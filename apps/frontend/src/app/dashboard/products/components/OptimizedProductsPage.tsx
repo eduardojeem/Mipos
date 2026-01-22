@@ -15,10 +15,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { 
-  AlertTriangle, 
-  RefreshCw, 
-  Plus, 
+import {
+  AlertTriangle,
+  RefreshCw,
+  Plus,
   Download,
   LayoutGrid,
   List,
@@ -36,14 +36,14 @@ interface OptimizedProductsPageProps {
 export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageProps) {
   // Supabase client
   const supabase = createClient();
-  
 
-  
+
+
   // Authentication and permissions
   const { user, canManageProducts, hasPermission } = useAuth();
   const canCreateProduct = canManageProducts();
   const canExportProducts = hasPermission('products.read');
-  
+
   // Local state
   const [filters, setFilters] = useState({
     search: '',
@@ -53,25 +53,25 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
     sortBy: 'updated_at',
     sortOrder: 'desc' as 'asc' | 'desc'
   });
-  
+
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  
+
   // Data hooks
-  const { 
-    products, 
-    loading, 
-    error, 
-    total, 
-    hasMore, 
-    refetch, 
+  const {
+    products,
+    loading,
+    error,
+    total,
+    hasMore,
+    refetch,
     loadMore,
     currentPage,
     totalPages,
     itemsPerPage
   } = useOptimizedProducts(filters);
-  
+
   const { stats, loading: statsLoading } = useProductStats();
-  
+
   // Memoized categories from products
   const categories = useMemo(() => {
     const categoryMap = new Map();
@@ -82,16 +82,16 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
     });
     return Array.from(categoryMap.values());
   }, [products]);
-  
+
   // Selection state
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
-  
+
   // Modal state
   const [detailsModal, setDetailsModal] = useState<{
     open: boolean;
     product: Product | null;
   }>({ open: false, product: null });
-  
+
   const [editModal, setEditModal] = useState<{
     open: boolean;
     product: Product | null;
@@ -102,9 +102,9 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
 
   // Event handlers
   const handleFilterChange = useCallback((newFilters: Partial<typeof filters>) => {
-    setFilters(prev => ({ 
-      ...prev, 
-      ...newFilters, 
+    setFilters(prev => ({
+      ...prev,
+      ...newFilters,
       page: newFilters.page || 1 // Reset page when filters change
     }));
   }, []);
@@ -163,7 +163,7 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
     toast.info(`Exportando ${selectedIds.length} productos`);
     // TODO: Implement bulk export
   }, [selectedProducts, products]);
-  
+
   const handleRefresh = useCallback(async () => {
     try {
       await refetch();
@@ -172,7 +172,7 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
       toast.error('Error al actualizar productos');
     }
   }, [refetch]);
-  
+
   const handleLoadMore = useCallback(async () => {
     if (hasMore && !loading) {
       try {
@@ -182,44 +182,44 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
       }
     }
   }, [hasMore, loading, loadMore]);
-  
+
   const handleProductEdit = useCallback((product: Product) => {
     setEditModal({ open: true, product });
   }, []);
-  
+
   const handleProductDelete = useCallback(async (productId: string) => {
     // TODO: Implement delete with confirmation
     console.log('Delete product:', productId);
     toast.info(`Eliminando producto: ${productId}`);
   }, []);
-  
+
   const handleProductView = useCallback((product: Product) => {
     setDetailsModal({ open: true, product });
   }, []);
-  
+
   const handleCreateProduct = useCallback(() => {
     if (!user) {
       setLoginModal(true);
       return;
     }
-    
+
     if (!canCreateProduct) {
       toast.error('No tienes permisos para crear productos. Contacta al administrador.');
       return;
     }
-    
+
     setEditModal({ open: true, product: null });
   }, [user, canCreateProduct]);
-  
+
   // Modal handlers
   const handleSaveProduct = useCallback(async (productData: Partial<Product>) => {
     try {
       console.log('Saving product:', productData);
-      
+
       if (editModal.product) {
         // Update existing product - TODO: Implement update API
         console.log('Updating product with data:', productData);
-        
+
         const response = await fetch(`/api/products/${editModal.product.id}`, {
           method: 'PUT',
           headers: {
@@ -227,28 +227,28 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
           },
           body: JSON.stringify(productData),
         });
-        
+
         if (!response.ok) {
           const errorData = await response.json();
           throw new Error(errorData.error || 'Error al actualizar producto');
         }
-        
+
         const result = await response.json();
         console.log('Product updated successfully:', result);
       } else {
         // Create new product using API route
         console.log('Creating product with data:', productData);
-        
+
         // Check authentication first
         if (!user) {
           throw new Error('Usuario no autenticado. Por favor inicia sesión.');
         }
-        
+
         // Check permissions
         if (!canCreateProduct) {
           throw new Error('No tienes permisos para crear productos. Contacta al administrador.');
         }
-        
+
         const response = await fetch('/api/products', {
           method: 'POST',
           headers: {
@@ -256,15 +256,15 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
           },
           body: JSON.stringify(productData),
         });
-        
+
         if (!response.ok) {
           let errorData: any = {};
           let errorMessage = 'Error al crear producto';
-          
+
           try {
             const text = await response.text();
             console.error('API Response Text:', text);
-            
+
             if (text) {
               errorData = JSON.parse(text);
               console.error('API Error Data:', errorData);
@@ -274,15 +274,15 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
             errorMessage = `Error del servidor (${response.status}): No se pudo procesar la respuesta`;
             throw new Error(errorMessage);
           }
-          
+
           // Construir mensaje de error detallado
           errorMessage = errorData.error || errorMessage;
-          
+
           // Si hay detalles adicionales, agregarlos
           if (errorData.details) {
             if (Array.isArray(errorData.details)) {
               // Errores de validación de Zod
-              const validationErrors = errorData.details.map((err: any) => 
+              const validationErrors = errorData.details.map((err: any) =>
                 `${err.path?.join('.') || 'campo'}: ${err.message}`
               ).join(', ');
               errorMessage = `${errorMessage}: ${validationErrors}`;
@@ -290,7 +290,7 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
               errorMessage = `${errorMessage}: ${errorData.details}`;
             }
           }
-          
+
           if (response.status === 401) {
             throw new Error('Usuario no autenticado. Por favor inicia sesión nuevamente.');
           } else if (response.status === 403) {
@@ -299,51 +299,51 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
             throw new Error(errorMessage);
           }
         }
-        
+
         const result = await response.json();
         console.log('Product created successfully:', result);
       }
-      
+
       // Refresh products list
       await refetch();
-      
+
     } catch (error) {
       console.error('Error saving product:', error);
       throw error; // Re-throw to let modal handle the error
     }
   }, [editModal.product, refetch, user, canCreateProduct]);
-  
+
   const handleDeleteFromModal = useCallback(async (productId: string) => {
     try {
       console.log('Deleting product:', productId);
-      
+
       // Delete product from Supabase
       const { error } = await supabase
         .from('products')
         .delete()
         .eq('id', productId);
-        
+
       if (error) {
         console.error('Error deleting product:', error);
         throw new Error(`Error al eliminar producto: ${error.message}`);
       }
-      
+
       // Refresh products list
       await refetch();
-      
+
       toast.success('Producto eliminado');
     } catch (error) {
       console.error('Error deleting product:', error);
       toast.error('Error al eliminar producto');
     }
   }, [refetch, supabase]);
-  
+
   const handleExportProducts = useCallback(() => {
     // TODO: Implement export functionality
     console.log('Export products');
     toast.info('Exportando productos');
   }, []);
-  
+
   // Error state
   if (error && products.length === 0) {
     return (
@@ -361,68 +361,79 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
       </div>
     );
   }
-  
+
   return (
     <div className={`container mx-auto p-6 space-y-6 ${className}`}>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Productos</h1>
-          <p className="text-muted-foreground">
-            Gestiona tu inventario de productos de belleza
-          </p>
-        </div>
-        
-        <div className="flex items-center gap-2">
-          {/* View Mode Toggle */}
-          <div className="flex items-center border rounded-lg p-1">
-            <Button
-              variant={viewMode === 'grid' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setViewMode('grid')}
-              className="h-8 w-8 p-0"
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </Button>
-            <Button
-              variant={viewMode === 'list' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setViewMode('list')}
-              className="h-8 w-8 p-0"
-            >
-              <List className="h-4 w-4" />
-            </Button>
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-violet-500/10 via-fuchsia-500/10 to-pink-500/10 dark:from-violet-500/20 dark:via-fuchsia-500/20 dark:to-pink-500/20 border border-violet-200/50 dark:border-violet-800/50 p-6 backdrop-blur-sm">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-violet-600 to-fuchsia-600 dark:from-violet-400 dark:to-fuchsia-400 bg-clip-text text-transparent">Productos</h1>
+            <p className="text-muted-foreground mt-1">
+              Gestiona tu inventario de productos de belleza
+            </p>
           </div>
-          
-          {/* Export Button */}
-          {canExportProducts && (
-            <Button
-              variant="outline"
-              onClick={handleExportProducts}
-              className="gap-2"
-            >
-              <Download className="h-4 w-4" />
-              <span className="hidden sm:inline">Exportar</span>
-            </Button>
-          )}
-          
-          {/* Create Button */}
-          {canCreateProduct && (
-            <Button onClick={handleCreateProduct} className="gap-2">
-              <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline">Nuevo Producto</span>
-            </Button>
-          )}
+
+          <div className="flex items-center gap-2">
+            {/* View Mode Toggle */}
+            <div className="flex items-center bg-white/60 dark:bg-zinc-900/60 backdrop-blur-md border border-violet-200/50 dark:border-violet-800/50 rounded-lg p-1 shadow-sm">
+              <Button
+                variant={viewMode === 'grid' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setViewMode('grid')}
+                className={`h-8 w-8 p-0 ${viewMode === 'grid'
+                    ? 'bg-gradient-to-br from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white shadow-md'
+                    : 'hover:bg-violet-100 dark:hover:bg-violet-900/30'
+                  }`}
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={viewMode === 'list' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setViewMode('list')}
+                className={`h-8 w-8 p-0 ${viewMode === 'list'
+                    ? 'bg-gradient-to-br from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white shadow-md'
+                    : 'hover:bg-violet-100 dark:hover:bg-violet-900/30'
+                  }`}
+              >
+                <List className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {/* Export Button */}
+            {canExportProducts && (
+              <Button
+                variant="outline"
+                onClick={handleExportProducts}
+                className="gap-2 border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-300 hover:bg-violet-50 dark:hover:bg-violet-950/30 hover:border-violet-400 dark:hover:border-violet-600 transition-colors"
+              >
+                <Download className="h-4 w-4" />
+                <span className="hidden sm:inline">Exportar</span>
+              </Button>
+            )}
+
+            {/* Create Button */}
+            {canCreateProduct && (
+              <Button
+                onClick={handleCreateProduct}
+                className="gap-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white shadow-lg shadow-violet-500/30 hover:shadow-xl hover:shadow-violet-500/40 transition-all"
+              >
+                <Plus className="h-4 w-4" />
+                <span className="hidden sm:inline">Nuevo Producto</span>
+              </Button>
+            )}
+          </div>
         </div>
       </div>
-      
+
       {/* Stats */}
-      <ProductsStats 
-        products={products} 
-        total={total} 
-        loading={statsLoading} 
+      <ProductsStats
+        products={products}
+        total={total}
+        loading={statsLoading}
       />
-      
+
       {/* Filters */}
       <ProductsFilters
         filters={filters}
@@ -440,7 +451,7 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
         onBulkExport={handleBulkExport}
         onClearSelection={handleClearSelection}
       />
-      
+
       {/* Results Summary and Controls */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4 text-sm text-muted-foreground">
@@ -450,22 +461,22 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
             totalItems={total}
           />
           {filters.search && (
-            <Badge variant="secondary" className="gap-1">
+            <Badge variant="secondary" className="gap-1 bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700">
               Búsqueda: "{filters.search}"
             </Badge>
           )}
           {filters.categoryId && (
-            <Badge variant="secondary" className="gap-1">
+            <Badge variant="secondary" className="gap-1 bg-purple-100 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border-purple-300 dark:border-purple-700">
               Categoría: {categories.find(c => c.id === filters.categoryId)?.name}
             </Badge>
           )}
           {selectedProducts.size > 0 && (
-            <Badge variant="outline" className="gap-1">
+            <Badge variant="outline" className="gap-1 bg-violet-100 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300 border-violet-400 dark:border-violet-600 font-semibold">
               {selectedProducts.size} seleccionados
             </Badge>
           )}
         </div>
-        
+
         <div className="flex items-center gap-4">
           {error && products.length > 0 && (
             <Badge variant="destructive" className="gap-1">
@@ -480,9 +491,9 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
           />
         </div>
       </div>
-      
+
       {/* Products List */}
-      <Card className="border-border/40 bg-card/50 backdrop-blur-sm">
+      <Card className="border-violet-200/50 dark:border-violet-800/30 bg-white/60 dark:bg-zinc-900/60 backdrop-blur-xl shadow-lg">
         <CardContent className="p-0">
           {loading && products.length === 0 ? (
             <div className="flex items-center justify-center h-96">
@@ -498,7 +509,7 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
               </div>
               <h3 className="text-lg font-semibold mb-2">No hay productos</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                {filters.search || filters.categoryId 
+                {filters.search || filters.categoryId
                   ? 'No se encontraron productos con los filtros aplicados'
                   : 'Comienza agregando tu primer producto'
                 }
@@ -535,7 +546,7 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
                   onSelectAll={handleSelectAll}
                 />
               )}
-              
+
               {/* Paginación */}
               {totalPages > 1 && (
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 border-t border-border/40">
@@ -554,7 +565,7 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
           )}
         </CardContent>
       </Card>
-      
+
       {/* Performance Info (Development Only) */}
       {process.env.NODE_ENV === 'development' && (
         <Card className="border-dashed border-muted-foreground/20">

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Save, User, Palette, Monitor } from 'lucide-react';
+import { Save, User, Palette, Monitor, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -36,33 +36,38 @@ export function ProfileTab() {
   }
 
   return (
-    <div className="grid gap-6 md:grid-cols-2">
-      {/* Personal Information */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <User className="h-5 w-5" />
+    <div className="grid gap-8 md:grid-cols-2">
+      {/* Personal Information with premium card style */}
+      <Card className="border-none shadow-xl shadow-blue-500/5 bg-white/50 dark:bg-card/50 backdrop-blur-sm overflow-hidden group">
+        <div className="absolute top-0 left-0 w-1 h-full bg-blue-600"></div>
+        <CardHeader className="pb-4">
+          <CardTitle className="flex items-center gap-3 text-xl font-bold">
+            <div className="p-2 rounded-lg bg-blue-600 text-white shadow-lg shadow-blue-600/20 group-hover:scale-110 transition-transform duration-300">
+              <User className="h-5 w-5" />
+            </div>
             Información Personal
           </CardTitle>
-          <CardDescription>
+          <CardDescription className="text-base">
             Actualiza tu información de perfil y datos de contacto
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="first_name">Nombre</Label>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-2 gap-6">
+            <div className="space-y-2.5">
+              <Label htmlFor="first_name" className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Nombre</Label>
               <Input
                 id="first_name"
+                className="bg-muted/30 border-none focus-visible:ring-blue-600 h-11"
                 value={currentSettings.first_name || ''}
                 onChange={(e) => updateSetting('first_name', e.target.value)}
                 placeholder="Tu nombre"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="last_name">Apellido</Label>
+            <div className="space-y-2.5">
+              <Label htmlFor="last_name" className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Apellido</Label>
               <Input
                 id="last_name"
+                className="bg-muted/30 border-none focus-visible:ring-blue-600 h-11"
                 value={currentSettings.last_name || ''}
                 onChange={(e) => updateSetting('last_name', e.target.value)}
                 placeholder="Tu apellido"
@@ -70,21 +75,23 @@ export function ProfileTab() {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+          <div className="space-y-2.5">
+            <Label htmlFor="email" className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Email Profesional</Label>
             <Input
               id="email"
               type="email"
+              className="bg-muted/30 border-none focus-visible:ring-blue-600 h-11"
               value={currentSettings.email || ''}
               onChange={(e) => updateSetting('email', e.target.value)}
               placeholder="tu@email.com"
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="phone">Teléfono</Label>
+          <div className="space-y-2.5">
+            <Label htmlFor="phone" className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Teléfono</Label>
             <Input
               id="phone"
+              className="bg-muted/30 border-none focus-visible:ring-blue-600 h-11"
               value={currentSettings.phone || ''}
               onChange={(e) => updateSetting('phone', e.target.value)}
               placeholder="+595 21 123 4567"
@@ -93,73 +100,63 @@ export function ProfileTab() {
         </CardContent>
       </Card>
 
-      {/* Preferences */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Palette className="h-5 w-5" />
+      {/* Preferences with premium card style */}
+      <Card className="border-none shadow-xl shadow-indigo-500/5 bg-white/50 dark:bg-card/50 backdrop-blur-sm overflow-hidden group">
+        <div className="absolute top-0 left-0 w-1 h-full bg-indigo-600"></div>
+        <CardHeader className="pb-4">
+          <CardTitle className="flex items-center gap-3 text-xl font-bold">
+            <div className="p-2 rounded-lg bg-indigo-600 text-white shadow-lg shadow-indigo-600/20 group-hover:scale-110 transition-transform duration-300">
+              <Palette className="h-5 w-5" />
+            </div>
             Preferencias de Interfaz
           </CardTitle>
-          <CardDescription>
-            Personaliza tu experiencia de usuario
+          <CardDescription className="text-base">
+            Personaliza tu experiencia visual
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label>Tema</Label>
-            <Select 
-              value={currentSettings.theme || 'system'} 
-              onValueChange={(value) => updateSetting('theme', value)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="light">
-                  <div className="flex items-center gap-2">
-                    <Monitor className="h-4 w-4" />
-                    Claro
-                  </div>
-                </SelectItem>
-                <SelectItem value="dark">
-                  <div className="flex items-center gap-2">
-                    <Monitor className="h-4 w-4" />
-                    Oscuro
-                  </div>
-                </SelectItem>
-                <SelectItem value="system">
-                  <div className="flex items-center gap-2">
-                    <Monitor className="h-4 w-4" />
-                    Sistema
-                  </div>
-                </SelectItem>
-              </SelectContent>
-            </Select>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-2 gap-6">
+            <div className="space-y-2.5">
+              <Label className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Tema Visual</Label>
+              <Select
+                value={currentSettings.theme || 'system'}
+                onValueChange={(value) => updateSetting('theme', value)}
+              >
+                <SelectTrigger className="bg-muted/30 border-none h-11 focus-visible:ring-indigo-600">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="light">Claro</SelectItem>
+                  <SelectItem value="dark">Oscuro</SelectItem>
+                  <SelectItem value="system">Sistema</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2.5">
+              <Label className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Idioma</Label>
+              <Select
+                value={currentSettings.language || 'es'}
+                onValueChange={(value) => updateSetting('language', value)}
+              >
+                <SelectTrigger className="bg-muted/30 border-none h-11 focus-visible:ring-indigo-600">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="es">🇵🇾 Español</SelectItem>
+                  <SelectItem value="en">🇺🇸 English</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
-          <div className="space-y-2">
-            <Label>Idioma</Label>
-            <Select 
-              value={currentSettings.language || 'es'} 
-              onValueChange={(value) => updateSetting('language', value)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="es">🇵🇾 Español</SelectItem>
-                <SelectItem value="en">🇺🇸 English</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Diseño del Dashboard</Label>
-            <Select 
-              value={currentSettings.dashboard_layout || 'comfortable'} 
+          <div className="space-y-2.5">
+            <Label className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Diseño del Dashboard</Label>
+            <Select
+              value={currentSettings.dashboard_layout || 'comfortable'}
               onValueChange={(value) => updateSetting('dashboard_layout', value)}
             >
-              <SelectTrigger>
+              <SelectTrigger className="bg-muted/30 border-none h-11 focus-visible:ring-indigo-600">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -170,14 +167,14 @@ export function ProfileTab() {
             </Select>
           </div>
 
-          <Separator />
+          <Separator className="bg-muted/50" />
 
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/20 transition-colors">
               <div className="space-y-0.5">
-                <Label>Mostrar tooltips</Label>
-                <p className="text-sm text-muted-foreground">
-                  Ayuda contextual en elementos de la interfaz
+                <p className="font-semibold text-gray-800 dark:text-gray-200">Mostrar tooltips</p>
+                <p className="text-xs text-muted-foreground">
+                  Ayuda contextual activa
                 </p>
               </div>
               <Switch
@@ -186,11 +183,11 @@ export function ProfileTab() {
               />
             </div>
 
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/20 transition-colors">
               <div className="space-y-0.5">
-                <Label>Animaciones</Label>
-                <p className="text-sm text-muted-foreground">
-                  Efectos visuales y transiciones
+                <p className="font-semibold text-gray-800 dark:text-gray-200">Animaciones</p>
+                <p className="text-xs text-muted-foreground">
+                  Efectos visuales fluidos
                 </p>
               </div>
               <Switch
@@ -198,36 +195,23 @@ export function ProfileTab() {
                 onCheckedChange={(checked) => updateSetting('enable_animations', checked)}
               />
             </div>
-
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label>Guardado automático</Label>
-                <p className="text-sm text-muted-foreground">
-                  Guardar cambios automáticamente
-                </p>
-              </div>
-              <Switch
-                checked={currentSettings.auto_save ?? true}
-                onCheckedChange={(checked) => updateSetting('auto_save', checked)}
-              />
-            </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Save Button */}
+      {/* Save Button with modern style */}
       {hasChanges && (
-        <div className="md:col-span-2">
+        <div className="md:col-span-2 flex justify-end animate-in slide-in-from-bottom-4 duration-500">
           <PermissionGuard permission="settings.edit">
-            <Button 
-              onClick={handleSave} 
-              disabled={updateUserSettings.isPending} 
-              className="w-full"
+            <Button
+              onClick={handleSave}
+              disabled={updateUserSettings.isPending}
+              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-xl shadow-blue-500/20 px-8 py-6 text-lg font-bold rounded-2xl transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
             >
               {updateUserSettings.isPending ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                <RefreshCw className="h-5 w-5 mr-3 animate-spin" />
               ) : (
-                <Save className="h-4 w-4 mr-2" />
+                <Save className="h-5 w-5 mr-3" />
               )}
               Guardar Cambios
             </Button>

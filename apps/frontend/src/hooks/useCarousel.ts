@@ -48,12 +48,12 @@ export interface UseCarouselReturn {
   saving: boolean;
   error: CarouselError | null;
   hasChanges: boolean;
-  
+
   // Validation
   canAddMore: boolean;
   isValid: boolean;
   validationErrors: string[];
-  
+
   // Actions
   togglePromotion: (id: string) => void;
   movePromotion: (id: string, direction: 'up' | 'down') => void;
@@ -148,13 +148,13 @@ export function useCarousel(initialIds: string[] = []): UseCarouselReturn {
           timestamp: new Date(),
           retryable: false,
         });
-        
+
         toast({
           title: 'Límite alcanzado',
           description: `Máximo ${MAX_CAROUSEL_ITEMS} elementos en el carrusel.`,
           variant: 'destructive',
         });
-        
+
         return prev;
       }
     });
@@ -176,7 +176,7 @@ export function useCarousel(initialIds: string[] = []): UseCarouselReturn {
 
       // Swap elements
       [newIds[idx], newIds[swapIdx]] = [newIds[swapIdx], newIds[idx]];
-      
+
       return newIds;
     });
   }, []);
@@ -206,13 +206,13 @@ export function useCarousel(initialIds: string[] = []): UseCarouselReturn {
         timestamp: new Date(),
         retryable: false,
       });
-      
+
       toast({
         title: 'Error de validación',
         description: validationErrors.join(', '),
         variant: 'destructive',
       });
-      
+
       return;
     }
 
@@ -221,7 +221,7 @@ export function useCarousel(initialIds: string[] = []): UseCarouselReturn {
 
     try {
       console.log('[useCarousel] Saving carousel with IDs:', carouselIds);
-      
+
       // Use fetch directly to call Next.js API Route
       const response = await fetch('/api/promotions/carousel', {
         method: 'PUT',
@@ -239,7 +239,7 @@ export function useCarousel(initialIds: string[] = []): UseCarouselReturn {
         // Try to get error details
         const responseText = await response.text();
         console.log('[useCarousel] Error response text:', responseText);
-        
+
         let errorData: any = {};
         try {
           errorData = JSON.parse(responseText);
@@ -247,7 +247,7 @@ export function useCarousel(initialIds: string[] = []): UseCarouselReturn {
         } catch (parseErr) {
           console.error('[useCarousel] Could not parse error response as JSON:', parseErr);
         }
-        
+
         throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
       }
 
@@ -317,7 +317,7 @@ export function useCarousel(initialIds: string[] = []): UseCarouselReturn {
   const revertChanges = useCallback(() => {
     setCarouselIds(originalIds);
     setError(null);
-    
+
     toast({
       title: 'Cambios revertidos',
       description: 'Se restauró el estado anterior del carrusel',
@@ -341,8 +341,17 @@ export function useCarousel(initialIds: string[] = []): UseCarouselReturn {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('[useCarousel] Refresh error response:', errorData);
+        const responseText = await response.text();
+        console.error('[useCarousel] Refresh error raw response:', responseText);
+
+        let errorData: any = {};
+        try {
+          errorData = JSON.parse(responseText);
+        } catch (e) {
+          console.error('[useCarousel] Failed to parse error response as JSON');
+        }
+
+        console.error('[useCarousel] Refresh error parsed data:', errorData);
         throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
       }
 

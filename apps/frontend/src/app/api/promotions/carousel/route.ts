@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 // (removed conflicting import; local createAdminClient is defined below)
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
+export const dynamic = 'force-dynamic';
+
 type CachedEntry = { expiresAt: number; payload: any }
 const carouselCache = new Map<string, CachedEntry>()
 
@@ -51,7 +53,7 @@ export async function GET() {
 
     if (error) {
       console.error('[API/Carousel] Supabase error:', error)
-      
+
       // If table doesn't exist, return empty list instead of error
       // Check code 42P01 or message content
       if (error.code === '42P01' || error.message?.includes('does not exist')) {
@@ -60,10 +62,10 @@ export async function GET() {
       }
 
       return NextResponse.json(
-        { 
-          success: false, 
-          message: 'Error al cargar el carrusel', 
-          error: error.message, 
+        {
+          success: false,
+          message: 'Error al cargar el carrusel',
+          error: error.message,
           code: error.code,
           details: error.details,
           hint: error.hint
@@ -90,7 +92,7 @@ export async function PUT(request: NextRequest) {
   console.log('[API/Carousel] ========== PUT REQUEST START ==========')
   try {
     console.log('[API/Carousel] PUT request received')
-    
+
     // Log environment variables (without exposing full keys)
     const envCheck = {
       hasSupabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -98,23 +100,23 @@ export async function PUT(request: NextRequest) {
       supabaseUrlPrefix: process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 20)
     }
     console.log('[API/Carousel] Environment check:', envCheck)
-    
+
     if (!envCheck.hasSupabaseUrl || !envCheck.hasServiceKey) {
       console.error('[API/Carousel] CRITICAL: Missing environment variables!')
       return NextResponse.json(
-        { 
-          success: false, 
+        {
+          success: false,
           message: 'Configuración del servidor incompleta. Reinicia el servidor después de configurar las variables de entorno.',
           details: envCheck
         },
         { status: 500 }
       )
     }
-    
+
     // Get user for audit log
     const supabaseAuth = await createClient()
     const { data: { user } } = await supabaseAuth.auth.getUser()
-    
+
     if (!user) {
       console.log('[API/Carousel] No user found - unauthorized')
       return NextResponse.json(
@@ -133,7 +135,7 @@ export async function PUT(request: NextRequest) {
     // Validate UUID format
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const invalidIds = ids.filter(id => !uuidRegex.test(id));
-    
+
     if (invalidIds.length > 0) {
       return NextResponse.json(
         { success: false, message: 'IDs inválidos detectados. Solo se permiten promociones reales.' },
@@ -177,27 +179,27 @@ export async function PUT(request: NextRequest) {
       .from('promotions_carousel')
       .select('promotion_id')
       .order('position', { ascending: true })
-    
+
     const previousState = existingData ? existingData.map((r: any) => String(r.promotion_id)) : []
     const newState = ids
 
     // Delete ALL existing carousel items using a simple approach
     // Since we're using service_role, we can delete without conditions
     console.log('[API/Carousel] Deleting all existing carousel items...')
-    
+
     const { error: deleteError, count: deletedCount } = await supabase
       .from('promotions_carousel')
       .delete()
       .neq('id', '00000000-0000-0000-0000-000000000000') // Delete all (dummy condition that's always true)
-    
+
     if (deleteError) {
       console.error('[API/Carousel] Delete error:', deleteError)
       // If table doesn't exist, that's okay - continue
       if (deleteError.code !== '42P01') {
         return NextResponse.json(
-          { 
-            success: false, 
-            message: 'Error al limpiar el carrusel anterior', 
+          {
+            success: false,
+            message: 'Error al limpiar el carrusel anterior',
             error: deleteError.message,
             code: deleteError.code,
             details: deleteError.details,
@@ -207,7 +209,7 @@ export async function PUT(request: NextRequest) {
         )
       }
     }
-    
+
     console.log('[API/Carousel] Deleted', deletedCount || 0, 'existing items')
 
     // Insert new carousel items
@@ -225,9 +227,9 @@ export async function PUT(request: NextRequest) {
       if (insertError) {
         console.error('[API/Carousel] Insert error:', insertError)
         return NextResponse.json(
-          { 
-            success: false, 
-            message: 'Error al guardar el carrusel', 
+          {
+            success: false,
+            message: 'Error al guardar el carrusel',
             error: insertError.message,
             code: insertError.code,
             details: insertError.details
@@ -244,15 +246,15 @@ export async function PUT(request: NextRequest) {
     try {
       const ip = request.headers.get('x-forwarded-for') || 'unknown'
       const userAgent = request.headers.get('user-agent') || 'unknown'
-      
+
       // Check if it's a reorder or an update
       // Reorder: same items, different order
       // Update: items added or removed
-      const isReorder = 
-        previousState.length === newState.length && 
+      const isReorder =
+        previousState.length === newState.length &&
         previousState.every(id => newState.includes(id)) &&
         JSON.stringify(previousState) !== JSON.stringify(newState);
-      
+
       const action = isReorder ? 'REORDER' : 'UPDATE';
 
       const { error: rpcError } = await supabase.rpc('log_carousel_change', {
@@ -286,10 +288,10 @@ export async function PUT(request: NextRequest) {
     console.error('[API/Carousel] Error message:', error instanceof Error ? error.message : String(error))
     console.error('[API/Carousel] Error stack:', error instanceof Error ? error.stack : 'No stack trace')
     console.error('[API/Carousel] Full error object:', error)
-    
-    return NextResponse.json({ 
-      success: false, 
-      message: 'Error interno del servidor', 
+
+    return NextResponse.json({
+      success: false,
+      message: 'Error interno del servidor',
       error: error instanceof Error ? error.message : String(error),
       type: error?.constructor?.name
     }, { status: 500 })

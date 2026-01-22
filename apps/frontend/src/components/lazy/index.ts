@@ -1,10 +1,10 @@
 // Lazy loaded components for better performance
-import { 
-  withLazyLoading, 
-  ProductSkeleton, 
-  DashboardSkeleton, 
-  FormSkeleton, 
-  ModalSkeleton, 
+import {
+  withLazyLoading,
+  ProductSkeleton,
+  DashboardSkeleton,
+  FormSkeleton,
+  ModalSkeleton,
   ChartSkeleton,
   TableSkeleton,
   ListSkeleton,
@@ -12,8 +12,8 @@ import {
 } from '@/components/ui/lazy-loading';
 
 // Dashboard components
-export const LazyOptimizedDashboard = withLazyLoading(
-  () => import('@/components/dashboard/OptimizedDashboard'),
+export const LazyMainDashboard = withLazyLoading(
+  () => import('@/components/dashboard/MainDashboard'),
   DashboardSkeleton
 );
 

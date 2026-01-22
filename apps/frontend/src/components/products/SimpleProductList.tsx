@@ -13,6 +13,12 @@ interface SimpleProductListProps {
   loading?: boolean;
 }
 
+const ProductSkeleton = memo(function ProductSkeleton() {
+  return (
+    <div className="aspect-square bg-muted animate-pulse rounded-lg" />
+  );
+});
+
 export const SimpleProductList = memo(function SimpleProductList({
   products,
   onEdit,
@@ -20,17 +26,17 @@ export const SimpleProductList = memo(function SimpleProductList({
   onView,
   loading = false
 }: SimpleProductListProps) {
-  
+
   if (loading) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
         {Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className="aspect-square bg-muted animate-pulse rounded" />
+          <ProductSkeleton key={i} />
         ))}
       </div>
     );
   }
-  
+
   if (products.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-96 text-center">
@@ -42,16 +48,17 @@ export const SimpleProductList = memo(function SimpleProductList({
       </div>
     );
   }
-  
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-4">
-      {products.map((product) => (
+      {products.map((product, index) => (
         <SimpleProductCard
           key={product.id}
           product={product}
           onEdit={onEdit}
           onDelete={onDelete}
           onView={onView}
+          priority={index < 4}
         />
       ))}
     </div>

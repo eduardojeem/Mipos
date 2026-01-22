@@ -103,7 +103,7 @@ export async function GET(request: NextRequest) {
       // Obtener usuarios de la tabla personalizada
       const { data: users, error } = await (supabase as any)
         .from('users')
-        .select('id, email, full_name, created_at, updated_at')
+        .select('id, email, full_name, role, created_at, updated_at')
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -115,7 +115,7 @@ export async function GET(request: NextRequest) {
         id: user.id,
         email: user.email,
         name: user.full_name || user.email?.split('@')[0] || 'Usuario',
-        role: 'VIEWER', // Fallback cuando no hay columna 'role'
+        role: String(user.role || 'VIEWER'),
         status: 'active',
         createdAt: user.created_at,
         lastLogin: user.updated_at || user.created_at,

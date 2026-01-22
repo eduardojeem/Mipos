@@ -33,38 +33,54 @@ const StatCard = memo(function StatCard({
   variant = 'default'
 }: StatCardProps) {
   const cardClasses = {
-    default: 'border-border/40 bg-card/50',
-    success: 'border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/20',
-    warning: 'border-yellow-200 bg-yellow-50/50 dark:border-yellow-800 dark:bg-yellow-950/20',
-    destructive: 'border-red-200 bg-red-50/50 dark:border-red-800 dark:bg-red-950/20'
+    default: 'border-violet-200/50 dark:border-violet-800/30 bg-gradient-to-br from-violet-50/80 to-fuchsia-50/80 dark:from-violet-950/30 dark:to-fuchsia-950/30 backdrop-blur-sm',
+    success: 'border-emerald-300 dark:border-emerald-700 bg-gradient-to-br from-emerald-50/90 to-teal-50/90 dark:from-emerald-950/40 dark:to-teal-950/40 backdrop-blur-sm shadow-emerald-500/10',
+    warning: 'border-amber-300 dark:border-amber-700 bg-gradient-to-br from-amber-50/90 to-orange-50/90 dark:from-amber-950/40 dark:to-orange-950/40 backdrop-blur-sm shadow-amber-500/10',
+    destructive: 'border-red-300 dark:border-red-700 bg-gradient-to-br from-red-50/90 to-pink-50/90 dark:from-red-950/40 dark:to-pink-950/40 backdrop-blur-sm shadow-red-500/10'
   };
-  
+
   const iconClasses = {
-    default: 'text-muted-foreground',
-    success: 'text-green-600 dark:text-green-400',
-    warning: 'text-yellow-600 dark:text-yellow-400',
+    default: 'text-violet-600 dark:text-violet-400',
+    success: 'text-emerald-600 dark:text-emerald-400',
+    warning: 'text-amber-600 dark:text-amber-400',
     destructive: 'text-red-600 dark:text-red-400'
   };
-  
+
+  const valueClasses = {
+    default: 'text-violet-900 dark:text-violet-100',
+    success: 'text-emerald-900 dark:text-emerald-100',
+    warning: 'text-amber-900 dark:text-amber-100',
+    destructive: 'text-red-900 dark:text-red-100'
+  };
+
   return (
-    <Card className={`${cardClasses[variant]} backdrop-blur-sm transition-all duration-200 hover:shadow-md`}>
+    <Card className={`${cardClasses[variant]} transition-all duration-200 hover:shadow-lg hover:scale-[1.02]`}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">
           {title}
         </CardTitle>
-        <Icon className={`h-4 w-4 ${iconClasses[variant]}`} />
+        <div className={`h-10 w-10 rounded-full flex items-center justify-center ${variant === 'default' ? 'bg-violet-100 dark:bg-violet-900/50' :
+            variant === 'success' ? 'bg-emerald-100 dark:bg-emerald-900/50' :
+              variant === 'warning' ? 'bg-amber-100 dark:bg-amber-900/50' :
+                'bg-red-100 dark:bg-red-900/50'
+          }`}>
+          <Icon className={`h-5 w-5 ${iconClasses[variant]}`} />
+        </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-1">
-          <div className="text-2xl font-bold">{value}</div>
+          <div className={`text-2xl font-bold ${valueClasses[variant]}`}>{value}</div>
           {subtitle && (
             <p className="text-xs text-muted-foreground">{subtitle}</p>
           )}
           {trend && (
             <div className="flex items-center space-x-1">
-              <Badge 
+              <Badge
                 variant={trend.isPositive ? 'default' : 'secondary'}
-                className="text-xs"
+                className={`text-xs ${trend.isPositive
+                    ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
+                    : 'bg-red-500 hover:bg-red-600 text-white'
+                  }`}
               >
                 {trend.isPositive ? '+' : ''}{trend.value}%
               </Badge>
@@ -101,7 +117,7 @@ export const ProductsStats = memo(function ProductsStats({
   total,
   loading = false
 }: ProductsStatsProps) {
-  
+
   const stats = useMemo(() => {
     if (loading || products.length === 0) {
       return {
@@ -114,39 +130,39 @@ export const ProductsStats = memo(function ProductsStats({
         outOfStockPercentage: 0
       };
     }
-    
+
     const totalProducts = total || products.length;
-    
+
     // Calculate stock-related stats
     const lowStockProducts = products.filter(p => {
       const stock = p.stock_quantity || 0;
       const minStock = p.min_stock || 5;
       return stock > 0 && stock <= minStock;
     });
-    
-    const outOfStockProducts = products.filter(p => 
+
+    const outOfStockProducts = products.filter(p =>
       (p.stock_quantity || 0) === 0
     );
-    
+
     // Calculate value stats
     const totalValue = products.reduce((sum, p) => {
       const stock = p.stock_quantity || 0;
       const price = p.cost_price || p.sale_price || 0;
       return sum + (stock * price);
     }, 0);
-    
-    const averagePrice = products.length > 0 
+
+    const averagePrice = products.length > 0
       ? products.reduce((sum, p) => sum + (p.sale_price || 0), 0) / products.length
       : 0;
-    
-    const lowStockPercentage = totalProducts > 0 
-      ? (lowStockProducts.length / totalProducts) * 100 
+
+    const lowStockPercentage = totalProducts > 0
+      ? (lowStockProducts.length / totalProducts) * 100
       : 0;
-    
-    const outOfStockPercentage = totalProducts > 0 
-      ? (outOfStockProducts.length / totalProducts) * 100 
+
+    const outOfStockPercentage = totalProducts > 0
+      ? (outOfStockProducts.length / totalProducts) * 100
       : 0;
-    
+
     return {
       totalProducts,
       lowStockCount: lowStockProducts.length,
@@ -157,11 +173,11 @@ export const ProductsStats = memo(function ProductsStats({
       outOfStockPercentage
     };
   }, [products, total, loading]);
-  
+
   if (loading) {
     return <StatsSkeleton />;
   }
-  
+
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
       {/* Total Products */}
@@ -172,7 +188,7 @@ export const ProductsStats = memo(function ProductsStats({
         icon={Package}
         variant="default"
       />
-      
+
       {/* Low Stock */}
       <StatCard
         title="Stock Bajo"
@@ -181,7 +197,7 @@ export const ProductsStats = memo(function ProductsStats({
         icon={AlertTriangle}
         variant={stats.lowStockCount > 0 ? 'warning' : 'success'}
       />
-      
+
       {/* Out of Stock */}
       <StatCard
         title="Sin Stock"
@@ -190,7 +206,7 @@ export const ProductsStats = memo(function ProductsStats({
         icon={AlertTriangle}
         variant={stats.outOfStockCount > 0 ? 'destructive' : 'success'}
       />
-      
+
       {/* Total Value */}
       <StatCard
         title="Valor Total"

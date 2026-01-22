@@ -31,10 +31,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  RefreshCw, 
+import {
+  TrendingUp,
+  TrendingDown,
+  RefreshCw,
   Calendar,
   DollarSign,
   ShoppingCart,
@@ -115,6 +115,7 @@ interface ChartMetrics {
 
 interface RealtimeChartsProps {
   className?: string;
+  showMetrics?: boolean;
 }
 
 type TimeRange = '24h' | '7d' | '30d' | '90d' | '1y';
@@ -141,14 +142,14 @@ const CustomTooltip = ({ active, payload, label }: any) => {
         <p className="font-medium text-sm mb-2">{label}</p>
         {payload.map((entry: any, index: number) => (
           <div key={index} className="flex items-center gap-2 text-sm">
-            <div 
-              className="w-3 h-3 rounded-full" 
+            <div
+              className="w-3 h-3 rounded-full"
               style={{ backgroundColor: entry.color }}
             />
             <span className="text-muted-foreground">{entry.dataKey}:</span>
             <span className="font-medium">
-              {entry.dataKey.includes('revenue') || entry.dataKey.includes('sales') 
-                ? `$${entry.value.toLocaleString()}` 
+              {entry.dataKey.includes('revenue') || entry.dataKey.includes('sales')
+                ? `$${entry.value.toLocaleString()}`
                 : entry.value.toLocaleString()}
             </span>
           </div>
@@ -186,7 +187,7 @@ const QuickMetrics = ({ metrics }: { metrics: ChartMetrics }) => (
       <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">${metrics.totalRevenue.toLocaleString()}</p>
       <p className="text-xs text-muted-foreground mt-1">En el período seleccionado</p>
     </motion.div>
-    
+
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
@@ -202,7 +203,7 @@ const QuickMetrics = ({ metrics }: { metrics: ChartMetrics }) => (
       <p className="text-2xl font-bold text-green-600 dark:text-green-400">{metrics.totalOrders.toLocaleString()}</p>
       <p className="text-xs text-muted-foreground mt-1">Transacciones completadas</p>
     </motion.div>
-    
+
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
@@ -218,7 +219,7 @@ const QuickMetrics = ({ metrics }: { metrics: ChartMetrics }) => (
       <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">${metrics.averageOrderValue.toFixed(2)}</p>
       <p className="text-xs text-muted-foreground mt-1">Valor por transacción</p>
     </motion.div>
-    
+
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
@@ -237,7 +238,7 @@ const QuickMetrics = ({ metrics }: { metrics: ChartMetrics }) => (
   </div>
 )
 
-export function RealtimeCharts({ className }: RealtimeChartsProps) {
+export function RealtimeCharts({ className, showMetrics = true }: RealtimeChartsProps) {
   const [salesData, setSalesData] = useState<SalesData[]>([]);
   const [categoryData, setCategoryData] = useState<CategoryData[]>([]);
   const [productData, setProductData] = useState<ProductPerformance[]>([]);
@@ -251,7 +252,7 @@ export function RealtimeCharts({ className }: RealtimeChartsProps) {
     peakHour: 0,
     customerRetention: 0
   });
-  
+
   const [timeRange, setTimeRange] = useState<TimeRange>('7d');
   const [chartType, setChartType] = useState<ChartType>('area');
   const [autoRefresh, setAutoRefresh] = useState(true);
@@ -361,9 +362,9 @@ export function RealtimeCharts({ className }: RealtimeChartsProps) {
     })
 
     return () => {
-      try { unsubscribeConn() } catch {}
-      try { (unsubSales as any).then((fn: any) => fn()).catch(() => {}) } catch {}
-      try { (unsubInv as any).then((fn: any) => fn()).catch(() => {}) } catch {}
+      try { unsubscribeConn() } catch { }
+      try { (unsubSales as any).then((fn: any) => fn()).catch(() => { }) } catch { }
+      try { (unsubInv as any).then((fn: any) => fn()).catch(() => { }) } catch { }
       if (refreshTimer) clearTimeout(refreshTimer)
       if (pollRef.current) {
         clearInterval(pollRef.current as any)
@@ -401,7 +402,7 @@ export function RealtimeCharts({ className }: RealtimeChartsProps) {
       )}
     >
       {/* Métricas rápidas */}
-      <QuickMetrics metrics={metrics} />
+      {showMetrics && <QuickMetrics metrics={metrics} />}
 
       {/* Controles principales */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -411,7 +412,7 @@ export function RealtimeCharts({ className }: RealtimeChartsProps) {
             Última actualización: {lastUpdate.toLocaleTimeString()}
           </p>
         </div>
-        
+
         <div className="flex items-center gap-2">
           <Select value={timeRange} onValueChange={(value: TimeRange) => setTimeRange(value)}>
             <SelectTrigger className="w-40">
@@ -425,7 +426,7 @@ export function RealtimeCharts({ className }: RealtimeChartsProps) {
               ))}
             </SelectContent>
           </Select>
-          
+
           <Button
             variant="outline"
             size="sm"
@@ -434,11 +435,11 @@ export function RealtimeCharts({ className }: RealtimeChartsProps) {
           >
             {autoRefresh ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
           </Button>
-          
+
           <Button variant="outline" size="sm" onClick={handleRefresh}>
             <RefreshCw className="h-4 w-4" />
           </Button>
-          
+
           <Button variant="outline" size="sm" onClick={toggleFullscreen}>
             {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </Button>
@@ -495,12 +496,12 @@ export function RealtimeCharts({ className }: RealtimeChartsProps) {
                       <AreaChart data={salesData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                         <defs>
                           <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.8}/>
-                            <stop offset="95%" stopColor="#3B82F6" stopOpacity={0.1}/>
+                            <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.8} />
+                            <stop offset="95%" stopColor="#3B82F6" stopOpacity={0.1} />
                           </linearGradient>
                           <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#10B981" stopOpacity={0.8}/>
-                            <stop offset="95%" stopColor="#10B981" stopOpacity={0.1}/>
+                            <stop offset="5%" stopColor="#10B981" stopOpacity={0.8} />
+                            <stop offset="95%" stopColor="#10B981" stopOpacity={0.1} />
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
@@ -650,8 +651,8 @@ export function RealtimeCharts({ className }: RealtimeChartsProps) {
                         {Math.abs(metrics.growthRate).toFixed(1)}%
                       </span>
                     </div>
-                    <Progress 
-                      value={Math.min(Math.abs(metrics.growthRate), 100)} 
+                    <Progress
+                      value={Math.min(Math.abs(metrics.growthRate), 100)}
                       className={cn(
                         "h-3",
                         metrics.growthRate > 0 ? "bg-green-100 dark:bg-green-900/30" : "bg-red-100 dark:bg-red-900/30"
@@ -706,8 +707,8 @@ export function RealtimeCharts({ className }: RealtimeChartsProps) {
                         labelLine={{ stroke: 'currentColor', strokeWidth: 1 }}
                       >
                         {categoryData.map((entry, index) => (
-                          <Cell 
-                            key={`cell-${index}`} 
+                          <Cell
+                            key={`cell-${index}`}
                             fill={entry.color}
                             className="hover:opacity-80 transition-opacity cursor-pointer"
                           />
@@ -726,7 +727,7 @@ export function RealtimeCharts({ className }: RealtimeChartsProps) {
                 )}
               </CardContent>
             </Card>
-            
+
             {/* Lista de Categorías */}
             <Card className="border-border/50 shadow-sm bg-gradient-to-br from-card to-card/80">
               <CardHeader>
@@ -746,8 +747,8 @@ export function RealtimeCharts({ className }: RealtimeChartsProps) {
                       className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-muted/50 to-muted/30 hover:from-muted/70 hover:to-muted/50 transition-all border border-border/30 hover:border-border/50"
                     >
                       <div className="flex items-center gap-3 flex-1">
-                        <div 
-                          className="w-10 h-10 rounded-xl shadow-md flex items-center justify-center" 
+                        <div
+                          className="w-10 h-10 rounded-xl shadow-md flex items-center justify-center"
                           style={{ backgroundColor: category.color }}
                         >
                           <Package className="h-5 w-5 text-white" />
@@ -759,7 +760,7 @@ export function RealtimeCharts({ className }: RealtimeChartsProps) {
                           </div>
                         </div>
                       </div>
-                      
+
                       <div className="text-right ml-4">
                         <div className="font-bold text-lg">{category.percentage}%</div>
                         <div className={cn(
@@ -801,8 +802,8 @@ export function RealtimeCharts({ className }: RealtimeChartsProps) {
                       <YAxis className="text-xs" />
                       <Tooltip content={<CustomTooltip />} />
                       <Legend />
-                      <Bar 
-                        dataKey="value" 
+                      <Bar
+                        dataKey="value"
                         name="Ventas ($)"
                         radius={[8, 8, 0, 0]}
                       >
@@ -810,10 +811,10 @@ export function RealtimeCharts({ className }: RealtimeChartsProps) {
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Bar>
-                      <Line 
-                        type="monotone" 
-                        dataKey="percentage" 
-                        stroke="#8B5CF6" 
+                      <Line
+                        type="monotone"
+                        dataKey="percentage"
+                        stroke="#8B5CF6"
                         strokeWidth={2}
                         name="Participación (%)"
                         dot={{ fill: '#8B5CF6', r: 4 }}
@@ -859,12 +860,12 @@ export function RealtimeCharts({ className }: RealtimeChartsProps) {
                       #{index + 1}
                     </div>
                   </div>
-                  
+
                   <CardHeader>
                     <CardTitle className="text-lg pr-16 truncate">{product.name}</CardTitle>
                     <CardDescription>{product.category}</CardDescription>
                   </CardHeader>
-                  
+
                   <CardContent className="space-y-4">
                     <div className="grid grid-cols-2 gap-3">
                       <div className="bg-background/50 p-3 rounded-lg">
@@ -876,7 +877,7 @@ export function RealtimeCharts({ className }: RealtimeChartsProps) {
                         <p className="text-xl font-bold text-blue-600">{product.sales}</p>
                       </div>
                     </div>
-                    
+
                     <div className="flex items-center justify-between pt-2 border-t border-border/50">
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-muted-foreground">Margen:</span>
@@ -947,7 +948,7 @@ export function RealtimeCharts({ className }: RealtimeChartsProps) {
                           </div>
                         </div>
                       </div>
-                      
+
                       <div className="flex items-center gap-6">
                         <div className="text-right">
                           <div className="font-bold text-lg text-green-600 dark:text-green-400">
@@ -955,12 +956,12 @@ export function RealtimeCharts({ className }: RealtimeChartsProps) {
                           </div>
                           <div className="text-xs text-muted-foreground">{product.sales} ventas</div>
                         </div>
-                        
+
                         <div className="text-right min-w-[60px]">
                           <div className="text-sm font-medium text-muted-foreground">Margen</div>
                           <div className="font-bold">{product.margin.toFixed(1)}%</div>
                         </div>
-                        
+
                         <div className={cn(
                           "flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold min-w-[80px] justify-center",
                           product.trend === 'up' && "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
