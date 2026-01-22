@@ -338,7 +338,7 @@ function EnhancedCartComponent({
 
   // Cálculos avanzados del carrito con IVA por producto - optimizado con memo
   const cartCalculations = useMemo(() => {
-    return calculateCartWithIva(cart, products as import("e:/sistema de inventario pos/pos-system-pos/apps/frontend/src/types/supabase").Product[], discount, discountType)
+    return calculateCartWithIva(cart, products as import("@/types/supabase").Product[], discount, discountType)
   }, [cart, products, discount, discountType]);
 
   // Lista de productos mejorada

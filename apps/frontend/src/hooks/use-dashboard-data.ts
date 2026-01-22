@@ -75,7 +75,7 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
   const {
     refreshInterval = 30000, // 30 segundos
     enableRealtime = true,
-    cacheTimeout = 60000 // 1 minuto
+    cacheTimeout = 120000
   } = options
 
   const { user } = useAuth()
@@ -126,6 +126,68 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
       expiresAt: now + cacheTimeout
     })
   }, [cacheKey, cacheTimeout])
+
+  const loadFastStats = useCallback(async (): Promise<DashboardStats> => {
+    if (isSupabaseActive()) {
+      const supabase = createClient()
+      const now = new Date()
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
+      const [{ data: today }, { data: counts }] = await Promise.all([
+        supabase.rpc('get_today_sales_summary', { date_start: startOfDay }).single(),
+        supabase.rpc('get_dashboard_counts').single()
+      ])
+      const todayTotal = Number((today as any)?.total_sales || 0)
+      const todayCount = Number((today as any)?.sales_count || 0)
+      const averageTicket = todayCount ? todayTotal / todayCount : 0
+      const totalProducts = Number((counts as any)?.products_count || 0)
+      const lowStockCount = Number((counts as any)?.low_stock_count || 0)
+      const activeCustomers = Number((counts as any)?.customers_count || 0)
+      return {
+        todaySales: todayTotal,
+        monthSales: todayTotal,
+        lowStockCount,
+        activeCustomers,
+        averageTicket,
+        efficiency: 0,
+        salesPerHour: 0,
+        previousDaySales: 0,
+        previousMonthSales: 0,
+        growthRate: 0,
+        totalProducts,
+        pendingOrders: 0,
+        customerSatisfaction: 0,
+        conversionRate: 0
+      }
+    }
+    try {
+      const controller = new AbortController()
+      abortRef.current?.abort()
+      abortRef.current = controller
+      const { data: summary } = await api.get('/dashboard/fast-summary', { signal: controller.signal })
+      const s = summary || {}
+      const todayTotal = Number(s?.todaySales || 0)
+      const monthTotal = Number(s?.monthSales || todayTotal || 0)
+      const averageTicket = Number(s?.averageTicket || 0)
+      return {
+        todaySales: todayTotal,
+        monthSales: monthTotal,
+        lowStockCount: Number(s?.lowStockCount || 0),
+        activeCustomers: Number(s?.totalCustomers || 0),
+        averageTicket,
+        efficiency: 0,
+        salesPerHour: 0,
+        previousDaySales: 0,
+        previousMonthSales: 0,
+        growthRate: 0,
+        totalProducts: Number(s?.totalProducts || 0),
+        pendingOrders: Number(s?.activeOrders || 0),
+        customerSatisfaction: 0,
+        conversionRate: 0
+      }
+    } catch {
+      return await fetchDashboardStats()
+    }
+  }, [])
 
   const loadDashboardStats = useCallback(async (): Promise<DashboardStats> => {
     if (isSupabaseActive()) {
@@ -405,6 +467,16 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
       const controller = new AbortController()
       abortRef.current?.abort()
       abortRef.current = controller
+
+      const fastStats = await loadFastStats()
+      const partial: DashboardData = {
+        stats: fastStats,
+        recentSales: [],
+        topProducts: [],
+        lowStockProducts: []
+      }
+      setData(prev => ({ ...partial, recentSales: prev.recentSales, topProducts: prev.topProducts, lowStockProducts: prev.lowStockProducts }))
+      setLastUpdated(new Date())
 
       const fetchPromise = (async (): Promise<DashboardData> => {
         const [stats, recentSales, topProducts, lowStockProducts] = await Promise.all([

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, Suspense } from "react";
+import dynamic from "next/dynamic";
 import { AlertTriangle, Zap } from "lucide-react";
 import { UnifiedPermissionGuard } from "@/components/auth/UnifiedPermissionGuard";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -11,7 +12,10 @@ import { CashErrorBoundary } from "@/components/error/CashErrorBoundary";
 
 // Optimized Components
 import { OptimizedCashMetrics } from "./components/OptimizedCashMetrics";
-import { EnhancedCashFlowChart } from "./components/EnhancedCashFlowChart";
+const EnhancedCashFlowChart = dynamic(
+  () => import("./components/EnhancedCashFlowChart").then(m => m.EnhancedCashFlowChart),
+  { ssr: false }
+);
 import { SmartCashActions } from "./components/SmartCashActions";
 import { IntelligentCashInsights } from "./components/IntelligentCashInsights";
 import { OptimizedMovementsSection } from "./components/OptimizedMovementsSection";

@@ -4,23 +4,7 @@ import React, { useState } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { 
-  LineChart, 
-  Line, 
-  BarChart, 
-  Bar, 
-  PieChart, 
-  Pie, 
-  Cell,
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  Legend, 
-  ResponsiveContainer,
-  Area,
-  AreaChart
-} from 'recharts';
+import dynamic from 'next/dynamic';
 import { 
   BarChart3, 
   LineChart as LineChartIcon, 
@@ -31,6 +15,28 @@ import {
   Maximize2
 } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
+
+const lazyRecharts = (name: string) =>
+  dynamic(() => import('recharts').then((m: any) => (props: any) => {
+    const C = m[name];
+    return <C {...props} />;
+  }), { ssr: false });
+
+const ResponsiveContainer = lazyRecharts('ResponsiveContainer');
+const LineChart = lazyRecharts('LineChart');
+const Line = lazyRecharts('Line');
+const BarChart = lazyRecharts('BarChart');
+const Bar = lazyRecharts('Bar');
+const PieChart = lazyRecharts('PieChart');
+const Pie = lazyRecharts('Pie');
+const Cell = lazyRecharts('Cell');
+const XAxis = lazyRecharts('XAxis');
+const YAxis = lazyRecharts('YAxis');
+const CartesianGrid = lazyRecharts('CartesianGrid');
+const Tooltip = lazyRecharts('Tooltip');
+const Legend = lazyRecharts('Legend');
+const AreaChart = lazyRecharts('AreaChart');
+const Area = lazyRecharts('Area');
 
 interface BIChartPanelProps {
   title: string;
@@ -105,7 +111,7 @@ export function BIChartPanel({
               <XAxis 
                 dataKey="date" 
                 tick={{ fontSize: 12 }}
-                tickFormatter={(value) => {
+                tickFormatter={(value: string | number) => {
                   if (typeof value === 'string' && value.includes('-')) {
                     return new Date(value).toLocaleDateString('es-ES', { month: 'short', day: 'numeric' });
                   }
@@ -115,7 +121,7 @@ export function BIChartPanel({
               <YAxis tick={{ fontSize: 12 }} />
               <Tooltip 
                 formatter={formatTooltipValue}
-                labelFormatter={(label) => {
+                labelFormatter={(label: string | number) => {
                   if (typeof label === 'string' && label.includes('-')) {
                     return new Date(label).toLocaleDateString('es-ES');
                   }
@@ -166,7 +172,7 @@ export function BIChartPanel({
                 cx="50%"
                 cy="50%"
                 labelLine={false}
-                label={({ name, percentage }) => `${name}: ${percentage?.toFixed(1)}%`}
+                label={({ name, percentage }: { name: string; percentage: number }) => `${name}: ${percentage?.toFixed(1)}%`}
                 outerRadius={80}
                 fill="#8884d8"
                 dataKey="value"

@@ -1,5 +1,4 @@
 import { Metadata } from 'next';
-import { featuredProducts } from './data/homeData';
 import HomeClient from './HomeClient';
 import { createClient } from '@/lib/supabase/server';
 import { cookies } from 'next/headers';
@@ -129,22 +128,51 @@ export default async function HomePage() {
 
     // Schema.org - ItemList de Productos Destacados (fallback SEO)
     const currency = (config as any)?.storeSettings?.currency || 'PYG';
+    let itemListElements: any[] = [];
+    try {
+        const supabase = await createClient();
+        const since = new Date();
+        since.setDate(since.getDate() - 30);
+        const { data: items } = await supabase
+            .from('sale_items')
+            .select('product_id, quantity, created_at')
+            .gte('created_at', since.toISOString())
+            .limit(500);
+        const totals: Record<string, number> = {};
+        (Array.isArray(items) ? items : []).forEach((it: any) => {
+            const pid = String(it?.product_id || '');
+            const qty = Number(it?.quantity || 0);
+            if (pid) totals[pid] = (totals[pid] || 0) + qty;
+        });
+        const topIds = Object.entries(totals)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 6)
+            .map(([pid]) => pid);
+        if (topIds.length > 0) {
+            const { data: prods } = await supabase
+                .from('products')
+                .select('id, name, sale_price, offer_price, image_url, images')
+                .in('id', topIds);
+            const list = (Array.isArray(prods) ? prods : []);
+            itemListElements = list.map((p: any, idx: number) => ({
+                '@type': 'Product',
+                position: idx + 1,
+                name: String(p?.name || 'Producto'),
+                image: (Array.isArray(p?.images) && p.images[0]?.url) ? p.images[0].url : (p?.image_url || ''),
+                offers: {
+                    '@type': 'Offer',
+                    priceCurrency: currency,
+                    price: Number(p?.offer_price ?? p?.sale_price ?? 0),
+                    availability: 'https://schema.org/InStock'
+                }
+            }));
+        }
+    } catch {}
     const itemListSchema = {
         '@context': 'https://schema.org',
         '@type': 'ItemList',
         name: 'Los Más Vendidos',
-        itemListElement: featuredProducts.map((p, idx) => ({
-            '@type': 'Product',
-            position: idx + 1,
-            name: p.name,
-            image: p.image,
-            offers: {
-                '@type': 'Offer',
-                priceCurrency: currency,
-                price: p.price,
-                availability: 'https://schema.org/InStock'
-            }
-        }))
+        itemListElement: itemListElements
     };
 
     return (

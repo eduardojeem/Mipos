@@ -111,9 +111,24 @@ export class ConnectionMonitor {
    */
   private initialize(): void {
     this.setupRealtimeMonitoring();
-    this.startHeartbeat();
-    this.startQualityChecks();
-    this.setupNetworkEventListeners();
+    if (typeof window !== 'undefined') {
+      const start = () => {
+        this.startHeartbeat();
+        this.startQualityChecks();
+        this.setupNetworkEventListeners();
+      };
+      try {
+        // Prefer idle callback to avoid blocking initial render
+        const ric: any = (window as any).requestIdleCallback;
+        if (typeof ric === 'function') {
+          ric(() => start(), { timeout: 2000 });
+        } else {
+          setTimeout(start, 1500);
+        }
+      } catch {
+        setTimeout(start, 1500);
+      }
+    }
   }
 
   /**

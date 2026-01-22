@@ -12,9 +12,16 @@ import { useToast } from '@/components/ui/use-toast';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 
 // Optimized components
+import dynamic from 'next/dynamic';
 import { AnalyticsKPICards } from './components/AnalyticsKPICards';
-import { MonthlyTrendsChart } from './components/MonthlyTrendsChart';
-import { CategoryDistributionChart } from './components/CategoryDistributionChart';
+const MonthlyTrendsChart = dynamic(
+  () => import('./components/MonthlyTrendsChart').then(m => m.MonthlyTrendsChart),
+  { ssr: false }
+);
+const CategoryDistributionChart = dynamic(
+  () => import('./components/CategoryDistributionChart').then(m => m.CategoryDistributionChart),
+  { ssr: false }
+);
 import { TopPerformersTable } from './components/TopPerformersTable';
 import { PerformanceMetricsGrid } from './components/PerformanceMetricsGrid';
 

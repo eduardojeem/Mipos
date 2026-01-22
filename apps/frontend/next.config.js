@@ -82,11 +82,7 @@ const nextConfig = {
       // Optimizar imports de librerías grandes
       config.resolve.alias = {
         ...config.resolve.alias,
-        // Usar versiones optimizadas de librerías
-        'react-window': 'react-window/dist/index.esm.js',
-        'recharts': 'recharts/esm',
-        // Optimizar framer-motion para usar versión ESM
-        'framer-motion': 'framer-motion/dist/es/index.mjs',
+        'react-window': 'react-window/dist/index.esm.js'
       };
 
       // Configurar code splitting para chunks más pequeños

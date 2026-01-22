@@ -13,7 +13,11 @@ import { Sidebar } from '@/components/dashboard/sidebar';
 import { MobileNavigation } from '@/components/dashboard/MobileNavigation';
 import { Header } from '@/components/dashboard/header';
 import { KeyboardShortcuts } from '@/components/keyboard/keyboard-shortcuts';
-import { ConnectionIndicator } from '@/components/ui/connection-indicator';
+import dynamic from 'next/dynamic';
+const ConnectionIndicator = dynamic(
+  () => import('@/components/ui/connection-indicator').then(m => m.ConnectionIndicator),
+  { ssr: false }
+);
 
 // Component loading fallback
 const ComponentLoader = ({ className = "" }: { className?: string }) => (

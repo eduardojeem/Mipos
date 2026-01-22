@@ -13,21 +13,7 @@ import {
   Info,
   Lightbulb
 } from 'lucide-react';
-import { 
-  AreaChart, 
-  Area, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer,
-  PieChart, 
-  Pie, 
-  Cell, 
-  BarChart, 
-  Bar,
-  Legend
-} from 'recharts';
+import dynamic from 'next/dynamic';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -37,6 +23,26 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useProductPerformance, ProductPerformanceData, Suggestion } from '@/hooks/useProductPerformance';
 import { formatCurrency } from '@/lib/utils';
+
+const lazyRecharts = (name: string) =>
+  dynamic(() => import('recharts').then((m: any) => (props: any) => {
+    const C = m[name];
+    return <C {...props} />;
+  }), { ssr: false });
+
+const ResponsiveContainer = lazyRecharts('ResponsiveContainer');
+const AreaChart = lazyRecharts('AreaChart');
+const Area = lazyRecharts('Area');
+const XAxis = lazyRecharts('XAxis');
+const YAxis = lazyRecharts('YAxis');
+const CartesianGrid = lazyRecharts('CartesianGrid');
+const Tooltip = lazyRecharts('Tooltip');
+const PieChart = lazyRecharts('PieChart');
+const Pie = lazyRecharts('Pie');
+const Cell = lazyRecharts('Cell');
+const BarChart = lazyRecharts('BarChart');
+const Bar = lazyRecharts('Bar');
+const Legend = lazyRecharts('Legend');
 
 // Props interface - kept for compatibility but made optional
 interface ProductChartsProps {
@@ -134,7 +140,7 @@ export default function ProductCharts({ className = '' }: ProductChartsProps) {
                           fontSize={12} 
                           tickLine={false} 
                           axisLine={false}
-                          tickFormatter={(value) => `${value}`} 
+                          tickFormatter={(value: number | string) => `${value}`} 
                         />
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
                         <Tooltip 
@@ -229,7 +235,7 @@ export default function ProductCharts({ className = '' }: ProductChartsProps) {
                       <BarChart data={data.monthlyRevenue}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                         <XAxis dataKey="date" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
-                        <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} />
+                        <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value: number | string) => `$${value}`} />
                         <Tooltip formatter={(value: number) => formatCurrency(value)} />
                         <Bar dataKey="revenue" fill="#10b981" radius={[4, 4, 0, 0]} />
                       </BarChart>

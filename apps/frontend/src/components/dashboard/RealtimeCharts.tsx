@@ -2,23 +2,28 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-const LineChart = dynamic<any>(() => import('recharts').then(m => ({ default: m.LineChart })), { ssr: false });
-const Line = dynamic<any>(() => import('recharts').then(m => ({ default: m.Line })), { ssr: false });
-const AreaChart = dynamic<any>(() => import('recharts').then(m => ({ default: m.AreaChart })), { ssr: false });
-const Area = dynamic<any>(() => import('recharts').then(m => ({ default: m.Area as any })), { ssr: false });
-const Bar = dynamic<any>(() => import('recharts').then(m => ({ default: m.Bar as any })), { ssr: false });
-const PieChart = dynamic<any>(() => import('recharts').then(m => ({ default: m.PieChart })), { ssr: false });
-const Pie = dynamic<any>(() => import('recharts').then(m => ({ default: m.Pie as any })), { ssr: false });
-const Cell = dynamic<any>(() => import('recharts').then(m => ({ default: m.Cell })), { ssr: false });
-const XAxis = dynamic<any>(() => import('recharts').then(m => ({ default: m.XAxis })), { ssr: false });
-const YAxis = dynamic<any>(() => import('recharts').then(m => ({ default: m.YAxis })), { ssr: false });
-const CartesianGrid = dynamic<any>(() => import('recharts').then(m => ({ default: m.CartesianGrid })), { ssr: false });
-const Tooltip = dynamic<any>(() => import('recharts').then(m => ({ default: m.Tooltip })), { ssr: false });
-const Legend = dynamic<any>(() => import('recharts').then(m => ({ default: m.Legend })), { ssr: false });
-const ResponsiveContainer = dynamic<any>(() => import('recharts').then(m => ({ default: m.ResponsiveContainer })), { ssr: false });
-const ComposedChart = dynamic<any>(() => import('recharts').then(m => ({ default: m.ComposedChart })), { ssr: false });
-const RadialBarChart = dynamic<any>(() => import('recharts').then(m => ({ default: m.RadialBarChart })), { ssr: false });
-const RadialBar = dynamic<any>(() => import('recharts').then(m => ({ default: m.RadialBar as any })), { ssr: false });
+const lazyRecharts = (name: string) =>
+  dynamic(() => import('recharts').then((m: any) => (props: any) => {
+    const C = m[name];
+    return <C {...props} />;
+  }), { ssr: false });
+const LineChart = lazyRecharts('LineChart');
+const Line = lazyRecharts('Line');
+const AreaChart = lazyRecharts('AreaChart');
+const Area = lazyRecharts('Area');
+const Bar = lazyRecharts('Bar');
+const PieChart = lazyRecharts('PieChart');
+const Pie = lazyRecharts('Pie');
+const Cell = lazyRecharts('Cell');
+const XAxis = lazyRecharts('XAxis');
+const YAxis = lazyRecharts('YAxis');
+const CartesianGrid = lazyRecharts('CartesianGrid');
+const Tooltip = lazyRecharts('Tooltip');
+const Legend = lazyRecharts('Legend');
+const ResponsiveContainer = lazyRecharts('ResponsiveContainer');
+const ComposedChart = lazyRecharts('ComposedChart');
+const RadialBarChart = lazyRecharts('RadialBarChart');
+const RadialBar = lazyRecharts('RadialBar');
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

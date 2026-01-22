@@ -2,11 +2,28 @@
 
 import React, { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import dynamic from "next/dynamic";
 import { TrendingUp, BarChart3, DollarSign } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { CashReport } from "@/types/cash";
+
+const lazyRecharts = (name: string) =>
+  dynamic(() => import("recharts").then((m: any) => (props: any) => {
+    const C = m[name];
+    return <C {...props} />;
+  }), { ssr: false });
+
+const ResponsiveContainer = lazyRecharts("ResponsiveContainer");
+const BarChart = lazyRecharts("BarChart");
+const Bar = lazyRecharts("Bar");
+const LineChart = lazyRecharts("LineChart");
+const Line = lazyRecharts("Line");
+const XAxis = lazyRecharts("XAxis");
+const YAxis = lazyRecharts("YAxis");
+const CartesianGrid = lazyRecharts("CartesianGrid");
+const Tooltip = lazyRecharts("Tooltip");
+const Legend = lazyRecharts("Legend");
 
 interface ReportChartsSectionProps {
     reports: CashReport[];
@@ -96,7 +113,7 @@ function SessionTrendsChart({ reports }: { reports: CashReport[] }) {
                             }}
                         />
                         <Legend
-                            formatter={(value) =>
+                            formatter={(value: string) =>
                                 value === 'sesiones' ? 'Total' :
                                     value === 'cerradas' ? 'Cerradas' :
                                         value === 'abiertas' ? 'Abiertas' : value
@@ -175,7 +192,7 @@ function DiscrepancyAnalysisChart({ reports }: { reports: CashReport[] }) {
                             orientation="right"
                             className="text-xs"
                             tick={{ fill: 'currentColor' }}
-                            tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+                            tickFormatter={(value: number | string) => `$${(Number(value) / 1000).toFixed(0)}k`}
                         />
                         <Tooltip
                             contentStyle={{
@@ -183,15 +200,15 @@ function DiscrepancyAnalysisChart({ reports }: { reports: CashReport[] }) {
                                 border: '1px solid hsl(var(--border))',
                                 borderRadius: '0.5rem'
                             }}
-                            formatter={(value: number, name: string) => {
+                            formatter={(value: number | string, name: string) => {
                                 if (name === 'montoDiscrepancia' || name === 'promedioDiscrepancia') {
-                                    return [formatCurrency(value), name === 'montoDiscrepancia' ? 'Monto Total' : 'Promedio'];
+                                    return [formatCurrency(Number(value)), name === 'montoDiscrepancia' ? 'Monto Total' : 'Promedio'];
                                 }
                                 return [value, name === 'discrepancias' ? 'Sesiones con Discrepancia' : name];
                             }}
                         />
                         <Legend
-                            formatter={(value) =>
+                            formatter={(value: string) =>
                                 value === 'discrepancias' ? 'Sesiones Afectadas' :
                                     value === 'montoDiscrepancia' ? 'Monto Total' :
                                         value === 'promedioDiscrepancia' ? 'Promedio' : value

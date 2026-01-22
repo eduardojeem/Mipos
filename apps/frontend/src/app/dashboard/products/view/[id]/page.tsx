@@ -2,18 +2,22 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
+const lazyRecharts = (name: string) =>
+  dynamic(() => import('recharts').then((m: any) => (props: any) => {
+    const C = m[name];
+    return <C {...props} />;
+  }), { ssr: false });
 import { motion } from 'framer-motion';
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip as RechartsTooltip,
-  XAxis,
-  YAxis,
-  BarChart,
-  Bar
-} from 'recharts';
+const Area = lazyRecharts('Area');
+const AreaChart = lazyRecharts('AreaChart');
+const CartesianGrid = lazyRecharts('CartesianGrid');
+const ResponsiveContainer = lazyRecharts('ResponsiveContainer');
+const RechartsTooltip = lazyRecharts('Tooltip');
+const XAxis = lazyRecharts('XAxis');
+const YAxis = lazyRecharts('YAxis');
+const BarChart = lazyRecharts('BarChart');
+const Bar = lazyRecharts('Bar');
 import {
   ArrowLeft,
   Edit,
@@ -546,12 +550,12 @@ export default function ProductViewPage() {
                       fontSize={12}
                       tickLine={false}
                       axisLine={false}
-                      tickFormatter={(val) => `Gs ${val}`}
+                      tickFormatter={(val: number | string) => `Gs ${val}`}
                     />
                     <RechartsTooltip
                       contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '8px' }}
                       itemStyle={{ color: 'hsl(var(--foreground))' }}
-                      formatter={(value: number) => [fmtCurrency(value), 'Ingresos']}
+                      formatter={(value: number | string) => [fmtCurrency(Number(value)), 'Ingresos']}
                     />
                     <Area
                       type="monotone"

@@ -1,18 +1,23 @@
 'use client';
 
 import { memo, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { 
-  ResponsiveContainer, 
-  AreaChart, 
-  Area, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  Legend 
-} from 'recharts';
 import type { MonthlyTrend } from '../hooks/useSupplierAnalytics';
+
+const lazyRecharts = (name: string) =>
+  dynamic(() => import('recharts').then((m: any) => (props: any) => {
+    const C = m[name];
+    return <C {...props} />;
+  }), { ssr: false });
+const ResponsiveContainer = lazyRecharts('ResponsiveContainer');
+const AreaChart = lazyRecharts('AreaChart');
+const Area = lazyRecharts('Area');
+const XAxis = lazyRecharts('XAxis');
+const YAxis = lazyRecharts('YAxis');
+const CartesianGrid = lazyRecharts('CartesianGrid');
+const Tooltip = lazyRecharts('Tooltip');
+const Legend = lazyRecharts('Legend');
 
 interface MonthlyTrendsChartProps {
   data: MonthlyTrend[];

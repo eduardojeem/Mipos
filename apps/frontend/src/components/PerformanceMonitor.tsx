@@ -1,23 +1,27 @@
 import React, { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  PieChart,
-  Pie,
-  Cell
-} from 'recharts';
+const lazyRecharts = (name: string) =>
+  dynamic(() => import('recharts').then((m: any) => (props: any) => {
+    const C = m[name];
+    return <C {...props} />;
+  }), { ssr: false });
+const BarChart = lazyRecharts('BarChart');
+const Bar = lazyRecharts('Bar');
+const XAxis = lazyRecharts('XAxis');
+const YAxis = lazyRecharts('YAxis');
+const CartesianGrid = lazyRecharts('CartesianGrid');
+const Tooltip = lazyRecharts('Tooltip');
+const ResponsiveContainer = lazyRecharts('ResponsiveContainer');
+const LineChart = lazyRecharts('LineChart');
+const Line = lazyRecharts('Line');
+const PieChart = lazyRecharts('PieChart');
+const Pie = lazyRecharts('Pie');
+const Cell = lazyRecharts('Cell');
 import {
   Activity,
   Clock,
@@ -284,7 +288,7 @@ export function PerformanceMonitor({
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={({ name, value }) => `${name}: ${value}`}
+                    label={({ name, value }: { name: string; value: number }) => `${name}: ${value}`}
                     outerRadius={80}
                     fill="#8884d8"
                     dataKey="value"

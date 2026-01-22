@@ -1,24 +1,7 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  LineChart,
-  Line,
-  AreaChart,
-  Area,
-  ComposedChart
-} from 'recharts';
+import dynamic from 'next/dynamic';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { formatCurrency } from '@/lib/utils';
@@ -65,6 +48,29 @@ const COLORS = [
   '#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#00ff00',
   '#ff00ff', '#00ffff', '#ff0000', '#0000ff', '#ffff00'
 ];
+
+const lazyRecharts = (name: string) =>
+  dynamic(() => import('recharts').then((m: any) => (props: any) => {
+    const C = m[name];
+    return <C {...props} />;
+  }), { ssr: false });
+
+const ResponsiveContainer = lazyRecharts('ResponsiveContainer');
+const BarChart = lazyRecharts('BarChart');
+const Bar = lazyRecharts('Bar');
+const XAxis = lazyRecharts('XAxis');
+const YAxis = lazyRecharts('YAxis');
+const CartesianGrid = lazyRecharts('CartesianGrid');
+const Tooltip = lazyRecharts('Tooltip');
+const Legend = lazyRecharts('Legend');
+const PieChart = lazyRecharts('PieChart');
+const Pie = lazyRecharts('Pie');
+const Cell = lazyRecharts('Cell');
+const LineChart = lazyRecharts('LineChart');
+const Line = lazyRecharts('Line');
+const AreaChart = lazyRecharts('AreaChart');
+const Area = lazyRecharts('Area');
+const ComposedChart = lazyRecharts('ComposedChart');
 
 export default function ProductCharts({ data, className }: ProductChartsProps) {
   // Custom tooltip formatters
@@ -175,7 +181,7 @@ export default function ProductCharts({ data, className }: ProductChartsProps) {
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={({ name, percentage }) => `${name}: ${percentage.toFixed(1)}%`}
+                    label={({ name, percentage }: { name: string; percentage: number }) => `${name}: ${percentage.toFixed(1)}%`}
                     outerRadius={80}
                     fill="#8884d8"
                     dataKey="value"
@@ -184,7 +190,7 @@ export default function ProductCharts({ data, className }: ProductChartsProps) {
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value, name) => [value, 'Productos']} />
+                  <Tooltip formatter={(value: number | string, name: string) => [value, 'Productos']} />
                 </PieChart>
               </ResponsiveContainer>
             </CardContent>
@@ -203,7 +209,7 @@ export default function ProductCharts({ data, className }: ProductChartsProps) {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis type="number" />
                   <YAxis dataKey="name" type="category" width={80} />
-                  <Tooltip formatter={(value) => [value, 'Productos']} />
+                  <Tooltip formatter={(value: number | string) => [value, 'Productos']} />
                   <Bar dataKey="value" fill="#8884d8">
                     {chartData.stockLevelsForPie.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
@@ -237,7 +243,7 @@ export default function ProductCharts({ data, className }: ProductChartsProps) {
                 <YAxis yAxisId="right" orientation="right" />
                 <Tooltip 
                   formatter={formatTooltip}
-                  labelFormatter={(label) => `Producto: ${label}`}
+                  labelFormatter={(label: string | number) => `Producto: ${label}`}
                 />
                 <Legend />
                 <Bar 

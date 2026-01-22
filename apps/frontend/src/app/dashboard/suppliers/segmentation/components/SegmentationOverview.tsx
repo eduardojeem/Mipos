@@ -17,19 +17,24 @@ import dynamic from 'next/dynamic'
 import { Segment, SegmentationInsight } from '../hooks/useSupplierSegmentation'
 
 // Dynamic imports for charts
-const ResponsiveContainer = dynamic<any>(() => import('recharts').then(m => ({ default: m.ResponsiveContainer })), { ssr: false })
-const RechartsPieChart = dynamic<any>(() => import('recharts').then(m => ({ default: m.PieChart })), { ssr: false })
-const Pie = dynamic<any>(() => import('recharts').then((m) => m.Pie as any), { ssr: false })
-const Cell = dynamic<any>(() => import('recharts').then(m => ({ default: m.Cell })), { ssr: false })
-const Tooltip = dynamic<any>(() => import('recharts').then(m => ({ default: m.Tooltip })), { ssr: false })
-const BarChart = dynamic<any>(() => import('recharts').then(m => ({ default: m.BarChart })), { ssr: false })
-const Bar = dynamic<any>(() => import('recharts').then((m) => m.Bar as any), { ssr: false })
-const XAxis = dynamic<any>(() => import('recharts').then(m => ({ default: m.XAxis })), { ssr: false })
-const YAxis = dynamic<any>(() => import('recharts').then(m => ({ default: m.YAxis })), { ssr: false })
-const CartesianGrid = dynamic<any>(() => import('recharts').then(m => ({ default: m.CartesianGrid })), { ssr: false })
-const Legend = dynamic<any>(() => import('recharts').then(m => ({ default: m.Legend })), { ssr: false })
-const ScatterChart = dynamic<any>(() => import('recharts').then(m => ({ default: m.ScatterChart })), { ssr: false })
-const Scatter = dynamic<any>(() => import('recharts').then(m => ({ default: m.Scatter })), { ssr: false })
+const lazyRecharts = (name: string) =>
+  dynamic(() => import('recharts').then((m: any) => (props: any) => {
+    const C = m[name];
+    return <C {...props} />;
+  }), { ssr: false });
+const ResponsiveContainer = lazyRecharts('ResponsiveContainer')
+const RechartsPieChart = lazyRecharts('PieChart')
+const Pie = lazyRecharts('Pie')
+const Cell = lazyRecharts('Cell')
+const Tooltip = lazyRecharts('Tooltip')
+const BarChart = lazyRecharts('BarChart')
+const Bar = lazyRecharts('Bar')
+const XAxis = lazyRecharts('XAxis')
+const YAxis = lazyRecharts('YAxis')
+const CartesianGrid = lazyRecharts('CartesianGrid')
+const Legend = lazyRecharts('Legend')
+const ScatterChart = lazyRecharts('ScatterChart')
+const Scatter = lazyRecharts('Scatter')
 
 interface SegmentationOverviewProps {
   totalSuppliers: number

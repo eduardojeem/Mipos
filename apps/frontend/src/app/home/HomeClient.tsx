@@ -8,7 +8,7 @@ import { HeroSection } from './components/HeroSection';
 import { Carousel } from './components/Carousel';
 import { Footer } from './components/Footer';
 import SectionSkeleton from './components/SectionSkeleton';
-import { featuredProducts, type SpecialOffer, type FeaturedProduct } from './data/homeData';
+import { type SpecialOffer, type FeaturedProduct } from './data/homeData';
 import ExistingOffersModal from '@/components/promotions/ExistingOffersModal';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
@@ -47,6 +47,7 @@ export default function HomeClient() {
   const [isOffersModalOpen, setIsOffersModalOpen] = useState(false);
   const [specialOffers, setSpecialOffers] = useState<SpecialOffer[]>([]);
   const [topProducts, setTopProducts] = useState<FeaturedProduct[]>([]);
+  const [stats, setStats] = useState<{ products: number; customers: number; sales: number; imageUrl?: string }>({ products: 0, customers: 0, sales: 0 });
 
   // Hook centralizado de colores
   const {
@@ -139,15 +140,7 @@ export default function HomeClient() {
             };
           });
         if (!cancelled) setPublicOffers(mapped);
-      } catch {
-        try {
-          const params = new URLSearchParams({ status: 'active', sort: 'best_savings', page: '1', limit: '8' });
-          const resp = await fetch(`/api/offers?${params.toString()}`);
-          const json = await resp.json();
-          const fallback = Array.isArray(json?.data) ? json.data : [];
-          if (!cancelled) setPublicOffers(fallback);
-        } catch {}
-      }
+      } catch {}
     };
     const loadTopProducts = async () => {
       try {
@@ -205,6 +198,24 @@ export default function HomeClient() {
     return () => { cancelled = true; };
   }, [config]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadStats = async () => {
+      try {
+        const [{ count: prodCount }, { count: custCount }, { count: saleCount }] = await Promise.all([
+          supabase.from('products').select('id', { count: 'exact', head: true }),
+          supabase.from('customers').select('id', { count: 'exact', head: true }),
+          supabase.from('sales').select('id', { count: 'exact', head: true }),
+        ]);
+        const heroImage = Array.isArray(config?.carousel?.images) && config.carousel.images[0]?.url ? config.carousel.images[0].url : (config?.branding?.logo || undefined);
+        if (!cancelled) setStats({ products: prodCount || 0, customers: custCount || 0, sales: saleCount || 0, imageUrl: heroImage });
+      } catch {
+        if (!cancelled) setStats({ products: 0, customers: 0, sales: 0, imageUrl: (config?.branding?.logo || undefined) });
+      }
+    };
+    loadStats();
+    return () => { cancelled = true; };
+  }, [config]);
   useEffect(() => {
     try {
       const el = document.getElementById('ofertas');
@@ -300,7 +311,7 @@ export default function HomeClient() {
         />
       )}
 
-      <HeroSection config={config} onViewOffers={() => scrollToSection('ofertas')} />
+      <HeroSection config={config} onViewOffers={() => scrollToSection('ofertas')} stats={stats} />
 
       {/* Acceso rápido a ofertas existentes */}
       <div className="mx-4 md:mx-8 mt-4 flex justify-end">
@@ -382,7 +393,7 @@ export default function HomeClient() {
         </section>
       )}
 
-      <FeaturedProductsSection products={(topProducts.length > 0 ? topProducts : featuredProducts)} config={config} />
+      {topProducts.length > 0 && <FeaturedProductsSection products={topProducts} config={config} />}
 
       <ContactSection config={config} />
 

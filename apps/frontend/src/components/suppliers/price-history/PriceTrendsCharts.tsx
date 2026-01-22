@@ -1,7 +1,24 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, Legend, BarChart, Bar } from 'recharts';
+import dynamic from 'next/dynamic';
 import { PriceTrend } from '@/types/price-history';
 import { useCurrencyFormatter } from '@/contexts/BusinessConfigContext';
+
+const lazyRecharts = (name: string) =>
+  dynamic(() => import('recharts').then((m: any) => (props: any) => {
+    const C = m[name];
+    return <C {...props} />;
+  }), { ssr: false });
+
+const ResponsiveContainer = lazyRecharts('ResponsiveContainer');
+const LineChart = lazyRecharts('LineChart');
+const Line = lazyRecharts('Line');
+const CartesianGrid = lazyRecharts('CartesianGrid');
+const XAxis = lazyRecharts('XAxis');
+const YAxis = lazyRecharts('YAxis');
+const Tooltip = lazyRecharts('Tooltip');
+const Legend = lazyRecharts('Legend');
+const BarChart = lazyRecharts('BarChart');
+const Bar = lazyRecharts('Bar');
 
 interface PriceTrendsChartsProps {
     trends: PriceTrend[];
@@ -28,7 +45,7 @@ export function PriceTrendsCharts({ trends, loading }: PriceTrendsChartsProps) {
                                 <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis dataKey="period" />
                                 <YAxis />
-                                <Tooltip formatter={(value: number) => fmtCurrency(value)} />
+                                <Tooltip formatter={(value: any) => fmtCurrency(Number(value))} />
                                 <Legend />
                                 <Line type="monotone" dataKey="avgPrice" name="Precio Promedio" stroke="#2563eb" strokeWidth={2} />
                                 <Line type="monotone" dataKey="minPrice" name="Mínimo" stroke="#16a34a" strokeDasharray="5 5" />

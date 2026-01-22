@@ -162,7 +162,9 @@ export const VirtualizedProductList = memo(function VirtualizedProductList({
             overscanCount={2} // Pre-render 2 rows above/below viewport for smooth scrolling
             className="scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100"
           >
-            {ProductRow}
+            {({ index, style }) => (
+              <ProductRow index={index} style={style} data={listData} />
+            )}
           </List>
         )}
       </AutoSizer>

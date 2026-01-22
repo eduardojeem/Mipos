@@ -1,4 +1,17 @@
-import * as Sentry from '@sentry/nextjs';
+// Sentry opcional: evita errores de tipos si el paquete no está instalado
+let Sentry: any;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  Sentry = require('@sentry/nextjs');
+} catch {
+  Sentry = {
+    init: () => {},
+    captureException: () => {},
+    captureMessage: () => {},
+    addBreadcrumb: () => {},
+    setUser: () => {},
+  };
+}
 
 /**
  * Configuración de Sentry para monitoreo de errores
@@ -27,7 +40,7 @@ if (SENTRY_DSN) {
         tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
 
         // Configuración de errores
-        beforeSend(event, hint) {
+        beforeSend(event: any, hint: any) {
             // Filtrar errores que no son importantes
             const error = hint.originalException as Error;
 

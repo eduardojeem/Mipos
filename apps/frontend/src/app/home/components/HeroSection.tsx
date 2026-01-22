@@ -18,9 +18,10 @@ import { memo } from 'react';
 interface HeroSectionProps {
   config: BusinessConfig;
   onViewOffers: () => void;
+  stats?: { products: number; customers: number; sales: number; imageUrl?: string };
 }
 
-function HeroSectionComponent({ config, onViewOffers }: HeroSectionProps) {
+function HeroSectionComponent({ config, onViewOffers, stats }: HeroSectionProps) {
   const primary = config?.branding?.primaryColor || '#ec4899';
   const secondary = config?.branding?.secondaryColor || '#9333ea';
   const accent = config?.branding?.accentColor || primary;
@@ -90,7 +91,7 @@ function HeroSectionComponent({ config, onViewOffers }: HeroSectionProps) {
                   <div className="w-14 h-14 rounded-full bg-gradient-to-br from-sky-500 via-blue-500 to-cyan-500 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-sky-500/60 group-hover:scale-110 group-hover:shadow-xl group-hover:shadow-blue-500/60 transition-all">
                     <Package className="w-7 h-7 text-white" />
                   </div>
-                  <p className="text-3xl font-black bg-gradient-to-r from-sky-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent">500+</p>
+                  <p className="text-3xl font-black bg-gradient-to-r from-sky-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent">{(stats?.products ?? 0).toString()}</p>
                   <p className="text-sm text-slate-700 dark:text-slate-300 font-semibold">Productos</p>
                 </div>
               </div>
@@ -99,7 +100,7 @@ function HeroSectionComponent({ config, onViewOffers }: HeroSectionProps) {
                   <div className="w-14 h-14 rounded-full bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-emerald-500/60 group-hover:scale-110 group-hover:shadow-xl group-hover:shadow-teal-500/60 transition-all">
                     <Users className="w-7 h-7 text-white" />
                   </div>
-                  <p className="text-3xl font-black bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 bg-clip-text text-transparent">10K+</p>
+                  <p className="text-3xl font-black bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 bg-clip-text text-transparent">{(stats?.customers ?? 0).toString()}</p>
                   <p className="text-sm text-slate-700 dark:text-slate-300 font-semibold">Clientes</p>
                 </div>
               </div>
@@ -108,8 +109,8 @@ function HeroSectionComponent({ config, onViewOffers }: HeroSectionProps) {
                   <div className="w-14 h-14 rounded-full bg-gradient-to-br from-amber-500 via-orange-500 to-yellow-500 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-amber-500/60 group-hover:scale-110 group-hover:shadow-xl group-hover:shadow-orange-500/60 transition-all">
                     <Award className="w-7 h-7 text-white" />
                   </div>
-                  <p className="text-3xl font-black bg-gradient-to-r from-amber-600 via-orange-600 to-yellow-600 bg-clip-text text-transparent">5★</p>
-                  <p className="text-sm text-slate-700 dark:text-slate-300 font-semibold">Calificación</p>
+                  <p className="text-3xl font-black bg-gradient-to-r from-amber-600 via-orange-600 to-yellow-600 bg-clip-text text-transparent">{(stats?.sales ?? 0).toString()}</p>
+                  <p className="text-sm text-slate-700 dark:text-slate-300 font-semibold">Ventas</p>
                 </div>
               </div>
             </div>
@@ -118,7 +119,7 @@ function HeroSectionComponent({ config, onViewOffers }: HeroSectionProps) {
           <div className="relative">
             <div className="relative z-10">
               <Image
-                src="/api/placeholder/600/600"
+                src={stats?.imageUrl || '/api/placeholder/600/600'}
                 alt="Productos de belleza"
                 width={600}
                 height={600}

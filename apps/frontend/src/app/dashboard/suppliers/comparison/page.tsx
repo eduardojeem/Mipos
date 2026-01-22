@@ -38,78 +38,29 @@ import {
 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import { ArrowLeft } from 'lucide-react'
-const BarChart = dynamic<any>(
-  () => import('recharts').then((m) => ({ default: m.BarChart as any }) as any),
-  { ssr: false }
-)
-const Bar = dynamic<any>(
-  () => import('recharts').then((m) => ({ default: m.Bar as any }) as any),
-  { ssr: false }
-)
-const XAxis = dynamic<any>(
-  () => import('recharts').then((m) => ({ default: m.XAxis as any }) as any),
-  { ssr: false }
-)
-const YAxis = dynamic<any>(
-  () => import('recharts').then((m) => ({ default: m.YAxis as any }) as any),
-  { ssr: false }
-)
-const CartesianGrid = dynamic<any>(
-  () => import('recharts').then((m) => ({ default: m.CartesianGrid as any }) as any),
-  { ssr: false }
-)
-const Tooltip = dynamic<any>(
-  () => import('recharts').then((m) => ({ default: m.Tooltip as any }) as any),
-  { ssr: false }
-)
-const Legend = dynamic<any>(
-  () => import('recharts').then((m) => ({ default: m.Legend as any }) as any),
-  { ssr: false }
-)
-const ResponsiveContainer = dynamic<any>(
-  () => import('recharts').then((m) => ({ default: m.ResponsiveContainer as any }) as any),
-  { ssr: false }
-)
-const RadarChart = dynamic<any>(
-  () => import('recharts').then((m) => ({ default: m.RadarChart as any }) as any),
-  { ssr: false }
-)
-const PolarGrid = dynamic<any>(
-  () => import('recharts').then((m) => ({ default: m.PolarGrid as any }) as any),
-  { ssr: false }
-)
-const PolarAngleAxis = dynamic<any>(
-  () => import('recharts').then((m) => ({ default: m.PolarAngleAxis as any }) as any),
-  { ssr: false }
-)
-const PolarRadiusAxis = dynamic<any>(
-  () => import('recharts').then((m) => ({ default: m.PolarRadiusAxis as any }) as any),
-  { ssr: false }
-)
-const Radar = dynamic<any>(
-  () => import('recharts').then((m) => ({ default: m.Radar as any }) as any),
-  { ssr: false }
-)
-const RechartsLineChart = dynamic<any>(
-  () => import('recharts').then((m) => ({ default: m.LineChart as any }) as any),
-  { ssr: false }
-)
-const Line = dynamic<any>(
-  () => import('recharts').then((m) => ({ default: m.Line as any }) as any),
-  { ssr: false }
-)
-const RechartsPieChart = dynamic<any>(
-  () => import('recharts').then((m) => ({ default: m.PieChart as any }) as any),
-  { ssr: false }
-)
-const Cell = dynamic<any>(
-  () => import('recharts').then((m) => ({ default: m.Cell as any }) as any),
-  { ssr: false }
-)
-const Pie = dynamic<any>(
-  () => import('recharts').then((m) => ({ default: m.Pie as any }) as any),
-  { ssr: false }
-)
+const lazyRecharts = (name: string) =>
+  dynamic(() => import('recharts').then((m: any) => (props: any) => {
+    const C = m[name];
+    return <C {...props} />;
+  }), { ssr: false });
+const BarChart = lazyRecharts('BarChart');
+const Bar = lazyRecharts('Bar');
+const XAxis = lazyRecharts('XAxis');
+const YAxis = lazyRecharts('YAxis');
+const CartesianGrid = lazyRecharts('CartesianGrid');
+const Tooltip = lazyRecharts('Tooltip');
+const Legend = lazyRecharts('Legend');
+const ResponsiveContainer = lazyRecharts('ResponsiveContainer');
+const RadarChart = lazyRecharts('RadarChart');
+const PolarGrid = lazyRecharts('PolarGrid');
+const PolarAngleAxis = lazyRecharts('PolarAngleAxis');
+const PolarRadiusAxis = lazyRecharts('PolarRadiusAxis');
+const Radar = lazyRecharts('Radar');
+const RechartsLineChart = lazyRecharts('LineChart');
+const Line = lazyRecharts('Line');
+const RechartsPieChart = lazyRecharts('PieChart');
+const Cell = lazyRecharts('Cell');
+const Pie = lazyRecharts('Pie');
 
 // Interfaces
 interface Supplier {

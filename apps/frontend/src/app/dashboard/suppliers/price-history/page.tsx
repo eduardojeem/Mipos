@@ -20,9 +20,13 @@ import {
 } from '@/hooks/usePriceHistoryData';
 
 // Components
+import dynamic from 'next/dynamic';
 import { PriceAnalyticsCards } from '@/components/suppliers/price-history/PriceAnalyticsCards';
 import { PriceHistoryTable } from '@/components/suppliers/price-history/PriceHistoryTable';
-import { PriceTrendsCharts } from '@/components/suppliers/price-history/PriceTrendsCharts';
+const PriceTrendsCharts = dynamic(
+  () => import('@/components/suppliers/price-history/PriceTrendsCharts').then(m => m.PriceTrendsCharts),
+  { ssr: false }
+);
 import { PriceAlertsList } from '@/components/suppliers/price-history/PriceAlertsList';
 import { CreatePriceEntryDialog } from '@/components/suppliers/price-history/CreatePriceEntryDialog';
 import { CreatePriceAlertDialog } from '@/components/suppliers/price-history/CreatePriceAlertDialog';

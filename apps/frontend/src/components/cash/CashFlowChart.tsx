@@ -1,7 +1,19 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import dynamic from 'next/dynamic';
+const lazyRecharts = (name: string) =>
+  dynamic(() => import('recharts').then((m: any) => (props: any) => {
+    const C = m[name];
+    return <C {...props} />;
+  }), { ssr: false });
+const AreaChart = lazyRecharts('AreaChart');
+const Area = lazyRecharts('Area');
+const XAxis = lazyRecharts('XAxis');
+const YAxis = lazyRecharts('YAxis');
+const CartesianGrid = lazyRecharts('CartesianGrid');
+const Tooltip = lazyRecharts('Tooltip');
+const ResponsiveContainer = lazyRecharts('ResponsiveContainer');
 import { useCurrencyFormatter } from '@/contexts/BusinessConfigContext';
 import { CashMovement } from "@/types/cash";
 import { useMemo } from "react";
@@ -81,11 +93,11 @@ export default function CashFlowChart({ movements, openingBalance }: CashFlowCha
                                 fontSize={12}
                                 tickLine={false}
                                 axisLine={false}
-                                tickFormatter={(value) => `$${value}`}
+                                tickFormatter={(value: number | string) => `$${value}`}
                             />
                             <Tooltip
                                 contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                                formatter={(value: number) => [fmtCurrency(value), "Balance"]}
+                                formatter={(value: any) => [fmtCurrency(Number(value)), "Balance"]}
                             />
                             <Area
                                 type="monotone"
