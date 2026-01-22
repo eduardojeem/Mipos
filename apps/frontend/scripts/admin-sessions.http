@@ -1,0 +1,23 @@
+# Base
+@base = http://localhost:3000
+@csrf = {{CSRF_SECRET}}
+
+### Listar sesiones (paginado)
+GET {{base}}/api/admin/sessions?limit=5&page=1&status=all
+
+### Filtrar por rol y riesgo
+GET {{base}}/api/admin/sessions?userRole=ADMIN&riskLevel=high&limit=10
+
+### Exportar JSON
+GET {{base}}/api/admin/sessions/export?format=json&status=active
+
+### Exportar CSV (descarga)
+GET {{base}}/api/admin/sessions/export?format=csv&deviceType=desktop
+
+### Terminar sesión (CSRF requerido)
+POST {{base}}/api/admin/sessions/session-1/terminate
+X-CSRF-Token: {{csrf}}
+
+### Cleanup expiradas (CSRF requerido)
+POST {{base}}/api/admin/sessions/cleanup
+X-CSRF-Token: {{csrf}}

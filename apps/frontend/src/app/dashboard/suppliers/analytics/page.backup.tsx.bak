@@ -1,0 +1,643 @@
+'use client';
+
+import { useState, useEffect, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/hooks/use-auth';
+import { useToast } from '@/components/ui/use-toast';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import dynamic from 'next/dynamic';
+const BarChart = dynamic<any>(
+  () => import('recharts').then((m) => m.BarChart),
+  { ssr: false }
+);
+const Bar = dynamic<any>(
+  () =>
+    import('recharts').then(
+      (m) => ({ default: m.Bar as any } as any)
+    ),
+  { ssr: false }
+);
+const XAxis = dynamic<any>(
+  () => import('recharts').then((m) => m.XAxis),
+  { ssr: false }
+);
+const YAxis = dynamic<any>(
+  () => import('recharts').then((m) => m.YAxis),
+  { ssr: false }
+);
+const CartesianGrid = dynamic<any>(
+  () => import('recharts').then((m) => m.CartesianGrid),
+  { ssr: false }
+);
+const Tooltip = dynamic<any>(
+  () => import('recharts').then((m) => m.Tooltip),
+  { ssr: false }
+);
+const ResponsiveContainer = dynamic<any>(
+  () => import('recharts').then((m) => m.ResponsiveContainer),
+  { ssr: false }
+);
+const LineChart = dynamic<any>(
+  () => import('recharts').then((m) => m.LineChart),
+  { ssr: false }
+);
+const Line = dynamic<any>(
+  () => import('recharts').then((m) => m.Line),
+  { ssr: false }
+);
+const PieChart = dynamic<any>(
+  () => import('recharts').then((m) => m.PieChart),
+  { ssr: false }
+);
+const Pie = dynamic<any>(
+  () =>
+    import('recharts').then(
+      (m) => ({ default: m.Pie as any } as any)
+    ),
+  { ssr: false }
+);
+const Cell = dynamic<any>(
+  () => import('recharts').then((m) => m.Cell),
+  { ssr: false }
+);
+const Area = dynamic<any>(
+  () =>
+    import('recharts').then(
+      (m) => ({ default: m.Area as any } as any)
+    ),
+  { ssr: false }
+);
+const AreaChart = dynamic<any>(
+  () => import('recharts').then((m) => m.AreaChart),
+  { ssr: false }
+);
+import {
+  TrendingUp,
+  TrendingDown,
+  Users,
+  ShoppingCart,
+  DollarSign,
+  Calendar,
+  Award,
+  AlertTriangle,
+  Target,
+  Activity,
+  BarChart3,
+  PieChart as PieChartIcon,
+  ArrowLeft
+} from 'lucide-react';
+import api from '@/lib/api';
+import { useSuppliersAnalytics } from '@/hooks/useSuppliersAnalytics';
+
+// Types
+interface SupplierAnalytics {
+  id: string;
+  name: string;
+  totalPurchases: number;
+  totalOrders: number;
+  averageOrderValue: number;
+  lastPurchaseDate: string;
+  performanceScore: number;
+  reliability: number;
+  category: string;
+  status: string;
+  monthlyData: {
+    month: string;
+    purchases: number;
+    orders: number;
+  }[];
+}
+
+interface AnalyticsMetrics {
+  totalSuppliers: number;
+  activeSuppliers: number;
+  totalSpent: number;
+  averageOrderValue: number;
+  topPerformers: SupplierAnalytics[];
+  categoryDistribution: {
+    name: string;
+    value: number;
+    color?: string;
+  }[];
+  monthlyTrends: {
+    month: string;
+    purchases: number;
+    orders: number;
+    suppliers: number;
+  }[];
+  performanceMetrics: {
+    excellent: number;
+    good: number;
+    average: number;
+    poor: number;
+  };
+}
+
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
+
+export default function SuppliersAnalyticsPage() {
+  const router = useRouter();
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(true);
+  const [analytics, setAnalytics] = useState<AnalyticsMetrics | null>(null);
+  const [suppliers, setSuppliers] = useState<SupplierAnalytics[]>([]);
+  const [timeRange, setTimeRange] = useState('12months');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+
+  const { data: supaAnalytics, isLoading: loadingSupa } = useSuppliersAnalytics({ months: 12 });
+
+  // Load analytics data
+  const loadAnalytics = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get('/suppliers/analytics', {
+        params: { timeRange, category: selectedCategory }
+      });
+      
+      setAnalytics(response.data.analytics);
+      setSuppliers(response.data.suppliers);
+    } catch (error) {
+      console.error('Error loading analytics:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudieron cargar las métricas de proveedores',
+        variant: 'destructive',
+      });
+      
+      // Mock data for development
+      setAnalytics({
+        totalSuppliers: 45,
+        activeSuppliers: 38,
+        totalSpent: 2450000,
+        averageOrderValue: 15750,
+        topPerformers: [],
+        categoryDistribution: [
+          { name: 'Premium', value: 15, color: '#0088FE' },
+          { name: 'Regular', value: 23, color: '#00C49F' },
+          { name: 'Ocasional', value: 7, color: '#FFBB28' }
+        ],
+        monthlyTrends: [
+          { month: 'Ene', purchases: 180000, orders: 12, suppliers: 8 },
+          { month: 'Feb', purchases: 220000, orders: 15, suppliers: 10 },
+          { month: 'Mar', purchases: 195000, orders: 13, suppliers: 9 },
+          { month: 'Abr', purchases: 240000, orders: 16, suppliers: 11 },
+          { month: 'May', purchases: 210000, orders: 14, suppliers: 9 },
+          { month: 'Jun', purchases: 280000, orders: 18, suppliers: 12 }
+        ],
+        performanceMetrics: {
+          excellent: 12,
+          good: 18,
+          average: 10,
+          poor: 5
+        }
+      });
+      
+      setSuppliers([
+        {
+          id: '1',
+          name: 'TechSupply Corp',
+          totalPurchases: 450000,
+          totalOrders: 28,
+          averageOrderValue: 16071,
+          lastPurchaseDate: '2024-01-15',
+          performanceScore: 95,
+          reliability: 98,
+          category: 'Premium',
+          status: 'active',
+          monthlyData: [
+            { month: 'Ene', purchases: 75000, orders: 5 },
+            { month: 'Feb', purchases: 82000, orders: 6 },
+            { month: 'Mar', purchases: 68000, orders: 4 },
+            { month: 'Abr', purchases: 90000, orders: 6 },
+            { month: 'May', purchases: 78000, orders: 4 },
+            { month: 'Jun', purchases: 57000, orders: 3 }
+          ]
+        },
+        {
+          id: '2',
+          name: 'Global Materials',
+          totalPurchases: 320000,
+          totalOrders: 22,
+          averageOrderValue: 14545,
+          lastPurchaseDate: '2024-01-12',
+          performanceScore: 88,
+          reliability: 92,
+          category: 'Premium',
+          status: 'active',
+          monthlyData: [
+            { month: 'Ene', purchases: 52000, orders: 4 },
+            { month: 'Feb', purchases: 58000, orders: 4 },
+            { month: 'Mar', purchases: 45000, orders: 3 },
+            { month: 'Abr', purchases: 62000, orders: 4 },
+            { month: 'May', purchases: 55000, orders: 4 },
+            { month: 'Jun', purchases: 48000, orders: 3 }
+          ]
+        }
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (supaAnalytics?.analytics) {
+      const a = supaAnalytics.analytics;
+      setAnalytics({
+        totalSuppliers: a.totalSuppliers,
+        activeSuppliers: a.activeSuppliers,
+        totalSpent: a.totalSpent,
+        averageOrderValue: a.averageOrderValue,
+        topPerformers: [],
+        categoryDistribution: a.categoryDistribution,
+        monthlyTrends: a.monthlyTrends.map(m => ({ month: m.month, purchases: 0, orders: 0, suppliers: m.suppliers })),
+        performanceMetrics: a.performanceMetrics,
+      });
+      setLoading(false);
+      return;
+    }
+    loadAnalytics();
+  }, [timeRange, selectedCategory, supaAnalytics]);
+
+  // Calculate performance indicators
+  const performanceIndicators = useMemo(() => {
+    if (!analytics) return [];
+    
+    const totalSuppliers = analytics.totalSuppliers;
+    const activeRate = (analytics.activeSuppliers / totalSuppliers) * 100;
+    const avgOrderValue = analytics.averageOrderValue;
+    
+    return [
+      {
+        title: 'Tasa de Actividad',
+        value: `${activeRate.toFixed(1)}%`,
+        change: '+5.2%',
+        trend: 'up' as const,
+        icon: Activity
+      },
+      {
+        title: 'Valor Promedio de Orden',
+        value: `$${avgOrderValue.toLocaleString()}`,
+        change: '+12.3%',
+        trend: 'up' as const,
+        icon: DollarSign
+      },
+      {
+        title: 'Proveedores Activos',
+        value: analytics.activeSuppliers.toString(),
+        change: '+3',
+        trend: 'up' as const,
+        icon: Users
+      },
+      {
+        title: 'Total Gastado',
+        value: `$${analytics.totalSpent.toLocaleString()}`,
+        change: '+18.7%',
+        trend: 'up' as const,
+        icon: ShoppingCart
+      }
+    ];
+  }, [analytics]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-muted-foreground">Cargando analytics...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <Button 
+          variant="ghost" 
+          className="pl-0 hover:bg-transparent text-muted-foreground hover:text-foreground transition-colors"
+          onClick={() => router.back()}
+        >
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Volver
+        </Button>
+      </div>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Analytics de Proveedores</h1>
+          <p className="text-muted-foreground">
+            Métricas avanzadas y análisis de rendimiento de proveedores
+          </p>
+        </div>
+        <div className="flex items-center space-x-2">
+          <Select value={timeRange} onValueChange={setTimeRange}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="3months">Últimos 3 meses</SelectItem>
+              <SelectItem value="6months">Últimos 6 meses</SelectItem>
+              <SelectItem value="12months">Último año</SelectItem>
+              <SelectItem value="24months">Últimos 2 años</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas las categorías</SelectItem>
+              <SelectItem value="premium">Premium</SelectItem>
+              <SelectItem value="regular">Regular</SelectItem>
+              <SelectItem value="ocasional">Ocasional</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {performanceIndicators.map((indicator, index) => (
+          <Card key={index}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">{indicator.title}</CardTitle>
+              <indicator.icon className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{indicator.value}</div>
+              <div className="flex items-center text-xs text-muted-foreground">
+                {indicator.trend === 'up' ? (
+                  <TrendingUp className="mr-1 h-3 w-3 text-green-500" />
+                ) : (
+                  <TrendingDown className="mr-1 h-3 w-3 text-red-500" />
+                )}
+                <span className={indicator.trend === 'up' ? 'text-green-500' : 'text-red-500'}>
+                  {indicator.change}
+                </span>
+                <span className="ml-1">vs mes anterior</span>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Analytics Tabs */}
+      <Tabs defaultValue="overview" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="overview">Resumen</TabsTrigger>
+          <TabsTrigger value="performance">Rendimiento</TabsTrigger>
+          <TabsTrigger value="trends">Tendencias</TabsTrigger>
+          <TabsTrigger value="comparison">Comparación</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            {/* Monthly Trends Chart */}
+            <Card className="col-span-1">
+              <CardHeader>
+                <CardTitle>Tendencias Mensuales</CardTitle>
+                <CardDescription>Compras y órdenes por mes</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <AreaChart data={analytics?.monthlyTrends}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="month" />
+                    <YAxis />
+                    <Tooltip formatter={(value: number, name: string) => [
+                      name === 'purchases' ? `$${value.toLocaleString()}` : value,
+                      name === 'purchases' ? 'Compras' : 'Órdenes'
+                    ]} />
+                    <Area 
+                      type="monotone" 
+                      dataKey="purchases" 
+                      stackId="1" 
+                      stroke="#8884d8" 
+                      fill="#8884d8" 
+                      fillOpacity={0.6}
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="orders" 
+                      stackId="2" 
+                      stroke="#82ca9d" 
+                      fill="#82ca9d" 
+                      fillOpacity={0.6}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            {/* Category Distribution */}
+            <Card className="col-span-1">
+              <CardHeader>
+                <CardTitle>Distribución por Categoría</CardTitle>
+                <CardDescription>Proveedores por tipo</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={analytics?.categoryDistribution}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({
+                        name,
+                        percent,
+                      }: {
+                        name: string;
+                        percent: number;
+                      }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {analytics?.categoryDistribution?.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Top Performers */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Mejores Proveedores</CardTitle>
+              <CardDescription>Proveedores con mejor rendimiento</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {suppliers.slice(0, 5).map((supplier, index) => (
+                  <div key={supplier.id} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="flex items-center space-x-4">
+                      <div className="flex items-center justify-center w-8 h-8 bg-primary/10 rounded-full">
+                        <span className="text-sm font-bold text-primary">#{index + 1}</span>
+                      </div>
+                      <div>
+                        <h3 className="font-medium">{supplier.name}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {supplier.totalOrders} órdenes • ${supplier.totalPurchases.toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-4">
+                      <div className="text-right">
+                        <div className="text-sm font-medium">Score: {supplier.performanceScore}</div>
+                        <Progress value={supplier.performanceScore} className="w-20" />
+                      </div>
+                      <Badge variant={supplier.category === 'Premium' ? 'default' : 'secondary'}>
+                        {supplier.category}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="performance" className="space-y-4">
+          {/* Performance Metrics */}
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Excelente</CardTitle>
+                <Award className="h-4 w-4 text-green-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-green-500">{analytics?.performanceMetrics?.excellent}</div>
+                <p className="text-xs text-muted-foreground">Score 90-100</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Bueno</CardTitle>
+                <Target className="h-4 w-4 text-blue-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-blue-500">{analytics?.performanceMetrics?.good}</div>
+                <p className="text-xs text-muted-foreground">Score 70-89</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Promedio</CardTitle>
+                <BarChart3 className="h-4 w-4 text-yellow-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-yellow-500">{analytics?.performanceMetrics?.average}</div>
+                <p className="text-xs text-muted-foreground">Score 50-69</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Deficiente</CardTitle>
+                <AlertTriangle className="h-4 w-4 text-red-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-red-500">{analytics?.performanceMetrics?.poor}</div>
+                <p className="text-xs text-muted-foreground">Score 0-49</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Performance Chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Análisis de Rendimiento</CardTitle>
+              <CardDescription>Score de rendimiento por proveedor</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={400}>
+                <BarChart data={suppliers}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="performanceScore" fill="#8884d8" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="trends" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Tendencias de Compras</CardTitle>
+              <CardDescription>Evolución mensual de compras y órdenes</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={400}>
+                <LineChart data={analytics?.monthlyTrends}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <Tooltip />
+                  <Line type="monotone" dataKey="purchases" stroke="#8884d8" strokeWidth={2} />
+                  <Line type="monotone" dataKey="orders" stroke="#82ca9d" strokeWidth={2} />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="comparison" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Comparación de Proveedores</CardTitle>
+              <CardDescription>Análisis comparativo de rendimiento</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {suppliers.map((supplier) => (
+                  <div key={supplier.id} className="p-4 border rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="font-medium">{supplier.name}</h3>
+                      <Badge variant={supplier.performanceScore >= 90 ? 'default' : 'secondary'}>
+                        Score: {supplier.performanceScore}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <p className="text-muted-foreground">Total Compras</p>
+                        <p className="font-medium">${supplier.totalPurchases.toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Órdenes</p>
+                        <p className="font-medium">{supplier.totalOrders}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Valor Promedio</p>
+                        <p className="font-medium">${supplier.averageOrderValue.toLocaleString()}</p>
+                      </div>
+                    </div>
+                    <div className="mt-2">
+                      <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                        <span>Rendimiento</span>
+                        <span>{supplier.performanceScore}%</span>
+                      </div>
+                      <Progress value={supplier.performanceScore} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}

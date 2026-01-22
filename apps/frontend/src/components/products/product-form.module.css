@@ -1,0 +1,151 @@
+.productForm {
+  --text-primary: #333333;
+  --text-label: #666666;
+  --text-help: #767676;
+  --placeholder-color: #767676;
+  --text-error: #CC0000;
+  --text-success: #006600;
+  --ring-color: #007BFF;
+  --button-text: #ffffff;
+  --button-bg: #007BFF;
+  --button-bg-hover: #0069D9;
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Liberation Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+  font-size: 16px;
+  line-height: 1.5;
+  text-align: left;
+  letter-spacing: normal;
+}
+
+/* Dark theme overrides: ensure AA contrast on dark backgrounds */
+.dark .productForm {
+  --text-primary: #EDEDED;
+  --text-label: #CCCCCC;
+  --text-help: #B0B0B0;
+  --placeholder-color: #B0B0B0;
+  --text-error: #FF6B6B;
+  --text-success: #4CAF50;
+  --ring-color: #3399FF;
+  --button-text: #ffffff;
+  --button-bg: #3399FF;
+  --button-bg-hover: #2B86E6;
+  color: var(--text-primary);
+}
+
+/* Etiquetas por defecto y enfatizadas */
+.productForm label {
+  color: var(--text-label);
+  text-transform: none;
+  font-size: 16px;
+}
+.productForm .labelImportant {
+  color: #4E73DF;
+}
+
+/* Textos de ayuda y secundarios */
+.productForm .helpText,
+.productForm .text-muted-foreground {
+  color: var(--text-help) !important;
+  font-size: 14px;
+  max-width: 70ch;
+}
+
+/* Placeholders claros y visibles */
+.productForm input::placeholder,
+.productForm textarea::placeholder,
+.productForm select::placeholder {
+  color: var(--placeholder-color);
+  opacity: 1;
+  font-style: normal;
+}
+
+/* Textos de error coherentes */
+.productForm .errorText {
+  color: var(--text-error);
+  font-size: 14px;
+}
+
+.productForm .successText {
+  color: var(--text-success);
+  font-size: 14px;
+}
+
+/* Estados deshabilitados */
+.productForm :disabled {
+  color: #7A7A7A;
+}
+.productForm button:disabled {
+  color: #7A7A7A;
+}
+
+.productForm input:focus,
+.productForm textarea:focus,
+.productForm select:focus,
+.productForm input:focus-visible,
+.productForm textarea:focus-visible,
+.productForm select:focus-visible {
+  outline: 2px solid var(--ring-color);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--ring-color);
+  border-color: var(--ring-color);
+}
+
+.productForm button {
+  color: var(--button-text);
+  background-color: var(--button-bg);
+  text-transform: none;
+}
+
+.productForm button:hover {
+  background-color: var(--button-bg-hover);
+}
+
+.productForm button:focus-visible {
+  outline: 2px solid var(--ring-color);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--ring-color);
+}
+
+.productForm h1, .productForm h2, .productForm h3 {
+  font-weight: 600;
+  margin: 0.25rem 0 0.5rem 0;
+}
+
+.sectionCard {
+  border: 1px solid #e5e7eb;
+  background-color: #ffffff;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+
+.sectionTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.productForm input,
+.productForm textarea,
+.productForm select {
+  min-height: 40px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+}
+
+.productForm p {
+  margin: 0.25rem 0 0.75rem 0;
+  max-width: 70ch;
+}
+
+.productForm ul {
+  list-style: disc;
+  margin: 0.25rem 0 0.75rem 1.25rem;
+  max-width: 70ch;
+}
+
+.productForm li {
+  margin: 0.25rem 0;
+}

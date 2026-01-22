@@ -1,0 +1,578 @@
+"use client";
+
+import React, { useMemo, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { formatCurrency, cn } from "@/lib/utils";
+import { formatDateTime } from "@/lib/date-utils";
+import { Clock, RefreshCw, CheckCircle, XCircle, Download } from "lucide-react";
+import { UnifiedPermissionGuard, WithPermission } from "@/components/auth/UnifiedPermissionGuard";
+import { Pagination } from "@/components/ui/Pagination";
+import { usePagination } from "@/hooks/usePagination";
+import { TableSkeleton } from "@/components/ui/loading-states";
+import { useToast } from "@/components/ui/use-toast";
+import type { CashSession } from "@/types/cash";
+import CashFilters from "@/components/cash/CashFilters";
+import { useSessionsData } from "./hooks/useSessionsData";
+import { useExportSessions } from "./hooks/useExportSessions";
+import { CashCountModal } from "./components/CashCountModal";
+import api from "@/lib/api";
+
+
+
+type CashCount = {
+  denomination: number;
+  quantity: number;
+  total: number;
+};
+
+const apiBase = process.env.NEXT_PUBLIC_API_BASE ?? "";
+
+export default function SessionsPage() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { exportToCSV } = useExportSessions();
+
+  // Filtros
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterFrom, setFilterFrom] = useState<string>("");
+  const [filterTo, setFilterTo] = useState<string>("");
+  const [filterUser, setFilterUser] = useState<string>("all");
+  const [showHistory, setShowHistory] = useState<boolean>(false);
+
+  // Fetch sessions with server-side filtering
+  const { sessions, isLoading: sessionsLoading, isFetching: sessionsFetching, refetch: refetchSessions } = useSessionsData({
+    filters: {
+      status: filterStatus !== "all" ? filterStatus : undefined,
+      from: filterFrom || undefined,
+      to: filterTo || undefined,
+      userId: filterUser !== "all" ? filterUser : undefined,
+      showHistory,
+    },
+  });
+
+  // Paginación
+  const { pagination, controls } = usePagination({ initialLimit: 15 });
+
+  // Modal state
+  const [selectedSession, setSelectedSession] = useState<CashSession | null>(null);
+  const [showCountModal, setShowCountModal] = useState(false);
+  const [counts, setCounts] = useState<CashCount[]>([
+    { denomination: 100000, quantity: 0, total: 0 },
+    { denomination: 50000, quantity: 0, total: 0 },
+    { denomination: 20000, quantity: 0, total: 0 },
+    { denomination: 10000, quantity: 0, total: 0 },
+    { denomination: 5000, quantity: 0, total: 0 },
+    { denomination: 2000, quantity: 0, total: 0 },
+    { denomination: 1000, quantity: 0, total: 0 },
+    { denomination: 500, quantity: 0, total: 0 },
+    { denomination: 100, quantity: 0, total: 0 },
+    { denomination: 50, quantity: 0, total: 0 },
+  ]);
+
+  const loadingSessions = sessionsLoading || sessionsFetching;
+
+  const clearFilters = () => {
+    setFilterStatus("all");
+    setFilterFrom("");
+    setFilterTo("");
+    setFilterUser("all");
+    controls.goToPage(1);
+  };
+
+  // Pagination
+  const paginatedSessions = useMemo(() => {
+    const start = (pagination.page - 1) * pagination.limit;
+    return sessions.slice(start, start + pagination.limit);
+  }, [sessions, pagination.page, pagination.limit]);
+
+  // Estadísticas de sesiones
+  const sessionStats = useMemo(() => {
+    const stats = {
+      total: sessions.length,
+      open: 0,
+      closed: 0,
+      cancelled: 0,
+      totalDiscrepancy: 0,
+    };
+
+    sessions.forEach((s) => {
+      if (s.discrepancyAmount) stats.totalDiscrepancy += Math.abs(s.discrepancyAmount);
+      const status = (s.status || '').toUpperCase();
+      if (status === "OPEN") stats.open++;
+      else if (status === "CLOSED") stats.closed++;
+      else if (status === "CANCELLED") stats.cancelled++;
+    });
+
+    return stats;
+  }, [sessions]);
+
+  const getSessionStatusBadge = (status: string) => {
+    const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+      OPEN: "default",
+      CLOSED: "secondary",
+      CANCELLED: "destructive",
+    };
+    const icons = {
+      OPEN: <Clock className="h-3 w-3 mr-1" />,
+      CLOSED: <CheckCircle className="h-3 w-3 mr-1" />,
+      CANCELLED: <XCircle className="h-3 w-3 mr-1" />,
+    };
+    return (
+      <Badge variant={variants[status] || "secondary"} className="flex items-center">
+        {icons[status as keyof typeof icons]}
+        {status}
+      </Badge>
+    );
+  };
+
+  const getDiscrepancyBadge = (discrepancy: number | null | undefined) => {
+    if (discrepancy == null) return null;
+    const abs = Math.abs(discrepancy);
+    if (abs === 0) return <Badge variant="outline" className="text-green-600">Cuadrado</Badge>;
+    if (abs < 1000) return <Badge variant="outline" className="text-yellow-600">Menor</Badge>;
+    return <Badge variant="destructive">Discrepancia</Badge>;
+  };
+
+  const calculateCountTotal = () => {
+    return counts.reduce((sum, count) => sum + count.total, 0);
+  };
+
+  const updateCount = (index: number, quantity: number) => {
+    const newCounts = [...counts];
+    newCounts[index].quantity = quantity;
+    newCounts[index].total = newCounts[index].denomination * quantity;
+    setCounts(newCounts);
+  };
+
+  const openCountModal = (session: CashSession) => {
+    setSelectedSession(session);
+    // Load existing counts if available
+    if (session.counts) {
+      const existingCounts = counts.map(c => {
+        const existing = session.counts?.find(ec => ec.denomination === c.denomination);
+        return existing ? { ...c, quantity: existing.quantity, total: existing.total } : c;
+      });
+      setCounts(existingCounts);
+    } else {
+      // Reset counts
+      setCounts(counts.map(c => ({ ...c, quantity: 0, total: 0 })));
+    }
+    setShowCountModal(true);
+  };
+
+  // Save counts mutation
+  const saveCountsMutation = useMutation({
+    mutationFn: async (counts: CashCount[]) => {
+      const res = await api.post(`/cash/sessions/${selectedSession!.id}/counts`, {
+        counts: counts.filter(c => c.quantity > 0)
+      });
+      return res.data;
+    },
+    onSuccess: () => {
+      toast({ description: "Conteo guardado exitosamente" });
+      setShowCountModal(false);
+      queryClient.invalidateQueries({ queryKey: ['cashSessions'] });
+      refetchSessions();
+    },
+    onError: (error: any) => {
+      toast({
+        description: error?.response?.data?.error || error?.message || "Error guardando conteo",
+        variant: "destructive"
+      });
+    },
+  });
+
+  const handleSaveCounts = () => {
+    saveCountsMutation.mutate(counts);
+  };
+
+  return (
+    <UnifiedPermissionGuard resource="cash" action="read">
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <Clock className="h-6 w-6" />
+              Sesiones de Caja
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Historial completo de aperturas y cierres de caja
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant={showHistory ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowHistory(!showHistory)}
+            >
+              {showHistory ? "Ver Recientes" : "Ver Historial"}
+            </Button>
+            <WithPermission resource="cash" action="read">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => exportToCSV(sessions)}
+                disabled={sessions.length === 0}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Exportar
+              </Button>
+            </WithPermission>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => refetchSessions()}
+              disabled={loadingSessions}
+            >
+              <RefreshCw className={cn("h-4 w-4 mr-2", loadingSessions && "animate-spin")} />
+              {loadingSessions ? "Actualizando..." : "Actualizar"}
+            </Button>
+          </div>
+        </div>
+
+        {/* Estadísticas */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Card>
+            <CardContent className="p-4">
+              <div className="text-2xl font-bold">{sessionStats.total}</div>
+              <p className="text-xs text-muted-foreground">Total Sesiones</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="text-2xl font-bold text-green-600">{sessionStats.open}</div>
+              <p className="text-xs text-muted-foreground">Abiertas</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="text-2xl font-bold text-blue-600">{sessionStats.closed}</div>
+              <p className="text-xs text-muted-foreground">Cerradas</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="text-2xl font-bold text-red-600">{formatCurrency(sessionStats.totalDiscrepancy)}</div>
+              <p className="text-xs text-muted-foreground">Total Discrepancias</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        <CashFilters
+          title="Filtros"
+          filters={[
+            {
+              key: "status", label: "Estado", type: "select", value: filterStatus, onChange: setFilterStatus, options: [
+                { value: "all", label: "Todos" },
+                { value: "OPEN", label: "Abierta" },
+                { value: "CLOSED", label: "Cerrada" },
+                { value: "CANCELLED", label: "Cancelada" },
+              ]
+            },
+            { key: "from", label: "Desde", type: "date", value: filterFrom, onChange: setFilterFrom },
+            { key: "to", label: "Hasta", type: "date", value: filterTo, onChange: setFilterTo },
+            {
+              key: "user", label: "Usuario", type: "select", value: filterUser, onChange: setFilterUser, options: [
+                { value: "all", label: "Todos" },
+              ]
+            },
+          ]}
+          onClear={clearFilters}
+          columns={4}
+        />
+
+        {/* Tabla de sesiones */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Historial de Sesiones</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loadingSessions ? (
+              <TableSkeleton rows={10} columns={8} />
+            ) : sessions.length === 0 ? (
+              <div className="text-sm text-gray-600 text-center py-8">No se encontraron sesiones</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Estado</TableHead>
+                      <TableHead>Apertura</TableHead>
+                      <TableHead>Cierre</TableHead>
+                      <TableHead>Esperado</TableHead>
+                      <TableHead>Discrepancia</TableHead>
+                      <TableHead>Usuario</TableHead>
+                      <TableHead>Fecha</TableHead>
+                      <TableHead>Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedSessions.map((s) => (
+                      <TableRow key={s.id}>
+                        <TableCell>{getSessionStatusBadge(s.status)}</TableCell>
+                        <TableCell className="font-medium">{formatCurrency(s.openingAmount)}</TableCell>
+                        <TableCell>{s.closingAmount ? formatCurrency(s.closingAmount) : "-"}</TableCell>
+                        <TableCell>{s.systemExpected ? formatCurrency(s.systemExpected) : "-"}</TableCell>
+                        <TableCell>
+                          {getDiscrepancyBadge(s.discrepancyAmount)}
+                          {s.discrepancyAmount ? (
+                            <div className="text-sm text-muted-foreground">
+                              {formatCurrency(s.discrepancyAmount)}
+                            </div>
+                          ) : null}
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm">
+                            <div>Abr: {s.openedByUser?.fullName || s.openedByUser?.email || "-"}</div>
+                            {s.closedByUser && (
+                              <div>Cer: {s.closedByUser.fullName || s.closedByUser.email}</div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm">
+                            <div>{formatDateTime(s.openedAt)}</div>
+                            {s.closedAt && (
+                              <div className="text-muted-foreground">
+                                {formatDateTime(s.closedAt)}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <WithPermission resource="cash" action="update">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openCountModal(s)}
+                                disabled={s.status !== "CLOSED"}
+                              >
+                                Conteo
+                              </Button>
+                            </WithPermission>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <Pagination pagination={pagination} controls={controls} isLoading={loadingSessions} className="mt-4" />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Modal de conteo de efectivo */}
+        <CashCountModal
+          setShowCountModal(false);
+        queryClient.invalidateQueries({queryKey: ['cashSessions'] });
+        refetchSessions();
+    },
+    onError: (error: any) => {
+          toast({
+            description: error?.response?.data?.error || error?.message || "Error guardando conteo",
+            variant: "destructive"
+          });
+    },
+  });
+
+  const handleSaveCounts = () => {
+          saveCountsMutation.mutate(counts);
+  };
+
+        return (
+        <UnifiedPermissionGuard resource="cash" action="read">
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-2xl font-bold flex items-center gap-2">
+                  <Clock className="h-6 w-6" />
+                  Sesiones de Caja
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  Historial completo de aperturas y cierres de caja
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={showHistory ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setShowHistory(!showHistory)}
+                >
+                  {showHistory ? "Ver Recientes" : "Ver Historial"}
+                </Button>
+                <WithPermission resource="cash" action="read">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => exportToCSV(sessions)}
+                    disabled={sessions.length === 0}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Exportar
+                  </Button>
+                </WithPermission>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => refetchSessions()}
+                  disabled={loadingSessions}
+                >
+                  <RefreshCw className={cn("h-4 w-4 mr-2", loadingSessions && "animate-spin")} />
+                  {loadingSessions ? "Actualizando..." : "Actualizar"}
+                </Button>
+              </div>
+            </div>
+
+            {/* Estadísticas */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Card>
+                <CardContent className="p-4">
+                  <div className="text-2xl font-bold">{sessionStats.total}</div>
+                  <p className="text-xs text-muted-foreground">Total Sesiones</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="text-2xl font-bold text-green-600">{sessionStats.open}</div>
+                  <p className="text-xs text-muted-foreground">Abiertas</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="text-2xl font-bold text-blue-600">{sessionStats.closed}</div>
+                  <p className="text-xs text-muted-foreground">Cerradas</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <div className="text-2xl font-bold text-red-600">{formatCurrency(sessionStats.totalDiscrepancy)}</div>
+                  <p className="text-xs text-muted-foreground">Total Discrepancias</p>
+                </CardContent>
+              </Card>
+            </div>
+
+            <CashFilters
+              title="Filtros"
+              filters={[
+                {
+                  key: "status", label: "Estado", type: "select", value: filterStatus, onChange: setFilterStatus, options: [
+                    { value: "all", label: "Todos" },
+                    { value: "OPEN", label: "Abierta" },
+                    { value: "CLOSED", label: "Cerrada" },
+                    { value: "CANCELLED", label: "Cancelada" },
+                  ]
+                },
+                { key: "from", label: "Desde", type: "date", value: filterFrom, onChange: setFilterFrom },
+                { key: "to", label: "Hasta", type: "date", value: filterTo, onChange: setFilterTo },
+                {
+                  key: "user", label: "Usuario", type: "select", value: filterUser, onChange: setFilterUser, options: [
+                    { value: "all", label: "Todos" },
+                  ]
+                },
+              ]}
+              onClear={clearFilters}
+              columns={4}
+            />
+
+            {/* Tabla de sesiones */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Historial de Sesiones</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {loadingSessions ? (
+                  <TableSkeleton rows={10} columns={8} />
+                ) : sessions.length === 0 ? (
+                  <div className="text-sm text-gray-600 text-center py-8">No se encontraron sesiones</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Estado</TableHead>
+                          <TableHead>Apertura</TableHead>
+                          <TableHead>Cierre</TableHead>
+                          <TableHead>Esperado</TableHead>
+                          <TableHead>Discrepancia</TableHead>
+                          <TableHead>Usuario</TableHead>
+                          <TableHead>Fecha</TableHead>
+                          <TableHead>Acciones</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {paginatedSessions.map((s) => (
+                          <TableRow key={s.id}>
+                            <TableCell>{getSessionStatusBadge(s.status)}</TableCell>
+                            <TableCell className="font-medium">{formatCurrency(s.openingAmount)}</TableCell>
+                            <TableCell>{s.closingAmount ? formatCurrency(s.closingAmount) : "-"}</TableCell>
+                            <TableCell>{s.systemExpected ? formatCurrency(s.systemExpected) : "-"}</TableCell>
+                            <TableCell>
+                              {getDiscrepancyBadge(s.discrepancyAmount)}
+                              {s.discrepancyAmount ? (
+                                <div className="text-sm text-muted-foreground">
+                                  {formatCurrency(s.discrepancyAmount)}
+                                </div>
+                              ) : null}
+                            </TableCell>
+                            <TableCell>
+                              <div className="text-sm">
+                                <div>Abr: {s.openedByUser?.fullName || s.openedByUser?.email || "-"}</div>
+                                {s.closedByUser && (
+                                  <div>Cer: {s.closedByUser.fullName || s.closedByUser.email}</div>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="text-sm">
+                                <div>{formatDateTime(s.openedAt)}</div>
+                                {s.closedAt && (
+                                  <div className="text-muted-foreground">
+                                    {formatDateTime(s.closedAt)}
+                                  </div>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-2">
+                                <WithPermission resource="cash" action="update">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => openCountModal(s)}
+                                    disabled={s.status !== "CLOSED"}
+                                  >
+                                    Conteo
+                                  </Button>
+                                </WithPermission>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                    <Pagination pagination={pagination} controls={controls} isLoading={loadingSessions} className="mt-4" />
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Modal de conteo de efectivo */}
+            <CashCountModal
+              open={showCountModal}
+              onOpenChange={setShowCountModal}
+              session={selectedSession}
+              counts={counts}
+              onCountChange={updateCount}
+              onSave={handleSaveCounts}
+              isSaving={saveCountsMutation.isPending}
+            />
+          </div>
+        </UnifiedPermissionGuard>
+        );
+}

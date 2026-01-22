@@ -1,0 +1,365 @@
+/* Estilos personalizados para el sistema de auditoría */
+
+/* Variables CSS para temas */
+:root {
+  --audit-primary: #3b82f6;
+  --audit-primary-dark: #1d4ed8;
+  --audit-success: #10b981;
+  --audit-warning: #f59e0b;
+  --audit-error: #ef4444;
+  --audit-info: #6366f1;
+  
+  /* Colores de estado */
+  --audit-success-bg: #ecfdf5;
+  --audit-success-border: #a7f3d0;
+  --audit-warning-bg: #fffbeb;
+  --audit-warning-border: #fde68a;
+  --audit-error-bg: #fef2f2;
+  --audit-error-border: #fecaca;
+  
+  /* Animaciones */
+  --audit-transition: all 0.2s ease-in-out;
+  --audit-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+/* Tema oscuro */
+.dark {
+  --audit-success-bg: #064e3b;
+  --audit-success-border: #047857;
+  --audit-warning-bg: #451a03;
+  --audit-warning-border: #d97706;
+  --audit-error-bg: #450a0a;
+  --audit-error-border: #dc2626;
+}
+
+/* Componentes de auditoría */
+.audit-dashboard {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  transition: var(--audit-transition);
+}
+
+.dark .audit-dashboard {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+}
+
+/* Cards con efectos mejorados */
+.audit-card {
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  transition: var(--audit-transition);
+}
+
+.audit-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+}
+
+.dark .audit-card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+/* Métricas animadas */
+.audit-metric {
+  position: relative;
+  overflow: hidden;
+}
+
+.audit-metric::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.audit-metric:hover::before {
+  left: 100%;
+}
+
+/* Timeline mejorado */
+.audit-timeline {
+  position: relative;
+}
+
+.audit-timeline::before {
+  content: '';
+  position: absolute;
+  left: 20px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(to bottom, var(--audit-primary), var(--audit-success));
+}
+
+.audit-timeline-item {
+  position: relative;
+  padding-left: 50px;
+  margin-bottom: 20px;
+}
+
+.audit-timeline-dot {
+  position: absolute;
+  left: 11px;
+  top: 8px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 3px solid white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  z-index: 1;
+}
+
+.audit-timeline-dot.success {
+  background: var(--audit-success);
+}
+
+.audit-timeline-dot.warning {
+  background: var(--audit-warning);
+}
+
+.audit-timeline-dot.error {
+  background: var(--audit-error);
+}
+
+/* Alertas con animaciones */
+.audit-alert {
+  animation: slideInDown 0.3s var(--audit-bounce);
+  border-left: 4px solid;
+}
+
+.audit-alert.critical {
+  border-left-color: var(--audit-error);
+  background: var(--audit-error-bg);
+}
+
+.audit-alert.warning {
+  border-left-color: var(--audit-warning);
+  background: var(--audit-warning-bg);
+}
+
+.audit-alert.success {
+  border-left-color: var(--audit-success);
+  background: var(--audit-success-bg);
+}
+
+/* Búsqueda mejorada */
+.audit-search {
+  position: relative;
+}
+
+.audit-search-suggestions {
+  animation: fadeInUp 0.2s ease-out;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+.dark .audit-search-suggestions {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+/* Filtros avanzados */
+.audit-filters {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.dark .audit-filters {
+  background: rgba(30, 41, 59, 0.8);
+}
+
+/* Tabla responsive mejorada */
+.audit-table {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+}
+
+.audit-table-row {
+  transition: var(--audit-transition);
+}
+
+.audit-table-row:hover {
+  background: rgba(59, 130, 246, 0.05);
+  transform: scale(1.01);
+}
+
+/* Gráficos animados */
+.audit-chart-bar {
+  transition: width 0.5s var(--audit-bounce);
+  border-radius: 4px;
+}
+
+.audit-chart-bar:hover {
+  filter: brightness(1.1);
+}
+
+/* Estados de carga */
+.audit-loading {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 3px solid rgba(59, 130, 246, 0.3);
+  border-radius: 50%;
+  border-top-color: var(--audit-primary);
+  animation: spin 1s ease-in-out infinite;
+}
+
+/* Badges mejorados */
+.audit-badge {
+  font-weight: 600;
+  font-size: 0.75rem;
+  padding: 4px 8px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  transition: var(--audit-transition);
+}
+
+.audit-badge:hover {
+  transform: scale(1.05);
+}
+
+.audit-badge.create {
+  background: var(--audit-success-bg);
+  color: var(--audit-success);
+  border: 1px solid var(--audit-success-border);
+}
+
+.audit-badge.update {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border: 1px solid #93c5fd;
+}
+
+.audit-badge.delete {
+  background: var(--audit-error-bg);
+  color: var(--audit-error);
+  border: 1px solid var(--audit-error-border);
+}
+
+.audit-badge.view {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+/* Animaciones */
+@keyframes slideInDown {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Efectos de hover mejorados */
+.audit-interactive {
+  cursor: pointer;
+  transition: var(--audit-transition);
+}
+
+.audit-interactive:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .audit-dashboard {
+    padding: 10px;
+  }
+  
+  .audit-card {
+    margin-bottom: 15px;
+  }
+  
+  .audit-timeline::before {
+    left: 15px;
+  }
+  
+  .audit-timeline-item {
+    padding-left: 40px;
+  }
+  
+  .audit-filters {
+    padding: 15px;
+  }
+}
+
+/* Accesibilidad mejorada */
+.audit-focus:focus {
+  outline: 2px solid var(--audit-primary);
+  outline-offset: 2px;
+}
+
+.audit-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Modo de alto contraste */
+@media (prefers-contrast: high) {
+  .audit-card {
+    border: 2px solid;
+  }
+  
+  .audit-badge {
+    border: 2px solid;
+  }
+}
+
+/* Reducir movimiento para usuarios sensibles */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

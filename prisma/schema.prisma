@@ -1,0 +1,635 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String           @id @default(cuid())
+  email              String           @unique
+  fullName           String           @map("full_name")
+  phone              String?
+  bio                String?
+  avatar             String?
+  location           String?
+  lastLogin          DateTime?        @map("last_login")
+  role               String           @default("CASHIER")
+  status             String           @default("ACTIVE") // ACTIVE, INACTIVE, SUSPENDED
+  createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
+  auditLogs          AuditLog[]
+  purchases          Purchase[]
+  returns            Return[]
+  performedAudits    RoleAuditLog[]   @relation("PerformedByUser")
+  auditLogs_role     RoleAuditLog[]   @relation("UserAuditLogs")
+  grantedPermissions RolePermission[] @relation("GrantedByUser")
+  sales              Sale[]
+  assignedRoles      UserRole_New[]   @relation("AssignedByUser")
+  userRoles          UserRole_New[]   @relation("UserToUserRoles")
+  sessions           UserSession[]
+  createdCredits     CustomerCredit[]
+  creditPayments     CreditPayment[]
+  openedCashSessions CashSession[]   @relation("CashSessionOpenedByUser")
+  closedCashSessions CashSession[]   @relation("CashSessionClosedByUser")
+  cashMovementsCreated CashMovement[]
+  reportedDiscrepancies CashDiscrepancy[]
+  pointsTransactions PointsTransaction[]
+
+  @@map("users")
+}
+
+model Role {
+  id           Int              @id @default(autoincrement())
+  name         String           @unique
+  displayName  String           @map("display_name")
+  description  String?
+  isSystemRole Boolean          @default(false) @map("is_system_role")
+  isActive     Boolean          @default(true) @map("is_active")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+  permissions  RolePermission[]
+  userRoles    UserRole_New[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          Int              @id @default(autoincrement())
+  name        String           @unique
+  displayName String           @map("display_name")
+  description String?
+  resource    String
+  action      String
+  isActive    Boolean          @default(true) @map("is_active")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  roles       RolePermission[]
+
+  @@unique([resource, action])
+  @@map("permissions")
+}
+
+model RolePermission {
+  id            Int        @id @default(autoincrement())
+  roleId        Int        @map("role_id")
+  permissionId  Int        @map("permission_id")
+  grantedAt     DateTime   @default(now()) @map("granted_at")
+  grantedBy     String?    @map("granted_by")
+  isActive      Boolean    @default(true) @map("is_active")
+  grantedByUser User?      @relation("GrantedByUser", fields: [grantedBy], references: [id])
+  permission    Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  role          Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole_New {
+  id             Int       @id @default(autoincrement())
+  userId         String    @map("user_id")
+  roleId         Int       @map("role_id")
+  assignedAt     DateTime  @default(now()) @map("assigned_at")
+  assignedBy     String?   @map("assigned_by")
+  expiresAt      DateTime? @map("expires_at")
+  isActive       Boolean   @default(true) @map("is_active")
+  assignedByUser User?     @relation("AssignedByUser", fields: [assignedBy], references: [id])
+  role           Role      @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  user           User      @relation("UserToUserRoles", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@map("user_roles")
+}
+
+model UserSession {
+  id                String    @id @default(cuid())
+  userId            String    @map("user_id")
+  supabaseSessionId String?   @unique @map("supabase_session_id")
+  ipAddress         String?   @map("ip_address")
+  userAgent         String?   @map("user_agent")
+  lastActivity      DateTime  @default(now()) @map("last_activity")
+  expiresAt         DateTime? @map("expires_at")
+  isActive          Boolean   @default(true) @map("is_active")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_sessions")
+}
+
+model RoleAuditLog {
+  id              String   @id @default(cuid())
+  userId          String @db.Uuid @map("user_id")
+  action          String
+  resourceType    String @map("resource_type")
+  resourceId      String? @db.Uuid @map("resource_id")
+  oldValues       Json? @map("old_values")
+  newValues       Json? @map("new_values")
+  performedBy     String? @db.Uuid @map("performed_by")
+  ipAddress       String? @map("ip_address")
+  userAgent       String? @map("user_agent")
+  createdAt       DateTime @default(now()) @map("created_at")
+  performedByUser User?    @relation("PerformedByUser", fields: [performedBy], references: [id])
+  user            User     @relation("UserAuditLogs", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("role_audit_logs")
+}
+
+model Category {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  products    Product[]
+  rewards     Reward[]
+
+  @@map("categories")
+}
+
+model Product {
+  id                 String              @id @default(cuid())
+  name               String
+  sku                String              @unique
+  barcode            String?             @unique
+  categoryId         String              @map("category_id")
+  description        String?
+  costPrice          Float               @map("cost_price")
+  salePrice          Float               @map("sale_price")
+  stockQuantity      Int                 @default(0) @map("stock_quantity")
+  minStock           Int                 @default(0) @map("min_stock")
+  images             String              @default("")
+  // IVA/Tax fields
+  ivaRate            Float               @default(16.00) @map("iva_rate") // Tasa de IVA en porcentaje
+  ivaIncluded        Boolean             @default(false) @map("iva_included") // Si el precio incluye IVA
+  priceWithIva       Float?              @map("price_with_iva") // Precio con IVA incluido
+  priceWithoutIva    Float?              @map("price_without_iva") // Precio sin IVA
+  // Cosmetic-specific attributes
+  brand              String?             // Marca del producto cosmético
+  shade              String?             // Tono/color del producto (ej: "Medium", "Fair", "Deep")
+  skinType           String?             @map("skin_type") // Tipo de piel (ej: "Grasa", "Seca", "Mixta", "Sensible")
+  ingredients        String?             // Ingredientes principales (JSON string)
+  volume             String?             // Volumen/tamaño (ej: "50ml", "30g")
+  spf                Int?                // Factor de protección solar (para protectores)
+  finish             String?             // Acabado (ej: "Mate", "Satinado", "Brillante")
+  coverage           String?             // Cobertura (ej: "Ligera", "Media", "Completa")
+  waterproof         Boolean?            // Resistente al agua
+  vegan              Boolean?            // Producto vegano
+  crueltyFree        Boolean?            @map("cruelty_free") // Libre de crueldad animal
+  expirationDate     DateTime?           @map("expiration_date") // Fecha de vencimiento
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+  inventoryMovements InventoryMovement[]
+  category           Category            @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  purchaseItems      PurchaseItem[]
+  returnItems        ReturnItem[]
+  saleItems          SaleItem[]
+  rewards            Reward[]
+
+  @@map("products")
+}
+
+model Supplier {
+  id          String     @id @default(cuid())
+  name        String
+  contactInfo String     @map("contact_info")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+  purchases   Purchase[]
+
+  @@map("suppliers")
+}
+
+model Purchase {
+  id            String         @id @default(cuid())
+  supplierId    String         @map("supplier_id")
+  userId        String         @map("user_id")
+  total         Float
+  date          DateTime       @default(now())
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+  purchaseItems PurchaseItem[]
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  supplier      Supplier       @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@map("purchases")
+}
+
+model PurchaseItem {
+  id         String   @id @default(cuid())
+  purchaseId String   @map("purchase_id")
+  productId  String   @map("product_id")
+  quantity   Int
+  unitCost   Float    @map("unit_cost")
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  purchase   Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+
+  @@map("purchase_items")
+}
+
+model Customer {
+  id             String          @id @default(cuid())
+  name           String
+  phone          String?
+  email          String?
+  address        String?
+  taxId          String?         @map("tax_id")
+  customerCode   String?         @unique @map("customer_code")
+  customerType   String          @default("regular") @map("customer_type")
+  status         String          @default("active")
+  isActive       Boolean         @default(true) @map("is_active")
+  birthDate      DateTime?       @map("birth_date")
+  notes          String?
+  totalPurchases Float?          @default(0) @map("total_purchases")
+  lastPurchase   DateTime?       @map("last_purchase")
+  creditLimit    Float?          @default(0) @map("credit_limit")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+  returns        Return[]
+  sales          Sale[]
+  credits        CustomerCredit[]
+  loyalties      CustomerLoyalty[]
+
+  @@index([isActive])
+  @@index([name])
+  @@index([email])
+  @@index([phone])
+  @@index([customerType])
+  @@index([createdAt])
+  @@index([isActive, customerType])
+  @@index([isActive, name])
+  @@map("customers")
+}
+
+model Sale {
+  id            String     @id @default(cuid())
+  userId        String     @map("user_id")
+  customerId    String?    @map("customer_id")
+  subtotal      Float
+  discount      Float      @default(0)
+  discountType  String     @default("PERCENTAGE") @map("discount_type")
+  tax           Float      @default(0)
+  total         Float
+  date          DateTime   @default(now())
+  paymentMethod String     @default("CASH") @map("payment_method")
+  notes         String?
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+  returns       Return[]
+  saleItems     SaleItem[]
+  customer      Customer?  @relation(fields: [customerId], references: [id])
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  usedRewards   CustomerReward[]
+
+  @@map("sales")
+}
+
+model SaleItem {
+  id          String       @id @default(cuid())
+  saleId      String       @map("sale_id")
+  productId   String       @map("product_id")
+  quantity    Int
+  unitPrice   Float        @map("unit_price")
+  returnItems ReturnItem[]
+  product     Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sale        Sale         @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@map("sale_items")
+}
+
+model InventoryMovement {
+  id          String   @id @default(cuid())
+  productId   String   @map("product_id")
+  type        String
+  quantity    Int
+  reason      String
+  referenceId String?  @map("reference_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("inventory_movements")
+}
+
+model Return {
+  id             String       @id @default(cuid())
+  originalSaleId String       @map("original_sale_id")
+  userId         String       @map("user_id")
+  customerId     String?      @map("customer_id")
+  status         String       @default("PENDING")
+  reason         String
+  refundMethod   String       @map("refund_method")
+  totalAmount    Float        @map("total_amount")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  returnItems    ReturnItem[]
+  customer       Customer?    @relation(fields: [customerId], references: [id])
+  user           User         @relation(fields: [userId], references: [id])
+  originalSale   Sale         @relation(fields: [originalSaleId], references: [id], onDelete: Cascade)
+
+  @@map("returns")
+}
+
+model ReturnItem {
+  id                 String   @id @default(cuid())
+  returnId           String   @map("return_id")
+  originalSaleItemId String   @map("original_sale_item_id")
+  productId          String   @map("product_id")
+  quantity           Int
+  unitPrice          Float    @map("unit_price")
+  reason             String?
+  createdAt          DateTime @default(now()) @map("created_at")
+  originalSaleItem   SaleItem @relation(fields: [originalSaleItemId], references: [id], onDelete: Cascade)
+  product            Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  return             Return   @relation(fields: [returnId], references: [id], onDelete: Cascade)
+
+  @@map("return_items")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  userId     String   @map("user_id")
+  userEmail  String   @map("user_email")
+  userRole   String   @map("user_role")
+  ipAddress  String   @map("ip_address")
+  changes    Json?
+  oldData    Json?    @map("old_data")
+  newData    Json?    @map("new_data")
+  timestamp  DateTime @default(now())
+  createdAt  DateTime @default(now()) @map("created_at")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([timestamp])
+  @@index([action])
+  @@map("audit_logs")
+}
+
+model CustomerCredit {
+  id              String          @id @default(cuid())
+  customerId      String          @map("customer_id")
+  totalAmount     Float           @map("total_amount")
+  paidAmount      Float           @default(0) @map("paid_amount")
+  remainingAmount Float           @map("remaining_amount")
+  status          String          @default("PENDING") // PENDING, PARTIAL, PAID, OVERDUE
+  description     String?
+  dueDate         DateTime?       @map("due_date")
+  createdBy       String          @map("created_by")
+  paidAt          DateTime?       @map("paid_at")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  customer        Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  createdByUser   User            @relation(fields: [createdBy], references: [id])
+  payments        CreditPayment[]
+
+  @@index([customerId])
+  @@index([status])
+  @@index([dueDate])
+  @@index([createdAt])
+  @@map("customer_credits")
+}
+
+model CreditPayment {
+  id            String         @id @default(cuid())
+  creditId      String         @map("credit_id")
+  amount        Float
+  paymentMethod String         @default("CASH") @map("payment_method")
+  notes         String?
+  createdBy     String         @map("created_by")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  credit        CustomerCredit @relation(fields: [creditId], references: [id], onDelete: Cascade)
+  createdByUser User           @relation(fields: [createdBy], references: [id])
+
+  @@index([creditId])
+  @@index([createdAt])
+  @@map("credit_payments")
+}
+
+// Loyalty System Models
+model LoyaltyProgram {
+  id                    String            @id @default(cuid())
+  name                  String            @unique
+  description           String?
+  isActive              Boolean           @default(true) @map("is_active")
+  pointsPerPurchase     Float             @default(1) @map("points_per_purchase") // Points earned per dollar spent
+  minimumPurchase       Float             @default(0) @map("minimum_purchase") // Minimum purchase to earn points
+  pointsExpirationDays  Int?              @map("points_expiration_days") // Days until points expire (null = never)
+  welcomeBonus          Int               @default(0) @map("welcome_bonus") // Points given when joining
+  birthdayBonus         Int               @default(0) @map("birthday_bonus") // Points given on birthday
+  referralBonus         Int               @default(0) @map("referral_bonus") // Points for referring new customers
+  createdAt             DateTime          @default(now()) @map("created_at")
+  updatedAt             DateTime          @updatedAt @map("updated_at")
+  customerLoyalties     CustomerLoyalty[]
+  rewards               Reward[]
+  tiers                 LoyaltyTier[]
+
+  @@map("loyalty_programs")
+}
+
+model LoyaltyTier {
+  id              String            @id @default(cuid())
+  programId       String            @map("program_id")
+  name            String
+  minPoints       Int               @map("min_points") // Minimum points required for this tier
+  maxPoints       Int?              @map("max_points") // Maximum points for this tier (null for highest tier)
+  multiplier      Float             @default(1.0) // Points multiplier for this tier
+  benefits        String? // JSON string describing tier benefits
+  color           String            @default("#6B7280") // Hex color for UI display
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+  program         LoyaltyProgram    @relation(fields: [programId], references: [id], onDelete: Cascade)
+  customerLoyalties CustomerLoyalty[]
+
+  @@unique([programId, name])
+  @@index([programId, minPoints])
+  @@map("loyalty_tiers")
+}
+
+model CustomerLoyalty {
+  id                String             @id @default(cuid())
+  customerId        String             @map("customer_id")
+  programId         String             @map("program_id")
+  tierId            String?            @map("tier_id")
+  currentPoints     Int                @default(0) @map("current_points")
+  totalPointsEarned Int                @default(0) @map("total_points_earned")
+  totalPointsUsed   Int                @default(0) @map("total_points_used")
+  joinedAt          DateTime           @default(now()) @map("joined_at")
+  lastActivity      DateTime?          @map("last_activity")
+  isActive          Boolean            @default(true) @map("is_active")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  customer          Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  program           LoyaltyProgram     @relation(fields: [programId], references: [id], onDelete: Cascade)
+  tier              LoyaltyTier?       @relation(fields: [tierId], references: [id])
+  pointsTransactions PointsTransaction[]
+  customerRewards   CustomerReward[]
+
+  @@unique([customerId, programId])
+  @@index([customerId])
+  @@index([programId])
+  @@index([currentPoints])
+  @@index([isActive])
+  @@map("customer_loyalties")
+}
+
+model PointsTransaction {
+  id              String          @id @default(cuid())
+  customerLoyaltyId String        @map("customer_loyalty_id")
+  type            String // EARNED, REDEEMED, EXPIRED, ADJUSTED, BONUS
+  points          Int // Positive for earned, negative for redeemed/expired
+  description     String
+  referenceType   String? // SALE, REWARD, BIRTHDAY, REFERRAL, MANUAL, etc.
+  referenceId     String?         @map("reference_id") // ID of related sale, reward, etc.
+  expiresAt       DateTime?       @map("expires_at")
+  createdBy       String?         @map("created_by") // User who created this transaction (for manual adjustments)
+  createdAt       DateTime        @default(now()) @map("created_at")
+  customerLoyalty CustomerLoyalty @relation(fields: [customerLoyaltyId], references: [id], onDelete: Cascade)
+  createdByUser   User?           @relation(fields: [createdBy], references: [id])
+
+  @@index([customerLoyaltyId])
+  @@index([type])
+  @@index([referenceType, referenceId])
+  @@index([createdAt])
+  @@index([expiresAt])
+  @@index([customerLoyaltyId, type, createdAt])
+  @@map("points_transactions")
+}
+
+model Reward {
+  id              String           @id @default(cuid())
+  programId       String           @map("program_id")
+  name            String
+  description     String?
+  type            String // DISCOUNT_PERCENTAGE, DISCOUNT_FIXED, FREE_PRODUCT, FREE_SHIPPING, CUSTOM
+  value           Float // Discount amount or percentage
+  pointsCost      Int              @map("points_cost")
+  maxRedemptions  Int?             @map("max_redemptions") // Max times this reward can be redeemed (null = unlimited)
+  currentRedemptions Int           @default(0) @map("current_redemptions")
+  validFrom       DateTime?        @map("valid_from")
+  validUntil      DateTime?        @map("valid_until")
+  isActive        Boolean          @default(true) @map("is_active")
+  terms           String? // Terms and conditions
+  productId       String?          @map("product_id") // For FREE_PRODUCT rewards
+  categoryId      String?          @map("category_id") // For category-specific rewards
+  minPurchase     Float?           @map("min_purchase") // Minimum purchase required to use reward
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+  program         LoyaltyProgram   @relation(fields: [programId], references: [id], onDelete: Cascade)
+  product         Product?         @relation(fields: [productId], references: [id])
+  category        Category?        @relation(fields: [categoryId], references: [id])
+  customerRewards CustomerReward[]
+
+  @@index([programId])
+  @@index([type])
+  @@index([isActive])
+  @@index([validFrom, validUntil])
+  @@index([pointsCost])
+  @@map("rewards")
+}
+
+model CustomerReward {
+  id              String          @id @default(cuid())
+  customerLoyaltyId String        @map("customer_loyalty_id")
+  rewardId        String          @map("reward_id")
+  status          String          @default("AVAILABLE") // AVAILABLE, USED, EXPIRED
+  redeemedAt      DateTime?       @map("redeemed_at")
+  usedAt          DateTime?       @map("used_at")
+  usedInSaleId    String?         @map("used_in_sale_id") // Sale where reward was applied
+  expiresAt       DateTime?       @map("expires_at")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  customerLoyalty CustomerLoyalty @relation(fields: [customerLoyaltyId], references: [id], onDelete: Cascade)
+  reward          Reward          @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+  usedInSale      Sale?           @relation(fields: [usedInSaleId], references: [id])
+
+  @@index([customerLoyaltyId])
+  @@index([rewardId])
+  @@index([status])
+  @@index([expiresAt])
+  @@index([usedInSaleId])
+  @@index([customerLoyaltyId, status, usedAt])
+  @@map("customer_rewards")
+}
+
+// Cash Reconciliation Models
+model CashSession {
+  id                 String    @id @default(cuid())
+  openedBy           String    @map("opened_by")
+  closedBy           String?   @map("closed_by")
+  openingAmount      Float     @map("opening_amount")
+  closingAmount      Float?    @map("closing_amount")
+  systemExpected     Float?    @map("system_expected")
+  discrepancyAmount  Float?    @map("discrepancy_amount")
+  status             String    @default("OPEN") // OPEN, CLOSED, CANCELLED
+  notes              String?
+  openedAt           DateTime  @default(now()) @map("opened_at")
+  closedAt           DateTime? @map("closed_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  openedByUser       User      @relation("CashSessionOpenedByUser", fields: [openedBy], references: [id])
+  closedByUser       User?     @relation("CashSessionClosedByUser", fields: [closedBy], references: [id])
+  movements          CashMovement[]
+  counts             CashCount[]
+  discrepancies      CashDiscrepancy[]
+
+  @@index([status])
+  @@index([openedAt])
+  @@index([closedAt])
+  @@map("cash_sessions")
+}
+
+model CashMovement {
+  id            String     @id @default(cuid())
+  sessionId     String     @map("session_id")
+  type          String     // IN, OUT, SALE, RETURN, ADJUSTMENT
+  amount        Float
+  reason        String?
+  referenceType String?    @map("reference_type") // e.g., SALE, RETURN, CREDIT_PAYMENT
+  referenceId   String?    @map("reference_id")
+  createdBy     String     @map("created_by")
+  createdAt     DateTime   @default(now()) @map("created_at")
+  session       CashSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdByUser User        @relation(fields: [createdBy], references: [id])
+
+  @@index([sessionId])
+  @@index([type])
+  @@index([createdAt])
+  @@index([referenceType, referenceId])
+  @@map("cash_movements")
+}
+
+model CashCount {
+  id          String      @id @default(cuid())
+  sessionId   String      @map("session_id")
+  denomination Float      // e.g., 1000, 500, 200, 100, 50, etc.
+  quantity    Int         @default(0)
+  total       Float       @default(0)
+  createdAt   DateTime    @default(now()) @map("created_at")
+  session     CashSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([denomination])
+  @@map("cash_counts")
+}
+
+model CashDiscrepancy {
+  id           String      @id @default(cuid())
+  sessionId    String      @map("session_id")
+  type         String      // SHORTAGE, OVERAGE
+  amount       Float
+  explained    Boolean     @default(false)
+  explanation  String?
+  reportedBy   String?     @map("reported_by")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  session      CashSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  reportedByUser User?     @relation(fields: [reportedBy], references: [id])
+
+  @@index([sessionId])
+  @@index([type])
+  @@index([createdAt])
+  @@map("cash_discrepancies")
+}

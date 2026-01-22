@@ -1,0 +1,1 @@
+export const DEFAULT_IVA_RATE_PARAGUAY = 10

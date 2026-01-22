@@ -1,0 +1,381 @@
+'use client';
+
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import NavBar from '@/app/home/components/NavBar';
+import CatalogHeader from './components/CatalogHeader';
+import CatalogFilters, { type ViewMode, type SortMode } from './components/CatalogFilters';
+import ProductGrid from './components/ProductGrid';
+import CartSidebar from './components/CartSidebar';
+import SearchSuggestions from './components/SearchSuggestions';
+import ProductDetailModal from '@/components/catalog/ProductDetailModal';
+import CheckoutModal from '@/components/catalog/CheckoutModal';
+import OrderConfirmationModal from '@/components/catalog/OrderConfirmationModal';
+import { useCatalogCart } from '@/hooks/useCatalogCart';
+import { useFavorites } from '@/hooks/useFavorites';
+import { useBusinessConfig } from '@/contexts/BusinessConfigContext';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import type { Product, Category } from '@/types';
+
+interface CatalogClientProps {
+    initialProducts: Product[];
+    initialCategories: Category[];
+}
+
+export default function CatalogClient({
+    initialProducts,
+    initialCategories,
+}: CatalogClientProps) {
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    const { config } = useBusinessConfig();
+    const supabase = createClientComponentClient();
+
+    // Hooks personalizados
+    const {
+        cart,
+        cartTotal,
+        cartItemsCount,
+        isHydrated: cartHydrated,
+        addToCart,
+        removeFromCart,
+        updateQuantity,
+        clearCart,
+    } = useCatalogCart();
+
+    const {
+        favorites,
+        isHydrated: favoritesHydrated,
+        toggleFavorite,
+    } = useFavorites();
+
+    // Estado de productos y categorías
+    const [products, setProducts] = useState<Product[]>(initialProducts);
+    const [categories] = useState<Category[]>(initialCategories);
+    const [loading, setLoading] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
+
+    // Paginación
+    const [page, setPage] = useState(1);
+    const [hasMore, setHasMore] = useState(initialProducts.length >= 20);
+
+    // Filtros
+    const [searchQuery, setSearchQuery] = useState(searchParams?.get('search') || '');
+    const [selectedCategory, setSelectedCategory] = useState(
+        searchParams?.get('category') || 'all'
+    );
+    const [sortBy, setSortBy] = useState<SortMode>(
+        (searchParams?.get('sort') as SortMode) || 'name'
+    );
+    const [viewMode, setViewMode] = useState<ViewMode>('grid');
+    const [showOnlyInStock, setShowOnlyInStock] = useState(
+        searchParams?.get('inStock') !== 'false'
+    );
+    const [showOnlyOnSale, setShowOnlyOnSale] = useState(
+        searchParams?.get('onSale') === 'true'
+    );
+
+    // UI State
+    const [showCart, setShowCart] = useState(false);
+    const [showCheckout, setShowCheckout] = useState(false);
+    const [showOrderConfirmation, setShowOrderConfirmation] = useState(false);
+    const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+    const [orderConfirmationData, setOrderConfirmationData] = useState<any>(null);
+
+    // Sincronizar filtros con URL
+    useEffect(() => {
+        const params = new URLSearchParams();
+        if (searchQuery) params.set('search', searchQuery);
+        if (selectedCategory && selectedCategory !== 'all')
+            params.set('category', selectedCategory);
+        if (sortBy && sortBy !== 'name') params.set('sort', sortBy);
+        params.set('inStock', String(showOnlyInStock));
+        params.set('onSale', String(showOnlyOnSale));
+
+        const query = params.toString();
+        router.replace(query ? `/catalog?${query}` : '/catalog', { scroll: false });
+    }, [searchQuery, selectedCategory, sortBy, showOnlyInStock, showOnlyOnSale, router]);
+
+    // Cargar productos cuando cambien los filtros
+    useEffect(() => {
+        const loadProducts = async () => {
+            setLoading(true);
+            try {
+                let query = supabase
+                    .from('products')
+                    .select('*')
+                    .eq('is_active', true);
+
+                if (searchQuery) {
+                    query = query.ilike('name', `%${searchQuery}%`);
+                }
+                if (selectedCategory && selectedCategory !== 'all') {
+                    query = query.eq('category_id', selectedCategory);
+                }
+
+                const { data, error } = await query.range(0, 19);
+
+                if (!error && data) {
+                    setProducts(data);
+                    setPage(1);
+                    setHasMore(data.length >= 20);
+                }
+            } catch (error) {
+                console.error('Error loading products:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        const timeoutId = setTimeout(loadProducts, 300);
+        return () => clearTimeout(timeoutId);
+    }, [searchQuery, selectedCategory, supabase]);
+
+    // Cargar más productos (infinite scroll)
+    const loadMore = useCallback(async () => {
+        if (loadingMore || !hasMore) return;
+
+        setLoadingMore(true);
+        try {
+            const nextPage = page + 1;
+            const start = (nextPage - 1) * 20;
+            const end = start + 19;
+
+            let query = supabase
+                .from('products')
+                .select('*')
+                .eq('is_active', true);
+
+            if (searchQuery) {
+                query = query.ilike('name', `%${searchQuery}%`);
+            }
+            if (selectedCategory && selectedCategory !== 'all') {
+                query = query.eq('category_id', selectedCategory);
+            }
+
+            const { data, error } = await query.range(start, end);
+
+            if (!error && data) {
+                setProducts((prev) => [...prev, ...data]);
+                setPage(nextPage);
+                setHasMore(data.length >= 20);
+            }
+        } catch (error) {
+            console.error('Error loading more products:', error);
+        } finally {
+            setLoadingMore(false);
+        }
+    }, [page, loadingMore, hasMore, searchQuery, selectedCategory, supabase]);
+
+    // Filtrado y ordenamiento en cliente
+    const filteredProducts = useMemo(() => {
+        let result = [...products];
+
+        // Filtros
+        if (showOnlyInStock) {
+            result = result.filter((p) => p.stock_quantity > 0);
+        }
+        if (showOnlyOnSale) {
+            result = result.filter(
+                (p) => (p as any).discount_percentage && (p as any).discount_percentage > 0
+            );
+        }
+
+        // Ordenamiento
+        result.sort((a, b) => {
+            switch (sortBy) {
+                case 'price-low':
+                    return a.sale_price - b.sale_price;
+                case 'price-high':
+                    return b.sale_price - a.sale_price;
+                case 'rating':
+                    return ((b as any).rating || 0) - ((a as any).rating || 0);
+                case 'newest':
+                    return (
+                        new Date(b.created_at || '').getTime() -
+                        new Date(a.created_at || '').getTime()
+                    );
+                default:
+                    return a.name.localeCompare(b.name);
+            }
+        });
+
+        return result;
+    }, [products, showOnlyInStock, showOnlyOnSale, sortBy]);
+
+    // Handlers
+    const handleClearFilters = useCallback(() => {
+        setSearchQuery('');
+        setSelectedCategory('all');
+        setSortBy('name');
+        setShowOnlyInStock(true);
+        setShowOnlyOnSale(false);
+    }, []);
+
+    const handleCheckout = useCallback(() => {
+        setShowCheckout(true);
+        setShowCart(false);
+    }, []);
+
+    const handleOrderSuccess = useCallback((orderData: any) => {
+        setShowCheckout(false);
+        setShowOrderConfirmation(true);
+        setOrderConfirmationData(orderData);
+        clearCart();
+    }, [clearCart]);
+
+    const handleAddToCartWithQuantity = useCallback(
+        (product: Product, quantity: number) => {
+            addToCart(product, quantity);
+            setSelectedProduct(null);
+            {/* Header del catálogo */ }
+            <CatalogHeader
+                searchQuery={searchQuery}
+                cartItemsCount={cartItemsCount}
+                config={config}
+                onSearchChange={setSearchQuery}
+                onToggleCart={() => setShowCart(!showCart)}
+            />
+
+            {/* Contenido principal */ }
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                {/* Hero Section */}
+                <section className="mb-6 rounded-2xl p-6 md:p-8 bg-gradient-to-r from-background to-muted/20 border shadow-sm">
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground mb-2">
+                                Explora nuestro catálogo
+                            </h1>
+                            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl">
+                                Encuentra productos de {config.businessName} con búsqueda, filtros y vistas.
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Barra de búsqueda con sugerencias */}
+                    <div className="mt-4 relative">
+                        <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder="Busca productos por nombre..."
+                            className="w-full h-11 text-lg pl-11 pr-4 rounded-xl border border-input bg-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                        />
+                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                        </div>
+
+                        {/* Sugerencias de búsqueda */}
+                        {searchQuery.trim().length > 1 && (
+                            <SearchSuggestions
+                                searchQuery={searchQuery}
+                                products={products}
+                                onSelectSuggestion={setSearchQuery}
+                            />
+                        )}
+                    </div>
+                </section>
+
+                {/* Filtros */}
+                <CatalogFilters
+                    selectedCategory={selectedCategory}
+                    sortBy={sortBy}
+                    viewMode={viewMode}
+                    showOnlyInStock={showOnlyInStock}
+                    showOnlyOnSale={showOnlyOnSale}
+                    categories={categories}
+                    resultsCount={filteredProducts.length}
+                    onCategoryChange={setSelectedCategory}
+                    onSortChange={setSortBy}
+                    onViewModeChange={setViewMode}
+                    onToggleInStock={() => setShowOnlyInStock(!showOnlyInStock)}
+                    onToggleOnSale={() => setShowOnlyOnSale(!showOnlyOnSale)}
+                    onClearFilters={handleClearFilters}
+                />
+
+                {/* Grid de productos */}
+                <div className="mt-6">
+                    <ProductGrid
+                        products={filteredProducts}
+                        viewMode={viewMode}
+                        favorites={favorites}
+                        loading={loading}
+                        loadingMore={loadingMore}
+                        hasMore={hasMore}
+                        onToggleFavorite={toggleFavorite}
+                        onOpenProductDetail={setSelectedProduct}
+                        onAddToCart={addToCart}
+                        onLoadMore={loadMore}
+                        onClearFilters={handleClearFilters}
+                        config={config}
+                    />
+                </div>
+            </div>
+
+            {/* Cart Sidebar - CON FIX APLICADO */ }
+            <CartSidebar
+                key={`cart-${cartItemsCount}`}
+                isOpen={showCart}
+                cart={cart}
+                cartTotal={cartTotal}
+                cartItemsCount={cartItemsCount}
+                config={config}
+                onClose={() => setShowCart(false)}
+                onUpdateQuantity={updateQuantity}
+                onRemoveItem={removeFromCart}
+                onClearCart={clearCart}
+                onCheckout={handleCheckout}
+            />
+
+            {/* Modal de detalle de producto */ }
+            {
+                selectedProduct && (
+                    <ProductDetailModal
+                        product={selectedProduct}
+                        isOpen={!!selectedProduct}
+                        onClose={() => setSelectedProduct(null)}
+                        onAddToCart={handleAddToCartWithQuantity}
+                        onToggleFavorite={() => toggleFavorite(selectedProduct.id)}
+                        isFavorite={favorites.includes(selectedProduct.id)}
+                    />
+                )
+            }
+
+            {/* Checkout Modal */ }
+            <CheckoutModal
+                isOpen={showCheckout}
+                onClose={() => setShowCheckout(false)}
+                cartItems={cart.map((item) => ({
+                    id: item.product.id,
+                    name: item.product.name,
+                    price: item.product.sale_price,
+                    quantity: item.quantity,
+                    image: item.product.image_url || undefined,
+                }))}
+                cartTotal={cartTotal}
+                onOrderSuccess={handleOrderSuccess}
+            />
+
+            {/* Order Confirmation Modal */ }
+            {
+                orderConfirmationData && (
+                    <OrderConfirmationModal
+                        isOpen={showOrderConfirmation}
+                        onClose={() => {
+                            setShowOrderConfirmation(false);
+                            setOrderConfirmationData(null);
+                        }}
+                        orderId={orderConfirmationData.orderId}
+                        customerName={orderConfirmationData.customerName}
+                        customerEmail={orderConfirmationData.customerEmail}
+                        total={orderConfirmationData.total}
+                        paymentMethod={orderConfirmationData.paymentMethod}
+                        orderDate={orderConfirmationData.orderDate}
+                    />
+                )
+            }
+        </div >
+    );
+}

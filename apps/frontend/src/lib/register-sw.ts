@@ -1,0 +1,9 @@
+export function registerServiceWorker() {
+  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+  if (process.env.NODE_ENV !== 'production') return;
+  navigator.serviceWorker
+    .register('/sw.js')
+    .catch((err) => {
+      console.warn('SW registration failed', err);
+    });
+}

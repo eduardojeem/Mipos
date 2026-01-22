@@ -1,0 +1,79 @@
+/**
+ * Touch-Optimized Styles
+ * Mejora la experiencia táctil en dispositivos móviles
+ */
+
+/* Tamaño mínimo para elementos interactivos */
+@media (hover: none) and (pointer: coarse) {
+  /* Dispositivos táctiles */
+  button,
+  a,
+  input[type="button"],
+  input[type="submit"],
+  [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Inputs también necesitan ser fáciles de tocar */
+  input[type="text"],
+  input[type="search"],
+  input[type="number"],
+  select,
+  textarea {
+    min-height: 44px;
+    font-size: 16px; /* Previene zoom en iOS */
+  }
+
+  /* Espaciado entre elementos táctiles */
+  button + button,
+  a + a {
+    margin-left: 8px;
+  }
+}
+
+/* Feedback visual al tocar */
+@media (hover: none) {
+  button:active,
+  [role="button"]:active {
+    transform: scale(0.98);
+    transition: transform 0.1s ease;
+  }
+}
+
+/* Optimizaciones para landscape móvil */
+@media (max-width: 767px) and (orientation: landscape) {
+  /* Reducir padding vertical */
+  .pos-layout {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+
+  /* Header más compacto */
+  .pos-header {
+    height: 3rem;
+    min-height: 3rem;
+  }
+
+  /* Productos en 2 columnas */
+  .products-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  /* Cards de producto más compactos */
+  .product-card {
+    padding: 0.5rem;
+  }
+
+  .product-card img {
+    height: 6rem;
+  }
+
+  /* Botones más pequeños pero táctiles */
+  .product-card button {
+    min-height: 36px;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+  }
+}
