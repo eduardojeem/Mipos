@@ -13,6 +13,7 @@ import { Sidebar } from '@/components/dashboard/sidebar';
 import { MobileNavigation } from '@/components/dashboard/MobileNavigation';
 import { Header } from '@/components/dashboard/header';
 import { KeyboardShortcuts } from '@/components/keyboard/keyboard-shortcuts';
+import { UserAppearanceManager } from '@/components/dashboard/UserAppearanceManager';
 import dynamic from 'next/dynamic';
 const ConnectionIndicator = dynamic(
   () => import('@/components/ui/connection-indicator').then(m => m.ConnectionIndicator),
@@ -102,6 +103,7 @@ export default function DashboardLayout({
 
   return (
     <DashboardErrorBoundary>
+      <UserAppearanceManager />
       <UnifiedPermissionGuard resource="dashboard" action="read" allowAdmin>
         <ResponsiveLayout
           className="transition-colors duration-300"

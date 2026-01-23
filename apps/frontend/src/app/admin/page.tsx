@@ -196,19 +196,19 @@ export default function AdminDashboardPageOptimized() {
             <CardContent>
               <div className="grid grid-cols-2 gap-4">
                 <div className="text-center p-4 bg-muted/50 rounded-lg">
-                  <p className="text-2xl font-bold text-green-600">
+                  <div className="text-2xl font-bold text-green-600">
                     {summaryLoading ? <Skeleton className="h-8 w-16 mx-auto" /> : `+${summary?.growthPercentage || 0}%`}
-                  </p>
+                  </div>
                   <p className="text-sm text-muted-foreground">Crecimiento vs mes anterior</p>
                 </div>
                 <div className="text-center p-4 bg-muted/50 rounded-lg">
-                  <p className="text-2xl font-bold text-blue-600">
+                  <div className="text-2xl font-bold text-blue-600">
                     {summaryLoading ? (
                       <Skeleton className="h-8 w-20 mx-auto" />
                     ) : (
                       <CurrencyDisplay value={summary?.monthlyTotal || 0} />
                     )}
-                  </p>
+                  </div>
                   <p className="text-sm text-muted-foreground">Total del mes</p>
                 </div>
               </div>

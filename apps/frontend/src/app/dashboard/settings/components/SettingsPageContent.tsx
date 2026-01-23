@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Download, RefreshCw, AlertCircle, HelpCircle, FileText, Mail } from 'lucide-react';
+import { Download, RefreshCw, AlertCircle, HelpCircle, FileText, Mail, User, Palette } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -10,6 +10,7 @@ import { ProfileTab } from './ProfileTab';
 import { SystemTab } from './SystemTab';
 import { NotificationsTab } from './NotificationsTab';
 import { SecurityTab } from './SecurityTab';
+import { AppearanceTab } from './AppearanceTab';
 import { SettingsLoadingSkeleton } from './SettingsLoadingSkeleton';
 import {
   useUserSettings,
@@ -176,6 +177,15 @@ export default function SettingsPageContent() {
               </div>
               <span className="font-semibold">Seguridad</span>
             </TabsTrigger>
+            <TabsTrigger
+              value="appearance"
+              className="flex-1 items-center gap-2.5 py-3 px-6 rounded-xl data-[state=active]:bg-background data-[state=active]:text-pink-600 data-[state=active]:shadow-lg transition-all duration-300 group"
+            >
+              <div className="p-1.5 rounded-lg bg-pink-500/10 group-data-[state=active]:bg-pink-600 group-data-[state=active]:text-white transition-colors duration-300">
+                <Palette className="h-4 w-4" />
+              </div>
+              <span className="font-semibold">Apariencia</span>
+            </TabsTrigger>
           </TabsList>
         </div>
 
@@ -197,6 +207,11 @@ export default function SettingsPageContent() {
         {/* Security Tab */}
         <TabsContent value="security" className="space-y-6 animate-in fade-in-50 slide-in-from-bottom-2 duration-300">
           <SecurityTab />
+        </TabsContent>
+
+        {/* Appearance Tab */}
+        <TabsContent value="appearance" className="space-y-6 animate-in fade-in-50 slide-in-from-bottom-2 duration-300">
+          <AppearanceTab />
         </TabsContent>
       </Tabs>
 

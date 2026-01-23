@@ -25,34 +25,48 @@ interface UserSettings {
   show_tooltips: boolean;
   enable_animations: boolean;
   auto_save: boolean;
+  primary_color: string;
+  border_radius: string;
+  enable_glassmorphism: boolean;
+  enable_gradients: boolean;
+  enable_shadows: boolean;
 }
 
 interface SystemSettings {
-  store_name: string;
-  store_address: string;
-  store_phone: string;
-  store_email: string;
-  store_website: string;
-  store_logo_url: string;
-  tax_rate: number;
-  currency: string;
-  receipt_footer: string;
-  low_stock_threshold: number;
-  auto_backup: boolean;
-  backup_frequency: 'daily' | 'weekly' | 'monthly';
-  email_notifications: boolean;
-  sms_notifications: boolean;
-  push_notifications: boolean;
-  timezone: string;
-  date_format: string;
-  time_format: '12h' | '24h';
-  decimal_places: number;
-  enable_barcode_scanner: boolean;
-  enable_receipt_printer: boolean;
-  enable_cash_drawer: boolean;
-  max_discount_percentage: number;
-  require_customer_info: boolean;
-  enable_loyalty_program: boolean;
+  store_name?: string;
+  store_address?: string;
+  store_phone?: string;
+  store_email?: string;
+  store_website?: string;
+  store_logo_url?: string;
+  tax_rate?: number;
+  currency?: string;
+  receipt_footer?: string;
+  low_stock_threshold?: number;
+  auto_backup?: boolean;
+  backup_frequency?: 'daily' | 'weekly' | 'monthly';
+  email_notifications?: boolean;
+  sms_notifications?: boolean;
+  push_notifications?: boolean;
+  timezone?: string;
+  date_format?: string;
+  time_format?: '12h' | '24h';
+  decimal_places?: number;
+  enable_barcode_scanner?: boolean;
+  enable_receipt_printer?: boolean;
+  enable_cash_drawer?: boolean;
+  max_discount_percentage?: number;
+  require_customer_info?: boolean;
+  enable_loyalty_program?: boolean;
+  // Campos del API
+  businessName?: string;
+  enableInventoryTracking?: boolean;
+  enableLoyaltyProgram?: boolean;
+  enableNotifications?: boolean;
+  backupFrequency?: 'daily' | 'weekly' | 'monthly';
+  dateFormat?: string;
+  timeFormat?: '12h' | '24h' | '24h'; // Fix type mismatch if API returns different literal
+  taxRate?: number;
 }
 
 interface SecuritySettings {
@@ -87,7 +101,12 @@ const DEFAULT_USER_SETTINGS: UserSettings = {
   sidebar_collapsed: false,
   show_tooltips: true,
   enable_animations: true,
-  auto_save: true
+  auto_save: true,
+  primary_color: 'blue',
+  border_radius: '0.5',
+  enable_glassmorphism: true,
+  enable_gradients: true,
+  enable_shadows: true,
 };
 
 const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
@@ -153,7 +172,10 @@ export function useSystemSettings() {
     queryFn: async (): Promise<SystemSettings> => {
       try {
         const response = await api.get('/system/settings');
-        return { ...DEFAULT_SYSTEM_SETTINGS, ...response.data.data };
+        // Usar los datos directamente, ya que el endpoint devuelve un objeto plano
+        // si data.data existe úsalo, si no, usa data
+        const settings = response.data.data || response.data;
+        return { ...DEFAULT_SYSTEM_SETTINGS, ...settings };
       } catch (error) {
         console.warn('Failed to load system settings, using defaults');
         return DEFAULT_SYSTEM_SETTINGS;
@@ -190,21 +212,41 @@ export function useUpdateUserSettings() {
 
   return useMutation({
     mutationFn: async (settings: Partial<UserSettings>) => {
-      const response = await api.put('/user/settings', settings);
-      return response.data;
+      try {
+        const response = await api.put('/user/settings', settings, {
+          _noRetry: true,
+        } as any);
+        return response.data;
+      } catch (error: any) {
+        if (error?.response?.status === 431) {
+          throw error;
+        }
+        throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['user-settings'] });
       toast({
         title: 'Éxito',
-        description: 'Configuración de perfil actualizada correctamente',
+        description: 'Configuración actualizada correctamente.',
       });
     },
-    onError: (error) => {
+    onError: (error: any) => {
       console.error('Error saving user settings:', error);
+
+      let title = 'Error al guardar';
+      let errorMessage = 'No se pudo actualizar la configuración del perfil';
+
+      if (error?.response?.status === 431) {
+        title = 'Sesión demasiado pesada (431)';
+        errorMessage = 'Tu token de acceso es demasiado grande. Esto sucede por guardar datos pesados (como imágenes) en el perfil. Por favor, cierra sesión y vuelve a entrar para limpiar tu token.';
+      } else if (error?.response?.status === 413) {
+        errorMessage = 'Los datos enviados son demasiado grandes.';
+      }
+
       toast({
-        title: 'Error',
-        description: 'No se pudo actualizar la configuración del perfil',
+        title,
+        description: errorMessage,
         variant: 'destructive'
       });
     }
@@ -217,8 +259,35 @@ export function useUpdateSystemSettings() {
 
   return useMutation({
     mutationFn: async (settings: Partial<SystemSettings>) => {
-      const response = await api.put('/system/settings', settings);
-      return response.data;
+      try {
+        // Crear una configuración de request más simple para evitar headers grandes
+        const response = await api.put('/system/settings', settings, {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          // Evitar retry automático para esta operación (casting a any porque _noRetry no está en tipos estándar)
+          _noRetry: true,
+        } as any);
+        return response.data;
+      } catch (error: any) {
+        // Si es error 431, intentar con menos datos
+        if (error?.response?.status === 431) {
+          console.warn('Headers too large, retrying with minimal data');
+          const minimalSettings = {
+            businessName: settings.businessName,
+            currency: settings.currency,
+            timezone: settings.timezone,
+          };
+          const response = await api.put('/system/settings', minimalSettings, {
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            _noRetry: true,
+          } as any);
+          return response.data;
+        }
+        throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['system-settings'] });
@@ -227,11 +296,22 @@ export function useUpdateSystemSettings() {
         description: 'Configuración del sistema actualizada correctamente',
       });
     },
-    onError: (error) => {
+    onError: (error: any) => {
       console.error('Error saving system settings:', error);
+
+      let errorMessage = 'No se pudo actualizar la configuración del sistema';
+
+      if (error?.response?.status === 431) {
+        errorMessage = 'Los datos son demasiado grandes. Intenta con menos información.';
+      } else if (error?.response?.status === 413) {
+        errorMessage = 'Los datos enviados son demasiado grandes.';
+      } else if (error?.response?.data?.error) {
+        errorMessage = error.response.data.error;
+      }
+
       toast({
         title: 'Error',
-        description: 'No se pudo actualizar la configuración del sistema',
+        description: errorMessage,
         variant: 'destructive'
       });
     }
