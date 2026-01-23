@@ -111,32 +111,27 @@ export default function SignInPage() {
   };
 
   return (
-    <div suppressHydrationWarning className="relative min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-rose-50 via-violet-100 to-indigo-100 dark:from-slate-950 dark:via-violet-950 dark:to-blue-950 p-4 overflow-hidden">
-      {/* Decoración de fondo mejorada */}
+    <div suppressHydrationWarning className="relative min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950 p-4 overflow-hidden">
+      {/* Decoración de fondo moderna y profesional */}
       <div suppressHydrationWarning className="absolute inset-0 -z-10 pointer-events-none">
-        {/* Capa aurora con gradiente cónico lento */}
-        <div
-          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[110vmax] h-[110vmax] rounded-full bg-[conic-gradient(from_180deg_at_50%_50%,#fecdd3_0%,#c4b5fd_25%,#93c5fd_50%,#a5b4fc_75%,#fecdd3_100%)] opacity-20 blur-[80px] motion-safe:animate-spin"
-          style={{ animationDuration: '120s' }}
-        />
-        {/* Rayos cónicos sutiles para textura aurora */}
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[100vmax] h-[100vmax] rounded-full bg-[repeating-conic-gradient(from_0deg,rgba(255,255,255,0.06)_0deg,transparent_10deg)] opacity-20 blur-[64px] mix-blend-overlay" />
-        {/* Destellos radiales suaves de color */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_20%_20%,rgba(244,114,182,0.18),transparent_60%),radial-gradient(ellipse_at_80%_30%,rgba(129,140,248,0.16),transparent_60%),radial-gradient(ellipse_at_50%_80%,rgba(99,102,241,0.14),transparent_60%)] blur-2xl" />
-        {/* Textura radial adicional sutil para enriquecer los bordes */}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_12%_50%,rgba(255,255,255,0.05)_0%,transparent_45%),radial-gradient(circle_at_88%_50%,rgba(255,255,255,0.05)_0%,transparent_45%),repeating-radial-gradient(circle_at_center,rgba(255,255,255,0.025)_0px,rgba(255,255,255,0.025)_2px,transparent_3px)] opacity-30 mix-blend-soft-light pointer-events-none" />
-        {/* Blobs existentes */}
-        <div className="absolute -top-16 -left-16 w-72 h-72 rounded-full bg-gradient-to-tr from-pink-300 to-violet-300 opacity-40 blur-3xl motion-safe:animate-pulse" />
-        <div className="absolute -bottom-20 -right-20 w-80 h-80 rounded-full bg-gradient-to-tr from-indigo-300 to-blue-300 opacity-40 blur-3xl motion-safe:animate-pulse" />
-        <div className="absolute top-1/2 -translate-y-1/2 right-1/3 w-40 h-40 rounded-full bg-gradient-to-tr from-amber-200 to-pink-200 opacity-40 blur-2xl motion-safe:animate-pulse" />
-        {/* Viñeta sutil para foco visual */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_50%,rgba(8,8,16,0.12)_100%)]" />
+        {/* Gradiente base suave */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(59,130,246,0.08),transparent_50%),radial-gradient(ellipse_at_bottom,rgba(99,102,241,0.06),transparent_50%)]" />
+        
+        {/* Blobs animados con colores profesionales */}
+        <div className="absolute top-0 left-1/4 w-96 h-96 rounded-full bg-gradient-to-br from-blue-400/20 to-indigo-400/20 blur-3xl motion-safe:animate-pulse" style={{ animationDuration: '8s' }} />
+        <div className="absolute bottom-0 right-1/4 w-96 h-96 rounded-full bg-gradient-to-br from-indigo-400/20 to-violet-400/20 blur-3xl motion-safe:animate-pulse" style={{ animationDuration: '10s' }} />
+        
+        {/* Grid sutil para textura */}
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(59,130,246,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(59,130,246,0.03)_1px,transparent_1px)] bg-[size:64px_64px] [mask-image:radial-gradient(ellipse_at_center,black_20%,transparent_80%)]" />
+        
+        {/* Viñeta para foco */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_60%,rgba(15,23,42,0.05)_100%)]" />
       </div>
       <div className="w-full max-w-md">
         {/* Logo y título (sincronizado con configuración del sistema) */}
         <div className="text-center mb-8">
           {config.branding?.logo ? (
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4 shadow-lg ring-4 ring-white/40 dark:ring-slate-800/40 overflow-hidden bg-white dark:bg-slate-900">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4 shadow-xl ring-2 ring-blue-100 dark:ring-indigo-900/50 overflow-hidden bg-white dark:bg-slate-900">
               <img
                 src={config.branding.logo}
                 alt="Logo"
@@ -147,15 +142,15 @@ export default function SignInPage() {
               />
             </div>
           ) : (
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-pink-500 via-violet-600 to-indigo-600 rounded-full mb-4 shadow-lg ring-4 ring-white/40 dark:ring-slate-800/40">
-              <ShoppingCart className="w-8 h-8 text-white animate-pulse" />
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl mb-4 shadow-xl ring-2 ring-blue-100 dark:ring-indigo-900/50">
+              <ShoppingCart className="w-8 h-8 text-white" />
             </div>
           )}
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-pink-600 via-violet-600 to-indigo-600 bg-clip-text text-transparent mb-2">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-2">
             {config.businessName || 'BeautyPOS'}
           </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            {config.businessName ? `Accede a ${config.businessName}` : 'Accede a tu sistema'}
+          <p className="text-slate-600 dark:text-slate-400 font-medium">
+            {config.businessName ? `Accede a ${config.businessName}` : 'Accede a tu sistema de forma segura'}
           </p>
           {config.contact?.website ? (
             <p className="text-xs text-muted-foreground mt-1">
@@ -172,25 +167,23 @@ export default function SignInPage() {
               key="signin"
               className="relative"
             >
-              <div className="absolute -inset-px rounded-2xl bg-gradient-to-r from-pink-500 via-violet-500 to-blue-500 opacity-30 blur-md pointer-events-none" />
-              <div className="absolute -inset-6 rounded-3xl bg-gradient-to-br from-pink-300/25 via-violet-300/25 to-indigo-300/25 opacity-30 blur-2xl pointer-events-none" />
-              <Card className="relative shadow-2xl border border-slate-200/60 dark:border-slate-800/60 bg-white/80 dark:bg-slate-900/60 backdrop-blur-sm ring-1 ring-pink-200/60 dark:ring-violet-700/40">
+              <div className="absolute -inset-1 rounded-2xl bg-gradient-to-r from-blue-500 to-indigo-500 opacity-10 blur-lg pointer-events-none" />
+              <Card className="relative shadow-2xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 backdrop-blur-sm">
                 <CardHeader className="space-y-1 pb-6">
-                  <CardTitle className="text-2xl font-semibold text-center bg-gradient-to-r from-pink-600 via-violet-600 to-indigo-600 bg-clip-text text-transparent">Iniciar Sesión</CardTitle>
-                  <CardDescription className="text-center">
-                    Ingresa tus credenciales para acceder al sistema
+                  <CardTitle className="text-2xl font-semibold text-center text-slate-900 dark:text-slate-100">Iniciar Sesión</CardTitle>
+                  <CardDescription className="text-center text-slate-600 dark:text-slate-400">
+                    Ingresa tus credenciales para acceder
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
                     {/* Campo Email */}
                     <div className="space-y-2">
-                      <Label htmlFor="email" className="text-sm font-medium text-violet-700 dark:text-violet-300">
+                      <Label htmlFor="email" className="text-sm font-medium text-slate-700 dark:text-slate-300">
                         Email
                       </Label>
                       <div className="relative group">
-                        <div className="absolute inset-0 rounded-md bg-gradient-to-r from-pink-500/10 via-violet-500/10 to-indigo-500/10 opacity-0 transition-opacity duration-500 group-focus-within:opacity-100 group-hover:opacity-100 blur-lg pointer-events-none"></div>
-                        <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-violet-500 h-4 w-4" />
+                        <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 dark:group-focus-within:text-blue-400 h-5 w-5 transition-colors" />
                         <Input
                           id="email"
                           type="email"
@@ -198,10 +191,10 @@ export default function SignInPage() {
                           autoComplete="email"
                           placeholder="tu@email.com"
                           className={cn(
-                            "pl-10 h-12 transition-all duration-200 focus:ring-2",
-                            errors.email
-                              ? "border-red-500 focus:border-red-500 focus:ring-red-500"
-                              : "focus:border-blue-500 focus:ring-blue-500"
+                            "pl-10 h-12 transition-all duration-200 border-slate-300 dark:border-slate-700",
+                            "focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20",
+                            "hover:border-slate-400 dark:hover:border-slate-600",
+                            errors.email && "border-red-500 focus:border-red-500 focus:ring-red-500/20"
                           )}
                           aria-invalid={!!errors.email}
                           aria-describedby={errors.email ? 'email-error' : undefined}
@@ -209,8 +202,8 @@ export default function SignInPage() {
                         />
                       </div>
                       {errors.email && (
-                        <p id="email-error" className="text-sm text-red-500 flex items-center">
-                          <AlertCircle className="h-4 w-4 mr-1" />
+                        <p id="email-error" className="text-sm text-red-600 dark:text-red-400 flex items-center gap-1">
+                          <AlertCircle className="h-4 w-4" />
                           {errors.email.message}
                         </p>
                       )}
@@ -218,21 +211,21 @@ export default function SignInPage() {
 
                     {/* Campo Contraseña */}
                     <div className="space-y-2">
-                      <Label htmlFor="password" className="text-sm font-medium text-violet-700 dark:text-violet-300">
+                      <Label htmlFor="password" className="text-sm font-medium text-slate-700 dark:text-slate-300">
                         Contraseña
                       </Label>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-violet-500 h-4 w-4" />
+                      <div className="relative group">
+                        <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 dark:group-focus-within:text-blue-400 h-5 w-5 transition-colors" />
                         <Input
                           id="password"
                           type={showPassword ? 'text' : 'password'}
                           autoComplete="current-password"
                           placeholder="••••••••"
                           className={cn(
-                            "pl-10 h-12 transition-all duration-200 focus:ring-2",
-                            errors.password
-                              ? "border-red-500 focus:border-red-500 focus:ring-red-500"
-                              : "focus:border-blue-500 focus:ring-blue-500"
+                            "pl-10 pr-10 h-12 transition-all duration-200 border-slate-300 dark:border-slate-700",
+                            "focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20",
+                            "hover:border-slate-400 dark:hover:border-slate-600",
+                            errors.password && "border-red-500 focus:border-red-500 focus:ring-red-500/20"
                           )}
                           aria-invalid={!!errors.password}
                           aria-describedby={errors.password ? 'password-error' : undefined}
@@ -241,19 +234,19 @@ export default function SignInPage() {
                         <button
                           type="button"
                           onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
                           aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                         >
                           {showPassword ? (
-                            <EyeOff className="h-4 w-4" />
+                            <EyeOff className="h-5 w-5" />
                           ) : (
-                            <Eye className="h-4 w-4" />
+                            <Eye className="h-5 w-5" />
                           )}
                         </button>
                       </div>
                       {errors.password && (
-                        <p id="password-error" className="text-sm text-red-500 flex items-center">
-                          <AlertCircle className="h-4 w-4 mr-1" />
+                        <p id="password-error" className="text-sm text-red-600 dark:text-red-400 flex items-center gap-1">
+                          <AlertCircle className="h-4 w-4" />
                           {errors.password.message}
                         </p>
                       )}
@@ -261,12 +254,12 @@ export default function SignInPage() {
 
                     {/* Recordar contraseña */}
                     <div className="flex items-center justify-between">
-                      <label htmlFor="remember" className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                      <label htmlFor="remember" className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
                         <input
                           id="remember"
                           type="checkbox"
                           {...register('remember')}
-                          className="rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                          className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 focus:ring-2 focus:ring-offset-0 cursor-pointer"
                         />
                         Recordar contraseña
                       </label>
@@ -278,11 +271,12 @@ export default function SignInPage() {
                     <Button
                       type="submit"
                       className={cn(
-                        "w-full h-12 text-base font-medium transition-all duration-200",
+                        "w-full h-12 text-base font-semibold transition-all duration-200",
                         loginSuccess
-                          ? "bg-green-600 hover:bg-green-700"
-                          : "bg-gradient-to-r from-pink-600 via-violet-600 to-indigo-600 hover:from-pink-700 hover:via-violet-700 hover:to-indigo-700",
-                        "shadow-lg hover:shadow-xl transform hover:scale-[1.02]"
+                          ? "bg-green-600 hover:bg-green-700 text-white"
+                          : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white",
+                        "shadow-lg hover:shadow-xl transform hover:scale-[1.01] active:scale-[0.99]",
+                        "disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                       )}
                       disabled={isLoading || loginSuccess || !isValid}
                     >
@@ -306,16 +300,16 @@ export default function SignInPage() {
                       <button
                         type="button"
                         onClick={() => setShowForgotPassword(true)}
-                        className="text-sm text-violet-600 hover:text-violet-500 hover:underline transition-colors"
+                        className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:underline transition-colors font-medium"
                       >
                         ¿Olvidaste tu contraseña?
                       </button>
 
-                      <div className="text-sm text-gray-600 dark:text-gray-400">
+                      <div className="text-sm text-slate-600 dark:text-slate-400">
                         ¿No tienes cuenta?{' '}
                         <Link
                           href="/auth/signup"
-                          className="font-medium bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent hover:from-violet-500 hover:to-indigo-500 hover:underline transition-colors"
+                          className="font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:underline transition-colors"
                         >
                           Regístrate aquí
                         </Link>
@@ -339,7 +333,7 @@ export default function SignInPage() {
         </>
 
         {/* Footer */}
-        <div className="text-center mt-8 text-sm text-gray-500 dark:text-gray-400">
+        <div className="text-center mt-8 text-sm text-slate-500 dark:text-slate-400">
           <p>© 2024 Sistema POS. Todos los derechos reservados.</p>
         </div>
       </div>
@@ -368,22 +362,21 @@ function ForgotPasswordForm({
   };
 
   return (
-    <Card className="shadow-2xl border border-slate-200/60 dark:border-slate-800/60 bg-white/80 dark:bg-slate-900/60 backdrop-blur-sm">
+    <Card className="shadow-2xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 backdrop-blur-sm">
       <CardHeader className="space-y-1 pb-6">
-        <CardTitle className="text-2xl font-semibold text-center bg-gradient-to-r from-pink-600 via-violet-600 to-indigo-600 bg-clip-text text-transparent">Recuperar Contraseña</CardTitle>
-        <CardDescription className="text-center">
+        <CardTitle className="text-2xl font-semibold text-center text-slate-900 dark:text-slate-100">Recuperar Contraseña</CardTitle>
+        <CardDescription className="text-center text-slate-600 dark:text-slate-400">
           Ingresa tu email para recibir un enlace de recuperación
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
-            <Label htmlFor="recovery-email" className="text-sm font-medium text-violet-700 dark:text-violet-300">
+            <Label htmlFor="recovery-email" className="text-sm font-medium text-slate-700 dark:text-slate-300">
               Email
             </Label>
             <div className="relative group">
-              <div className="absolute inset-0 rounded-md bg-gradient-to-r from-pink-500/10 via-violet-500/10 to-indigo-500/10 opacity-0 transition-opacity duration-500 group-focus-within:opacity-100 group-hover:opacity-100 blur-lg"></div>
-              <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-violet-500 h-4 w-4" />
+              <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 dark:group-focus-within:text-blue-400 h-5 w-5 transition-colors" />
               <Input
                 id="recovery-email"
                 type="email"
@@ -392,7 +385,7 @@ function ForgotPasswordForm({
                 placeholder="tu@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="pl-10 h-12 focus:border-blue-500 focus:ring-blue-500 focus:ring-2"
+                className="pl-10 h-12 border-slate-300 dark:border-slate-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 hover:border-slate-400 dark:hover:border-slate-600 transition-all"
                 required
               />
             </div>
@@ -401,7 +394,7 @@ function ForgotPasswordForm({
           <div className="space-y-3">
             <Button
               type="submit"
-              className="w-full h-12 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-base font-medium"
+              className="w-full h-12 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-base font-semibold shadow-lg hover:shadow-xl transition-all"
               disabled={isLoading || !email}
             >
               {isLoading ? (
@@ -418,7 +411,7 @@ function ForgotPasswordForm({
               type="button"
               variant="outline"
               onClick={onBack}
-              className="w-full h-12 text-base font-medium"
+              className="w-full h-12 text-base font-medium border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
             >
               Volver al Login
             </Button>
