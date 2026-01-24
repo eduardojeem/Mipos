@@ -40,7 +40,7 @@
     "jspdf": "^3.0.4",
     "jspdf-autotable": "^5.0.2",
     "multer": "^1.4.5-lts.1",
-    "next": "^15.6.0-canary.31",
+    "next": "^15.1.0",
     "nodemailer": "^6.10.1",
     "pdfkit": "^0.13.0",
     "redis": "^4.6.7",
