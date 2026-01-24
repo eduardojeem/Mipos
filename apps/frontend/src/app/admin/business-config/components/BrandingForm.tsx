@@ -1,19 +1,19 @@
 'use client';
 
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  Palette, 
-  Upload, 
-  Eye, 
-  EyeOff, 
-  RotateCcw, 
-  Sparkles, 
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../../../components/ui/card';
+import { Input } from '../../../../components/ui/input';
+import { Label } from '../../../../components/ui/label';
+import { Button } from '../../../../components/ui/button';
+import { Badge } from '../../../../components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../../components/ui/tabs';
+import {
+  Palette,
+  Upload,
+  Eye,
+  EyeOff,
+  RotateCcw,
+  Sparkles,
   Image as ImageIcon,
   CheckCircle,
   Type,
@@ -22,11 +22,11 @@ import {
   Moon,
   X
 } from 'lucide-react';
-import { BusinessConfig } from '@/types/business-config';
+import { BusinessConfig } from '../../../../types/business-config';
 import { useConfigValidation } from '../hooks/useConfigValidation';
 import { ImageUploader } from './ImageUploader';
 import { OptimizedImage } from './OptimizedImage';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../../lib/utils';
 
 interface BrandingFormProps {
   config: BusinessConfig;
@@ -168,15 +168,15 @@ export function BrandingForm({ config, onUpdate }: BrandingFormProps) {
                 )}
               >
                 <div className="flex gap-1 mb-3 justify-center">
-                  <div 
+                  <div
                     className="w-6 h-6 rounded-full shadow-sm ring-2 ring-white dark:ring-slate-800"
                     style={{ backgroundColor: preset.primary }}
                   />
-                  <div 
+                  <div
                     className="w-6 h-6 rounded-full shadow-sm ring-2 ring-white dark:ring-slate-800 -ml-2"
                     style={{ backgroundColor: preset.secondary }}
                   />
-                  <div 
+                  <div
                     className="w-6 h-6 rounded-full shadow-sm ring-2 ring-white dark:ring-slate-800 -ml-2"
                     style={{ backgroundColor: preset.accent }}
                   />
@@ -263,7 +263,7 @@ export function BrandingForm({ config, onUpdate }: BrandingFormProps) {
                         className="w-14 h-14 rounded-xl cursor-pointer border-2 border-slate-200 dark:border-slate-700 overflow-hidden"
                         style={{ padding: 0 }}
                       />
-                      <div 
+                      <div
                         className="absolute inset-1 rounded-lg pointer-events-none"
                         style={{ backgroundColor: config.branding.primaryColor }}
                       />
@@ -435,21 +435,21 @@ export function BrandingForm({ config, onUpdate }: BrandingFormProps) {
             <div className="mt-6 p-6 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30">
               <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Vista Previa en Tiempo Real</p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div 
+                <div
                   className="p-4 rounded-xl text-white font-medium shadow-lg transition-all hover:scale-105"
                   style={{ backgroundColor: config.branding.primaryColor }}
                 >
                   <p className="text-sm opacity-80">Primario</p>
                   <p className="text-lg">Botón Principal</p>
                 </div>
-                <div 
+                <div
                   className="p-4 rounded-xl text-white font-medium shadow-lg transition-all hover:scale-105"
                   style={{ backgroundColor: config.branding.secondaryColor }}
                 >
                   <p className="text-sm opacity-80">Secundario</p>
                   <p className="text-lg">Enlace Activo</p>
                 </div>
-                <div 
+                <div
                   className="p-4 rounded-xl text-white font-medium shadow-lg transition-all hover:scale-105"
                   style={{ backgroundColor: config.branding.accentColor }}
                 >
@@ -457,9 +457,9 @@ export function BrandingForm({ config, onUpdate }: BrandingFormProps) {
                   <p className="text-lg">Notificación</p>
                 </div>
               </div>
-              <div 
+              <div
                 className="mt-4 p-6 rounded-xl border transition-all"
-                style={{ 
+                style={{
                   background: `linear-gradient(135deg, ${config.branding.gradientStart || '#e9f0f7'}, ${config.branding.gradientEnd || '#f9fbfe'})`,
                   color: config.branding.textColor || '#202c38'
                 }}
@@ -519,7 +519,7 @@ export function BrandingForm({ config, onUpdate }: BrandingFormProps) {
                         />
                       </div>
                     </div>
-                    
+
                     {/* Overlay con acciones */}
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all rounded-2xl flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
                       <Button
@@ -543,7 +543,7 @@ export function BrandingForm({ config, onUpdate }: BrandingFormProps) {
                     </div>
                   </div>
                 ) : (
-                  <div 
+                  <div
                     className="p-8 rounded-2xl border-2 border-dashed border-amber-200 dark:border-amber-800 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 text-center cursor-pointer hover:border-amber-300 transition-all"
                     onClick={() => setShowLogoUploader(true)}
                   >
@@ -660,7 +660,7 @@ export function BrandingForm({ config, onUpdate }: BrandingFormProps) {
                         />
                       </div>
                     </div>
-                    
+
                     {/* Overlay con acciones */}
                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all rounded-2xl flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
                       <Button
@@ -684,7 +684,7 @@ export function BrandingForm({ config, onUpdate }: BrandingFormProps) {
                     </div>
                   </div>
                 ) : (
-                  <div 
+                  <div
                     className="p-8 rounded-2xl border-2 border-dashed border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950/20 dark:to-cyan-950/20 text-center cursor-pointer hover:border-blue-300 transition-all"
                     onClick={() => setShowFaviconUploader(true)}
                   >

@@ -29,33 +29,6 @@
     "paths": {
       "@/*": [
         "./src/*"
-      ],
-      "@/components/*": [
-        "./src/components/*"
-      ],
-      "@/lib/*": [
-        "./src/lib/*"
-      ],
-      "@/hooks/*": [
-        "./src/hooks/*"
-      ],
-      "@/types": [
-        "./src/types"
-      ],
-      "@/types/*": [
-        "./src/types/*"
-      ],
-      "@/store/*": [
-        "./src/store/*"
-      ],
-      "@/services/*": [
-        "./src/services/*"
-      ],
-      "@/utils/*": [
-        "./src/utils/*"
-      ],
-      "@/contexts/*": [
-        "./src/contexts/*"
       ]
     },
     "target": "ES2017",
