@@ -1,1 +1,10 @@
-{"rewrites":[{"source":"/(.*)","destination":"/index.html"}]}
+{
+  "buildCommand": "cd apps/frontend && npm install && npm run build",
+  "installCommand": "npm install --legacy-peer-deps",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
