@@ -2,6 +2,9 @@
   "name": "pos-system",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
   "packageManager": "npm@11.7.0",
   "scripts": {
     "build": "npm --prefix apps/frontend run build",
