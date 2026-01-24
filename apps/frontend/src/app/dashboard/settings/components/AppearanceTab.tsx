@@ -1,7 +1,8 @@
+import { useState, useEffect } from 'react';
 import {
     Palette, Sun, Moon, Monitor, Paintbrush, Square,
     RotateCcw, CheckCircle, Sparkles, Layers, Brush,
-    Contrast, Eye, Zap, Shield
+    Contrast, Eye, Zap, Shield, Save, RefreshCw
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -11,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useUserSettings, useUpdateUserSettings } from '../hooks/useOptimizedSettings';
+import { useToast } from '@/components/ui/use-toast';
 
 const PRIMARY_HEX_MAP: Record<string, string> = {
     blue: '#2563eb',
@@ -48,17 +50,47 @@ const RADIUS_OPTIONS = [
 export function AppearanceTab() {
     const { data: userSettings, isLoading } = useUserSettings();
     const updateUserSettings = useUpdateUserSettings();
+    const { toast } = useToast();
+    
+    // Estado local para cambios pendientes
+    const [localSettings, setLocalSettings] = useState<any>({});
+    const [hasChanges, setHasChanges] = useState(false);
+
+    // Sincronizar con settings del servidor
+    useEffect(() => {
+        if (userSettings) {
+            setLocalSettings(userSettings);
+        }
+    }, [userSettings]);
 
     if (isLoading) {
         return <div className="flex items-center justify-center py-8">Cargando...</div>;
     }
 
-    const updateSetting = (key: string, value: any) => {
-        updateUserSettings.mutate({ [key]: value });
+    const updateLocalSetting = (key: string, value: any) => {
+        setLocalSettings((prev: any) => ({ ...prev, [key]: value }));
+        setHasChanges(true);
+    };
+
+    const saveChanges = async () => {
+        try {
+            await updateUserSettings.mutateAsync(localSettings);
+            setHasChanges(false);
+            toast({
+                title: 'Cambios guardados',
+                description: 'Tu configuración visual se ha actualizado correctamente.',
+            });
+        } catch (error: any) {
+            toast({
+                title: 'Error al guardar',
+                description: error?.response?.data?.error || 'No se pudieron guardar los cambios. Intenta nuevamente.',
+                variant: 'destructive',
+            });
+        }
     };
 
     const resetStyles = () => {
-        updateUserSettings.mutate({
+        const defaultSettings = {
             theme: 'system',
             dashboard_layout: 'comfortable',
             enable_animations: true,
@@ -67,11 +99,13 @@ export function AppearanceTab() {
             enable_glassmorphism: true,
             enable_gradients: true,
             enable_shadows: true,
-        });
+        };
+        setLocalSettings((prev: any) => ({ ...prev, ...defaultSettings }));
+        setHasChanges(true);
     };
 
-    const primaryColor = userSettings?.primary_color || 'blue';
-    const borderRadius = userSettings?.border_radius || '0.5';
+    const primaryColor = localSettings?.primary_color || 'blue';
+    const borderRadius = localSettings?.border_radius || '0.5';
 
     return (
         <motion.div
@@ -94,15 +128,17 @@ export function AppearanceTab() {
                                 Personaliza cómo ves el sistema MiPOS
                             </CardDescription>
                         </div>
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={resetStyles}
-                            className="gap-2 rounded-xl hover:bg-primary/5 text-primary font-bold"
-                        >
-                            <RotateCcw className="h-4 w-4" />
-                            Restablecer
-                        </Button>
+                        <div className="flex gap-2">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={resetStyles}
+                                className="gap-2 rounded-xl hover:bg-primary/5 text-primary font-bold"
+                            >
+                                <RotateCcw className="h-4 w-4" />
+                                Restablecer
+                            </Button>
+                        </div>
                     </div>
                 </CardHeader>
                 <CardContent className="p-8 space-y-10">
@@ -120,10 +156,10 @@ export function AppearanceTab() {
                             ].map((option) => (
                                 <button
                                     key={option.value}
-                                    onClick={() => updateSetting('theme', option.value)}
+                                    onClick={() => updateLocalSetting('theme', option.value)}
                                     className={cn(
                                         "group relative flex flex-col gap-4 p-5 rounded-[1.5rem] border-2 transition-all duration-300 active:scale-95 overflow-hidden",
-                                        userSettings?.theme === option.value
+                                        localSettings?.theme === option.value
                                             ? "border-primary bg-primary/5 shadow-[0_0_20px_rgba(var(--primary),0.1)]"
                                             : "border-muted hover:border-primary/20 bg-background/50"
                                     )}
@@ -133,13 +169,13 @@ export function AppearanceTab() {
                                         option.bg, option.text, "border shadow-inner"
                                     )}>
                                         <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white via-transparent to-transparent" />
-                                        <option.icon className={cn("h-10 w-10 relative z-10 transition-transform group-hover:scale-110 duration-500", userSettings?.theme === option.value ? "text-primary" : "opacity-40")} />
+                                        <option.icon className={cn("h-10 w-10 relative z-10 transition-transform group-hover:scale-110 duration-500", localSettings?.theme === option.value ? "text-primary" : "opacity-40")} />
                                     </div>
                                     <div className="text-center space-y-1">
                                         <p className="font-bold text-base leading-none">{option.label}</p>
                                         <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-tighter">Esquema de Colores</p>
                                     </div>
-                                    {userSettings?.theme === option.value && (
+                                    {localSettings?.theme === option.value && (
                                         <motion.div
                                             layoutId="active-theme-user"
                                             className="absolute top-3 right-3"
@@ -177,7 +213,7 @@ export function AppearanceTab() {
                                                 : "hover:shadow-md"
                                         )}
                                         style={{ backgroundColor: hex }}
-                                        onClick={() => updateSetting('primary_color', color)}
+                                        onClick={() => updateLocalSetting('primary_color', color)}
                                         title={color}
                                     >
                                         {primaryColor === color && (
@@ -211,7 +247,7 @@ export function AppearanceTab() {
                                         {RADIUS_OPTIONS.map((option) => (
                                             <button
                                                 key={option.value}
-                                                onClick={() => updateSetting('border_radius', option.value)}
+                                                onClick={() => updateLocalSetting('border_radius', option.value)}
                                                 className={cn(
                                                     "flex-1 h-12 rounded-xl border-2 transition-all flex items-center justify-center group",
                                                     borderRadius === option.value
@@ -228,16 +264,16 @@ export function AppearanceTab() {
                                 <div className="space-y-4">
                                     <div className="flex justify-between text-sm font-bold opacity-70">
                                         <span>Densidad de Interfaz</span>
-                                        <span className="text-primary capitalize">{userSettings?.dashboard_layout}</span>
+                                        <span className="text-primary capitalize">{localSettings?.dashboard_layout}</span>
                                     </div>
                                     <div className="flex gap-2 p-1.5 bg-muted/30 rounded-2xl border">
                                         {DENSITY_OPTIONS.map((option) => (
                                             <button
                                                 key={option.value}
-                                                onClick={() => updateSetting('dashboard_layout', option.value)}
+                                                onClick={() => updateLocalSetting('dashboard_layout', option.value)}
                                                 className={cn(
                                                     "flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all",
-                                                    userSettings?.dashboard_layout === option.value
+                                                    localSettings?.dashboard_layout === option.value
                                                         ? "bg-background text-primary shadow-sm border border-primary/10"
                                                         : "text-muted-foreground hover:text-foreground"
                                                 )}
@@ -278,8 +314,8 @@ export function AppearanceTab() {
                                 </div>
                                 <Switch
                                     id={effect.id}
-                                    checked={(userSettings as any)[effect.id] ?? true}
-                                    onCheckedChange={(checked) => updateSetting(effect.id, checked)}
+                                    checked={(localSettings as any)[effect.id] ?? true}
+                                    onCheckedChange={(checked) => updateLocalSetting(effect.id, checked)}
                                 />
                             </div>
                         ))}
@@ -334,6 +370,26 @@ export function AppearanceTab() {
                     </CardContent>
                 </Card>
             </div>
+            
+            {/* Sticky Save Button */}
+            {hasChanges && (
+                <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-4 duration-500">
+                    <Button
+                        onClick={saveChanges}
+                        disabled={updateUserSettings.isPending}
+                        className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-xl shadow-blue-500/20 px-8 py-6 text-lg font-bold rounded-2xl transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+                    >
+                        {updateUserSettings.isPending ? (
+                            <div className="mr-3 animate-spin">
+                                <RefreshCw className="h-5 w-5" />
+                            </div>
+                        ) : (
+                            <Save className="h-5 w-5 mr-3" />
+                        )}
+                        Guardar Apariencia
+                    </Button>
+                </div>
+            )}
         </motion.div>
     );
 }
