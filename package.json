@@ -3,10 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "packageManager": "npm@11.7.0",
-  "workspaces": [
-    "apps/frontend",
-    "apps/backend"
-  ],
   "scripts": {
     "build": "npm --prefix apps/frontend run build",
     "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
