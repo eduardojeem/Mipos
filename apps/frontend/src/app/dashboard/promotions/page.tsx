@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Plus, Search, Download, RefreshCw, FileSpreadsheet, FileJson } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -39,7 +40,7 @@ interface Promotion {
   isActive: boolean;
   usageCount?: number;
   usageLimit?: number;
-  applicableProducts?: any[];
+  applicableProducts?: unknown[];
 }
 
 export default function PromotionsPage() {
@@ -66,30 +67,8 @@ export default function PromotionsPage() {
   const storeLoading = useStore(s => s.loading);
   const storeError = useStore(s => s.error);
 
-  useEffect(() => {
-    fetchStorePromotions().catch(() => { });
-  }, [fetchStorePromotions]);
-
-  // ✅ Fetch product counts después de cargar promociones
-  useEffect(() => {
-    if (storeItems.length > 0) {
-      fetchProductCounts();
-    }
-  }, [storeItems]);
-
-  // ✅ Memoizar función de status para evitar recalcular
-  const getPromotionStatus = useCallback((promo: Promotion) => {
-    const now = new Date();
-    const start = new Date(promo.startDate);
-    const end = new Date(promo.endDate);
-    if (!promo.isActive) return 'inactive';
-    if (now < start) return 'scheduled';
-    if (now > end) return 'expired';
-    return 'active';
-  }, []);
-
-  // ✅ Nueva función para fetch batch (con fallback temporal)
-  const fetchProductCounts = async () => {
+  // ✅ Declarar fetchProductCounts antes de usarla
+  const fetchProductCounts = useCallback(async () => {
     try {
       setLoadingCounts(true);
 
@@ -109,12 +88,12 @@ export default function PromotionsPage() {
           console.log('[ProductCounts] Counts set:', response.data.counts);
           return;
         }
-      } catch (batchError) {
-        console.log('[ProductCounts] Batch endpoint failed, using fallback');
+      } catch (batchError: unknown) {
+        console.log('[ProductCounts] Batch endpoint failed, using fallback', batchError);
 
         // Fallback: usar counts mock para que funcione la UI
         const mockCounts: Record<string, number> = {};
-        ids.forEach((id, index) => {
+        ids.forEach((id) => {
           mockCounts[id] = Math.floor(Math.random() * 10) + 1; // 1-10 productos mock
         });
 
@@ -127,10 +106,32 @@ export default function PromotionsPage() {
     } finally {
       setLoadingCounts(false);
     }
-  };
+  }, [storeItems]);
+
+  useEffect(() => {
+    fetchStorePromotions().catch(() => { });
+  }, [fetchStorePromotions]);
+
+  // ✅ Fetch product counts después de cargar promociones
+  useEffect(() => {
+    if (storeItems.length > 0) {
+      fetchProductCounts().catch(console.error);
+    }
+  }, [storeItems, fetchProductCounts]);
+
+  // ✅ Memoizar función de status para evitar recalcular
+  const getPromotionStatus = useCallback((promo: Promotion) => {
+    const now = new Date();
+    const start = new Date(promo.startDate);
+    const end = new Date(promo.endDate);
+    if (!promo.isActive) return 'inactive';
+    if (now < start) return 'scheduled';
+    if (now > end) return 'expired';
+    return 'active';
+  }, []);
 
   const filteredPromotions = useMemo(() => {
-    let filtered = storeItems.filter((promo: Promotion) => {
+    const filtered = storeItems.filter((promo: Promotion) => {
       const matchesSearch = promo.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (promo.description || '').toLowerCase().includes(searchTerm.toLowerCase());
 
@@ -153,7 +154,7 @@ export default function PromotionsPage() {
     });
 
     return filtered;
-  }, [storeItems, searchTerm, statusFilter, sortBy]);
+  }, [storeItems, searchTerm, statusFilter, sortBy, getPromotionStatus]);
 
   // ✅ Paginación
   const totalPages = Math.ceil(filteredPromotions.length / itemsPerPage);
@@ -221,113 +222,122 @@ export default function PromotionsPage() {
       action="view"
       fallback={<div className="p-6"><h1 className="text-xl font-semibold">Acceso denegado</h1></div>}
     >
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
-        <div className="container mx-auto px-4 py-8 space-y-8">
-          {/* Header Section */}
-          <div className="flex flex-col gap-6">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div className="space-y-1">
-                <h1 className="text-4xl font-bold bg-gradient-to-r from-violet-600 to-indigo-600 dark:from-violet-400 dark:to-indigo-400 bg-clip-text text-transparent">
-                  Gestión de Promociones
-                </h1>
-                <p className="text-slate-600 dark:text-slate-400 text-lg">
-                  Administra y optimiza tus ofertas y descuentos
-                </p>
-              </div>
-
-              <div className="flex flex-wrap gap-3">
-                <Button
-                  variant="outline"
-                  size="lg"
-                  onClick={() => fetchStorePromotions()}
-                  className="gap-2"
-                  aria-label="Actualizar promociones"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  <span className="hidden sm:inline">Actualizar</span>
-                </Button>
-
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="outline"
-                      size="lg"
-                      className="gap-2"
-                      aria-label="Exportar promociones"
-                    >
-                      <Download className="h-4 w-4" />
-                      <span className="hidden sm:inline">Exportar</span>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={exportToExcel}>
-                      <FileSpreadsheet className="h-4 w-4 mr-2" />
-                      Exportar a Excel
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={exportToJSON}>
-                      <FileJson className="h-4 w-4 mr-2" />
-                      Exportar a JSON
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-
-                <Button
-                  size="lg"
-                  onClick={() => setIsCreateDialogOpen(true)}
-                  className="gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700"
-                >
-                  <Plus className="h-4 w-4" />
-                  Nueva Promoción
-                </Button>
-              </div>
+      <div className="min-h-screen bg-slate-50/50 dark:bg-slate-950">
+        <div className="container mx-auto px-4 py-8 max-w-7xl space-y-8">
+          {/* Header Section Moderno */}
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-slate-200 dark:border-slate-800">
+            <div className="space-y-2">
+              <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
+                Promociones
+              </h1>
+              <p className="text-slate-500 dark:text-slate-400 text-lg max-w-2xl">
+                Gestiona tus campañas de descuentos y ofertas especiales desde un solo lugar.
+              </p>
             </div>
 
-            {/* Stats Cards */}
-            <PromotionStats promotions={storeItems} productCounts={productCounts} />
+            <div className="flex flex-wrap gap-3">
+              <Button
+                variant="outline"
+                size="default"
+                onClick={() => fetchStorePromotions()}
+                className="gap-2 bg-white dark:bg-slate-900"
+                aria-label="Actualizar promociones"
+              >
+                <RefreshCw className={cn("h-4 w-4", storeLoading ? "animate-spin" : "")} />
+                <span className="hidden sm:inline">Actualizar</span>
+              </Button>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="default"
+                    className="gap-2 bg-white dark:bg-slate-900"
+                    aria-label="Exportar promociones"
+                  >
+                    <Download className="h-4 w-4" />
+                    <span className="hidden sm:inline">Exportar</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem onClick={exportToExcel} className="cursor-pointer">
+                    <FileSpreadsheet className="h-4 w-4 mr-2 text-green-600" />
+                    Excel (.xlsx)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={exportToJSON} className="cursor-pointer">
+                    <FileJson className="h-4 w-4 mr-2 text-orange-600" />
+                    JSON (.json)
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <Button
+                size="default"
+                onClick={() => setIsCreateDialogOpen(true)}
+                className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white shadow-md hover:shadow-lg transition-all"
+              >
+                <Plus className="h-4 w-4" />
+                Nueva Promoción
+              </Button>
+            </div>
+          </div>
+
+          {/* Stats Cards - Integrado */}
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+             <PromotionStats promotions={storeItems} productCounts={productCounts} />
           </div>
 
           {/* Alerts */}
           <PromotionAlerts promotions={storeItems} />
 
           {/* Carousel Editor */}
-          <CarouselEditor
-            key={`carousel-v${carouselVersion}`}
-            promotions={storeItems}
-            isLoading={storeLoading}
-          />
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+             <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+                <h3 className="font-semibold text-slate-900 dark:text-slate-200">Carrusel de Ofertas</h3>
+             </div>
+             <div className="p-4">
+                <CarouselEditor
+                    key={`carousel-v${carouselVersion}`}
+                    promotions={storeItems}
+                    isLoading={storeLoading}
+                />
+             </div>
+          </div>
 
           {/* Audit Log (Collapsible) */}
           <div className="space-y-2">
             <Button
-              variant="outline"
+              variant="ghost"
               onClick={() => setShowAuditLog(!showAuditLog)}
-              className="w-full"
+              className="w-full justify-between text-slate-500 hover:text-slate-900 dark:hover:text-slate-200"
             >
-              {showAuditLog ? 'Ocultar' : 'Ver'} Historial de Cambios
+              <span>Historial de Cambios</span>
+              <span className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-full">{showAuditLog ? 'Ocultar' : 'Mostrar'}</span>
             </Button>
             {showAuditLog && (
-              <CarouselAuditLog
-                onRevert={() => {
-                  // Refresh promotions after revert
-                  fetchStorePromotions();
-                  // Force CarouselEditor refresh
-                  setCarouselVersion(v => v + 1);
-                }}
-              />
+              <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                <CarouselAuditLog
+                    onRevert={() => {
+                    // Refresh promotions after revert
+                    fetchStorePromotions();
+                    // Force CarouselEditor refresh
+                    setCarouselVersion(v => v + 1);
+                    }}
+                />
+              </div>
             )}
           </div>
 
           {/* Search and Filters */}
-          <Card className="border-slate-200 dark:border-slate-800 shadow-lg">
-            <CardContent className="p-6">
+          <div className="sticky top-4 z-30 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md rounded-xl border border-slate-200/60 dark:border-slate-800/60 shadow-sm p-4">
               <div className="flex flex-col lg:flex-row gap-4">
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
+                <div className="flex-1 relative group">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
                   <Input
-                    placeholder="Buscar promociones por nombre o descripción..."
+                    placeholder="Buscar por nombre, código o descripción..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 h-12 text-base"
+                    className="pl-10 h-10 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-indigo-500/20 transition-all"
                     aria-label="Buscar promociones"
                   />
                 </div>
@@ -341,62 +351,71 @@ export default function PromotionsPage() {
                   setViewMode={setViewMode}
                 />
               </div>
-            </CardContent>
-          </Card>
+          </div>
 
           {/* Promotions Display */}
-          {storeError ? (
-            <ErrorState
-              error={storeError}
-              onRetry={() => fetchStorePromotions()}
-              additionalInfo="Los datos se intentaron cargar automáticamente varias veces."
-            />
-          ) : storeLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {[...Array(6)].map((_, i) => (
-                <Card key={i} className="animate-pulse">
-                  <CardContent className="p-6 space-y-4">
-                    <div className="h-6 bg-slate-200 dark:bg-slate-700 rounded w-3/4" />
-                    <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-full" />
-                    <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-2/3" />
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ) : filteredPromotions.length === 0 ? (
-            <EmptyState
-              type={storeItems.length === 0 ? 'no-promotions' : 'no-results'}
-              onCreateClick={storeItems.length === 0 ? () => setIsCreateDialogOpen(true) : undefined}
-            />
-          ) : (
-            <>
-              <PromotionsList
-                promotions={paginatedPromotions}
-                viewMode={viewMode}
-                onRefresh={() => {
-                  fetchStorePromotions();
-                  fetchProductCounts(); // ✅ Refrescar counts también
-                }}
-                selectedIds={selectedIds}
-                onToggleSelect={handleToggleSelect}
-                productCounts={productCounts} // ✅ Pasar counts
-                loadingCounts={loadingCounts} // ✅ Pasar loading state
-              />
+          <div className="min-h-[400px]">
+            {storeError ? (
+                <div className="max-w-2xl mx-auto py-12">
+                    <ErrorState
+                    error={storeError}
+                    onRetry={() => fetchStorePromotions()}
+                    additionalInfo="Verifica tu conexión o contacta a soporte si el problema persiste."
+                    />
+                </div>
+            ) : storeLoading ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[...Array(6)].map((_, i) => (
+                    <Card key={i} className="animate-pulse border-slate-200 dark:border-slate-800">
+                    <CardContent className="p-6 space-y-4">
+                        <div className="h-6 bg-slate-200 dark:bg-slate-800 rounded w-3/4" />
+                        <div className="h-4 bg-slate-100 dark:bg-slate-800/60 rounded w-full" />
+                        <div className="flex gap-2 pt-2">
+                            <div className="h-8 w-20 bg-slate-200 dark:bg-slate-800 rounded" />
+                            <div className="h-8 w-20 bg-slate-200 dark:bg-slate-800 rounded" />
+                        </div>
+                    </CardContent>
+                    </Card>
+                ))}
+                </div>
+            ) : filteredPromotions.length === 0 ? (
+                <div className="py-12">
+                    <EmptyState
+                    type={storeItems.length === 0 ? 'no-promotions' : 'no-results'}
+                    onCreateClick={storeItems.length === 0 ? () => setIsCreateDialogOpen(true) : undefined}
+                    />
+                </div>
+            ) : (
+                <div className="space-y-6 animate-in fade-in duration-500">
+                <PromotionsList
+                    promotions={paginatedPromotions}
+                    viewMode={viewMode}
+                    onRefresh={() => {
+                    fetchStorePromotions();
+                    fetchProductCounts();
+                    }}
+                    selectedIds={selectedIds}
+                    onToggleSelect={handleToggleSelect}
+                    productCounts={productCounts}
+                    loadingCounts={loadingCounts}
+                />
 
-              {/* ✅ Paginación */}
-              <Pagination
-                currentPage={currentPage}
-                totalPages={totalPages}
-                totalItems={filteredPromotions.length}
-                itemsPerPage={itemsPerPage}
-                onPageChange={setCurrentPage}
-                onItemsPerPageChange={(items) => {
-                  setItemsPerPage(items);
-                  setCurrentPage(1); // Reset a página 1 al cambiar items por página
-                }}
-              />
-            </>
-          )}
+                <div className="flex justify-center py-8">
+                    <Pagination
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        totalItems={filteredPromotions.length}
+                        itemsPerPage={itemsPerPage}
+                        onPageChange={setCurrentPage}
+                        onItemsPerPageChange={(items) => {
+                        setItemsPerPage(items);
+                        setCurrentPage(1);
+                        }}
+                    />
+                </div>
+                </div>
+            )}
+          </div>
         </div>
 
         {/* Bulk Actions Bar */}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useIsAuthenticated, useAuth } from '@/hooks/use-auth';
 import { navigation as sidebarNavigation, type NavItem as SidebarNavItem } from '@/components/dashboard/sidebar';
 import { ResponsiveLayout } from '@/components/ui/responsive-layout';
@@ -19,14 +19,6 @@ const ConnectionIndicator = dynamic(
   () => import('@/components/ui/connection-indicator').then(m => m.ConnectionIndicator),
   { ssr: false }
 );
-
-// Component loading fallback
-const ComponentLoader = ({ className = "" }: { className?: string }) => (
-  <div className={`flex items-center justify-center ${className}`}>
-    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-  </div>
-);
-
 
 export default function DashboardLayout({
   children,
@@ -50,7 +42,8 @@ export default function DashboardLayout({
           const { syncCoordinator } = await import(/* webpackPrefetch: true */ '@/lib/sync/sync-coordinator');
           syncCoordinator.start();
           syncStarted = true;
-        } catch (error: any) {
+        } catch (err: unknown) {
+          const error = err as Error;
           const isChunkError = error && (error.name === 'ChunkLoadError' || /Loading chunk/i.test(String(error)));
           if (isChunkError && attempt < 3) {
             setTimeout(() => load(attempt + 1), 1500 * attempt);

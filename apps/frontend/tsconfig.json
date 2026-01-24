@@ -43,11 +43,8 @@
   "exclude": [
     "node_modules",
     "tests",
-    "**/*.test.ts",
-    "**/*.test.tsx",
     "**/*.spec.ts",
     "**/*.spec.tsx",
-    "src/**/__tests__/**",
     "src/lib/test-utils/**",
     "src/app/**/testing/**"
   ]

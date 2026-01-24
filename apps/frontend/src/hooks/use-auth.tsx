@@ -81,7 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const createMockAuthUser = useCallback((email?: string, role?: string): SupabaseUser => {
     const now = new Date().toISOString();
     const mockEmail = email || 'admin@mock.local';
-    const mockRole = (role && Object.values(USER_ROLES).includes(role as any)) ? role! : USER_ROLES.ADMIN;
+    const mockRole = (role && Object.values(USER_ROLES).includes(role as keyof typeof USER_ROLES)) ? role! : USER_ROLES.ADMIN;
     return {
       id: `mock-${Math.random().toString(36).slice(2)}`,
       email: mockEmail,
@@ -132,7 +132,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.warn('Profile API error, using fallback:', apiError);
         return createFallbackUser(authUser);
       }
-      const userData = data as any;
+      const userData = data as { name?: string; role?: string; id?: string; email?: string; created_at?: string; updated_at?: string };
       const name = userData.name || extractNameFromEmail(authUser.email || '');
       const role = userData.role || USER_ROLES.CASHIER;
 
@@ -295,7 +295,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Sign up function
-  const signUp = async (email: string, password: string, userData?: any): Promise<void> => {
+  const signUp = async (email: string, password: string, userData?: Record<string, unknown>): Promise<void> => {
     try {
       setLoading(true);
       setError(null);
@@ -397,7 +397,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
       } catch (err) {
-        const msg = (err as any)?.message || '';
+        const msg = (err as Error)?.message || '';
         const isSupabaseUnconfigured = msg.includes('Supabase no configurado') || msg.toLowerCase().includes('supabase not configured');
         if (isSupabaseUnconfigured) {
           console.warn('Auth: Supabase no configurado durante getInitialSession; usando usuario mock');
@@ -439,7 +439,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             fetchUserData(session.user).then(setUser);
           }
         } catch (err) {
-          const msg = (err as any)?.message || '';
+          const msg = (err as Error)?.message || '';
           const isSupabaseUnconfigured = msg.includes('Supabase no configurado') || msg.toLowerCase().includes('supabase not configured');
           if (isSupabaseUnconfigured) {
             console.warn('Auth: Supabase no configurado durante cambio de estado');
@@ -532,7 +532,7 @@ export function useUserStatus() {
 
 // Hook to check if using fallback mode
 export function useIsFallbackMode() {
-  const { user } = useAuthContext();
+  useAuthContext(); // Consumir el contexto para asegurar que se use dentro del provider
   return false; // Always return false since we removed the isCustomTable property
 }
 
