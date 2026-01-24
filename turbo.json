@@ -1,33 +1,28 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalDependencies": ["**/.env.*local"],
-  "tasks": {
+  "pipeline": {
     "build": {
-      "dependsOn": ["^build"],
-      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
-    },
-    "dev": {
-      "cache": false,
-      "persistent": true
-    },
-    "start": {
-      "dependsOn": ["build"]
+      "dependsOn": [],
+      "outputs": []
     },
     "lint": {
-      "dependsOn": ["^lint"]
+      "outputs": []
     },
     "test": {
-      "dependsOn": ["^test"],
-      "outputs": ["coverage/**"]
-    },
-    "clean": {
-      "cache": false
-    },
-    "migrate": {
-      "cache": false
-    },
-    "seed": {
-      "cache": false
+      "outputs": []
     }
-  }
+  },
+  "globalEnv": [
+    "NEXT_PUBLIC_SUPABASE_URL",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "SUPABASE_URL",
+    "JWT_SECRET",
+    "JWT_PUBLIC_KEY",
+    "JWT_PUBLIC_KEY_URL",
+    "JWT_ISSUER",
+    "JWT_AUDIENCE",
+    "UPLOAD_DIR",
+    "MAX_FILE_SIZE"
+  ]
 }
