@@ -7,8 +7,8 @@ export default function RootPage() {
   const router = useRouter();
 
   useEffect(() => {
-    // Redirigir automáticamente a la página de inicio
-    router.push('/home');
+    // Redirigir automáticamente al dashboard
+    router.push('/dashboard');
   }, [router]);
 
   return (
