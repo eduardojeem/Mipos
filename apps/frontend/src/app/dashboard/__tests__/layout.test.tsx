@@ -92,7 +92,7 @@ describe('DashboardLayout', () => {
       </DashboardLayout>
     );
 
-    expect(screen.getByText('Verificando autenticación...')).toBeInTheDocument();
+    expect(screen.getByText('Iniciando sesión...')).toBeInTheDocument();
     expect(screen.queryByTestId('responsive-layout')).not.toBeInTheDocument();
   });
 

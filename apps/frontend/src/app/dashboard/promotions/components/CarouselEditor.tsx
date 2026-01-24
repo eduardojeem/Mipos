@@ -19,12 +19,12 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
-import { 
-  ArrowDown, 
-  ArrowUp, 
-  Save, 
-  Search, 
-  Trash2, 
+import {
+  ArrowDown,
+  ArrowUp,
+  Save,
+  Search,
+  Trash2,
   AlertCircle,
   RefreshCw,
   Undo2,
@@ -42,6 +42,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { CarouselErrorAlert } from "./CarouselErrorAlert";
 
 type Promotion = {
   id: string;
@@ -94,7 +95,7 @@ function formatDate(iso: string) {
 
 function getDiscountBadge(promotion: Promotion) {
   if (!promotion.discountValue) return null;
-  
+
   if (promotion.discountType === 'PERCENTAGE') {
     return `-${promotion.discountValue}%`;
   } else if (promotion.discountType === 'FIXED_AMOUNT') {
@@ -116,11 +117,11 @@ export default function CarouselEditor({
   const [focusedIndex, setFocusedIndex] = useState<number>(-1);
   const [showPreview, setShowPreview] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  
+
   // Use example data if no promotions provided, BUT only if not loading
   const promotions = (propPromotions.length > 0 || isLoading) ? propPromotions : EXAMPLE_PROMOTIONS;
   const isUsingExamples = propPromotions.length === 0 && !isLoading;
-  
+
   // Use the custom hook for state management
   const {
     carouselIds,
@@ -149,8 +150,8 @@ export default function CarouselEditor({
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return promotions;
-    return promotions.filter((p) => 
-      p.name.toLowerCase().includes(q) || 
+    return promotions.filter((p) =>
+      p.name.toLowerCase().includes(q) ||
       p.id.toLowerCase().includes(q)
     );
   }, [promotions, search]);
@@ -163,7 +164,7 @@ export default function CarouselEditor({
   const handleDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault();
     if (draggedIndex === null || draggedIndex === index) return;
-    
+
     // Visual feedback
     e.currentTarget.classList.add('border-primary');
   };
@@ -175,18 +176,18 @@ export default function CarouselEditor({
   const handleDrop = (e: React.DragEvent, targetIndex: number) => {
     e.preventDefault();
     e.currentTarget.classList.remove('border-primary');
-    
+
     if (draggedIndex === null || draggedIndex === targetIndex) return;
-    
+
     const id = carouselIds[draggedIndex];
     const direction = draggedIndex < targetIndex ? 'down' : 'up';
     const steps = Math.abs(targetIndex - draggedIndex);
-    
+
     // Move multiple steps
     for (let i = 0; i < steps; i++) {
       movePromotion(id, direction);
     }
-    
+
     setDraggedIndex(null);
   };
 
@@ -212,7 +213,7 @@ export default function CarouselEditor({
       // Arrow keys for focused item
       if (focusedIndex >= 0 && focusedIndex < carouselIds.length) {
         const id = carouselIds[focusedIndex];
-        
+
         // Ctrl/Cmd + Up to move up
         if ((e.ctrlKey || e.metaKey) && e.key === 'ArrowUp') {
           e.preventDefault();
@@ -298,24 +299,11 @@ export default function CarouselEditor({
 
           {/* Error Display */}
           {error && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Error</AlertTitle>
-              <AlertDescription className="flex items-center justify-between">
-                <span>{error.message}</span>
-                {error.retryable && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => saveCarousel()}
-                    className="ml-2"
-                  >
-                    <RefreshCw className="h-3 w-3 mr-1" />
-                    Reintentar
-                  </Button>
-                )}
-              </AlertDescription>
-            </Alert>
+            <CarouselErrorAlert
+              error={error}
+              onRetry={() => saveCarousel()}
+              onDismiss={() => { }}
+            />
           )}
 
           {/* Validation Errors */}
@@ -490,17 +478,15 @@ export default function CarouselEditor({
                       const isSelected = carouselIds.includes(p.id);
                       const isDisabled = !isSelected && !canAddMore;
                       const discount = getDiscountBadge(p);
-                      
+
                       return (
                         <label
                           key={`sel-${p.id}`}
-                          className={`flex items-center justify-between p-3 rounded-lg border-2 transition-all ${
-                            isSelected 
-                              ? 'border-violet-500 bg-violet-50 dark:bg-violet-950/30' 
-                              : 'border-transparent hover:border-violet-200 dark:hover:border-violet-800'
-                          } ${
-                            isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-                          }`}
+                          className={`flex items-center justify-between p-3 rounded-lg border-2 transition-all ${isSelected
+                            ? 'border-violet-500 bg-violet-50 dark:bg-violet-950/30'
+                            : 'border-transparent hover:border-violet-200 dark:hover:border-violet-800'
+                            } ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                            }`}
                         >
                           <div className="flex items-center gap-3 flex-1">
                             <Checkbox
@@ -556,7 +542,7 @@ export default function CarouselEditor({
                   <div className="space-y-2">
                     {selectedPromotions.map((p, idx) => {
                       const discount = getDiscountBadge(p);
-                      
+
                       return (
                         <div
                           key={`ord-${p.id}`}
@@ -568,11 +554,10 @@ export default function CarouselEditor({
                           onFocus={() => setFocusedIndex(idx)}
                           onBlur={() => setFocusedIndex(-1)}
                           tabIndex={0}
-                          className={`flex items-center gap-2 p-3 rounded-lg border-2 bg-white dark:bg-slate-900 transition-all cursor-move ${
-                            focusedIndex === idx 
-                              ? 'border-violet-500 ring-2 ring-violet-200 dark:ring-violet-800' 
-                              : 'border-violet-200 dark:border-violet-800 hover:border-violet-400'
-                          }`}
+                          className={`flex items-center gap-2 p-3 rounded-lg border-2 bg-white dark:bg-slate-900 transition-all cursor-move ${focusedIndex === idx
+                            ? 'border-violet-500 ring-2 ring-violet-200 dark:ring-violet-800'
+                            : 'border-violet-200 dark:border-violet-800 hover:border-violet-400'
+                            }`}
                           aria-label={`Promoción ${idx + 1}: ${p.name}`}
                         >
                           <GripVertical className="h-5 w-5 text-muted-foreground flex-shrink-0" />

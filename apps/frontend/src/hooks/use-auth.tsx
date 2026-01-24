@@ -374,8 +374,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setUser(null);
           }
         } else if (session?.user) {
-          const userData = await fetchUserData(session.user);
-          setUser(userData);
+          // Optimistic update for instant UI feedback
+          const fallbackUser = createFallbackUser(session.user);
+          setUser(fallbackUser);
+          
+          // Fetch fresh data in background
+          fetchUserData(session.user)
+            .then(userData => {
+              // Only update if data actually changed to avoid re-renders
+              if (JSON.stringify(userData) !== JSON.stringify(fallbackUser)) {
+                setUser(userData);
+              }
+            })
+            .catch(err => console.error('Background user fetch failed:', err));
         } else {
           if (isDevMockMode()) {
             const mockAuthUser = createMockAuthUser();
@@ -415,13 +426,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       async (event: AuthChangeEvent, session: Session | null) => {
         try {
           if (event === 'SIGNED_IN' && session?.user) {
-            const userData = await fetchUserData(session.user);
-            setUser(userData);
+            // Optimistic update
+            const fallbackUser = createFallbackUser(session.user);
+            setUser(fallbackUser);
+            
+            // Background update
+            fetchUserData(session.user).then(setUser);
           } else if (event === 'SIGNED_OUT') {
             setUser(null);
           } else if (event === 'TOKEN_REFRESHED' && session?.user) {
-            const userData = await fetchUserData(session.user);
-            setUser(userData);
+            // Background update is enough for token refresh, but we can be safe
+            fetchUserData(session.user).then(setUser);
           }
         } catch (err) {
           const msg = (err as any)?.message || '';

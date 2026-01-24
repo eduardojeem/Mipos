@@ -13,6 +13,7 @@ import { CreatePromotionDialog } from './components/CreatePromotionDialog';
 import { PromotionStats } from './components/PromotionStats';
 import { PromotionsList } from './components/PromotionsList';
 import { EmptyState } from './components/EmptyState';
+import { ErrorState } from './components/ErrorState';
 import { BulkActionsBar } from './components/BulkActionsBar';
 import { PromotionAlerts } from './components/PromotionAlerts';
 import { Pagination } from './components/Pagination';
@@ -50,22 +51,23 @@ export default function PromotionsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showAuditLog, setShowAuditLog] = useState(false);
   const [carouselVersion, setCarouselVersion] = useState(0);
-  
+
   // ✅ Nuevo estado para product counts
   const [productCounts, setProductCounts] = useState<Record<string, number>>({});
   const [loadingCounts, setLoadingCounts] = useState(false);
-  
+
   // ✅ Estados de paginación
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(12);
-  
+
   const { toast } = useToast();
   const storeItems = useStore(s => s.items);
   const fetchStorePromotions = useStore(s => s.fetchPromotions);
   const storeLoading = useStore(s => s.loading);
+  const storeError = useStore(s => s.error);
 
   useEffect(() => {
-    fetchStorePromotions().catch(() => {});
+    fetchStorePromotions().catch(() => { });
   }, [fetchStorePromotions]);
 
   // ✅ Fetch product counts después de cargar promociones
@@ -90,10 +92,10 @@ export default function PromotionsPage() {
   const fetchProductCounts = async () => {
     try {
       setLoadingCounts(true);
-      
+
       const ids = storeItems.map((p: Promotion) => p.id);
       console.log('[ProductCounts] Fetching counts for IDs:', ids);
-      
+
       try {
         // Intentar usar el endpoint batch
         const response = await api.post('/promotions/batch/product-counts', {
@@ -109,13 +111,13 @@ export default function PromotionsPage() {
         }
       } catch (batchError) {
         console.log('[ProductCounts] Batch endpoint failed, using fallback');
-        
+
         // Fallback: usar counts mock para que funcione la UI
         const mockCounts: Record<string, number> = {};
         ids.forEach((id, index) => {
           mockCounts[id] = Math.floor(Math.random() * 10) + 1; // 1-10 productos mock
         });
-        
+
         setProductCounts(mockCounts);
         console.log('[ProductCounts] Mock counts set:', mockCounts);
       }
@@ -131,9 +133,9 @@ export default function PromotionsPage() {
     let filtered = storeItems.filter((promo: Promotion) => {
       const matchesSearch = promo.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (promo.description || '').toLowerCase().includes(searchTerm.toLowerCase());
-      
+
       if (!matchesSearch) return false;
-      
+
       if (statusFilter === 'all') return true;
       return getPromotionStatus(promo) === statusFilter;
     });
@@ -232,7 +234,7 @@ export default function PromotionsPage() {
                   Administra y optimiza tus ofertas y descuentos
                 </p>
               </div>
-              
+
               <div className="flex flex-wrap gap-3">
                 <Button
                   variant="outline"
@@ -244,7 +246,7 @@ export default function PromotionsPage() {
                   <RefreshCw className="h-4 w-4" />
                   <span className="hidden sm:inline">Actualizar</span>
                 </Button>
-                
+
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
@@ -268,7 +270,7 @@ export default function PromotionsPage() {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-                
+
                 <Button
                   size="lg"
                   onClick={() => setIsCreateDialogOpen(true)}
@@ -329,7 +331,7 @@ export default function PromotionsPage() {
                     aria-label="Buscar promociones"
                   />
                 </div>
-                
+
                 <PromotionFilters
                   statusFilter={statusFilter}
                   setStatusFilter={setStatusFilter}
@@ -343,7 +345,13 @@ export default function PromotionsPage() {
           </Card>
 
           {/* Promotions Display */}
-          {storeLoading ? (
+          {storeError ? (
+            <ErrorState
+              error={storeError}
+              onRetry={() => fetchStorePromotions()}
+              additionalInfo="Los datos se intentaron cargar automáticamente varias veces."
+            />
+          ) : storeLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {[...Array(6)].map((_, i) => (
                 <Card key={i} className="animate-pulse">

@@ -92,10 +92,15 @@ export default function DashboardLayout({
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-800">
-        <Loader2 className="h-16 w-16 text-blue-600 animate-spin mb-4" />
-        <div className="text-center space-y-2">
-          <p className="text-lg font-semibold text-foreground">Verificando autenticación...</p>
-          <p className="text-sm text-muted-foreground">Por favor espera un momento</p>
+        <div className="flex flex-col items-center gap-6 animate-in fade-in zoom-in duration-500">
+          <div className="relative">
+            <div className="absolute inset-0 bg-blue-500/20 blur-xl rounded-full animate-pulse" />
+            <Loader2 className="h-12 w-12 text-blue-600 dark:text-blue-400 animate-spin relative z-10" />
+          </div>
+          <div className="text-center space-y-2">
+            <p className="text-lg font-medium text-foreground/80">Iniciando sesión...</p>
+            <p className="text-sm text-muted-foreground animate-pulse">Preparando tu espacio de trabajo</p>
+          </div>
         </div>
       </div>
     );

@@ -57,7 +57,7 @@ export type PromotionsState = {
   loading: boolean
   error?: string
   promotionsSource?: string
-  fetchPromotions: (params?: { search?: string; status?: 'all' | 'active' | 'inactive' }) => Promise<void>
+  fetchPromotions: (params?: { search?: string; status?: 'all' | 'active' | 'inactive' }, retryCount?: number) => Promise<void>
   setItems: (items: Promotion[]) => void
 }
 
@@ -206,7 +206,7 @@ export const useStore = create<RootState>()(
       error: undefined,
       promotionsSource: undefined,
       setItems: (items) => set((s: RootState) => ({ ...s, items }), false, 'promotions/setItems'),
-      fetchPromotions: async (params) => {
+      fetchPromotions: async (params, retryCount = 0) => {
         const key = `promotions:list:${JSON.stringify(params || {})}`
         const cached = get().getCache(key)
         if (cached) {
@@ -214,11 +214,32 @@ export const useStore = create<RootState>()(
           return
         }
         set((s: RootState) => ({ ...s, loading: true, error: undefined }), false, 'promotions/fetch/start')
+
+        const MAX_RETRIES = 2
+        const TIMEOUT_MS = 10000 // 10 segundos
+
         try {
           const apiMod = await import('@/lib/api')
           const api = (apiMod as any).default || (apiMod as any).api
-          const response = await api.get('/promotions', { params })
+
+          // Crear una promesa con timeout
+          const fetchWithTimeout = Promise.race([
+            api.get('/promotions', { params }),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Tiempo de espera agotado. El servidor tardó demasiado en responder.')), TIMEOUT_MS)
+            )
+          ])
+
+          const response = await fetchWithTimeout as any
           const data = response?.data
+
+          // Validar que tengamos datos
+          if (!data && retryCount < MAX_RETRIES) {
+            console.warn(`[fetchPromotions] No data received, retrying... (${retryCount + 1}/${MAX_RETRIES})`)
+            await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1))) // Espera exponencial
+            return get().fetchPromotions(params, retryCount + 1)
+          }
+
           const raw = (
             Array.isArray(data?.data) ? data.data :
               (data?.success && Array.isArray(data?.data)) ? data.data :
@@ -226,6 +247,7 @@ export const useStore = create<RootState>()(
                   Array.isArray(data) ? data :
                     []
           ) as any[]
+
           const list = raw.map((r: any) => ({
             id: r.id,
             name: r.name,
@@ -242,14 +264,56 @@ export const useStore = create<RootState>()(
             applicableProducts: Array.isArray(r.applicableProducts) ? r.applicableProducts : [] as any[],
             createdAt: r.createdAt ?? new Date().toISOString()
           })) as Promotion[]
+
           const sourceHeader = String((response?.headers || {})['x-source'] || '')
           const origin = sourceHeader || (Array.isArray(data?.data) ? 'supabase' : (data?.success ? 'supabase' : 'memory'))
-          set((s: RootState) => ({ ...s, items: list, loading: false, promotionsSource: origin }), false, 'promotions/fetch/success')
+
+          set((s: RootState) => ({ ...s, items: list, loading: false, promotionsSource: origin, error: undefined }), false, 'promotions/fetch/success')
+
           // cache for 60s TTL
           get().setCache(key, list, 60_000)
         } catch (e: any) {
-          console.error('fetchPromotions error', e)
-          set((s: RootState) => ({ ...s, error: e?.message || 'Error al cargar promociones', loading: false }), false, 'promotions/fetch/error')
+          console.error('[fetchPromotions] Error:', e)
+
+          // Reintentar en caso de error de red
+          if (retryCount < MAX_RETRIES && (
+            e?.message?.includes('fetch') ||
+            e?.message?.includes('network') ||
+            e?.message?.includes('Network') ||
+            e?.code === 'ECONNREFUSED'
+          )) {
+            console.warn(`[fetchPromotions] Network error, retrying... (${retryCount + 1}/${MAX_RETRIES})`)
+            await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1))) // Espera exponencial
+            return get().fetchPromotions(params, retryCount + 1)
+          }
+
+          // Construir mensaje de error detallado
+          let errorMessage = 'Error al cargar promociones'
+
+          if (e?.message?.includes('Tiempo de espera')) {
+            errorMessage = e.message
+          } else if (e?.response?.status === 500) {
+            errorMessage = 'Error del servidor. Por favor, intenta nuevamente más tarde.'
+          } else if (e?.response?.status === 404) {
+            errorMessage = 'No se encontró el endpoint de promociones. Verifica la configuración.'
+          } else if (e?.response?.status === 403) {
+            errorMessage = 'No tienes permisos para acceder a las promociones.'
+          } else if (e?.message?.includes('fetch') || e?.message?.includes('network')) {
+            errorMessage = 'Error de conexión. Verifica tu conexión a internet.'
+          } else if (e?.message) {
+            errorMessage = e.message
+          }
+
+          if (retryCount > 0) {
+            errorMessage += ` (Se reintentó ${retryCount} ${retryCount === 1 ? 'vez' : 'veces'})`
+          }
+
+          set((s: RootState) => ({
+            ...s,
+            error: errorMessage,
+            loading: false,
+            items: [] // Limpiar items en caso de error
+          }), false, 'promotions/fetch/error')
         }
       },
 
