@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { Plus, Search, Download, RefreshCw, FileSpreadsheet, FileJson } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card, CardContent } from '@/components/ui/card';
@@ -66,6 +66,8 @@ export default function PromotionsPage() {
   const fetchStorePromotions = useStore(s => s.fetchPromotions);
   const storeLoading = useStore(s => s.loading);
   const storeError = useStore(s => s.error);
+
+  const emptyToastShown = useRef(false);
 
   // ✅ Declarar fetchProductCounts antes de usarla
   const fetchProductCounts = useCallback(async () => {
@@ -166,6 +168,16 @@ export default function PromotionsPage() {
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, statusFilter, sortBy]);
+
+  useEffect(() => {
+    if (!storeLoading && storeItems.length === 0 && !emptyToastShown.current) {
+      toast({
+        title: 'Aún no hay promociones',
+        description: 'Crea tu primera promoción para atraer clientes y aumentar tus ventas.',
+      });
+      emptyToastShown.current = true;
+    }
+  }, [storeLoading, storeItems, toast]);
 
   const exportToExcel = () => {
     const data = filteredPromotions.map((p: Promotion) => ({

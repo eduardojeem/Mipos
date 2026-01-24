@@ -22,11 +22,11 @@ export function EmptyState({ type, onCreateClick }: EmptyStateProps) {
           </div>
           
           <h3 className="text-2xl font-bold mb-2 text-slate-900 dark:text-white">
-            No hay promociones
+            Aún no hay promociones
           </h3>
           <p className="text-slate-600 dark:text-slate-400 mb-6 max-w-md">
-            Comienza a impulsar tus ventas creando tu primera promoción. 
-            Ofrece descuentos atractivos y aumenta la satisfacción de tus clientes.
+            Crea tu primera promoción para atraer clientes y aumentar tus ventas. 
+            Define descuentos, fechas y productos aplicables para destacar tus ofertas.
           </p>
           
           {onCreateClick && (
@@ -36,7 +36,7 @@ export function EmptyState({ type, onCreateClick }: EmptyStateProps) {
               className="gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700"
             >
               <Plus className="h-5 w-5" />
-              Crear Primera Promoción
+              Crear promoción
             </Button>
           )}
         </CardContent>
