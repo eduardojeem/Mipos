@@ -7,8 +7,9 @@ export default function RootPage() {
   const router = useRouter();
 
   useEffect(() => {
-    // Redirigir automáticamente al dashboard
-    router.push('/dashboard');
+    // Red dirigir a la página pública por defecto
+    // El usuario puede ir a /dashboard directamente si necesita el admin
+    router.push('/home');
   }, [router]);
 
   return (
