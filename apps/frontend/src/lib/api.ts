@@ -1,6 +1,5 @@
-import axios, { AxiosError, AxiosResponse } from 'axios';
-import { createClient } from './supabase';
-import { isMockAuthEnabled, getEnvMode } from './env';
+ import axios, { AxiosError, AxiosResponse } from 'axios';
+ import { createClient } from './supabase/client';
 // NOTE: Do not import the UI store at module scope. It is client-only and
 // importing it on the server can crash SSR/API routes due to localStorage usage.
 
@@ -92,14 +91,13 @@ function resolveBaseURL() {
   return 'http://localhost:3000/api';
 }
 
-// Create axios instance
+ // Create axios instance
 const api = axios.create({
   baseURL: resolveBaseURL(),
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
-    'X-Env-Mode': getEnvMode(),
   },
 });
 
@@ -111,36 +109,11 @@ api.interceptors.request.use(
       const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
 
-      const isMockAuth = isMockAuthEnabled();
-
       if (session?.access_token) {
         safeConfig.headers.Authorization = `Bearer ${session.access_token}`;
-        (safeConfig.headers as any)['X-Env-Mode'] = 'prod';
-      } else if (isMockAuth) {
-        // Usar token mock en desarrollo cuando no hay sesión
-        (safeConfig.headers as any).Authorization = 'Bearer mock-token';
-        (safeConfig.headers as any)['x-user-id'] = 'mock-user-id';
-        (safeConfig.headers as any)['x-user-role'] = 'admin';
-        (safeConfig.headers as any)['X-Env-Mode'] = getEnvMode();
-      } else {
-        // Forzar modo mock en desarrollo si no hay sesión, incluso cuando Supabase está configurado
-        if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'production') {
-          (safeConfig.headers as any).Authorization = 'Bearer mock-token';
-          (safeConfig.headers as any)['x-user-id'] = 'mock-user-id';
-          (safeConfig.headers as any)['x-user-role'] = 'admin';
-          (safeConfig.headers as any)['X-Env-Mode'] = 'mock';
-        }
       }
     } catch (error: unknown) {
       console.error('Error getting session:', error);
-      // En caso de error y modo mock, asegurar token mock
-      const isMockAuth = isMockAuthEnabled();
-      if (isMockAuth) {
-        (safeConfig.headers as any).Authorization = 'Bearer mock-token';
-        (safeConfig.headers as any)['x-user-id'] = 'mock-user-id';
-        (safeConfig.headers as any)['x-user-role'] = 'admin';
-        (safeConfig.headers as any)['X-Env-Mode'] = getEnvMode();
-      }
     }
     try {
       const method = String((safeConfig.method || 'get')).toUpperCase();

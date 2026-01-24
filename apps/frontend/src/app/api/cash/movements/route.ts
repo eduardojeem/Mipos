@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createServerClient } from '@/lib/supabase';
-import { isMockAuthEnabled } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase-admin';
 
 export async function GET(request: NextRequest) {
@@ -22,25 +21,16 @@ export async function GET(request: NextRequest) {
         const cookieStore = await cookies();
         const supabase = await createServerClient(cookieStore);
 
-        // Get current user; allow mock mode without auth
+        // Get current user
         const { data: { user }, error: authError } = await supabase.auth.getUser();
-        const envMode = (request.headers.get('x-env-mode') || request.headers.get('X-Env-Mode') || '').toLowerCase();
-        const mockEnabled = isMockAuthEnabled() || envMode === 'mock';
-        if ((authError || !user) && !mockEnabled) {
+        if (authError || !user) {
             return NextResponse.json(
                 { error: 'Authentication required' },
                 { status: 401 }
             );
         }
 
-        // Use admin client in mock mode to bypass RLS for development
-        let client: any = supabase as any;
-        if (mockEnabled) {
-            try {
-                client = createAdminClient();
-            } catch {}
-        }
-        let query = client.from('cash_movements').select('*');
+        let query = supabase.from('cash_movements').select('*');
 
         if (sessionId) {
             query = query.eq('session_id', sessionId);
@@ -66,7 +56,7 @@ export async function GET(request: NextRequest) {
         let to = rawTo ? normalizeDate(rawTo, true) : undefined;
         if (sessionId && to) {
             try {
-                const { data: ses } = await client
+                const { data: ses } = await supabase
                     .from('cash_sessions')
                     .select('closed_at')
                     .eq('id', sessionId)
@@ -112,13 +102,13 @@ export async function GET(request: NextRequest) {
 
             if (userIds.length > 0) {
                 // Try profiles, then users as fallback
-                const { data: profiles, error: profilesError } = await client
+                const { data: profiles, error: profilesError } = await supabase
                     .from('profiles')
                     .select('id, full_name, email')
                     .in('id', userIds);
                 let profilesData = profiles || [];
                 if (profilesError || profilesData.length === 0) {
-                    const { data: users } = await client
+                    const { data: users } = await supabase
                         .from('users')
                         .select('id, full_name, email')
                         .in('id', userIds);

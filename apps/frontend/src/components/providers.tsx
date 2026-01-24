@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { ThemeProvider, useTheme } from 'next-themes';
 import { useBusinessConfig } from '@/contexts/BusinessConfigContext';
+import { useUserSettings } from '@/app/dashboard/settings/hooks/useOptimizedSettings';
 import { AuthProvider as OldAuthProvider } from '@/hooks/use-auth';
 import { AuthProvider } from '@/components/auth/AuthProvider';
 import { PermissionsProvider } from '@/hooks/use-permissions';
@@ -172,84 +173,114 @@ export function Providers({ children }: { children: React.ReactNode }) {
   );
 }
 
+const COLOR_MAP: Record<string, string> = {
+  blue: '221.2 83.2% 53.3%',
+  indigo: '226 100% 65%', // Keeping the vibrant indigo from globals
+  violet: '262.1 83.3% 57.8%',
+  purple: '271.5 81.3% 55.9%',
+  fuchsia: '292.2 84.1% 60.6%',
+  pink: '330.4 81.2% 60.4%',
+  rose: '346.8 77.2% 49.8%',
+  red: '355.6 71.1% 60.6%',
+  orange: '24.6 95% 53.1%',
+  amber: '48 96% 53%',
+  yellow: '47.9 95.8% 53.1%',
+  lime: '84.8 85.2% 55.6%',
+  green: '142.1 76.2% 36.3%',
+  emerald: '156.2 71.6% 66.9%',
+  teal: '173.4 80.4% 40%',
+  cyan: '188.7 94.5% 42.7%',
+  sky: '201.3 96.3% 42.3%',
+  slate: '215.4 16.3% 46.9%',
+};
+
 function ThemeRuntime() {
   const { theme, setTheme } = useTheme();
   const { config } = useBusinessConfig();
+  const { data: userSettings } = useUserSettings();
   
   // Aplicar opciones avanzadas: intensidad, tono, programación
   useEffect(() => {
     try {
       const root = document.documentElement;
 
-      // Leer opciones guardadas
-      const rawOpts = localStorage.getItem('pos-ui-theme-options') || '{}';
-      const opts = JSON.parse(rawOpts || '{}') as {
-        intensity?: 'dim' | 'normal' | 'black';
-        tone?: 'blue' | 'gray' | 'pure';
-        smoothTransitions?: boolean;
+      // 1. Priorizar settings del usuario (servidor), fallback a localStorage
+      const settings = userSettings || {
+        theme_dark_intensity: 'normal',
+        theme_dark_tone: 'blue',
+        theme_smooth_transitions: true,
+        primary_color: 'blue',
+        border_radius: '0.5',
+        enable_animations: true,
+        dashboard_layout: 'comfortable'
       };
 
-      const rawSched = localStorage.getItem('pos-theme-schedule') || '{}';
-      const sched = JSON.parse(rawSched || '{}') as {
-        enabled?: boolean;
-        start?: string; // HH:MM
-        end?: string;   // HH:MM
-      };
-
-      // Programación automática de tema
-      if (sched?.enabled && typeof sched.start === 'string' && typeof sched.end === 'string') {
-        const now = new Date();
-        const [sh, sm] = sched.start.split(':').map((v) => parseInt(v, 10));
-        const [eh, em] = sched.end.split(':').map((v) => parseInt(v, 10));
-        const startDate = new Date(now); startDate.setHours(sh || 19, sm || 0, 0, 0);
-        const endDate = new Date(now); endDate.setHours(eh || 7, em || 0, 0, 0);
-        const inRange = startDate <= endDate
-          ? (now >= startDate && now <= endDate)
-          : (now >= startDate || now <= endDate);
-        if (inRange) setTheme('dark'); else if (theme === 'system') setTheme('light');
+      // Si el usuario tiene un tema explícito guardado en DB, sincronizar next-themes
+      // Solo si es diferente para evitar loops, y si userSettings ya cargó
+      if (userSettings?.theme && userSettings.theme !== theme && userSettings.theme !== 'system') {
+         // Nota: Esto podría causar conflictos si el usuario cambia el tema localmente.
+         // Idealmente el toggle de tema debería actualizar userSettings.
       }
 
-      // Intensidad para OLED/AMOLED
-      root.classList.remove('oled');
-      if (opts?.intensity === 'black') {
-        root.classList.add('oled');
-        // Ajustar variables principales para negro puro
-        root.style.setProperty('--background', '0 0% 0%');
-        root.style.setProperty('--card', '0 0% 0%');
-        root.style.setProperty('--border', '0 0% 12%');
-        root.style.setProperty('--muted', '0 0% 8%');
-      } else if (opts?.intensity === 'dim') {
-        root.style.setProperty('--background', '220 20% 10%');
-        root.style.setProperty('--card', '220 20% 12%');
-        root.style.setProperty('--border', '220 15% 20%');
+      // --- Personalización Visual ---
+
+      // 1. Color Primario
+      const primaryColor = settings.primary_color || 'blue';
+      const primaryHSL = COLOR_MAP[primaryColor];
+      if (primaryHSL) {
+        root.style.setProperty('--primary', primaryHSL);
+        // Ajustar ring para combinar
+        root.style.setProperty('--ring', primaryHSL);
       } else {
-        // Restablecer a variables base del tema oscuro definido en CSS
-        root.style.removeProperty('--background');
-        root.style.removeProperty('--card');
-        root.style.removeProperty('--border');
-        root.style.removeProperty('--muted');
+        root.style.removeProperty('--primary');
+        root.style.removeProperty('--ring');
       }
 
-      // Tono de color (ajuste de marca para modo oscuro)
-      const applyTone = (t: string | undefined) => {
-        if (t === 'blue') {
-          root.style.setProperty('--primary', '217.2 91.2% 59.8%');
-          root.style.setProperty('--accent', '217.2 32.6% 17.5%');
-        } else if (t === 'gray') {
-          root.style.setProperty('--primary', '220 9% 46%');
-          root.style.setProperty('--accent', '220 9% 20%');
-        } else if (t === 'pure') {
-          root.style.setProperty('--primary', '0 0% 100%');
-          root.style.setProperty('--accent', '0 0% 20%');
-        } else {
-          root.style.removeProperty('--primary');
-          root.style.removeProperty('--accent');
-        }
-      };
-      applyTone(opts?.tone);
+      // 2. Radio de Borde
+      const radius = settings.border_radius || '0.5';
+      root.style.setProperty('--radius', `${radius}rem`);
 
-      // Transiciones suaves
-      root.classList.toggle('theme-smooth', !!opts?.smoothTransitions);
+      // 3. Layout / Densidad
+      const density = settings.dashboard_layout || 'comfortable';
+      root.setAttribute('data-density', density);
+      // Ajustar variables de espaciado según densidad
+      if (density === 'compact') {
+        root.style.setProperty('--card-padding', '1rem');
+      } else if (density === 'spacious') {
+        root.style.setProperty('--card-padding', '2rem');
+      } else {
+        root.style.removeProperty('--card-padding');
+      }
+
+      // 4. Intensidad Oscura (OLED/AMOLED)
+      root.classList.remove('oled');
+      if (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        if (settings.theme_dark_intensity === 'black') {
+          root.classList.add('oled');
+          root.style.setProperty('--background', '0 0% 0%');
+          root.style.setProperty('--card', '0 0% 0%');
+          root.style.setProperty('--border', '0 0% 12%');
+          root.style.setProperty('--muted', '0 0% 8%');
+        } else if (settings.theme_dark_intensity === 'dim') {
+          root.style.setProperty('--background', '220 20% 10%');
+          root.style.setProperty('--card', '220 20% 12%');
+          root.style.setProperty('--border', '220 15% 20%');
+        } else {
+          // Normal
+          root.style.removeProperty('--background');
+          root.style.removeProperty('--card');
+          root.style.removeProperty('--border');
+          root.style.removeProperty('--muted');
+        }
+      }
+
+      // 5. Animaciones
+      root.classList.toggle('theme-smooth', !!settings.enable_animations);
+      if (!settings.enable_animations) {
+        root.style.setProperty('--transition-duration', '0s');
+      } else {
+        root.style.removeProperty('--transition-duration');
+      }
 
       // Caché simple de assets oscuros (logo/favicon de negocio)
       try {
@@ -260,8 +291,11 @@ function ThemeRuntime() {
         if (typeof favicon === 'string' && favicon) urls.push(favicon);
         urls.forEach((u) => { const img = new Image(); img.decoding = 'async'; img.src = u; });
       } catch {}
-    } catch {}
-  }, [theme, setTheme, config]);
+
+    } catch (e) {
+      console.error('Error applying theme:', e);
+    }
+  }, [theme, setTheme, config, userSettings]);
 
   return null;
 }

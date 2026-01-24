@@ -20,6 +20,20 @@ export async function POST(request: NextRequest) {
       `create policy if not exists "Authenticated read suppliers" on suppliers for select to authenticated using (is_active = true);`,
       `grant usage on schema public to authenticated;`,
       `grant usage on schema public to service_role;`,
+      // User Settings: habilitar RLS y políticas por usuario
+      `alter table if exists user_settings enable row level security;`,
+      `create policy if not exists "Read own user_settings" on user_settings
+         for select to authenticated
+         using (user_id = auth.uid());`,
+      `create policy if not exists "Insert own user_settings" on user_settings
+         for insert to authenticated
+         with check (user_id = auth.uid());`,
+      `create policy if not exists "Update own user_settings" on user_settings
+         for update to authenticated
+         using (user_id = auth.uid())
+         with check (user_id = auth.uid());`,
+      `grant select, insert, update on user_settings to authenticated;`,
+      `grant select, insert, update, delete on user_settings to service_role;`,
       `grant select on products to authenticated;`,
       `grant select on categories to authenticated;`,
       `grant select on suppliers to authenticated;`,

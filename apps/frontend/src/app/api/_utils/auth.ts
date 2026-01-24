@@ -1,5 +1,4 @@
 import { NextRequest } from 'next/server'
-import { isMockAuthEnabled } from '@/lib/env'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { logAudit } from '@/app/api/admin/_utils/audit'
 
@@ -10,17 +9,7 @@ export async function assertAdmin(request: NextRequest): Promise<
   | { ok: true; session?: any }
   | { ok: false; status: number; body: { error: string } }
 > {
-  const forceMock = (request.headers.get('x-env-mode') || request.headers.get('X-Env-Mode') || '').toLowerCase() === 'mock'
-  if (forceMock || isMockAuthEnabled()) {
-    const role = request.headers.get('x-user-role') || request.headers.get('X-User-Role')
-    const r = (role || '').toUpperCase().replace('-', '_')
-    if (r === 'ADMIN' || r === 'SUPER_ADMIN') {
-      logAudit('auth.ok', { mode: 'mock', role: r, url: request.url })
-      return { ok: true }
-    }
-    logAudit('auth.denied', { mode: 'mock', reason: 'role_not_allowed', role: r, url: request.url })
-    return { ok: false, status: 403, body: { error: 'Acceso denegado (mock)' } }
-  }
+  // Solo permitir verificación real de sesión con Supabase
 
   try {
     const supabase = await createClient()

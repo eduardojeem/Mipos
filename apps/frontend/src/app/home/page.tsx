@@ -1,7 +1,7 @@
 import { Metadata } from 'next';
 import HomeClient from './HomeClient';
 import { createClient } from '@/lib/supabase/server';
-import { cookies } from 'next/headers';
+export const dynamic = 'force-dynamic';
 
 export async function generateMetadata(): Promise<Metadata> {
     let config: any = null;

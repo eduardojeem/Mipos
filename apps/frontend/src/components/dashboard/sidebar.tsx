@@ -188,17 +188,6 @@ export const navigation: NavItem[] = [
     borderColor: 'border-indigo-200 dark:border-indigo-800'
   },
   {
-    name: 'Gestión de Contenido',
-    href: '/dashboard/content',
-    icon: FileText,
-    roles: ['ADMIN', 'MANAGER'],
-    category: 'content',
-    description: 'Páginas web, banners y multimedia',
-    color: 'text-cyan-600 dark:text-cyan-400',
-    bgColor: 'bg-cyan-50 dark:bg-cyan-900/20',
-    borderColor: 'border-cyan-200 dark:border-cyan-800'
-  },
-  {
     name: 'Administración',
     href: '/admin',
     icon: Shield,

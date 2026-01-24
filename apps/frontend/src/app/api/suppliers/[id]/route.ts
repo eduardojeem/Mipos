@@ -3,38 +3,12 @@ import { cookies } from 'next/headers'
 import { createServerClient } from '@/lib/supabase'
 import { getErrorMessage } from '@/lib/api'
 
-function isDevMockMode(req?: NextRequest) {
-  const hasSupabaseEnv = !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  const isDev = process.env.NODE_ENV === 'development'
-  const headerMode = req?.headers.get('x-env-mode') || req?.headers.get('X-Env-Mode') || ''
-  const forcedMock = String(headerMode).toLowerCase() === 'mock' || process.env.MOCK_AUTH === 'true'
-  return (isDev && (!hasSupabaseEnv || forcedMock)) || forcedMock
-}
+// Modo mock deshabilitado
 
 // GET /api/suppliers/:id
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
-
-    if (isDevMockMode(request)) {
-      // Return mock supplier
-      const mock = {
-        id,
-        name: 'Proveedor Demo Mock',
-        contactInfo: {
-          phone: '+52 555-000-0000',
-          email: 'mock@demo.com',
-          address: 'Calle Mock 123',
-          contactPerson: 'Mock Person'
-        },
-        taxId: 'MOCK123456',
-        status: 'active',
-        category: 'general',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
-      return NextResponse.json(mock)
-    }
 
     const cookieStore = await cookies()
     const supabase = await createServerClient(cookieStore)
@@ -83,10 +57,6 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const { id } = await params
     const body = await request.json()
 
-    if (isDevMockMode(request)) {
-      return NextResponse.json({ ...body, id })
-    }
-
     const cookieStore = await cookies()
     const supabase = await createServerClient(cookieStore)
 
@@ -126,10 +96,6 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
-
-    if (isDevMockMode(request)) {
-      return NextResponse.json({ success: true })
-    }
 
     const cookieStore = await cookies()
     const supabase = await createServerClient(cookieStore)
