@@ -143,7 +143,10 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: "(function(){try{var t=localStorage.getItem('theme');var d=window.matchMedia('(prefers-color-scheme: dark)').matches;var c=t==='dark'||(t==='system'&&d)?'dark':'light';var e=document.documentElement;e.classList.remove('light','dark');e.classList.add(c);}catch(_){}})();" }} />
       </head>
       <body className={inter.className + " min-h-[100svh] w-full bg-background antialiased"}>
-        {children}
+        <Providers>
+          {children}
+          <Toaster />
+        </Providers>
       </body>
     </html>
   )
