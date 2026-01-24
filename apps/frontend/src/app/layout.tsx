@@ -9,6 +9,10 @@ import { Toaster } from '@/components/ui/toaster'
 import { defaultBusinessConfig } from '@/types/business-config'
 import { getBusinessConfigAsync } from '@/app/api/admin/_utils/business-config'
 
+// Force dynamic rendering
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 const inter = Inter({ subsets: ['latin'] })
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -139,10 +143,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: "(function(){try{var t=localStorage.getItem('theme');var d=window.matchMedia('(prefers-color-scheme: dark)').matches;var c=t==='dark'||(t==='system'&&d)?'dark':'light';var e=document.documentElement;e.classList.remove('light','dark');e.classList.add(c);}catch(_){}})();" }} />
       </head>
       <body className={inter.className + " min-h-[100svh] w-full bg-background antialiased"}>
-        <Providers>
-          {children}
-          <Toaster />
-        </Providers>
+        {children}
       </body>
     </html>
   )
