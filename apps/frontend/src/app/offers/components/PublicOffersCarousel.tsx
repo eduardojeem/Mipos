@@ -78,39 +78,34 @@ export default function PublicOffersCarousel({
   useEffect(() => {
     const fetchCarousel = async () => {
       try {
-        console.log('[PublicCarousel] Fetching carousel data...');
         const response = await fetch("/api/promotions/carousel/public");
-        
-        console.log('[PublicCarousel] Response status:', response.status);
-        
-        if (!response.ok) {
-          console.error('[PublicCarousel] Response not OK:', response.statusText);
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        const result = await response.json();
-        console.log('[PublicCarousel] Result:', result);
 
-        if (result.success && result.data) {
-          console.log('[PublicCarousel] Setting items:', result.data.length);
+        // Silently handle errors - no toast
+        if (!response.ok) {
+          console.warn('[PublicCarousel] API returned error:', response.status);
+          setItems([]);
+          setLoading(false);
+          return;
+        }
+
+        const result = await response.json();
+
+        if (result.success && result.data && Array.isArray(result.data)) {
           setItems(result.data);
         } else {
-          console.warn('[PublicCarousel] No data or unsuccessful response:', result);
+          setItems([]);
         }
       } catch (error) {
-        console.error("[PublicCarousel] Error loading carousel:", error);
-        toast({
-          title: "Error",
-          description: "No se pudo cargar el carrusel de ofertas",
-          variant: "destructive",
-        });
+        // Silently handle errors - just log
+        console.warn("[PublicCarousel] Error loading carousel:", error);
+        setItems([]);
       } finally {
         setLoading(false);
       }
     };
 
     fetchCarousel();
-  }, [toast]);
+  }, []); // Removed toast dependency
 
   // Auto-play functionality
   useEffect(() => {
@@ -180,25 +175,47 @@ export default function PublicOffersCarousel({
   // Loading state
   if (loading) {
     return (
-      <section className="mb-12">
+      <section className="mb-12 animate-slide-up">
         <div className="flex items-center gap-2 mb-6">
           <Flame className="w-6 h-6 text-rose-500 animate-pulse" />
           <h2 className="text-3xl font-bold text-slate-900 dark:text-white">
             Ofertas Destacadas
           </h2>
         </div>
-        <Card className="overflow-hidden border-2 border-rose-200 dark:border-rose-800">
+        <Card className="overflow-hidden border-0 shadow-2xl">
           <CardContent className="p-0">
-            <div className="relative h-[400px] md:h-[500px] bg-slate-100 dark:bg-slate-800 animate-pulse" />
+            <div className="relative h-[400px] md:h-[500px] bg-gradient-to-r from-slate-100 via-slate-200 to-slate-100 dark:from-slate-800 dark:via-slate-700 dark:to-slate-800 animate-pulse" />
           </CardContent>
         </Card>
       </section>
     );
   }
 
-  // No items state
+  // Empty state - show beautiful card instead of nothing
   if (items.length === 0) {
-    return null; // Don't show anything if no carousel items
+    return (
+      <section className="mb-12 animate-slide-up">
+        <div className="flex items-center gap-2 mb-6">
+          <Flame className="w-6 h-6 text-slate-400" />
+          <h2 className="text-3xl font-bold text-slate-900 dark:text-white">
+            Ofertas Destacadas
+          </h2>
+        </div>
+        <Card className="overflow-hidden border-0 shadow-xl bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 dark:from-slate-800 dark:via-purple-900/20 dark:to-slate-800">
+          <CardContent className="p-12 text-center">
+            <div className="max-w-md mx-auto space-y-4">
+              <Sparkles className="w-16 h-16 mx-auto text-purple-400 opacity-50" />
+              <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
+                Próximamente 🎉
+              </h3>
+              <p className="text-slate-600 dark:text-slate-400">
+                Estamos preparando ofertas increíbles para ti. ¡Vuelve pronto para descubrir descuentos exclusivos!
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+    );
   }
 
   const currentItem = items[currentIndex];
@@ -236,7 +253,7 @@ export default function PublicOffersCarousel({
                 initial={{ opacity: 0, x: 100 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -100 }}
-                transition={{ 
+                transition={{
                   duration: 0.3, // Reducido de 0.5s a 0.3s para transiciones más rápidas
                   ease: "easeInOut" // Curva de animación suave
                 }}
@@ -363,11 +380,10 @@ export default function PublicOffersCarousel({
                   <button
                     key={index}
                     onClick={() => handleDotClick(index)}
-                    className={`h-2 rounded-full transition-all duration-300 ease-in-out ${
-                      index === currentIndex
+                    className={`h-2 rounded-full transition-all duration-300 ease-in-out ${index === currentIndex
                         ? "w-8 bg-white"
                         : "w-2 bg-white/50 hover:bg-white/75"
-                    }`}
+                      }`}
                     aria-label={`Ir a oferta ${index + 1}`}
                   />
                 ))}

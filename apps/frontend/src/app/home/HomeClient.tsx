@@ -6,10 +6,20 @@ import { useBusinessConfig } from '@/contexts/BusinessConfigContext';
 import { NavBar } from './components/NavBar';
 import { HeroSection } from './components/HeroSection';
 import { Carousel } from './components/Carousel';
-import { Footer } from './components/Footer';
 import SectionSkeleton from './components/SectionSkeleton';
 import { type SpecialOffer, type FeaturedProduct } from './data/homeData';
-import ExistingOffersModal from '@/components/promotions/ExistingOffersModal';
+
+// Lazy load Footer (not critical for initial render)
+const Footer = dynamic(
+  () => import('./components/Footer').then(m => ({ default: m.Footer })),
+  { ssr: false }
+);
+
+// Lazy load modal (only when needed)
+const ExistingOffersModal = dynamic(
+  () => import('@/components/promotions/ExistingOffersModal'),
+  { ssr: false }
+);
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import { useCurrencyFormatter } from '@/contexts/BusinessConfigContext';
@@ -23,7 +33,7 @@ import { createClient } from '@/lib/supabase/client';
 import { calculateOfferPrice } from '@/lib/offers/calculations';
 import { useCatalogCart } from '@/hooks/useCatalogCart';
 
- 
+
 
 const FeaturedProductsSection = dynamic(
   () => import('./components/FeaturedProductsSection').then(m => m.FeaturedProductsSection),
@@ -140,7 +150,7 @@ export default function HomeClient() {
             };
           });
         if (!cancelled) setPublicOffers(mapped);
-      } catch {}
+      } catch { }
     };
     const loadTopProducts = async () => {
       try {
@@ -223,7 +233,7 @@ export default function HomeClient() {
       const clone = el.cloneNode(true) as HTMLElement;
       el.replaceWith(clone);
       clone.remove();
-    } catch {}
+    } catch { }
   }, []);
 
   useEffect(() => {
@@ -270,7 +280,7 @@ export default function HomeClient() {
 
   return (
     <div
-      className="min-h-screen home-theme bg-gradient-to-br from-violet-50 via-fuchsia-50 to-cyan-50 dark:from-slate-950 dark:via-purple-950/50 dark:to-slate-900"
+      className="min-h-screen home-theme bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 dark:from-slate-950 dark:via-purple-950/40 dark:to-slate-900 relative overflow-hidden"
       style={{
         // Global tokens used by shadcn classes
         ['--background' as any]: bgHsl,
@@ -289,120 +299,217 @@ export default function HomeClient() {
         ['--home-badge-text' as any]: '#ffffff',
       }}
     >
-      <NavBar config={config} activeSection={activeSection} onNavigate={scrollToSection} />
-
-      {/* Aviso discreto cuando la configuración no está persistida en base de datos */}
-      {mounted && !persisted && (
-        <div className="mx-4 md:mx-8 mt-2 rounded border border-amber-200 bg-amber-50 text-amber-800 px-3 py-2 text-xs md:text-sm">
-          Usando configuración local en este navegador. No está guardada en base de datos.
-        </div>
-      )}
-
-      {/* Carrusel de imágenes configurable */}
-      {config?.carousel?.enabled && Array.isArray(config?.carousel?.images) && config.carousel.images.length > 0 && (
-        <Carousel
-          images={config.carousel.images}
-          enabled={config.carousel.enabled}
-          intervalSec={config.carousel.transitionSeconds}
-          ratio={config.carousel.ratio}
-          autoplay={config.carousel.autoplay}
-          transitionMs={config.carousel.transitionMs}
-          branding={config.branding}
-        />
-      )}
-
-      <HeroSection config={config} onViewOffers={() => scrollToSection('ofertas')} stats={stats} />
-
-      {/* Acceso rápido a ofertas existentes */}
-      <div className="mx-4 md:mx-8 mt-4 flex justify-end">
-        <Button variant="outline" onClick={() => setIsOffersModalOpen(true)} aria-label="Ver ofertas existentes">
-          Ver ofertas existentes
-        </Button>
+      {/* Animated Background Elements */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+        <div className="absolute top-0 -left-4 w-[500px] h-[500px] bg-gradient-to-br from-purple-400/20 via-pink-400/20 to-transparent rounded-full blur-3xl animate-float" />
+        <div className="absolute top-1/4 -right-4 w-[600px] h-[600px] bg-gradient-to-bl from-blue-400/15 via-cyan-400/15 to-transparent rounded-full blur-3xl animate-float" style={{ animationDelay: '1s' }} />
+        <div className="absolute bottom-0 left-1/3 w-[400px] h-[400px] bg-gradient-to-tr from-pink-400/10 via-purple-400/10 to-transparent rounded-full blur-3xl animate-float" style={{ animationDelay: '2s' }} />
       </div>
 
-      
+      <div className="relative z-10">
+        <NavBar config={config} activeSection={activeSection} onNavigate={scrollToSection} />
 
-      {/* Productos en oferta (público) */}
-      {publicOffers.length > 0 && (
-        <section className="mx-4 md:mx-8 my-8" aria-labelledby="home-public-offers-title">
-          <div className="flex items-center gap-2 mb-4">
-            <h2 id="home-public-offers-title" className="text-xl md:text-2xl font-bold">Productos en oferta</h2>
-            <Badge variant="secondary" aria-live="polite" role="status">
-              {publicOffers.length} {publicOffers.length === 1 ? 'producto' : 'productos'}
-            </Badge>
-            <div className="ml-auto">
-              <Link href="/offers?status=active">
-                <Button variant="outline">Ver todas</Button>
-              </Link>
+        {/* Aviso discreto cuando la configuración no está persistida en base de datos */}
+        {mounted && !persisted && (
+          <div className="mx-4 md:mx-8 mt-2 rounded border border-amber-200 bg-amber-50 text-amber-800 px-3 py-2 text-xs md:text-sm">
+            Usando configuración local en este navegador. No está guardada en base de datos.
+          </div>
+        )}
+
+        {/* Carrusel de imágenes configurable */}
+        {config?.carousel?.enabled && Array.isArray(config?.carousel?.images) && config.carousel.images.length > 0 && (
+          <Carousel
+            images={config.carousel.images}
+            enabled={config.carousel.enabled}
+            intervalSec={config.carousel.transitionSeconds}
+            ratio={config.carousel.ratio}
+            autoplay={config.carousel.autoplay}
+            transitionMs={config.carousel.transitionMs}
+            branding={config.branding}
+          />
+        )}
+
+        <HeroSection config={config} onViewOffers={() => scrollToSection('ofertas')} stats={stats} />
+
+        {/* Acceso rápido a ofertas existentes */}
+        <div className="mx-4 md:mx-8 mt-4 flex justify-end">
+          <Button variant="outline" onClick={() => setIsOffersModalOpen(true)} aria-label="Ver ofertas existentes">
+            Ver ofertas existentes
+          </Button>
+        </div>
+
+
+        {/* Productos en oferta (público) - PREMIUM DESIGN */}
+        {publicOffers.length > 0 && (
+          <section className="mx-4 md:mx-8 my-12 animate-slide-up" aria-labelledby="home-public-offers-title">
+            {/* Premium Section Header */}
+            <div className="text-center mb-12">
+              <Badge className="badge-hot mb-4 text-sm px-4 py-2 shadow-xl">
+                🔥 Ofertas Limitadas
+              </Badge>
+              <h2 id="home-public-offers-title" className="text-4xl lg:text-5xl font-black mb-4 bg-gradient-to-r from-pink-600 via-purple-600 to-blue-600 dark:from-pink-400 dark:via-purple-400 dark:to-blue-400 bg-clip-text text-transparent">
+                Productos en Oferta
+              </h2>
+              <p className="text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto mb-6">
+                Aprovecha estos <strong>descuentos exclusivos</strong> antes de que terminen
+              </p>
+
+              <div className="flex items-center justify-center gap-3">
+                <Badge variant="secondary" className="px-4 py-2" aria-live="polite" role="status">
+                  {publicOffers.length} {publicOffers.length === 1 ? 'producto' : 'productos'} disponibles
+                </Badge>
+                <Link href="/offers?status=active">
+                  <Button className="btn-premium-outline">
+                    Ver Todas las Ofertas →
+                  </Button>
+                </Link>
+              </div>
             </div>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {publicOffers.map((item, idx) => {
-              const img = item?.product?.images?.[0]?.url || item?.product?.image || '/api/placeholder/300/300';
-              const name = item?.product?.name || 'Producto';
-              const offerPrice = item?.offerPrice ?? item?.product?.sale_price ?? 0;
-              const basePrice = item?.basePrice ?? item?.product?.sale_price ?? 0;
-              const timeLeft = getTimeRemaining(item?.promotion?.endDate);
-              return (
-                <Card key={item?.product?.id ?? idx} className="overflow-hidden">
-                  <div className="relative aspect-square bg-muted">
-                    <Image src={img} alt={name} fill className="object-cover" sizes="(max-width:768px) 50vw, 25vw" />
-                    <div className="absolute top-2 left-2">
-                      <Badge className="bg-rose-500 text-white border-none">-{Math.max(0, Math.round(((basePrice - offerPrice) / (basePrice || 1)) * 100))}%</Badge>
-                    </div>
-                    {timeLeft && (
-                      <div className="absolute top-2 right-2">
-                        <Badge variant="secondary" className="bg-white/90 text-[10px] shadow-sm">
-                          <Clock className="w-3 h-3 mr-1" /> {timeLeft}
-                        </Badge>
-                      </div>
-                    )}
-                  </div>
-                  <CardContent className="p-3">
-                    <h3 className="font-semibold text-sm line-clamp-2 mb-1">{name}</h3>
-                    <div className="flex items-baseline gap-2 mb-2">
-                      <span className="text-base font-bold text-rose-600">{formatCurrency(offerPrice)}</span>
-                      {basePrice > offerPrice && (
-                        <span className="text-xs text-muted-foreground line-through">{formatCurrency(basePrice)}</span>
+
+            {/* Premium Product Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+              {publicOffers.map((item, idx) => {
+                const img = item?.product?.images?.[0]?.url || item?.product?.image || '/api/placeholder/300/300';
+                const name = item?.product?.name || 'Producto';
+                const offerPrice = item?.offerPrice ?? item?.product?.sale_price ?? 0;
+                const basePrice = item?.basePrice ?? item?.product?.sale_price ?? 0;
+                const discountPercent = Math.max(0, Math.round(((basePrice - offerPrice) / (basePrice || 1)) * 100));
+                const timeLeft = getTimeRemaining(item?.promotion?.endDate);
+
+                return (
+                  <Card key={item?.product?.id ?? idx} className="card-product group border-0 shadow-lg hover:shadow-2xl animate-slide-up">
+                    <div className="image-overlay relative aspect-square bg-gradient-to-br from-gray-100 to-gray-200 dark:from-slate-700 dark:to-slate-800">
+                      <Image
+                        src={img}
+                        alt={name}
+                        fill
+                        className="object-cover transition-transform duration-500 group-hover:scale-110"
+                        sizes="(max-width:768px) 50vw, 25vw"
+                        loading="lazy"
+                      />
+
+                      {/* Premium gradient overlay on hover */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+
+                      {/* Discount Badge - Premium HOT style */}
+                      {discountPercent > 0 && (
+                        <div className="absolute top-3 left-3 z-10">
+                          <Badge className="badge-hot text-xs font-bold px-3 py-1 shadow-xl">
+                            🔥 -{discountPercent}%
+                          </Badge>
+                        </div>
                       )}
+
+                      {/* Time Remaining Badge - Glassmorphism */}
+                      {timeLeft && timeLeft !== 'Finalizada' && (
+                        <div className="absolute top-3 right-3 z-10">
+                          <Badge className="glass-card text-[10px] font-semibold px-2 py-1 border-0 shadow-lg">
+                            <Clock className="w-3 h-3 mr-1" />
+                            {timeLeft}
+                          </Badge>
+                        </div>
+                      )}
+
+                      {/* Quick action button on hover */}
+                      <div className="absolute inset-x-0 bottom-0 p-4 transform translate-y-full group-hover:translate-y-0 transition-transform duration-300">
+                        <Button
+                          size="sm"
+                          className="w-full btn-premium shadow-xl backdrop-blur-sm"
+                          onClick={() => {
+                            try {
+                              const base = Number(basePrice || 0);
+                              const offer = Number(offerPrice ?? NaN);
+                              const effectiveOffer = offer > 0 && offer < base ? offer : undefined;
+                              const productLike: any = {
+                                id: String(item?.product?.id || ''),
+                                name: String(name),
+                                sale_price: base,
+                                offer_price: effectiveOffer,
+                                image_url: String(img || ''),
+                                stock_quantity: Number(item?.product?.stock_quantity ?? 999),
+                                is_active: true,
+                              };
+                              addToCart(productLike as any, 1);
+                            } catch { }
+                          }}
+                          aria-label={`Agregar ${name} al carrito`}
+                        >
+                          <ShoppingCart className="w-4 h-4 mr-2" />
+                          Agregar al Carrito
+                        </Button>
+                      </div>
                     </div>
-                    <Button size="sm" className="w-full bg-red-600 hover:bg-red-700 text-white transition-all duration-200 hover:shadow-lg hover:scale-105" onClick={() => {
-                      try {
-                        const base = Number(basePrice || 0);
-                        const offer = Number(offerPrice ?? NaN);
-                        const effectiveOffer = offer > 0 && offer < base ? offer : undefined;
-                        const productLike: any = {
-                          id: String(item?.product?.id || ''),
-                          name: String(name),
-                          sale_price: base,
-                          offer_price: effectiveOffer,
-                          image_url: String(img || ''),
-                          stock_quantity: Number(item?.product?.stock_quantity ?? 999),
-                          is_active: true,
-                        };
-                        addToCart(productLike as any, 1);
-                      } catch {}
-                    }} aria-label={`Agregar ${name} al carrito`}>
-                      <ShoppingCart className="w-4 h-4 mr-2" /> Agregar
-                    </Button>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </section>
-      )}
 
-      {topProducts.length > 0 && <FeaturedProductsSection products={topProducts} config={config} />}
+                    <CardContent className="p-4 bg-white dark:bg-slate-800">
+                      <h3 className="font-bold text-sm line-clamp-2 mb-2 text-slate-900 dark:text-slate-100 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
+                        {name}
+                      </h3>
 
-      <ContactSection config={config} />
+                      <div className="flex items-baseline gap-2 mb-3">
+                        <span className="text-lg font-black bg-gradient-to-r from-pink-600 via-purple-600 to-blue-600 bg-clip-text text-transparent">
+                          {formatCurrency(offerPrice)}
+                        </span>
+                        {basePrice > offerPrice && (
+                          <span className="text-xs text-muted-foreground dark:text-slate-400 line-through opacity-75">
+                            {formatCurrency(basePrice)}
+                          </span>
+                        )}
+                      </div>
 
-      <LocationSection config={config} />
+                      {item?.promotion?.name && (
+                        <div className="mb-3">
+                          <Badge variant="outline" className="text-[10px] font-medium border-purple-300 text-purple-700 dark:border-purple-600 dark:text-purple-400">
+                            ✨ {item.promotion.name}
+                          </Badge>
+                        </div>
+                      )}
 
-      <Footer config={config} onNavigate={scrollToSection} />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full border-2 border-purple-200 dark:border-purple-800 text-purple-600 dark:text-purple-400 hover:bg-purple-600 hover:text-white hover:border-purple-600 transition-all duration-300 hover:scale-105 font-semibold shadow-md hover:shadow-xl group-hover:shadow-purple-500/50"
+                        onClick={() => {
+                          try {
+                            const base = Number(basePrice || 0);
+                            const offer = Number(offerPrice ?? NaN);
+                            const effectiveOffer = offer > 0 && offer < base ? offer : undefined;
+                            const productLike: any = {
+                              id: String(item?.product?.id || ''),
+                              name: String(name),
+                              sale_price: base,
+                              offer_price: effectiveOffer,
+                              image_url: String(img || ''),
+                              stock_quantity: Number(item?.product?.stock_quantity ?? 999),
+                              is_active: true,
+                            };
+                            addToCart(productLike as any, 1);
+                          } catch { }
+                        }}
+                        aria-label={`Agregar ${name} al carrito`}
+                      >
+                        <ShoppingCart className="w-4 h-4 mr-2" />
+                        Comprar Ahora
+                      </Button>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
-      {/* Modal ofertas existentes */}
-      <ExistingOffersModal open={isOffersModalOpen} onOpenChange={setIsOffersModalOpen} />
+        {topProducts.length > 0 && <FeaturedProductsSection products={topProducts} config={config} />}
+
+        <ContactSection config={config} />
+
+        <LocationSection config={config} />
+
+        <Footer config={config} onNavigate={scrollToSection} />
+
+        {/* Modal ofertas existentes */}
+        <ExistingOffersModal open={isOffersModalOpen} onOpenChange={setIsOffersModalOpen} />
+      </div>
+      {/* End z-10 wrapper */}
     </div>
   );
 }

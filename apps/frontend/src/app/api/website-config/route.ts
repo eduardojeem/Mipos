@@ -12,7 +12,7 @@ export async function GET() {
       .eq('key', 'website_config')
       .single()
 
-    if (error && error.code !== 'PGRST116') {
+    if (error && error.code !== 'PGRST116' && error.code !== 'PGRST205') {
       console.error('Error fetching website config:', error)
       return NextResponse.json({ 
         success: false, 

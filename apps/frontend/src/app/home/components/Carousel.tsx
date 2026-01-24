@@ -29,14 +29,14 @@ export interface CarouselProps {
   };
 }
 
-export function Carousel({ 
-  images, 
-  enabled = true, 
-  intervalSec = 5, 
-  ratio, 
-  autoplay = true, 
-  transitionMs = 500, 
-  branding 
+export function Carousel({
+  images,
+  enabled = true,
+  intervalSec = 5,
+  ratio,
+  autoplay = true,
+  transitionMs = 500,
+  branding
 }: CarouselProps) {
   const [index, setIndex] = useState(0);
   const [progress, setProgress] = useState(0);
@@ -62,11 +62,10 @@ export function Carousel({
     return list.filter((im) => typeof im?.url === 'string' && im.url.trim().length > 0);
   }, [images]);
 
-  // Ratio más compacto: 21:9 por defecto para un carrusel más bajo
   const safeRatio = useMemo(() => {
     const r = Number(ratio);
-    if (!isFinite(r) || r <= 0) return 2.5; // Más ancho y bajo
-    return Math.max(r, 1.5); // Mínimo 1.5 para evitar muy alto
+    if (!isFinite(r) || r <= 0) return 2.5;
+    return Math.max(r, 1.5);
   }, [ratio]);
 
   const blurDataURL = useMemo(() => {
@@ -111,10 +110,10 @@ export function Carousel({
   // Auto-advance with progress
   useEffect(() => {
     const autoPlayEnabled = enabled && autoplay && !reduceMotion && imgs.length > 1;
-    
+
     if (progressRef.current) clearInterval(progressRef.current);
     if (timerRef.current) clearTimeout(timerRef.current);
-    
+
     if (!autoPlayEnabled) {
       setProgress(0);
       return;
@@ -122,7 +121,7 @@ export function Carousel({
 
     const intervalMs = validInterval * 1000;
     const progressStep = 100 / (intervalMs / 30);
-    
+
     progressRef.current = setInterval(() => {
       if (!hoverRef.current) {
         setProgress(prev => Math.min(100, prev + progressStep));
@@ -164,8 +163,9 @@ export function Carousel({
   };
 
   return (
-    <section className="w-full py-2 sm:py-4">
-      <div className="max-w-6xl mx-auto px-3 sm:px-4 lg:px-6">
+    <section className="w-full relative">
+      {/* Full-width container - sin max-width para aprovechar toda la pantalla */}
+      <div className="w-full">
         <div
           role="region"
           aria-roledescription="Carrusel"
@@ -197,26 +197,31 @@ export function Carousel({
             touchDeltaX.current = 0;
           }}
           className={cn(
-            "relative w-full overflow-hidden",
-            "rounded-xl sm:rounded-2xl",
-            "shadow-lg",
-            "bg-slate-900",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+            "relative w-full overflow-hidden group",
+            "shadow-2xl",
+            "bg-slate-900"
           )}
           style={{
-            aspectRatio: safeRatio,
-            maxHeight: '320px', // Altura máxima para mantenerlo compacto
+            // Mejor aspect ratio para aprovechar pantalla - 60% de viewport height
+            aspectRatio: 'auto',
+            height: 'calc(60vh)',
+            minHeight: '400px',
+            maxHeight: '600px',
           }}
         >
-          {/* Progress bar */}
+          {/* Premium gradient overlay for depth */}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/20 pointer-events-none z-10" />
+
+          {/* Progress bar - más visible y premium */}
           {imgs.length > 1 && autoplay && (
-            <div className="absolute top-0 left-0 right-0 h-0.5 bg-white/20 z-20">
-              <div 
-                className="h-full"
-                style={{ 
+            <div className="absolute top-0 left-0 right-0 h-1 bg-black/30 backdrop-blur-sm z-30">
+              <div
+                className="h-full shadow-lg"
+                style={{
                   background: `linear-gradient(90deg, ${gradientStart}, ${gradientEnd})`,
                   width: `${progress}%`,
-                  transition: 'width 30ms linear'
+                  transition: 'width 30ms linear',
+                  boxShadow: `0 0 10px ${gradientEnd}`
                 }}
               />
             </div>
@@ -228,7 +233,7 @@ export function Carousel({
               key={img.id}
               className={cn(
                 "absolute inset-0",
-                !reduceMotion && "transition-opacity duration-500 ease-out"
+                !reduceMotion && "transition-opacity duration-700 ease-in-out"
               )}
               style={{
                 opacity: i === index ? 1 : 0,
@@ -240,98 +245,97 @@ export function Carousel({
                 alt={img.alt || `Promoción ${i + 1}`}
                 fill
                 priority={i === 0}
-                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 100vw, 1152px"
+                sizes="100vw"
                 className="object-cover"
                 placeholder="blur"
                 blurDataURL={blurDataURL}
               />
-              
-              {/* Subtle gradient overlay */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
 
-              {/* Caption - compact */}
+              {/* Enhanced gradient overlay */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
+
+              {/* Caption - más grande y visible */}
               {img.alt && (
-                <div className="absolute bottom-3 left-3 right-3 sm:bottom-4 sm:left-4">
-                  <span 
-                    className={cn(
-                      "inline-block",
-                      "bg-black/50 backdrop-blur-sm",
-                      "text-white text-xs sm:text-sm font-medium",
-                      "px-3 py-1.5 rounded-lg",
-                      "max-w-[80%] truncate"
-                    )}
-                  >
-                    {img.alt}
-                  </span>
+                <div className="absolute bottom-6 left-6 right-6 sm:bottom-12 sm:left-12 sm:right-12 z-20">
+                  <div className="glass-card px-6 py-4 sm:px-8 sm:py-5 max-w-2xl rounded-2xl">
+                    <h3 className="text-white text-lg sm:text-2xl lg:text-3xl font-bold mb-2 text-shadow-lg">
+                      {img.alt}
+                    </h3>
+                    <div className="w-20 h-1 rounded-full bg-gradient-to-r from-purple-500 to-pink-500" />
+                  </div>
                 </div>
               )}
             </div>
           ))}
 
-          {/* Navigation - compact arrows */}
+          {/* Navigation arrows - más grandes y visibles */}
           {imgs.length > 1 && (
             <>
               <button
                 aria-label="Anterior"
                 onClick={goPrev}
                 className={cn(
-                  "absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 z-20",
-                  "w-8 h-8 sm:w-9 sm:h-9",
+                  "absolute left-4 sm:left-8 top-1/2 -translate-y-1/2 z-30",
+                  "w-12 h-12 sm:w-14 sm:h-14 lg:w-16 lg:h-16",
                   "rounded-full",
-                  "bg-black/40 hover:bg-black/60",
-                  "backdrop-blur-sm",
+                  "glass-card",
                   "flex items-center justify-center",
-                  "transition-all duration-150",
-                  "opacity-0 group-hover:opacity-100",
+                  "transition-all duration-300",
+                  "opacity-60 hover:opacity-100 group-hover:opacity-100",
+                  "hover:scale-110 active:scale-95",
                   "focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                 )}
-                style={{ opacity: 0.7 }}
-                onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-                onMouseLeave={(e) => e.currentTarget.style.opacity = '0.7'}
               >
-                <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                <ChevronLeft className="w-6 h-6 sm:w-7 sm:h-7 lg:w-8 lg:h-8 text-white" />
               </button>
-              
+
               <button
                 aria-label="Siguiente"
                 onClick={goNext}
                 className={cn(
-                  "absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 z-20",
-                  "w-8 h-8 sm:w-9 sm:h-9",
+                  "absolute right-4 sm:right-8 top-1/2 -translate-y-1/2 z-30",
+                  "w-12 h-12 sm:w-14 sm:h-14 lg:w-16 lg:h-16",
                   "rounded-full",
-                  "bg-black/40 hover:bg-black/60",
-                  "backdrop-blur-sm",
+                  "glass-card",
                   "flex items-center justify-center",
-                  "transition-all duration-150",
+                  "transition-all duration-300",
+                  "opacity-60 hover:opacity-100 group-hover:opacity-100",
+                  "hover:scale-110 active:scale-95",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                 )}
-                style={{ opacity: 0.7 }}
-                onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-                onMouseLeave={(e) => e.currentTarget.style.opacity = '0.7'}
               >
-                <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+                <ChevronRight className="w-6 h-6 sm:w-7 sm:h-7 lg:w-8 lg:h-8 text-white" />
               </button>
             </>
           )}
 
-          {/* Dots - minimal */}
+          {/* Dots - más grandes y con estilo premium */}
           {imgs.length > 1 && (
-            <div className="absolute bottom-3 right-3 sm:bottom-4 sm:right-4 flex items-center gap-1.5 z-20">
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2 sm:gap-3 z-30">
               {imgs.map((_, i) => (
                 <button
                   key={i}
                   aria-label={`Ir a imagen ${i + 1}`}
                   onClick={() => goToSlide(i)}
                   className={cn(
-                    "transition-all duration-200",
+                    "transition-all duration-300",
                     "rounded-full",
-                    "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white",
-                    i === index 
-                      ? "w-4 sm:w-5 h-1.5 bg-white" 
-                      : "w-1.5 h-1.5 bg-white/50 hover:bg-white/80"
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white shadow-lg",
+                    i === index
+                      ? "w-8 sm:w-12 h-2 sm:h-2.5 bg-gradient-to-r from-purple-500 to-pink-500"
+                      : "w-2 sm:w-2.5 h-2 sm:h-2.5 bg-white/50 hover:bg-white/80 hover:scale-125"
                   )}
                 />
               ))}
+            </div>
+          )}
+
+          {/* Slide counter - nuevo elemento informativo */}
+          {imgs.length > 1 && (
+            <div className="absolute top-6 right-6 z-30 glass-card px-3 py-1.5 rounded-full">
+              <span className="text-white text-xs sm:text-sm font-semibold">
+                {index + 1} / {imgs.length}
+              </span>
             </div>
           )}
         </div>
