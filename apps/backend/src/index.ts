@@ -49,6 +49,8 @@ import { sanitizeInput, validateContentType } from './middleware/validation';
 import { performanceMiddleware, performanceMetricsHandler, healthCheckHandler } from './middleware/performance';
 
 // Load environment variables
+dotenv.config({ path: '../../.env' });
+// Fallback to local .env if exists (overrides root)
 dotenv.config();
 
 // Initialize Prisma and Supabase clients

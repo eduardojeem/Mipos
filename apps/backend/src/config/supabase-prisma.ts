@@ -10,13 +10,16 @@ export class SupabasePrismaAdapter {
 
   constructor() {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     
     if (!supabaseUrl || !supabaseKey) {
-      throw new Error('Missing Supabase environment variables');
+      console.warn('Missing Supabase environment variables. Adapter will fail on requests.');
+      // Don't throw here to allow app to start, but subsequent calls will fail if client isn't created.
+      // We'll create a dummy client or let it fail later.
     }
     
-    this.supabase = createClient(supabaseUrl, supabaseKey);
+    // @ts-ignore
+    this.supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
   }
 
   // Helper method to map Prisma field names to database column names
@@ -109,11 +112,39 @@ export class SupabasePrismaAdapter {
   // Categories operations
   category = {
     findMany: async (options?: { where?: any; select?: any; orderBy?: any; include?: any; skip?: number; take?: number }) => {
+      if (!this.supabase) throw new Error('Supabase client not initialized');
       let query = this.supabase.from('categories').select('*');
       
       if (options?.where) {
         Object.entries(options.where).forEach(([key, value]) => {
-          query = query.eq(key, value);
+          if (key === 'OR' && Array.isArray(value)) {
+            // Build OR query string: "name.ilike.%search%,description.ilike.%search%"
+            const orParts: string[] = [];
+            value.forEach((cond: any) => {
+              Object.entries(cond).forEach(([k, v]: [string, any]) => {
+                const dbK = this.mapPrismaFieldToDbColumn(k);
+                if (typeof v === 'object' && v !== null && 'contains' in v) {
+                  orParts.push(`${dbK}.ilike.%${v.contains}%`);
+                } else if (typeof v === 'object' && v !== null && 'mode' in v) {
+                  // Skip mode, handled by ilike/like choice usually
+                } else {
+                  orParts.push(`${dbK}.eq.${v}`);
+                }
+              });
+            });
+            if (orParts.length > 0) {
+              query = query.or(orParts.join(','));
+            }
+          } else if (key === 'name' || key === 'description') {
+             // Handle direct filters if any
+             if (typeof value === 'object' && value !== null && 'contains' in value) {
+                query = query.ilike(key, `%${(value as any).contains}%`);
+             } else {
+                query = query.eq(key, value);
+             }
+          } else {
+            query = query.eq(key, value);
+          }
         });
       }
       
@@ -124,15 +155,16 @@ export class SupabasePrismaAdapter {
         query = query.order(dbOrderField, { ascending: orderDirection === 'asc' });
       }
 
-      if (options?.skip) {
+      if (options?.skip !== undefined) {
         query = query.range(options.skip, options.skip + (options.take || 20) - 1);
-      } else if (options?.take) {
+      } else if (options?.take !== undefined) {
         query = query.limit(options.take);
       }
       
       const { data, error } = await query;
       
       if (error) {
+        console.error('SupabaseAdapter.category.findMany error:', error);
         throw new Error(`Database query failed: ${error.message}`);
       }
 
@@ -166,6 +198,7 @@ export class SupabasePrismaAdapter {
     },
 
     findUnique: async (options: { where: { id: string }; include?: any; select?: any }) => {
+      if (!this.supabase) throw new Error('Supabase client not initialized');
       const { data, error } = await this.supabase
         .from('categories')
         .select('*')
@@ -325,17 +358,44 @@ export class SupabasePrismaAdapter {
     },
 
     count: async (options?: { where?: any }) => {
+      if (!this.supabase) throw new Error('Supabase client not initialized');
       let query = this.supabase.from('categories').select('*', { count: 'exact', head: true });
       
       if (options?.where) {
         Object.entries(options.where).forEach(([key, value]) => {
-          query = query.eq(key, value);
+          if (key === 'OR' && Array.isArray(value)) {
+            const orParts: string[] = [];
+            value.forEach((cond: any) => {
+              Object.entries(cond).forEach(([k, v]: [string, any]) => {
+                const dbK = this.mapPrismaFieldToDbColumn(k);
+                if (typeof v === 'object' && v !== null && 'contains' in v) {
+                  orParts.push(`${dbK}.ilike.%${v.contains}%`);
+                } else if (typeof v === 'object' && v !== null && 'mode' in v) {
+                  // Skip mode
+                } else {
+                  orParts.push(`${dbK}.eq.${v}`);
+                }
+              });
+            });
+            if (orParts.length > 0) {
+              query = query.or(orParts.join(','));
+            }
+          } else if (key === 'name' || key === 'description') {
+             if (typeof value === 'object' && value !== null && 'contains' in value) {
+                query = query.ilike(key, `%${(value as any).contains}%`);
+             } else {
+                query = query.eq(key, value);
+             }
+          } else {
+            query = query.eq(key, value);
+          }
         });
       }
       
       const { count, error } = await query;
       
       if (error) {
+        console.error('SupabaseAdapter.category.count error:', error);
         throw new Error(`Database count failed: ${error.message}`);
       }
       

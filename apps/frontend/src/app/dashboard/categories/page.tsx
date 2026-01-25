@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Plus, Search, Edit, Trash2, Tag, Eye, EyeOff, Filter, Package, ArrowUpDown, ArrowUp, ArrowDown, Grid, List, MoreHorizontal, CheckSquare, Square, X, SlidersHorizontal, Download, Upload, FileText, AlertCircle } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Eye, EyeOff, ArrowUpDown, ArrowUp, ArrowDown, Grid, List, MoreHorizontal, SlidersHorizontal, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/components/ui/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
@@ -16,13 +16,11 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { api, getErrorMessage } from '@/lib/api';
+import { createClient } from '@/lib/supabase/client';
+import { isSupabaseActive } from '@/lib/env';
 import type { Category } from '@/types';
 import { StatsCards } from './components/StatsCards';
 import { CategoryCard } from './components/CategoryCard';
-
-// Lazy load heavy components (optional - not used in optimized version)
-// const AdvancedFiltersPanel = lazy(() => import('./components/AdvancedFiltersPanel').catch(() => ({ default: () => null })));
-// const ImportExportModal = lazy(() => import('./components/ImportExportModal').catch(() => ({ default: () => null })));
 
 interface CategoryWithCount extends Category {
   _count?: {
@@ -34,13 +32,7 @@ type SortField = 'name' | 'created_at' | 'products' | 'is_active';
 type SortDirection = 'asc' | 'desc';
 type ViewMode = 'cards' | 'table';
 
-interface AdvancedFilters {
-  dateRange: { from: string; to: string };
-  productCountRange: { min: number; max: number };
-  hasProducts: 'all' | 'with_products' | 'without_products';
-}
-
-export default function CategoriesPageOptimized() {
+export default function CategoriesPage() {
   const { toast } = useToast();
   
   // Core state
@@ -54,22 +46,13 @@ export default function CategoriesPageOptimized() {
   const [viewMode, setViewMode] = useState<ViewMode>('cards');
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(12);
+  const itemsPerPage = 12;
   
   // Modal states
   const [showModal, setShowModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState<CategoryWithCount | null>(null);
   const [formData, setFormData] = useState({ name: '', description: '', is_active: true });
   const [submitting, setSubmitting] = useState(false);
-  
-  // Advanced features (lazy loaded)
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
-  const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilters>({
-    dateRange: { from: '', to: '' },
-    productCountRange: { min: 0, max: 100 },
-    hasProducts: 'all'
-  });
-  const [maxProductCount, setMaxProductCount] = useState(100);
   
   // Bulk actions
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
@@ -78,37 +61,23 @@ export default function CategoriesPageOptimized() {
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     searchTimeoutRef.current = setTimeout(() => {
       setSearchQuery(searchInput);
       setCurrentPage(1);
     }, 300);
     
     return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-      }
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     };
   }, [searchInput]);
   
-  // Load categories - optimized
+  // Load categories from Supabase
   const loadCategories = useCallback(async () => {
     try {
       setLoading(true);
       const response = await api.get('/categories/public');
-      const cats = response.data.categories || [];
-      
-      setCategories(cats);
-      
-      // Calculate max product count
-      const maxCount = Math.max(...cats.map((c: CategoryWithCount) => c._count?.products || 0), 100);
-      setMaxProductCount(maxCount);
-      setAdvancedFilters(prev => ({
-        ...prev,
-        productCountRange: { min: 0, max: maxCount }
-      }));
+      setCategories(response.data.categories || []);
     } catch (error) {
       console.error('Error loading categories:', error);
       toast({
@@ -124,8 +93,36 @@ export default function CategoriesPageOptimized() {
   useEffect(() => {
     loadCategories();
   }, [loadCategories]);
+
+  // Realtime subscription to Supabase
+  useEffect(() => {
+    if (!isSupabaseActive()) return;
+
+    const supabase = createClient();
+    const channel = supabase
+      .channel('categories_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'categories' },
+        (payload) => {
+          console.log('Category change detected:', payload);
+          loadCategories();
+          
+          if (payload.eventType === 'INSERT') {
+            toast({ title: 'Nueva categoría creada' });
+          } else if (payload.eventType === 'DELETE') {
+            toast({ title: 'Categoría eliminada' });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [loadCategories, toast]);
   
-  // Memoized filtered and sorted categories
+  // Filtered and sorted categories
   const filteredAndSortedCategories = useMemo(() => {
     let filtered = categories.filter(category => {
       const matchesSearch = category.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -135,27 +132,9 @@ export default function CategoriesPageOptimized() {
         (statusFilter === 'active' && category.is_active) ||
         (statusFilter === 'inactive' && !category.is_active);
       
-      // Advanced filters
-      const { dateRange, productCountRange, hasProducts } = advancedFilters;
-      
-      let matchesDateRange = true;
-      if (dateRange.from || dateRange.to) {
-        const categoryDate = new Date(category.created_at);
-        if (dateRange.from) matchesDateRange = matchesDateRange && categoryDate >= new Date(dateRange.from);
-        if (dateRange.to) matchesDateRange = matchesDateRange && categoryDate <= new Date(dateRange.to + 'T23:59:59');
-      }
-      
-      const productCount = category._count?.products || 0;
-      const matchesProductCount = productCount >= productCountRange.min && productCount <= productCountRange.max;
-      
-      let matchesHasProducts = true;
-      if (hasProducts === 'with_products') matchesHasProducts = productCount > 0;
-      else if (hasProducts === 'without_products') matchesHasProducts = productCount === 0;
-      
-      return matchesSearch && matchesStatus && matchesDateRange && matchesProductCount && matchesHasProducts;
+      return matchesSearch && matchesStatus;
     });
     
-    // Sort
     filtered.sort((a, b) => {
       let aValue: any, bValue: any;
       
@@ -186,13 +165,13 @@ export default function CategoriesPageOptimized() {
     });
     
     return filtered;
-  }, [categories, searchQuery, statusFilter, sortField, sortDirection, advancedFilters]);
+  }, [categories, searchQuery, statusFilter, sortField, sortDirection]);
   
-  // Memoized paginated categories
+  // Paginated categories
   const paginatedCategories = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
     return filteredAndSortedCategories.slice(startIndex, startIndex + itemsPerPage);
-  }, [filteredAndSortedCategories, currentPage, itemsPerPage]);
+  }, [filteredAndSortedCategories, currentPage]);
   
   const totalPages = Math.ceil(filteredAndSortedCategories.length / itemsPerPage);
   
@@ -222,7 +201,7 @@ export default function CategoriesPageOptimized() {
     e.preventDefault();
     
     if (!formData.name.trim()) {
-      toast({ title: 'Error', description: 'El nombre de la categoría es requerido', variant: 'destructive' });
+      toast({ title: 'Error', description: 'El nombre es requerido', variant: 'destructive' });
       return;
     }
     
@@ -236,17 +215,16 @@ export default function CategoriesPageOptimized() {
     try {
       if (editingCategory) {
         await api.put(`/categories/${editingCategory.id}`, formData);
-        toast({ title: 'Éxito', description: 'Categoría actualizada correctamente' });
+        toast({ title: 'Categoría actualizada' });
       } else {
         await api.post('/categories', formData);
-        toast({ title: 'Éxito', description: 'Categoría creada correctamente' });
+        toast({ title: 'Categoría creada' });
       }
       
       handleCloseModal();
       loadCategories();
     } catch (error: any) {
-      console.error('Error saving category:', error);
-      toast({ title: 'Error', description: getErrorMessage(error) || 'No se pudo guardar la categoría', variant: 'destructive' });
+      toast({ title: 'Error', description: getErrorMessage(error), variant: 'destructive' });
     } finally {
       setSubmitting(false);
     }
@@ -256,10 +234,9 @@ export default function CategoriesPageOptimized() {
     try {
       await api.put(`/categories/${categoryId}`, { is_active: !currentStatus });
       setCategories(prev => prev.map(c => c.id === categoryId ? { ...c, is_active: !currentStatus } : c));
-      toast({ title: 'Éxito', description: `Categoría ${!currentStatus ? 'activada' : 'desactivada'} correctamente` });
+      toast({ title: `Categoría ${!currentStatus ? 'activada' : 'desactivada'}` });
     } catch (error) {
-      console.error('Error toggling category status:', error);
-      toast({ title: 'Error', description: getErrorMessage(error) || 'No se pudo cambiar el estado', variant: 'destructive' });
+      toast({ title: 'Error', description: getErrorMessage(error), variant: 'destructive' });
     }
   }, [toast]);
   
@@ -268,19 +245,18 @@ export default function CategoriesPageOptimized() {
     const productCount = category?._count?.products || 0;
     
     if (productCount > 0) {
-      toast({ title: 'No se puede eliminar', description: `Esta categoría tiene ${productCount} productos asociados`, variant: 'destructive' });
+      toast({ title: 'No se puede eliminar', description: `Tiene ${productCount} productos asociados`, variant: 'destructive' });
       return;
     }
     
-    if (!confirm('¿Estás seguro de que quieres eliminar esta categoría?')) return;
+    if (!confirm('¿Eliminar esta categoría?')) return;
     
     try {
       await api.delete(`/categories/${categoryId}`);
       setCategories(prev => prev.filter(c => c.id !== categoryId));
-      toast({ title: 'Éxito', description: 'Categoría eliminada correctamente' });
+      toast({ title: 'Categoría eliminada' });
     } catch (error: any) {
-      console.error('Error deleting category:', error);
-      toast({ title: 'Error', description: getErrorMessage(error) || 'No se pudo eliminar la categoría', variant: 'destructive' });
+      toast({ title: 'Error', description: getErrorMessage(error), variant: 'destructive' });
     }
   }, [categories, toast]);
   
@@ -299,9 +275,9 @@ export default function CategoriesPageOptimized() {
     });
   }, []);
   
-  const handleSelectAll = useCallback((selected: boolean, filtered: CategoryWithCount[]) => {
-    setSelectedCategories(selected ? new Set(filtered.map(c => c.id)) : new Set());
-  }, []);
+  const handleSelectAll = useCallback((selected: boolean) => {
+    setSelectedCategories(selected ? new Set(filteredAndSortedCategories.map(c => c.id)) : new Set());
+  }, [filteredAndSortedCategories]);
   
   const handleBulkAction = useCallback(async (action: 'activate' | 'deactivate' | 'delete') => {
     if (selectedCategories.size === 0) return;
@@ -315,7 +291,7 @@ export default function CategoriesPageOptimized() {
       });
       
       if (categoriesWithProducts.length > 0) {
-        toast({ title: 'No se puede eliminar', description: `${categoriesWithProducts.length} categoría(s) tiene(n) productos asociados`, variant: 'destructive' });
+        toast({ title: 'No se puede eliminar', description: `${categoriesWithProducts.length} categoría(s) con productos`, variant: 'destructive' });
         return;
       }
       
@@ -325,12 +301,10 @@ export default function CategoriesPageOptimized() {
     setBulkActionLoading(true);
     
     try {
-      const promises = selectedArray.map(categoryId => {
+      await Promise.all(selectedArray.map(categoryId => {
         if (action === 'delete') return api.delete(`/categories/${categoryId}`);
         return api.put(`/categories/${categoryId}`, { is_active: action === 'activate' });
-      });
-      
-      await Promise.all(promises);
+      }));
       
       if (action === 'delete') {
         setCategories(prev => prev.filter(c => !selectedArray.includes(c.id)));
@@ -339,10 +313,9 @@ export default function CategoriesPageOptimized() {
       }
       
       setSelectedCategories(new Set());
-      toast({ title: 'Éxito', description: `${selectedArray.length} categoría(s) procesada(s) correctamente` });
+      toast({ title: `${selectedArray.length} categoría(s) procesadas` });
     } catch (error) {
-      console.error('Error in bulk action:', error);
-      toast({ title: 'Error', description: getErrorMessage(error) || 'No se pudo completar la acción', variant: 'destructive' });
+      toast({ title: 'Error', description: getErrorMessage(error), variant: 'destructive' });
     } finally {
       setBulkActionLoading(false);
     }
@@ -380,6 +353,15 @@ export default function CategoriesPageOptimized() {
           Nueva Categoría
         </Button>
       </div>
+
+      {!isSupabaseActive() && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Supabase no está configurado. Los cambios no se sincronizarán en tiempo real.
+          </AlertDescription>
+        </Alert>
+      )}
       
       {/* Stats */}
       <StatsCards categories={categories} />
@@ -388,16 +370,14 @@ export default function CategoriesPageOptimized() {
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-col lg:flex-row gap-4">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar categorías..."
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar categorías..."
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                className="pl-10"
+              />
             </div>
             
             <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
@@ -411,14 +391,9 @@ export default function CategoriesPageOptimized() {
               </SelectContent>
             </Select>
             
-            <div className="flex gap-2">
-              <Button variant="outline" size="icon" onClick={() => setViewMode(viewMode === 'cards' ? 'table' : 'cards')}>
-                {viewMode === 'cards' ? <List className="h-4 w-4" /> : <Grid className="h-4 w-4" />}
-              </Button>
-              <Button variant="outline" size="icon" onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}>
-                <SlidersHorizontal className="h-4 w-4" />
-              </Button>
-            </div>
+            <Button variant="outline" size="icon" onClick={() => setViewMode(viewMode === 'cards' ? 'table' : 'cards')}>
+              {viewMode === 'cards' ? <List className="h-4 w-4" /> : <Grid className="h-4 w-4" />}
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -471,7 +446,7 @@ export default function CategoriesPageOptimized() {
                 <TableHead className="w-12">
                   <Checkbox
                     checked={selectedCategories.size === filteredAndSortedCategories.length && filteredAndSortedCategories.length > 0}
-                    onCheckedChange={(checked) => handleSelectAll(checked as boolean, filteredAndSortedCategories)}
+                    onCheckedChange={(checked) => handleSelectAll(checked as boolean)}
                   />
                 </TableHead>
                 <TableHead><SortButton field="name">Nombre</SortButton></TableHead>
