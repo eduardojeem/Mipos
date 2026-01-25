@@ -537,29 +537,31 @@ export default function OptimizedPOSLayout() {
         <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-primary/8 to-primary/5 dark:from-primary/10 dark:via-primary/15 dark:to-primary/10" />
 
         {/* Glassmorphism Overlay */}
-        <div className="relative backdrop-blur-xl bg-card/80 border-b border-border shadow-lg">
-          <div className="px-4 py-3 flex items-center justify-between">
+        <div className="relative backdrop-blur-xl bg-card/90 dark:bg-card/95 border-b border-border shadow-lg">
+          <div className="px-3 sm:px-4 py-2 sm:py-3 flex items-center justify-between gap-2">
             {/* Left Side - Logo & Title */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 {/* Logo with glow effect */}
-                <div className="relative p-2 bg-gradient-to-br from-primary to-primary/80 rounded-xl shadow-lg group-hover:shadow-primary/50 transition-shadow">
+                <div className="relative p-1.5 sm:p-2 bg-gradient-to-br from-primary to-primary/80 rounded-lg sm:rounded-xl shadow-lg group-hover:shadow-primary/50 transition-shadow">
                   <div className="absolute inset-0 bg-gradient-to-br from-primary to-primary/80 rounded-xl blur-md opacity-50 animate-glow-pulse" />
-                  <Package className="w-5 h-5 text-white relative z-10" />
+                  <Package className="w-4 h-4 sm:w-5 sm:h-5 text-white relative z-10" />
                 </div>
 
                 {/* Title with gradient */}
-                <h1 className="text-xl font-bold bg-gradient-to-r from-primary via-primary/90 to-primary/80 bg-clip-text text-transparent">
+                <h1 className="text-base sm:text-xl font-bold bg-gradient-to-r from-primary via-primary/90 to-primary/80 bg-clip-text text-transparent truncate">
                   Punto de Venta
                 </h1>
               </div>
 
-              {/* Mini Stats - Desktop Only */}
-              <POSStats
-                productsCount={products.length}
-                cartItemsCount={cart.length}
-                cartTotal={cartCalculations.total}
-              />
+              {/* Mini Stats - Desktop/Tablet Only */}
+              <div className="hidden lg:block">
+                <POSStats
+                  productsCount={products.length}
+                  cartItemsCount={cart.length}
+                  cartTotal={cartCalculations.total}
+                />
+              </div>
             </div>
 
             {/* Right Side - Actions */}
@@ -654,7 +656,7 @@ export default function OptimizedPOSLayout() {
           deviceType === 'mobile' && "pb-24" // Espacio para el botón flotante
         )}>
           {/* Search and Controls - Ultra Premium */}
-          <div className="glass dark:glass-dark border-b border-border p-3 space-y-3">
+          <div className="glass dark:glass-dark border-b border-border p-2 sm:p-3 space-y-2 sm:space-y-3">
             {/* Search Bar - Ultra Premium */}
             <div className="relative group" role="search">
               {/* Focus ring animado con gradiente */}
@@ -699,7 +701,7 @@ export default function OptimizedPOSLayout() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-2 sm:gap-3">
               <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen} className="lg:col-span-8">
                 <div className="flex items-center justify-between">
                   <h3 id="filters-title" className="text-sm font-semibold text-foreground">Filtros</h3>
@@ -713,7 +715,7 @@ export default function OptimizedPOSLayout() {
                   </CollapsibleTrigger>
                 </div>
                 <CollapsibleContent id="filters-content" className="data-[state=open]:animate-accordion-down data-[state=closed]:animate-accordion-up overflow-hidden space-y-2 mt-2">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2 sm:gap-3">
                     {/* Desktop/Tablet: Select tradicional */}
                     <div className="hidden md:block md:col-span-2 min-w-[200px]">
                       <label htmlFor="category-filter" className="sr-only">Filtrar por categoría</label>
@@ -724,7 +726,7 @@ export default function OptimizedPOSLayout() {
                         className="w-full px-2.5 py-2 border border-border rounded-lg text-sm bg-card focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all duration-200"
                       >
                         <option value="all">Todas las categorías</option>
-                        {categories.map((cat) => (
+                        {(categories as any[]).map((cat) => (
                           <option key={cat.id} value={cat.id}>{cat.name}</option>
                         ))}
                       </select>
@@ -735,53 +737,55 @@ export default function OptimizedPOSLayout() {
                       <SwipeableCategories
                         categories={[
                           { id: 'all', name: 'Todas las categorías' },
-                          ...categories.map(cat => ({ id: cat.id, name: cat.name }))
+                          ...(categories as any[]).map(cat => ({ id: cat.id, name: cat.name }))
                         ]}
                         selectedCategory={selectedCategory}
                         onCategoryChange={setSelectedCategory}
                       />
                     </div>
-                    <div className="md:col-span-1 flex items-center gap-1 bg-muted rounded-lg p-1 border border-border shadow-sm">
+                    <div className="md:col-span-1 flex items-center gap-1 bg-muted/50 dark:bg-muted rounded-lg p-1 border border-border shadow-sm">
                       <Button
                         variant={viewMode === 'grid' ? 'default' : 'ghost'}
                         size="sm"
                         onClick={() => setViewMode('grid')}
-                        className="transition-all duration-200 hover:scale-105"
+                        className="flex-1 sm:flex-none transition-all duration-200 hover:scale-105 min-h-[44px] sm:min-h-0"
                         aria-label="Vista en cuadrícula"
                       >
                         <Grid3X3 className="w-4 h-4" />
+                        <span className="ml-1 sm:hidden text-xs">Grid</span>
                       </Button>
                       <Button
                         variant={viewMode === 'list' ? 'default' : 'ghost'}
                         size="sm"
                         onClick={() => setViewMode('list')}
-                        className="transition-all duration-200 hover:scale-105"
+                        className="flex-1 sm:flex-none transition-all duration-200 hover:scale-105 min-h-[44px] sm:min-h-0"
                         aria-label="Vista en lista"
                       >
                         <List className="w-4 h-4" />
+                        <span className="ml-1 sm:hidden text-xs">Lista</span>
                       </Button>
                       <Button
                         variant={quickAddMode ? 'default' : 'outline'}
                         size="sm"
                         onClick={() => setQuickAddMode(v => !v)}
-                        className="ml-auto items-center gap-2"
+                        className="ml-auto items-center gap-2 min-h-[44px] sm:min-h-0"
                       >
                         <Zap className="w-4 h-4" />
-                        Modo rápido
+                        <span className="hidden sm:inline">Modo rápido</span>
                       </Button>
                     </div>
                   </div>
 
                   <section aria-labelledby="load-title" className="space-y-1">
                     <h4 id="load-title" className="text-sm font-semibold text-foreground">Carga de productos</h4>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-muted rounded-lg p-2 border border-border shadow-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-2 bg-muted/50 dark:bg-muted/30 rounded-lg p-3 sm:p-2 border border-border shadow-sm">
                       <div className="space-y-1">
                         <label htmlFor="load-mode" className="text-xs text-muted-foreground">Modo</label>
                         <select
                           id="load-mode"
                           value={productsLoadMode}
                           onChange={(e) => { const v = e.target.value as 'infinite' | 'pagination'; setProductsLoadMode(v); if (v === 'pagination') setProductsPage(1); }}
-                          className="w-full px-2 py-2 border border-border rounded text-xs bg-card"
+                          className="w-full px-3 py-2.5 sm:py-2 border border-border rounded-lg text-sm sm:text-xs bg-card dark:bg-card/50 min-h-[44px] sm:min-h-0"
                         >
                           <option value="infinite">Scroll infinito</option>
                           <option value="pagination">Paginación</option>
@@ -793,7 +797,7 @@ export default function OptimizedPOSLayout() {
                           id="page-size"
                           value={productsPageSize}
                           onChange={(e) => { setProductsPageSize(Number(e.target.value)); setProductsPage(1); }}
-                          className="w-full px-2 py-2 border border-border rounded text-xs bg-card"
+                          className="w-full px-3 py-2.5 sm:py-2 border border-border rounded-lg text-sm sm:text-xs bg-card dark:bg-card/50 min-h-[44px] sm:min-h-0"
                         >
                           <option value={10}>10</option>
                           <option value={12}>12</option>
@@ -807,7 +811,7 @@ export default function OptimizedPOSLayout() {
                           id="batch-size"
                           value={productsBatchSize}
                           onChange={(e) => setProductsBatchSize(Number(e.target.value))}
-                          className="w-full px-2 py-2 border border-border rounded text-xs bg-card"
+                          className="w-full px-3 py-2.5 sm:py-2 border border-border rounded-lg text-sm sm:text-xs bg-card dark:bg-card/50 min-h-[44px] sm:min-h-0"
                         >
                           <option value={12}>12</option>
                           <option value={24}>24</option>
@@ -820,27 +824,27 @@ export default function OptimizedPOSLayout() {
               </Collapsible>
 
               <section aria-labelledby="actions-title" className="lg:col-span-4 space-y-2">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <h3 id="actions-title" className="text-sm font-semibold text-gray-700 dark:text-gray-300">Acciones rápidas</h3>
                   <Badge variant="secondary">{filteredProducts.length} resultados</Badge>
                 </div>
-                <div className="flex items-center gap-2 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 rounded-lg p-1 border border-blue-200 dark:border-blue-800 shadow-sm">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-gradient-to-r from-blue-50/50 to-indigo-50/50 dark:from-blue-950/20 dark:to-indigo-950/20 rounded-lg p-2 sm:p-1 border border-blue-200/50 dark:border-blue-800/30 shadow-sm">
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => setShowCustomItemModal(true)}
-                    className="hover:bg-white/50 dark:hover:bg-white/10 transition-all duration-200"
+                    className="w-full sm:w-auto justify-start sm:justify-center hover:bg-white/50 dark:hover:bg-white/10 transition-all duration-200 min-h-[44px] sm:min-h-0"
                   >
                     <PackagePlus className="w-4 h-4 mr-1.5" />
                     Item Manual
                   </Button>
-                  <div className="w-px h-6 bg-blue-200 dark:bg-blue-800" />
+                  <div className="hidden sm:block w-px h-6 bg-blue-200 dark:bg-blue-800" />
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={handleHoldSale}
                     disabled={cart.length === 0}
-                    className="hover:bg-white/50 dark:hover:bg-white/10 transition-all duration-200"
+                    className="w-full sm:w-auto justify-start sm:justify-center hover:bg-white/50 dark:hover:bg-white/10 transition-all duration-200 min-h-[44px] sm:min-h-0"
                   >
                     <PauseCircle className="w-4 h-4 mr-1.5" />
                     Espera
@@ -996,6 +1000,7 @@ export default function OptimizedPOSLayout() {
         )}
       </div>
 
+
       {/* Mobile Cart Integration */}
       {deviceType === 'mobile' && (
         <>
@@ -1076,111 +1081,117 @@ export default function OptimizedPOSLayout() {
       )}
 
       {/* Keyboard Shortcuts Modal */}
-      {showKeyboardShortcuts && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-popover rounded-xl p-6 max-w-md w-full">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Atajos de Teclado</h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowKeyboardShortcuts(false)}
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            </div>
+      {
+        showKeyboardShortcuts && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-popover rounded-xl p-6 max-w-md w-full">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold">Atajos de Teclado</h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowKeyboardShortcuts(false)}
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
 
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span>Buscar productos</span>
-                <kbd className="px-2 py-1 bg-muted rounded text-xs">Ctrl + K</kbd>
-              </div>
-              <div className="flex justify-between">
-                <span>Procesar venta</span>
-                <kbd className="px-2 py-1 bg-muted rounded text-xs">Ctrl + Enter</kbd>
-              </div>
-              <div className="flex justify-between">
-                <span>Limpiar carrito</span>
-                <kbd className="px-2 py-1 bg-muted rounded text-xs">Ctrl + L</kbd>
-              </div>
-              <div className="flex justify-between">
-                <span>Cambiar vista</span>
-                <kbd className="px-2 py-1 bg-muted rounded text-xs">Ctrl + V</kbd>
-              </div>
-              <div className="flex justify-between">
-                <span>Modo rápido</span>
-                <kbd className="px-2 py-1 bg-muted rounded text-xs">Ctrl + Q</kbd>
-              </div>
-              <div className="flex justify-between">
-                <span>Abrir/cerrar carrito</span>
-                <kbd className="px-2 py-1 bg-muted rounded text-xs">Ctrl + C</kbd>
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between">
+                  <span>Buscar productos</span>
+                  <kbd className="px-2 py-1 bg-muted rounded text-xs">Ctrl + K</kbd>
+                </div>
+                <div className="flex justify-between">
+                  <span>Procesar venta</span>
+                  <kbd className="px-2 py-1 bg-muted rounded text-xs">Ctrl + Enter</kbd>
+                </div>
+                <div className="flex justify-between">
+                  <span>Limpiar carrito</span>
+                  <kbd className="px-2 py-1 bg-muted rounded text-xs">Ctrl + L</kbd>
+                </div>
+                <div className="flex justify-between">
+                  <span>Cambiar vista</span>
+                  <kbd className="px-2 py-1 bg-muted rounded text-xs">Ctrl + V</kbd>
+                </div>
+                <div className="flex justify-between">
+                  <span>Modo rápido</span>
+                  <kbd className="px-2 py-1 bg-muted rounded text-xs">Ctrl + Q</kbd>
+                </div>
+                <div className="flex justify-between">
+                  <span>Abrir/cerrar carrito</span>
+                  <kbd className="px-2 py-1 bg-muted rounded text-xs">Ctrl + C</kbd>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
 
       {/* Sale Processing Modal (lazy loaded) */}
-      {showSaleModal && (
-        <Suspense fallback={<ModalLoadingFallback />}>
-          <ProcessSaleModal
-            isOpen={showSaleModal}
-            onClose={() => setShowSaleModal(false)}
-            cart={cart}
-            products={products}
-            initialDiscount={discount}
-            initialDiscountType={discountType}
-            customer={selectedCustomer}
-            customers={customers}
-            onSelectCustomer={setSelectedCustomer}
-            paymentMethod={paymentMethod as any}
-            onPaymentMethodChange={(m) => setPaymentMethod(m as any)}
-            enableSplitPayment={true}
-            onRemoveItem={(id) => removeFromCart(id)}
-            onConfirm={async (d, t) => {
-              await handleConfirmProcessSale(d, t);
-            }}
-          />
-        </Suspense>
-      )}
+      {
+        showSaleModal && (
+          <Suspense fallback={<ModalLoadingFallback />}>
+            <ProcessSaleModal
+              isOpen={showSaleModal}
+              onClose={() => setShowSaleModal(false)}
+              cart={cart}
+              products={products}
+              initialDiscount={discount}
+              initialDiscountType={discountType}
+              customer={selectedCustomer}
+              customers={customers}
+              onSelectCustomer={setSelectedCustomer}
+              paymentMethod={paymentMethod as any}
+              onPaymentMethodChange={(m) => setPaymentMethod(m as any)}
+              enableSplitPayment={true}
+              onRemoveItem={(id) => removeFromCart(id)}
+              onConfirm={async (d, t) => {
+                await handleConfirmProcessSale(d, t);
+              }}
+            />
+          </Suspense>
+        )
+      }
 
       {/* Receipt Modal (lazy loaded) */}
-      {showReceiptModal && lastSale && (
-        <Suspense fallback={<ModalLoadingFallback />}>
-          <ReceiptModal
-            isOpen={showReceiptModal}
-            onClose={() => setShowReceiptModal(false)}
-            saleData={lastSale}
-            businessInfo={{
-              name: config.businessName,
-              address: `${config.address.street}, ${config.address.city}`,
-              phone: config.contact.phone,
-              taxId: config.legalInfo.ruc || '',
-              email: config.contact.email,
-              website: config.contact.website,
-              logo: config.branding.logo
-            }}
-            thermalPrinter={true}
-            onPrint={() => {
-              if (lastSale) {
-                // Abrir ventana de impresión con el recibo
-                const printWindow = window.open(`/receipt/${lastSale.id}`, '_blank', 'width=800,height=600');
-                printWindow?.focus();
-              }
-            }}
-            onDownload={() => {
-              if (lastSale) {
-                // Descargar recibo como PDF
-                const link = document.createElement('a');
-                link.href = `/api/receipts/${lastSale.id}/download`;
-                link.download = `recibo-venta-${lastSale.saleNumber}.pdf`;
-                link.click();
-              }
-            }}
-          />
-        </Suspense>
-      )}
+      {
+        showReceiptModal && lastSale && (
+          <Suspense fallback={<ModalLoadingFallback />}>
+            <ReceiptModal
+              isOpen={showReceiptModal}
+              onClose={() => setShowReceiptModal(false)}
+              saleData={lastSale}
+              businessInfo={{
+                name: config.businessName,
+                address: `${config.address.street}, ${config.address.city}`,
+                phone: config.contact.phone,
+                taxId: config.legalInfo.ruc || '',
+                email: config.contact.email,
+                website: config.contact.website,
+                logo: config.branding.logo
+              }}
+              thermalPrinter={true}
+              onPrint={() => {
+                if (lastSale) {
+                  // Abrir ventana de impresión con el recibo
+                  const printWindow = window.open(`/receipt/${lastSale.id}`, '_blank', 'width=800,height=600');
+                  printWindow?.focus();
+                }
+              }}
+              onDownload={() => {
+                if (lastSale) {
+                  // Descargar recibo como PDF
+                  const link = document.createElement('a');
+                  link.href = `/api/receipts/${lastSale.id}/download`;
+                  link.download = `recibo-venta-${lastSale.saleNumber}.pdf`;
+                  link.click();
+                }
+              }}
+            />
+          </Suspense>
+        )
+      }
 
       <CustomItemModal
         isOpen={showCustomItemModal}
@@ -1200,9 +1211,9 @@ export default function OptimizedPOSLayout() {
         isOpenSessionDialogOpen={isOpenSessionDialogOpen}
         setOpenSessionDialogOpen={setOpenSessionDialogOpen}
         isCloseSessionDialogOpen={false}
-        setCloseSessionDialogOpen={() => {}}
+        setCloseSessionDialogOpen={() => { }}
         isNewMovementDialogOpen={false}
-        setNewMovementDialogOpen={() => {}}
+        setNewMovementDialogOpen={() => { }}
         onOpenSession={async (amount: number, notes?: string) => {
           try {
             const res = await (await import('@/lib/api')).default.post('/cash/session/open', {
@@ -1220,7 +1231,7 @@ export default function OptimizedPOSLayout() {
                   try {
                     setAutoRetryProcessing(true);
                     await handleConfirmProcessSale(discount, discountType);
-                  } catch {}
+                  } catch { }
                   finally { setAutoRetryProcessing(false); }
                 }
               } else {
@@ -1234,22 +1245,24 @@ export default function OptimizedPOSLayout() {
             toast.error(msg);
           }
         }}
-        onRequestCloseSession={() => {}}
-        onRequestRegisterMovement={() => {}}
+        onRequestCloseSession={() => { }}
+        onRequestRegisterMovement={() => { }}
         loadingOpening={false}
         loadingClosing={false}
         loadingRegistering={false}
         currentBalance={0}
       />
 
-      {autoRetryProcessing && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
-          <div className="bg-popover rounded-xl p-6 shadow-lg flex items-center gap-3">
-            <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent" />
-            <span className="text-sm text-muted-foreground">Procesando venta...</span>
+      {
+        autoRetryProcessing && (
+          <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
+            <div className="bg-popover rounded-xl p-6 shadow-lg flex items-center gap-3">
+              <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent" />
+              <span className="text-sm text-muted-foreground">Procesando venta...</span>
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 }
