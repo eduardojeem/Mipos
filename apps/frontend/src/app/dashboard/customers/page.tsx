@@ -484,4 +484,4 @@ const CustomersPageContent = memo(function CustomersPageContent() {
             />
         </div>
     );
-}
+});

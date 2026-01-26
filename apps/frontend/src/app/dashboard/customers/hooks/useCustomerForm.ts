@@ -1,8 +1,7 @@
-```typescript
 import { useState, useCallback, useEffect } from 'react';
 import { validateCustomerData } from '@/lib/validation-schemas';
 import { useToast } from '@/components/ui/use-toast';
-import { createCustomer, updateCustomer } from '../actions/customer-actions';
+import { customerService } from '@/lib/customer-service';
 import { createLogger } from '@/lib/logger';
 import type { UICustomer } from '@/types/customer-page';
 
@@ -40,15 +39,13 @@ export interface UseCustomerFormReturn {
  * - Create/Update handling
  * 
  * @example
- * ```tsx
-    * const form = useCustomerForm(existingCustomer);
+ * const form = useCustomerForm(existingCustomer);
  * 
  * <Input
  * value={ form.formData.name }
  * onChange={ (e) => form.updateField('name', e.target.value) }
  * error={ form.errors.name }
  * />
-    * ```
  */
 const logger = createLogger('CustomerForm');
 
