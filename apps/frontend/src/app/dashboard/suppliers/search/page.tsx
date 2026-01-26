@@ -12,10 +12,10 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { 
-  Search, 
-  Filter, 
-  X, 
+import {
+  Search,
+  Filter,
+  X,
   ChevronDown,
   ChevronUp,
   Save,
@@ -34,6 +34,7 @@ import {
   Package
 } from 'lucide-react';
 import api from '@/lib/api';
+import { createLogger } from '@/lib/logger';
 
 // Types
 interface Supplier {
@@ -122,10 +123,12 @@ const initialFilters: SearchFilters = {
   hasPhone: null
 };
 
+const logger = createLogger('SupplierSearch');
+
 export default function AdvancedSearchPage() {
   const { user } = useAuth();
   const { toast } = useToast();
-  
+
   // State
   const [loading, setLoading] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -133,14 +136,14 @@ export default function AdvancedSearchPage() {
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [searchName, setSearchName] = useState('');
-  
+
   // Filter options
   const [categories, setCategories] = useState<string[]>([]);
   const [countries, setCountries] = useState<string[]>([]);
   const [cities, setCities] = useState<string[]>([]);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [paymentTermsOptions, setPaymentTermsOptions] = useState<string[]>([]);
-  
+
   // UI State
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
     basic: true,
@@ -166,7 +169,7 @@ export default function AdvancedSearchPage() {
       setAvailableTags(response.data.tags || ['Premium', 'Local', 'Estratégico', 'Nuevo']);
       setPaymentTermsOptions(response.data.paymentTerms || ['Contado', '30 días', '60 días', '90 días']);
     } catch (error) {
-      console.error('Error loading filter options:', error);
+      logger.error('Error loading filter options:', error);
     }
   };
 
@@ -175,7 +178,7 @@ export default function AdvancedSearchPage() {
       const response = await api.get('/suppliers/search/saved');
       setSavedSearches(response.data || []);
     } catch (error) {
-      console.error('Error loading saved searches:', error);
+      logger.error('Error loading saved searches:', error);
       // Mock data
       setSavedSearches([
         {
@@ -201,13 +204,13 @@ export default function AdvancedSearchPage() {
       const response = await api.post('/suppliers/search', { filters });
       setSuppliers(response.data.suppliers || []);
     } catch (error) {
-      console.error('Error performing search:', error);
+      logger.error('Error performing search:', error);
       toast({
         title: 'Error',
         description: 'No se pudo realizar la búsqueda',
         variant: 'destructive',
       });
-      
+
       // Mock data for development
       setSuppliers([
         {
@@ -275,7 +278,7 @@ export default function AdvancedSearchPage() {
           supplier.category,
           ...supplier.tags
         ].join(' ').toLowerCase();
-        
+
         if (!searchableText.includes(query)) return false;
       }
 
@@ -377,7 +380,7 @@ export default function AdvancedSearchPage() {
   const handleArrayFilterChange = (key: keyof SearchFilters, value: string, checked: boolean) => {
     setFilters(prev => ({
       ...prev,
-      [key]: checked 
+      [key]: checked
         ? [...(prev[key] as string[]), value]
         : (prev[key] as string[]).filter(item => item !== value)
     }));
@@ -389,7 +392,7 @@ export default function AdvancedSearchPage() {
 
   const saveSearch = async () => {
     if (!searchName.trim()) return;
-    
+
     try {
       const newSearch: SavedSearch = {
         id: Date.now().toString(),
@@ -397,18 +400,18 @@ export default function AdvancedSearchPage() {
         filters: { ...filters },
         createdAt: new Date().toISOString()
       };
-      
+
       await api.post('/suppliers/search/save', newSearch);
       setSavedSearches([...savedSearches, newSearch]);
       setShowSaveDialog(false);
       setSearchName('');
-      
+
       toast({
         title: 'Éxito',
         description: 'Búsqueda guardada correctamente',
       });
     } catch (error) {
-      console.error('Error saving search:', error);
+      logger.error('Error saving search:', error);
       toast({
         title: 'Error',
         description: 'No se pudo guardar la búsqueda',
@@ -435,7 +438,7 @@ export default function AdvancedSearchPage() {
   // Auto-search when filters change
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      if (Object.values(filters).some(value => 
+      if (Object.values(filters).some(value =>
         Array.isArray(value) ? value.length > 0 : value !== initialFilters[Object.keys(filters).find(k => filters[k as keyof SearchFilters] === value) as keyof SearchFilters]
       )) {
         performSearch();
@@ -493,7 +496,7 @@ export default function AdvancedSearchPage() {
                       onChange={(e) => handleFilterChange('query', e.target.value)}
                     />
                   </div>
-                  
+
                   <div>
                     <Label>Categorías</Label>
                     <div className="space-y-2 mt-2">
@@ -502,7 +505,7 @@ export default function AdvancedSearchPage() {
                           <Checkbox
                             id={`category-${category}`}
                             checked={filters.categories.includes(category)}
-                            onCheckedChange={(checked) => 
+                            onCheckedChange={(checked) =>
                               handleArrayFilterChange('categories', category, checked as boolean)
                             }
                           />
@@ -520,7 +523,7 @@ export default function AdvancedSearchPage() {
                           <Checkbox
                             id={`status-${status}`}
                             checked={filters.statuses.includes(status)}
-                            onCheckedChange={(checked) => 
+                            onCheckedChange={(checked) =>
                               handleArrayFilterChange('statuses', status, checked as boolean)
                             }
                           />
@@ -547,7 +550,7 @@ export default function AdvancedSearchPage() {
                           <Checkbox
                             id={`country-${country}`}
                             checked={filters.countries.includes(country)}
-                            onCheckedChange={(checked) => 
+                            onCheckedChange={(checked) =>
                               handleArrayFilterChange('countries', country, checked as boolean)
                             }
                           />
@@ -565,7 +568,7 @@ export default function AdvancedSearchPage() {
                           <Checkbox
                             id={`city-${city}`}
                             checked={filters.cities.includes(city)}
-                            onCheckedChange={(checked) => 
+                            onCheckedChange={(checked) =>
                               handleArrayFilterChange('cities', city, checked as boolean)
                             }
                           />
@@ -646,7 +649,7 @@ export default function AdvancedSearchPage() {
                           <Checkbox
                             id={`payment-${term}`}
                             checked={filters.paymentTerms.includes(term)}
-                            onCheckedChange={(checked) => 
+                            onCheckedChange={(checked) =>
                               handleArrayFilterChange('paymentTerms', term, checked as boolean)
                             }
                           />
@@ -746,7 +749,7 @@ export default function AdvancedSearchPage() {
                           <Checkbox
                             id={`tag-${tag}`}
                             checked={filters.tags.includes(tag)}
-                            onCheckedChange={(checked) => 
+                            onCheckedChange={(checked) =>
                               handleArrayFilterChange('tags', tag, checked as boolean)
                             }
                           />
@@ -763,7 +766,7 @@ export default function AdvancedSearchPage() {
                         <Checkbox
                           id="has-website"
                           checked={filters.hasWebsite === true}
-                          onCheckedChange={(checked) => 
+                          onCheckedChange={(checked) =>
                             handleFilterChange('hasWebsite', checked ? true : null)
                           }
                         />
@@ -773,7 +776,7 @@ export default function AdvancedSearchPage() {
                         <Checkbox
                           id="has-phone"
                           checked={filters.hasPhone === true}
-                          onCheckedChange={(checked) => 
+                          onCheckedChange={(checked) =>
                             handleFilterChange('hasPhone', checked ? true : null)
                           }
                         />
@@ -867,7 +870,7 @@ export default function AdvancedSearchPage() {
                               </Badge>
                               <Badge variant="outline">{supplier.category}</Badge>
                             </div>
-                            
+
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                               <div className="flex items-center space-x-2">
                                 <Mail className="h-4 w-4 text-muted-foreground" />

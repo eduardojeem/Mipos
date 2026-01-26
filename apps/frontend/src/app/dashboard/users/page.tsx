@@ -56,6 +56,9 @@ import {
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { formatDate } from '@/lib/utils';
+import api from '@/lib/api';
+import Link from 'next/link';
+import { createLogger } from '@/lib/logger';
 import { AdminApiService } from '@/lib/services/admin-api';
 import { userService } from '@/lib/services/user-service';
 import type { User as ServiceUser } from '@/lib/services/user-service';
@@ -69,6 +72,8 @@ interface UserFormData {
   password: string;
   confirmPassword: string;
 }
+
+const logger = createLogger('UsersPage');
 
 export default function UsersPage() {
   return (
@@ -159,7 +164,7 @@ function UsersPageContent() {
       const { users: fetchedUsers } = await userService.getUsers(1, 50);
       setUsers(fetchedUsers);
     } catch (error) {
-      console.error('Error fetching users:', error);
+      logger.error('Error fetching users:', error);
       const errorMessage = 'No se pudieron cargar los usuarios desde la API';
       setError(errorMessage);
       toast({
@@ -437,7 +442,7 @@ function UsersPageContent() {
             Administra los usuarios del sistema
           </p>
         </div>
-        
+
         <PermissionGuard permission="users.create">
           <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
             <DialogTrigger asChild>
@@ -490,8 +495,8 @@ function UsersPageContent() {
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="role">Rol</Label>
-                  <Select 
-                    value={formData.role} 
+                  <Select
+                    value={formData.role}
                     onValueChange={(value: string) => setFormData({ ...formData, role: value })}
                   >
                     <SelectTrigger>
@@ -563,7 +568,7 @@ function UsersPageContent() {
       <div className="grid gap-4">
         {filteredUsers.map((user) => {
           const RoleIcon = getRoleIcon(user.role);
-          
+
           return (
             <Card key={user.id}>
               <CardContent className="p-6">
@@ -572,34 +577,34 @@ function UsersPageContent() {
                     <div className="w-12 h-12 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center">
                       <RoleIcon className="h-6 w-6 text-gray-600 dark:text-gray-400" />
                     </div>
-                    
+
                     <div>
                       <div className="flex items-center space-x-2">
                         <h3 className="text-lg font-semibold">{user.full_name || user.email}</h3>
                         <Badge className={getRoleBadgeColor(user.role)}>
                           {user.role === 'ADMIN' ? 'Administrador' :
-                           user.role === 'MANAGER' ? 'Manager' :
-                           user.role === 'EMPLOYEE' ? 'Empleado' :
-                           user.role === 'VIEWER' ? 'Visualizador' : 'Cajero'}
+                            user.role === 'MANAGER' ? 'Manager' :
+                              user.role === 'EMPLOYEE' ? 'Empleado' :
+                                user.role === 'VIEWER' ? 'Visualizador' : 'Cajero'}
                         </Badge>
                         <Badge variant={user.isActive ? 'default' : 'secondary'}>
                           {user.isActive ? 'Activo' : 'Inactivo'}
                         </Badge>
                       </div>
-                      
+
                       <div className="flex items-center space-x-4 mt-1 text-sm text-gray-600 dark:text-gray-400">
                         <div className="flex items-center space-x-1">
                           <Mail className="h-4 w-4" />
                           <span>{user.email}</span>
                         </div>
-                        
+
                         {user.phone && (
                           <div className="flex items-center space-x-1">
                             <Phone className="h-4 w-4" />
                             <span>{user.phone}</span>
                           </div>
                         )}
-                        
+
                         <div className="flex items-center space-x-1">
                           <Calendar className="h-4 w-4" />
                           <span>{formatDate(user.created_at)}</span>
@@ -607,7 +612,7 @@ function UsersPageContent() {
                       </div>
                     </div>
                   </div>
-                  
+
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="sm">
@@ -628,7 +633,7 @@ function UsersPageContent() {
                         </DropdownMenuItem>
                       </PermissionGuard>
                       <PermissionGuard permission="users.delete">
-                        <DropdownMenuItem 
+                        <DropdownMenuItem
                           onClick={() => openDeleteDialog(user)}
                           className="text-red-600"
                         >
@@ -690,8 +695,8 @@ function UsersPageContent() {
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="edit-role">Rol</Label>
-                <Select 
-                  value={formData.role} 
+                <Select
+                  value={formData.role}
                   onValueChange={(value: string) => setFormData({ ...formData, role: value })}
                 >
                   <SelectTrigger>
@@ -719,7 +724,7 @@ function UsersPageContent() {
                   <p className="text-sm text-red-600">{formErrors.password}</p>
                 )}
               </div>
-              
+
               {formData.password && (
                 <div className="grid gap-2">
                   <Label htmlFor="edit-confirmPassword">Confirmar Nueva Contraseña</Label>

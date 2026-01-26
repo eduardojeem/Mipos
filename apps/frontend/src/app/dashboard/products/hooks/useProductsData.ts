@@ -4,6 +4,7 @@ import { useSupabase } from '@/hooks/use-supabase';
 import { useProductsStore } from '@/store/products-store';
 import { getStockThresholds } from '@/lib/env';
 import type { Product, Category } from '@/types';
+import { createLogger } from '@/lib/logger';
 
 interface DashboardStats {
   totalProducts: number;
@@ -21,6 +22,8 @@ interface UseProductsDataOptions {
   pageSize?: number;
   page?: number;
 }
+
+const logger = createLogger('ProductsData');
 
 export function useProductsData(options: UseProductsDataOptions = {}) {
   const [isLoading, setIsLoading] = useState(true);
@@ -99,10 +102,10 @@ export function useProductsData(options: UseProductsDataOptions = {}) {
 
   const loadCategories = useCallback(async () => {
     try {
-      const cached = (typeof window !== 'undefined') 
-        ? localStorage.getItem('products-categories-cache') 
+      const cached = (typeof window !== 'undefined')
+        ? localStorage.getItem('products-categories-cache')
         : null;
-      
+
       if (cached) {
         const parsed = JSON.parse(cached);
         if (parsed?.ts && (Date.now() - parsed.ts) < 300_000 && Array.isArray(parsed.data)) {
@@ -115,15 +118,15 @@ export function useProductsData(options: UseProductsDataOptions = {}) {
       const { data, error } = await getCategoriesRef.current();
       if (!error && Array.isArray(data)) {
         setCategoriesStore(data);
-        try { 
-          localStorage.setItem('products-categories-cache', JSON.stringify({ 
-            ts: Date.now(), 
-            data 
-          })); 
+        try {
+          localStorage.setItem('products-categories-cache', JSON.stringify({
+            ts: Date.now(),
+            data
+          }));
         } catch { }
       }
     } catch (e) {
-      console.error('getCategories failed', e);
+      logger.error('getCategories failed', e);
     }
   }, [setCategoriesStore]);
 
@@ -140,10 +143,10 @@ export function useProductsData(options: UseProductsDataOptions = {}) {
       const createdAt = new Date(p.created_at || 0).getTime();
 
       acc.totalValue += stock * (cost || price);
-      
+
       if (stock === 0) acc.outOfStock++;
       else if (stock <= thresholds.low) acc.lowStock++;
-      
+
       if (createdAt >= weekAgo) acc.recentlyAdded++;
 
       return acc;
@@ -163,7 +166,7 @@ export function useProductsData(options: UseProductsDataOptions = {}) {
 
     const topCategoryId = Object.entries(categoryCounts)
       .sort(([, a], [, b]) => b - a)[0]?.[0];
-    
+
     const topCategory = categories.find(c => c.id === topCategoryId)?.name || 'N/A';
 
     return {
@@ -182,10 +185,10 @@ export function useProductsData(options: UseProductsDataOptions = {}) {
     (async () => {
       setIsLoading(true);
       await loadCategories();
-      try { 
-        await refetch(); 
-      } catch (e) { 
-        console.error(e); 
+      try {
+        await refetch();
+      } catch (e) {
+        logger.error(e);
       }
       if (mounted) setIsLoading(false);
     })();
@@ -196,7 +199,7 @@ export function useProductsData(options: UseProductsDataOptions = {}) {
   // Update products store and stats
   useEffect(() => {
     if (productsLoading) return;
-    
+
     if (productsError) {
       setProductsStore([]);
       setDashboardStats({

@@ -8,6 +8,7 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { X, User, Calendar, DollarSign, CreditCard, Package, Hash, Printer, Share2 } from 'lucide-react';
 import { Sale } from './SalesDataTable';
+import { createLogger } from '@/lib/logger';
 
 interface SaleDetailModalProps {
   sale: Sale | null;
@@ -72,6 +73,8 @@ const getSaleTypeLabel = (type: string) => {
       return type;
   }
 };
+
+const logger = createLogger('SaleDetailModal');
 
 export function SaleDetailModal({ sale, open, onClose }: SaleDetailModalProps) {
   if (!sale) return null;
@@ -209,7 +212,7 @@ export function SaleDetailModal({ sale, open, onClose }: SaleDetailModalProps) {
       try {
         await navigator.share(shareData);
       } catch (error) {
-        console.log('Error sharing:', error);
+        logger.log('Error sharing:', error);
         fallbackShare();
       }
     } else {

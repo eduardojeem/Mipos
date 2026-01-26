@@ -14,12 +14,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Progress } from '@/components/ui/progress';
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  Activity, 
-  BarChart3, 
-  PieChart, 
+import {
+  TrendingUp,
+  TrendingDown,
+  Activity,
+  BarChart3,
+  PieChart,
   Target,
   Clock,
   DollarSign,
@@ -73,6 +73,7 @@ const Legend = lazyRecharts('Legend');
 const ResponsiveContainer = lazyRecharts('ResponsiveContainer');
 import api from '@/lib/api';
 import { useCurrencyFormatter } from '@/contexts/BusinessConfigContext';
+import { createLogger } from '@/lib/logger';
 
 // Types
 interface SupplierPerformance {
@@ -407,12 +408,14 @@ const mockPerformanceData: SupplierPerformance[] = [
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
 
+const logger = createLogger('SupplierPerformance');
+
 export default function PerformancePage() {
   const router = useRouter();
   const fmtCurrency = useCurrencyFormatter();
   const { user } = useAuth();
   const { toast } = useToast();
-  
+
   // State
   const [performanceData, setPerformanceData] = useState<SupplierPerformance[]>(mockPerformanceData);
   const [loading, setLoading] = useState(false);
@@ -436,7 +439,7 @@ export default function PerformancePage() {
       // const response = await api.get('/suppliers/performance');
       // setPerformanceData(response.data.performance);
     } catch (error) {
-      console.error('Error loading performance data:', error);
+      logger.error('Error loading performance data:', error);
       toast({
         title: 'Error',
         description: 'Error al cargar los datos de rendimiento',
@@ -451,10 +454,10 @@ export default function PerformancePage() {
   const filteredData = performanceData
     .filter(supplier => {
       const matchesSearch = supplier.supplierName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                           supplier.category.toLowerCase().includes(searchQuery.toLowerCase());
+        supplier.category.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesCategory = filterCategory === 'all' || supplier.category === filterCategory;
       const matchesPeriod = filterPeriod === 'all' || supplier.period === filterPeriod;
-      
+
       return matchesSearch && matchesCategory && matchesPeriod;
     })
     .sort((a, b) => {
@@ -484,7 +487,7 @@ export default function PerformancePage() {
           aValue = a.kpis.overallScore;
           bValue = b.kpis.overallScore;
       }
-      
+
       if (sortOrder === 'asc') {
         return aValue > bValue ? 1 : -1;
       } else {
@@ -551,8 +554,8 @@ export default function PerformancePage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             size="sm"
             onClick={() => router.back()}
             className="flex items-center"
@@ -696,12 +699,11 @@ export default function PerformancePage() {
                 <CardContent className="p-6">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-start space-x-4">
-                      <div className={`p-3 rounded-lg ${
-                        supplier.kpis.overallScore >= 90 ? 'bg-green-100' :
-                        supplier.kpis.overallScore >= 80 ? 'bg-blue-100' :
-                        supplier.kpis.overallScore >= 70 ? 'bg-yellow-100' :
-                        'bg-red-100'
-                      }`}>
+                      <div className={`p-3 rounded-lg ${supplier.kpis.overallScore >= 90 ? 'bg-green-100' :
+                          supplier.kpis.overallScore >= 80 ? 'bg-blue-100' :
+                            supplier.kpis.overallScore >= 70 ? 'bg-yellow-100' :
+                              'bg-red-100'
+                        }`}>
                         <Building className="h-6 w-6" />
                       </div>
                       <div className="flex-1">
@@ -715,7 +717,7 @@ export default function PerformancePage() {
                           </span>
                         </div>
                         <p className="text-muted-foreground mb-3">{supplier.category}</p>
-                        
+
                         {/* KPI Scores */}
                         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
                           <div className="text-center">
@@ -749,7 +751,7 @@ export default function PerformancePage() {
                             <div className="text-xs text-muted-foreground">Cumplimiento</div>
                           </div>
                         </div>
-                        
+
                         {/* Key Metrics */}
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                           <div>
@@ -787,7 +789,7 @@ export default function PerformancePage() {
                       </Button>
                     </div>
                   </div>
-                  
+
                   {/* Performance Progress Bars */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-sm">
@@ -857,7 +859,7 @@ export default function PerformancePage() {
                         sustainabilityScore: 'Sostenibilidad',
                         communicationScore: 'Comunicación'
                       }[key] || key;
-                      
+
                       return (
                         <div key={key} className="space-y-2">
                           <div className="flex items-center justify-between text-sm">
@@ -1027,7 +1029,7 @@ export default function PerformancePage() {
               Métricas completas y análisis de rendimiento del proveedor
             </DialogDescription>
           </DialogHeader>
-          
+
           {selectedSupplier && (
             <div className="space-y-6">
               {/* Supplier Header */}
@@ -1136,7 +1138,7 @@ export default function PerformancePage() {
                         sustainabilityScore: 'Sostenibilidad',
                         communicationScore: 'Comunicación'
                       }[key] || key;
-                      
+
                       return (
                         <div key={key} className="text-center">
                           <div className={`text-3xl font-bold ${getScoreColor(value)}`}>
@@ -1172,9 +1174,8 @@ export default function PerformancePage() {
                               {[...Array(rating.maxRating)].map((_, i) => (
                                 <Star
                                   key={i}
-                                  className={`h-4 w-4 ${
-                                    i < rating.rating ? 'text-yellow-400 fill-current' : 'text-gray-300'
-                                  }`}
+                                  className={`h-4 w-4 ${i < rating.rating ? 'text-yellow-400 fill-current' : 'text-gray-300'
+                                    }`}
                                 />
                               ))}
                             </div>
@@ -1188,7 +1189,7 @@ export default function PerformancePage() {
               )}
             </div>
           )}
-          
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDetailsDialog(false)}>
               Cerrar

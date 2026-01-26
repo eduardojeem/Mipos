@@ -1,47 +1,30 @@
 'use client';
 
-import React, { useState, useCallback, memo, useEffect, useMemo, lazy, Suspense } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, lazy, Suspense } from 'react';
 import { useDebounce } from 'use-debounce';
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from '@/components/ui/command';
 
-import { Separator } from '@/components/ui/separator';
 import { toast } from '@/lib/toast';
 import {
   ShoppingCart,
   Search,
-  Barcode,
   Zap,
   Users,
   CreditCard,
   RefreshCw,
-  Settings,
   TrendingUp,
   Package,
-  Calculator,
-  Filter,
   Grid3X3,
   List,
   X,
-  Plus,
-  Minus,
-  Trash2,
-  Star,
   Clock,
-  CheckCircle,
-  AlertTriangle,
   Keyboard,
-  Maximize2,
   Minimize2,
   PauseCircle,
   PackagePlus,
-  RotateCcw,
   ChevronDown
 } from 'lucide-react';
-import { formatCurrency } from '@/lib/utils';
 import { usePOSStore } from '@/store';
 import { useCart } from '@/hooks/useCart';
 import { usePOSData } from '@/hooks/use-optimized-data';
@@ -50,15 +33,10 @@ import { calculateCartWithIva } from '@/lib/pos/calculations';
 import { type SaleResponse } from '@/lib/api';
 const ProcessSaleModal = lazy(() => import('./ProcessSaleModal'));
 const ReceiptModal = lazy(() => import('./ReceiptModal').then(m => ({ default: m.ReceiptModal })));
-const OfflineSyncPanel = lazy(() => import('./OfflineSyncPanel').then(m => ({ default: m.OfflineSyncPanel })));
-import type { Product, Customer, Category } from '@/types';
-import type { CartItem } from '@/hooks/useCart';
+import type { Product, Customer } from '@/types';
 import { usePOSRealtimeSync } from '@/hooks/usePOSRealtimeSync';
-import AutoSizer from 'react-virtualized-auto-sizer';
-import { FixedSizeGrid, FixedSizeList } from 'react-window';
 import { useDeviceType } from '@/components/ui/responsive-layout';
 import { useOrientation, useIsLandscape } from '@/hooks/useOrientation';
-import { MobileCartDrawer } from './MobileCartDrawer';
 import { AnimatedMobileCartDrawer } from './AnimatedMobileCartDrawer';
 import { cn } from '@/lib/utils';
 import {
@@ -71,7 +49,6 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Menu } from 'lucide-react';
 
-import { POSProductCard } from './optimized/POSProductCard';
 import { POSProductsViewport } from './optimized/POSProductsViewport';
 import { POSCartItem } from './optimized/POSCartItem';
 import { POSCartSummary } from './optimized/POSCartSummary';
@@ -83,18 +60,8 @@ import { HeldSalesModal } from './HeldSalesModal';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { useBusinessConfig } from '@/contexts/BusinessConfigContext';
-import { ProductDetailModal } from '@/components/catalog/ProductDetailModal';
 import { useCashSessionValidation } from '@/hooks/useCashSessionValidation';
 import CashActionDialogs from '@/components/cash/CashActionDialogs';
-
-// Memoized sub-components for better performance
-
-
-
-
-
-
-
 
 // Loading fallback para lazy modales
 const ModalLoadingFallback = () => (
@@ -150,7 +117,6 @@ export default function OptimizedPOSLayout() {
   const [productsPageSize, setProductsPageSize] = useState(10);
   const [productsBatchSize, setProductsBatchSize] = useState(12);
   const [productsPage, setProductsPage] = useState(1);
-  const [selectedProductForDetails, setSelectedProductForDetails] = useState<Product | null>(null);
 
 
   // Store state
@@ -168,6 +134,7 @@ export default function OptimizedPOSLayout() {
 
   // Device detection
   const deviceType = useDeviceType();
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const orientation = useOrientation();
   const isLandscape = useIsLandscape();
 
@@ -181,37 +148,22 @@ export default function OptimizedPOSLayout() {
   } = usePOSData();
 
   // Cash session validation
-  const { validateCashPayment, hasOpenSession, refetch: refetchCashSession } = useCashSessionValidation();
+  const { validateCashPayment } = useCashSessionValidation();
 
   // Índices optimizados para búsqueda y filtrado ultra-rápidos
   const productIndices = useMemo(() => {
     // Índice de búsqueda: pre-computar texto searchable
+    // Mantenemos referencia al producto original para evitar duplicación
     const searchIndex = products.map(p => ({
-      id: p.id,
+      // id no es estrictamente necesario si tenemos referencia al producto, pero ayuda
       searchText: `${p.name} ${p.sku || ''} ${p.barcode || ''} ${p.brand || ''}`.toLowerCase(),
-      categoryId: p.category_id,
-      product: p
+      categoryId: p.category_id || 'uncategorized',
+      product: p,
+      isActive: p.is_active !== false
     }));
-
-    // Índice por categoría: Map para acceso O(1)
-    const byCategory = new Map<string, typeof products>();
-    products.forEach(p => {
-      const catId = p.category_id || 'uncategorized';
-      if (!byCategory.has(catId)) {
-        byCategory.set(catId, []);
-      }
-      byCategory.get(catId)!.push(p);
-    });
-
-    // Índice de productos activos (filtro común)
-    const activeProducts = products.filter(p => p.is_active !== false);
-    const activeIds = new Set(activeProducts.map(p => p.id));
 
     return {
       searchIndex,
-      byCategory,
-      activeProducts,
-      activeIds,
       totalCount: products.length
     };
   }, [products]);
@@ -245,7 +197,6 @@ export default function OptimizedPOSLayout() {
     updateQuantity,
     removeFromCart,
     clearCart,
-    cartTotals,
     setCartItems
   } = useCart({
     products,
@@ -257,39 +208,28 @@ export default function OptimizedPOSLayout() {
   // Filter products
   // Filtrado optimizado usando índices pre-computados
   const filteredProducts = useMemo(() => {
-    const { searchIndex, byCategory } = productIndices;
+    const { searchIndex } = productIndices;
 
-    // Si no hay filtros, devolver productos activos
-    if (!debouncedSearchQuery && selectedCategory === 'all') {
-      return productIndices.activeProducts;
-    }
+    // Comenzamos con todos los productos (o el índice)
+    let candidates = searchIndex;
 
-    let result: Product[] = [];
+    // Filtro 1: Activos
+    candidates = candidates.filter(item => item.isActive);
 
-    // Paso 1: Filtrar por categoría usando índice (O(1))
+    // Filtro 2: Categoría
     if (selectedCategory !== 'all') {
-      result = byCategory.get(selectedCategory) || [];
-    } else {
-      result = products;
+      candidates = candidates.filter(item => item.categoryId === selectedCategory);
     }
 
-    // Paso 2: Búsqueda usando índice pre-computado
+    // Filtro 3: Búsqueda
     if (debouncedSearchQuery) {
       const searchLower = debouncedSearchQuery.toLowerCase();
-
-      // Búsqueda en índice (mucho más rápido que filtrar productos)
-      const matchingIds = new Set(
-        searchIndex
-          .filter(idx => idx.searchText.includes(searchLower))
-          .map(idx => idx.id)
-      );
-
-      // Filtrar resultado usando el Set de IDs (O(1) por elemento)
-      result = result.filter(p => matchingIds.has(p.id));
+      candidates = candidates.filter(item => item.searchText.includes(searchLower));
     }
 
-    return result;
-  }, [productIndices, selectedCategory, debouncedSearchQuery, products]);
+    // Mapear de vuelta a productos
+    return candidates.map(item => item.product);
+  }, [productIndices, selectedCategory, debouncedSearchQuery]);
 
   // Cart calculations
   const cartCalculations = useMemo(() => {
@@ -312,10 +252,6 @@ export default function OptimizedPOSLayout() {
       setIsCartOpen(true);
     }
   }, [addToCart, deviceType]);
-
-  const handleViewProductDetails = useCallback((product: Product) => {
-    setSelectedProductForDetails(product);
-  }, []);
 
   const handleClearCart = useCallback(() => {
     clearCart();
@@ -387,23 +323,6 @@ export default function OptimizedPOSLayout() {
     // Abrir modal de procesamiento de venta
     setShowSaleModal(true);
   }, [cart.length]);
-
-  const handleSaleComplete = useCallback((sale: SaleResponse) => {
-    // Guardar la venta completada para referencia
-    setLastSale(sale);
-
-    // Limpiar el carrito después de una venta exitosa
-    handleClearCart();
-
-    // Cerrar el modal de procesamiento
-    setShowSaleModal(false);
-
-    // Mostrar notificación de éxito con número de venta
-    toast.success(`¡Venta #${sale.saleNumber} procesada exitosamente!`);
-
-    // Abrir el modal de recibo
-    setShowReceiptModal(true);
-  }, [handleClearCart]);
 
   const handleConfirmProcessSale = useCallback(async (
     newDiscount: number,
@@ -479,7 +398,7 @@ export default function OptimizedPOSLayout() {
       toast.error(error.message || 'Error al procesar la venta');
       throw error;
     }
-  }, [cart, products, paymentMethod, selectedCustomer, notes, handleClearCart, isWholesaleMode]);
+  }, [cart, products, paymentMethod, selectedCustomer, notes, handleClearCart, isWholesaleMode, validateCashPayment]);
 
   // Keyboard shortcuts
   usePOSKeyboard({
@@ -494,13 +413,21 @@ export default function OptimizedPOSLayout() {
     quickAddMode,
   });
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     isConnected,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     lastUpdate,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     newSalesCount,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     refresh,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     markSalesAsViewed,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     notificationsEnabled,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     toggleNotifications,
   } = usePOSRealtimeSync({ onRefresh: refetchAll, refreshDebounceMs: 1000 });
 
@@ -645,9 +572,6 @@ export default function OptimizedPOSLayout() {
           </div>
         </div>
       </header>
-
-
-
 
       <div className="flex-1 flex overflow-hidden">
         {/* Main Content */}

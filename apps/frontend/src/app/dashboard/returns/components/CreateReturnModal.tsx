@@ -1,19 +1,20 @@
 'use client';
 
 import { useState } from 'react';
-import { 
-  Dialog, DialogContent, DialogDescription, 
-  DialogFooter, DialogHeader, DialogTitle 
+import {
+  Dialog, DialogContent, DialogDescription,
+  DialogFooter, DialogHeader, DialogTitle
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { 
-  Select, SelectContent, SelectItem, 
-  SelectTrigger, SelectValue 
+import {
+  Select, SelectContent, SelectItem,
+  SelectTrigger, SelectValue
 } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
+import { createLogger } from '@/lib/logger';
 
 interface CreateReturnModalProps {
   open: boolean;
@@ -21,10 +22,12 @@ interface CreateReturnModalProps {
   onSubmit: (data: any) => void;
 }
 
-export function CreateReturnModal({ 
-  open, 
-  onOpenChange, 
-  onSubmit 
+const logger = createLogger('CreateReturnModal');
+
+export function CreateReturnModal({
+  open,
+  onOpenChange,
+  onSubmit
 }: CreateReturnModalProps) {
   const { toast } = useToast();
   const [formData, setFormData] = useState({
@@ -43,7 +46,7 @@ export function CreateReturnModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.saleId || !formData.reason) {
       toast({
         title: 'Campos requeridos',
@@ -65,7 +68,7 @@ export function CreateReturnModal({
       });
       onOpenChange(false);
     } catch (error) {
-      console.error('Error creating return:', error);
+      logger.error('Error creating return:', error);
     } finally {
       setIsSubmitting(false);
     }
@@ -106,8 +109,8 @@ export function CreateReturnModal({
 
             <div className="grid gap-2">
               <Label htmlFor="reason">Razón de Devolución *</Label>
-              <Select 
-                value={formData.reason} 
+              <Select
+                value={formData.reason}
                 onValueChange={(value) => setFormData({ ...formData, reason: value })}
               >
                 <SelectTrigger>
@@ -137,9 +140,9 @@ export function CreateReturnModal({
           </div>
 
           <DialogFooter>
-            <Button 
-              type="button" 
-              variant="outline" 
+            <Button
+              type="button"
+              variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={isSubmitting}
             >

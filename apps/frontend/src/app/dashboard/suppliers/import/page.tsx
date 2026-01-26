@@ -12,12 +12,12 @@ import { Progress } from '@/components/ui/progress';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { 
-  Upload, 
-  Download, 
-  FileText, 
-  CheckCircle, 
-  XCircle, 
+import {
+  Upload,
+  Download,
+  FileText,
+  CheckCircle,
+  XCircle,
   AlertTriangle,
   Eye,
   Trash2,
@@ -28,6 +28,7 @@ import {
   Info
 } from 'lucide-react';
 import api from '@/lib/api';
+import { createLogger } from '@/lib/logger';
 
 // Types
 interface ImportedSupplier {
@@ -65,7 +66,7 @@ interface ImportProgress {
 
 const CSV_TEMPLATE_HEADERS = [
   'name',
-  'email', 
+  'email',
   'phone',
   'website',
   'address',
@@ -112,11 +113,13 @@ const SAMPLE_DATA = [
   }
 ];
 
+const logger = createLogger('SupplierImport');
+
 export default function ImportSuppliersPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   // State
   const [file, setFile] = useState<File | null>(null);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
@@ -140,7 +143,7 @@ export default function ImportSuppliersPage() {
         });
         return;
       }
-      
+
       if (selectedFile.size > 10 * 1024 * 1024) { // 10MB limit
         toast({
           title: 'Error',
@@ -149,7 +152,7 @@ export default function ImportSuppliersPage() {
         });
         return;
       }
-      
+
       setFile(selectedFile);
       setImportResult(null);
       setPreviewData([]);
@@ -167,13 +170,13 @@ export default function ImportSuppliersPage() {
     if (droppedFile) {
       // Create a proper ChangeEvent-like object
       const mockEvent = {
-        target: { 
+        target: {
           files: [droppedFile] as unknown as FileList,
           value: ''
         },
         currentTarget: null,
-        preventDefault: () => {},
-        stopPropagation: () => {},
+        preventDefault: () => { },
+        stopPropagation: () => { },
         nativeEvent: {} as Event,
         bubbles: false,
         cancelable: false,
@@ -184,7 +187,7 @@ export default function ImportSuppliersPage() {
         type: 'change',
         isDefaultPrevented: () => false,
         isPropagationStopped: () => false,
-        persist: () => {}
+        persist: () => { }
       } as unknown as React.ChangeEvent<HTMLInputElement>;
       handleFileSelect(mockEvent);
     }
@@ -319,11 +322,11 @@ export default function ImportSuppliersPage() {
     if (supplier.website && !supplier.website.startsWith('http')) {
       supplier.warnings.push('El sitio web debería incluir http:// o https://');
     }
-    
+
     if (supplier.creditLimit && supplier.creditLimit < 0) {
       supplier.errors.push('El límite de crédito no puede ser negativo');
     }
-    
+
     if (supplier.discount && (supplier.discount < 0 || supplier.discount > 100)) {
       supplier.errors.push('El descuento debe estar entre 0 y 100');
     }
@@ -362,7 +365,7 @@ export default function ImportSuppliersPage() {
 
       setPreviewData(suppliers);
       setShowPreview(true);
-      
+
       setProgress({
         stage: 'completed',
         progress: 100,
@@ -374,7 +377,7 @@ export default function ImportSuppliersPage() {
         description: `Se procesaron ${suppliers.length} registros`,
       });
     } catch (error) {
-      console.error('Error parsing CSV:', error);
+      logger.error('Error parsing CSV:', error);
       setProgress({
         stage: 'error',
         progress: 0,
@@ -414,7 +417,7 @@ export default function ImportSuppliersPage() {
 
       for (let i = 0; i < validSuppliers.length; i++) {
         const supplier = validSuppliers[i];
-        
+
         try {
           await api.post('/suppliers', {
             name: supplier.name,
@@ -431,10 +434,10 @@ export default function ImportSuppliersPage() {
             discount: supplier.discount,
             notes: supplier.notes
           });
-          
+
           successful++;
         } catch (error) {
-          console.error(`Error importing supplier ${supplier.name}:`, error);
+          logger.error(`Error importing supplier ${supplier.name}:`, error);
           supplier.errors.push('Error al guardar en la base de datos');
           failed++;
         }
@@ -467,7 +470,7 @@ export default function ImportSuppliersPage() {
         description: `${successful} proveedores importados exitosamente`,
       });
     } catch (error) {
-      console.error('Error during import:', error);
+      logger.error('Error during import:', error);
       setProgress({
         stage: 'error',
         progress: 0,
@@ -485,8 +488,8 @@ export default function ImportSuppliersPage() {
   const downloadTemplate = () => {
     const csvContent = [
       CSV_TEMPLATE_HEADERS.join(','),
-      ...SAMPLE_DATA.map(row => 
-        CSV_TEMPLATE_HEADERS.map(header => 
+      ...SAMPLE_DATA.map(row =>
+        CSV_TEMPLATE_HEADERS.map(header =>
           row[header as keyof typeof row] || ''
         ).join(',')
       )
@@ -625,7 +628,7 @@ export default function ImportSuppliersPage() {
                 )}
 
                 <div className="flex space-x-2">
-                  <Button 
+                  <Button
                     onClick={previewImport}
                     disabled={progress.stage === 'parsing' || progress.stage === 'validating'}
                   >
@@ -633,7 +636,7 @@ export default function ImportSuppliersPage() {
                     Vista Previa
                   </Button>
                   {showPreview && (
-                    <Button 
+                    <Button
                       onClick={importSuppliers}
                       disabled={progress.stage === 'importing' || previewData.filter(s => s.errors.length === 0).length === 0}
                     >
@@ -789,7 +792,7 @@ export default function ImportSuppliersPage() {
                           )}
                         </div>
                       </div>
-                      
+
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm mb-3">
                         <div><strong>Ciudad:</strong> {supplier.city}</div>
                         <div><strong>País:</strong> {supplier.country}</div>

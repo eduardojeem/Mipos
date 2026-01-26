@@ -1,6 +1,7 @@
 'use client';
 
-import AdvancedCache from './AdvancedCache';
+import { AdvancedCache } from './AdvancedCache';
+import { createLogger } from '@/lib/logger';
 
 interface OfflineAction {
   id: string;
@@ -16,6 +17,8 @@ interface OfflineState {
   pendingActions: OfflineAction[];
   lastSync: number;
 }
+
+const logger = createLogger('OfflineManager');
 
 class OfflineManager {
   private static instance: OfflineManager;
@@ -102,7 +105,7 @@ class OfflineManager {
           return false;
         }
       } catch (error) {
-        console.error('Failed to execute action online:', error);
+        logger.error('Failed to execute action online:', error);
         this.queueAction(action);
         return false;
       }
@@ -134,11 +137,11 @@ class OfflineManager {
           if (action.retryCount >= 3) {
             // Remove after 3 failed attempts
             successfulActions.push(action.id);
-            console.warn('Action failed after 3 attempts, removing:', action);
+            logger.warn('Action failed after 3 attempts, removing:', action);
           }
         }
       } catch (error) {
-        console.error('Failed to sync action:', action, error);
+        logger.error('Failed to sync action:', action, error);
         action.retryCount++;
         if (action.retryCount >= 3) {
           successfulActions.push(action.id);
@@ -161,12 +164,12 @@ class OfflineManager {
   private async performAction(action: Omit<OfflineAction, 'id' | 'timestamp' | 'retryCount'>): Promise<boolean> {
     // This is a mock implementation
     // In a real app, this would call your API endpoints
-    
-    console.log('Performing action:', action);
-    
+
+    logger.log('Performing action:', action);
+
     // Simulate API call
     await new Promise(resolve => setTimeout(resolve, 1000));
-    
+
     // Simulate success/failure (90% success rate)
     return Math.random() > 0.1;
   }
@@ -227,7 +230,7 @@ class OfflineManager {
     this.state.lastSync = 0;
     this.notifyListeners();
     this.saveOfflineState();
-    
+
     // Clear offline cache entries
     // This would need to be implemented in AdvancedCache
   }
@@ -243,7 +246,7 @@ class OfflineManager {
         lastSync: this.state.lastSync
       }));
     } catch (error) {
-      console.warn('Failed to save offline state:', error);
+      logger.warn('Failed to save offline state:', error);
     }
   }
 
@@ -256,7 +259,7 @@ class OfflineManager {
         this.state.lastSync = parsed.lastSync || 0;
       }
     } catch (error) {
-      console.warn('Failed to load offline state:', error);
+      logger.warn('Failed to load offline state:', error);
     }
   }
 

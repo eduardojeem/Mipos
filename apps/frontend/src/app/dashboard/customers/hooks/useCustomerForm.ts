@@ -1,6 +1,9 @@
+```typescript
 import { useState, useCallback, useEffect } from 'react';
 import { validateCustomerData } from '@/lib/validation-schemas';
-import { customerService } from '@/lib/customer-service';
+import { useToast } from '@/components/ui/use-toast';
+import { createCustomer, updateCustomer } from '../actions/customer-actions';
+import { createLogger } from '@/lib/logger';
 import type { UICustomer } from '@/types/customer-page';
 
 interface FormData {
@@ -38,15 +41,17 @@ export interface UseCustomerFormReturn {
  * 
  * @example
  * ```tsx
- * const form = useCustomerForm(existingCustomer);
+    * const form = useCustomerForm(existingCustomer);
  * 
  * <Input
- *   value={form.formData.name}
- *   onChange={(e) => form.updateField('name', e.target.value)}
- *   error={form.errors.name}
+ * value={ form.formData.name }
+ * onChange={ (e) => form.updateField('name', e.target.value) }
+ * error={ form.errors.name }
  * />
- * ```
+    * ```
  */
+const logger = createLogger('CustomerForm');
+
 export function useCustomerForm(initialCustomer?: UICustomer): UseCustomerFormReturn {
     const [formData, setFormData] = useState<FormData>(
         initialCustomer ? transformCustomerToForm(initialCustomer) : getDefaultFormData()
@@ -131,18 +136,18 @@ export function useCustomerForm(initialCustomer?: UICustomer): UseCustomerFormRe
                 status: formData.is_active ? 'active' : 'inactive',
             };
 
-            console.log('📝 Form data a enviar:', customerData);
-            console.log('📝 Initial customer ID:', initialCustomer?.id);
+            logger.log('📝 Form data a enviar:', customerData);
+            logger.log('📝 Initial customer ID:', initialCustomer?.id);
 
             if (initialCustomer) {
                 const result = await customerService.update(initialCustomer.id, customerData as any);
-                console.log('📝 Resultado de update:', result);
+                logger.log('📝 Resultado de update:', result);
                 if (result.error) {
                     throw new Error(result.error);
                 }
             } else {
                 const result = await customerService.create(customerData as any);
-                console.log('📝 Resultado de create:', result);
+                logger.log('📝 Resultado de create:', result);
                 if (result.error) {
                     throw new Error(result.error);
                 }
@@ -179,7 +184,7 @@ export function useCustomerForm(initialCustomer?: UICustomer): UseCustomerFormRe
 function getDefaultFormData(): FormData {
     return {
         name: '',
-        customerCode: `CL-${Date.now()}`,
+        customerCode: `CL - ${ Date.now() } `,
         email: '',
         phone: '',
         address: '',
@@ -196,7 +201,7 @@ function getDefaultFormData(): FormData {
 function transformCustomerToForm(customer: UICustomer): FormData {
     return {
         name: customer.name,
-        customerCode: customer.customerCode || `CL-${Date.now()}`,
+        customerCode: customer.customerCode || `CL - ${ Date.now() } `,
         email: customer.email || '',
         phone: customer.phone || '',
         address: customer.address || '',

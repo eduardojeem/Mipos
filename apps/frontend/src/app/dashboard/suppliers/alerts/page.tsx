@@ -14,14 +14,14 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { 
-  AlertTriangle, 
-  Bell, 
-  Calendar, 
-  Clock, 
-  DollarSign, 
-  FileText, 
-  Mail, 
+import {
+  AlertTriangle,
+  Bell,
+  Calendar,
+  Clock,
+  DollarSign,
+  FileText,
+  Mail,
   Phone,
   Search,
   Filter,
@@ -46,6 +46,7 @@ import {
 import api from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
+import { createLogger } from '@/lib/logger';
 
 // Types
 interface Alert {
@@ -222,11 +223,13 @@ const mockSuppliers: Supplier[] = [
   { id: 'sup4', name: 'Quick Logistics', category: 'Logística', email: 'support@quicklogistics.com', phone: '+52 55 4567 8901' }
 ];
 
+const logger = createLogger('SupplierAlerts');
+
 export default function AlertsPage() {
   const router = useRouter();
   const { user } = useAuth();
   const { toast } = useToast();
-  
+
   // State
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [alertRules, setAlertRules] = useState<AlertRule[]>(mockAlertRules);
@@ -239,21 +242,21 @@ export default function AlertsPage() {
   const [filterSupplier, setFilterSupplier] = useState<string>('all');
   const [sortBy, setSortBy] = useState<string>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  
+
   // Dialog states
   const [showNewAlertDialog, setShowNewAlertDialog] = useState(false);
   const [showRuleDialog, setShowRuleDialog] = useState(false);
   const [showDetailsDialog, setShowDetailsDialog] = useState(false);
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
   const [selectedRule, setSelectedRule] = useState<AlertRule | null>(null);
-  
+
   // Form state
   const [alertFormData, setAlertFormData] = useState<Partial<Alert>>({
     severity: 'medium',
     status: 'active',
     type: 'custom'
   });
-  
+
   const [ruleFormData, setRuleFormData] = useState<Partial<AlertRule>>({
     isActive: true,
     type: 'custom',
@@ -275,7 +278,7 @@ export default function AlertsPage() {
       // Rules are still mock for now as backend support is pending
       // setAlertRules(response.data.rules);
     } catch (error) {
-      console.error('Error loading alerts:', error);
+      logger.error('Error loading alerts:', error);
       toast({
         title: 'Error',
         description: 'Error al cargar las alertas',
@@ -290,13 +293,13 @@ export default function AlertsPage() {
   const filteredAlerts = alerts
     .filter(alert => {
       const matchesSearch = alert.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                           alert.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                           alert.supplierName.toLowerCase().includes(searchQuery.toLowerCase());
+        alert.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        alert.supplierName.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesType = filterType === 'all' || alert.type === filterType;
       const matchesSeverity = filterSeverity === 'all' || alert.severity === filterSeverity;
       const matchesStatus = filterStatus === 'all' || alert.status === filterStatus;
       const matchesSupplier = filterSupplier === 'all' || alert.supplierId === filterSupplier;
-      
+
       return matchesSearch && matchesType && matchesSeverity && matchesStatus && matchesSupplier;
     })
     .sort((a, b) => {
@@ -323,7 +326,7 @@ export default function AlertsPage() {
           aValue = new Date(a.triggeredAt);
           bValue = new Date(b.triggeredAt);
       }
-      
+
       if (sortOrder === 'asc') {
         return aValue > bValue ? 1 : -1;
       } else {
@@ -438,19 +441,19 @@ export default function AlertsPage() {
   const handleAcknowledgeAlert = async (alertId: string) => {
     try {
       await api.patch('/suppliers/alerts', { id: alertId, status: 'acknowledged' });
-      
-      setAlerts(prev => prev.map(alert => 
-        alert.id === alertId 
+
+      setAlerts(prev => prev.map(alert =>
+        alert.id === alertId
           ? { ...alert, status: 'acknowledged', assignedTo: user?.id, assignedToName: user?.name }
           : alert
       ));
-      
+
       toast({
         title: 'Alerta reconocida',
         description: 'La alerta ha sido reconocida exitosamente',
       });
     } catch (error) {
-      console.error('Error acknowledging alert:', error);
+      logger.error('Error acknowledging alert:', error);
       toast({
         title: 'Error',
         description: 'Error al reconocer la alerta',
@@ -461,30 +464,30 @@ export default function AlertsPage() {
 
   const handleResolveAlert = async (alertId: string, resolution: string) => {
     try {
-      await api.patch('/suppliers/alerts', { 
-        id: alertId, 
-        status: 'resolved', 
-        resolution_notes: resolution 
+      await api.patch('/suppliers/alerts', {
+        id: alertId,
+        status: 'resolved',
+        resolution_notes: resolution
       });
-      
-      setAlerts(prev => prev.map(alert => 
-        alert.id === alertId 
-          ? { 
-              ...alert, 
-              status: 'resolved', 
-              resolvedBy: user?.id, 
-              resolvedByName: user?.name,
-              resolvedAt: new Date().toISOString()
-            }
+
+      setAlerts(prev => prev.map(alert =>
+        alert.id === alertId
+          ? {
+            ...alert,
+            status: 'resolved',
+            resolvedBy: user?.id,
+            resolvedByName: user?.name,
+            resolvedAt: new Date().toISOString()
+          }
           : alert
       ));
-      
+
       toast({
         title: 'Alerta resuelta',
         description: 'La alerta ha sido resuelta exitosamente',
       });
     } catch (error) {
-      console.error('Error resolving alert:', error);
+      logger.error('Error resolving alert:', error);
       toast({
         title: 'Error',
         description: 'Error al resolver la alerta',
@@ -497,17 +500,17 @@ export default function AlertsPage() {
     try {
       // In a real app, update via API
       // await api.patch(`/suppliers/alert-rules/${ruleId}`, { isActive });
-      
-      setAlertRules(prev => prev.map(rule => 
+
+      setAlertRules(prev => prev.map(rule =>
         rule.id === ruleId ? { ...rule, isActive } : rule
       ));
-      
+
       toast({
         title: isActive ? 'Regla activada' : 'Regla desactivada',
         description: `La regla ha sido ${isActive ? 'activada' : 'desactivada'} exitosamente`,
       });
     } catch (error) {
-      console.error('Error toggling rule:', error);
+      logger.error('Error toggling rule:', error);
       toast({
         title: 'Error',
         description: 'Error al actualizar la regla',
@@ -519,8 +522,8 @@ export default function AlertsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <Button 
-          variant="ghost" 
+        <Button
+          variant="ghost"
           className="pl-0 hover:bg-transparent text-muted-foreground hover:text-foreground transition-colors"
           onClick={() => router.back()}
         >
@@ -712,12 +715,11 @@ export default function AlertsPage() {
                 <CardContent className="p-6">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-start space-x-4">
-                      <div className={`p-2 rounded-lg ${
-                        alert.severity === 'critical' ? 'bg-red-100' :
-                        alert.severity === 'high' ? 'bg-orange-100' :
-                        alert.severity === 'medium' ? 'bg-yellow-100' :
-                        'bg-blue-100'
-                      }`}>
+                      <div className={`p-2 rounded-lg ${alert.severity === 'critical' ? 'bg-red-100' :
+                          alert.severity === 'high' ? 'bg-orange-100' :
+                            alert.severity === 'medium' ? 'bg-yellow-100' :
+                              'bg-blue-100'
+                        }`}>
                         {getSeverityIcon(alert.severity)}
                       </div>
                       <div className="flex-1">
@@ -789,7 +791,7 @@ export default function AlertsPage() {
                       </Button>
                     </div>
                   </div>
-                  
+
                   {/* Metadata */}
                   {alert.metadata && (
                     <div className="bg-muted p-4 rounded-lg">
@@ -913,7 +915,7 @@ export default function AlertsPage() {
                   <Clock className="h-8 w-8 text-orange-500" />
                   <div>
                     <p className="text-2xl font-bold">
-                      {alerts.filter(a => a.status === 'active').length > 0 ? 
+                      {alerts.filter(a => a.status === 'active').length > 0 ?
                         Math.round(alerts.filter(a => a.status === 'active').reduce((sum, a) => {
                           const hours = (new Date().getTime() - new Date(a.triggeredAt).getTime()) / (1000 * 60 * 60);
                           return sum + hours;
@@ -964,7 +966,7 @@ export default function AlertsPage() {
               Información completa y acciones disponibles
             </DialogDescription>
           </DialogHeader>
-          
+
           {selectedAlert && (
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-6">
@@ -1001,12 +1003,12 @@ export default function AlertsPage() {
                   <p className="mt-1">{new Date(selectedAlert.triggeredAt).toLocaleString()}</p>
                 </div>
               </div>
-              
+
               <div>
                 <Label>Descripción</Label>
                 <p className="mt-1 p-3 bg-muted rounded-lg">{selectedAlert.description}</p>
               </div>
-              
+
               {selectedAlert.metadata && Object.keys(selectedAlert.metadata).length > 0 && (
                 <div>
                   <Label>Información Adicional</Label>
@@ -1016,8 +1018,8 @@ export default function AlertsPage() {
                         <div key={key}>
                           <span className="text-muted-foreground capitalize">{key.replace(/([A-Z])/g, ' $1')}:</span>
                           <p className="font-medium">
-                            {typeof value === 'number' && key.includes('amount') ? 
-                              formatCurrency(value) : 
+                            {typeof value === 'number' && key.includes('amount') ?
+                              formatCurrency(value) :
                               String(value)
                             }
                           </p>
@@ -1027,14 +1029,14 @@ export default function AlertsPage() {
                   </div>
                 </div>
               )}
-              
+
               {selectedAlert.assignedToName && (
                 <div>
                   <Label>Asignada a</Label>
                   <p className="mt-1">{selectedAlert.assignedToName}</p>
                 </div>
               )}
-              
+
               {selectedAlert.resolvedAt && (
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -1049,14 +1051,14 @@ export default function AlertsPage() {
               )}
             </div>
           )}
-          
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDetailsDialog(false)}>
               Cerrar
             </Button>
             {selectedAlert?.status === 'active' && (
               <>
-                <Button 
+                <Button
                   variant="outline"
                   onClick={() => {
                     handleAcknowledgeAlert(selectedAlert.id);
@@ -1066,7 +1068,7 @@ export default function AlertsPage() {
                   <Eye className="mr-2 h-4 w-4" />
                   Reconocer
                 </Button>
-                <Button 
+                <Button
                   onClick={() => {
                     handleResolveAlert(selectedAlert.id, 'Resuelto desde detalles');
                     setShowDetailsDialog(false);

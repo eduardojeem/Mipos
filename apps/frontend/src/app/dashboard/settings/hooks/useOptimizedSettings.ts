@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/components/ui/use-toast';
-import { api } from '@/lib/api';
+import api from '@/lib/api';
+import { createLogger } from '@/lib/logger';
 
 // Types
 interface UserSettings {
@@ -147,6 +148,8 @@ const DEFAULT_SECURITY_SETTINGS: SecuritySettings = {
   allowed_ip_addresses: []
 };
 
+const logger = createLogger('SettingsHook');
+
 // Optimized hooks
 export function useUserSettings() {
   return useQuery({
@@ -156,7 +159,7 @@ export function useUserSettings() {
         const response = await api.get('/user/settings');
         return { ...DEFAULT_USER_SETTINGS, ...response.data.data };
       } catch (error) {
-        console.warn('Failed to load user settings, using defaults');
+        logger.warn('Failed to load user settings, using defaults');
         return DEFAULT_USER_SETTINGS;
       }
     },
@@ -177,7 +180,7 @@ export function useSystemSettings() {
         const settings = response.data.data || response.data;
         return { ...DEFAULT_SYSTEM_SETTINGS, ...settings };
       } catch (error) {
-        console.warn('Failed to load system settings, using defaults');
+        logger.warn('Failed to load system settings, using defaults');
         return DEFAULT_SYSTEM_SETTINGS;
       }
     },
@@ -195,7 +198,7 @@ export function useSecuritySettings() {
         const response = await api.get('/security/settings');
         return { ...DEFAULT_SECURITY_SETTINGS, ...response.data.data };
       } catch (error) {
-        console.warn('Failed to load security settings, using defaults');
+        logger.warn('Failed to load security settings, using defaults');
         return DEFAULT_SECURITY_SETTINGS;
       }
     },
@@ -232,7 +235,7 @@ export function useUpdateUserSettings() {
       });
     },
     onError: (error: any) => {
-      console.error('Error saving user settings:', error);
+      logger.error('Error saving user settings:', error);
 
       let title = 'Error al guardar';
       let errorMessage = 'No se pudo actualizar la configuración del perfil';
@@ -272,7 +275,7 @@ export function useUpdateSystemSettings() {
       } catch (error: any) {
         // Si es error 431, intentar con menos datos
         if (error?.response?.status === 431) {
-          console.warn('Headers too large, retrying with minimal data');
+          logger.warn('Headers too large, retrying with minimal data');
           const minimalSettings = {
             businessName: settings.businessName,
             currency: settings.currency,
@@ -297,7 +300,7 @@ export function useUpdateSystemSettings() {
       });
     },
     onError: (error: any) => {
-      console.error('Error saving system settings:', error);
+      logger.error('Error saving system settings:', error);
 
       let errorMessage = 'No se pudo actualizar la configuración del sistema';
 
@@ -335,7 +338,7 @@ export function useUpdateSecuritySettings() {
       });
     },
     onError: (error) => {
-      console.error('Error saving security settings:', error);
+      logger.error('Error saving security settings:', error);
       toast({
         title: 'Error',
         description: 'No se pudo actualizar la configuración de seguridad',
@@ -363,7 +366,7 @@ export function useChangePassword() {
       });
     },
     onError: (error) => {
-      console.error('Error changing password:', error);
+      logger.error('Error changing password:', error);
       toast({
         title: 'Error',
         description: 'No se pudo cambiar la contraseña. Verifica tu contraseña actual.',

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, Suspense, memo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Plus, Download, Trash2, CheckCircle, XCircle, Users, TrendingUp, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -40,21 +40,47 @@ import {
 import type { Customer } from '@/types';
 import type { UICustomer } from '@/types/customer-page';
 
+// Loading skeleton para Suspense
+function CustomersLoadingSkeleton() {
+    return (
+        <div className="space-y-6 pb-10">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="space-y-2">
+                    <div className="h-8 w-48 bg-muted animate-pulse rounded" />
+                    <div className="h-4 w-96 bg-muted animate-pulse rounded" />
+                </div>
+                <div className="h-10 w-32 bg-muted animate-pulse rounded" />
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                {[1, 2, 3, 4].map(i => (
+                    <div key={i} className="h-32 bg-muted animate-pulse rounded-lg" />
+                ))}
+            </div>
+            <div className="h-96 bg-muted animate-pulse rounded-lg" />
+        </div>
+    );
+}
+
 /**
  * Customers Page - Refactored Modular Architecture
  * 
  * This page has been refactored from a 2,415-line monolith into a clean,
  * maintainable architecture using custom hooks and components.
+ * 
+ * OPTIMIZED: Wrapped with Suspense for better loading performance
  */
 export default function CustomersPage() {
     return (
         <PermissionProvider>
-            <CustomersPageContent />
+            <Suspense fallback={<CustomersLoadingSkeleton />}>
+                <CustomersPageContent />
+            </Suspense>
         </PermissionProvider>
     );
 }
 
-function CustomersPageContent() {
+// Memoize content to prevent unnecessary re-renders when parent re-renders
+const CustomersPageContent = memo(function CustomersPageContent() {
     const { toast } = useToast();
     const queryClient = useQueryClient();
 
@@ -151,9 +177,9 @@ function CustomersPageContent() {
     const handleBulkActivate = useCallback(async () => {
         if (selectedIds.length === 0) return;
 
-        bulkOperation.mutate({ 
-            action: 'activate', 
-            customerIds: selectedIds 
+        bulkOperation.mutate({
+            action: 'activate',
+            customerIds: selectedIds
         });
         setSelectedIds([]);
     }, [selectedIds, bulkOperation]);
@@ -161,9 +187,9 @@ function CustomersPageContent() {
     const handleBulkDeactivate = useCallback(async () => {
         if (selectedIds.length === 0) return;
 
-        bulkOperation.mutate({ 
-            action: 'deactivate', 
-            customerIds: selectedIds 
+        bulkOperation.mutate({
+            action: 'deactivate',
+            customerIds: selectedIds
         });
         setSelectedIds([]);
     }, [selectedIds, bulkOperation]);
@@ -173,9 +199,9 @@ function CustomersPageContent() {
 
         if (!confirm(`¿Eliminar ${selectedIds.length} clientes?`)) return;
 
-        bulkOperation.mutate({ 
-            action: 'delete', 
-            customerIds: selectedIds 
+        bulkOperation.mutate({
+            action: 'delete',
+            customerIds: selectedIds
         });
         setSelectedIds([]);
     }, [selectedIds, bulkOperation]);
@@ -191,15 +217,15 @@ function CustomersPageContent() {
         }
 
         try {
-            const result = await bulkOperation.mutateAsync({ 
-                action: 'export', 
-                customerIds: selectedIds 
+            const result = await bulkOperation.mutateAsync({
+                action: 'export',
+                customerIds: selectedIds
             });
 
             if (result.success && result.data.csvContent) {
                 // Download CSV
-                const blob = new Blob([result.data.csvContent], { 
-                    type: result.data.contentType || 'text/csv;charset=utf-8;' 
+                const blob = new Blob([result.data.csvContent], {
+                    type: result.data.contentType || 'text/csv;charset=utf-8;'
                 });
                 const link = document.createElement('a');
                 const url = URL.createObjectURL(blob);
@@ -219,13 +245,13 @@ function CustomersPageContent() {
 
     const handleSelectAll = useCallback((customers: UICustomer[]) => {
         const allIds = customers.map(c => c.id);
-        setSelectedIds(prevIds => 
+        setSelectedIds(prevIds =>
             prevIds.length === allIds.length ? [] : allIds
         );
     }, []);
 
     const handleSelectCustomer = useCallback((customerId: string) => {
-        setSelectedIds(prevIds => 
+        setSelectedIds(prevIds =>
             prevIds.includes(customerId)
                 ? prevIds.filter(id => id !== customerId)
                 : [...prevIds, customerId]
@@ -267,7 +293,7 @@ function CustomersPageContent() {
                         </p>
                     </CardContent>
                 </Card>
-                
+
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Nuevos Este Mes</CardTitle>
@@ -325,9 +351,9 @@ function CustomersPageContent() {
                             </span>
                             <div className="flex items-center gap-2">
                                 <PermissionGuard permission="customers.export">
-                                    <Button 
-                                        variant="outline" 
-                                        size="sm" 
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
                                         onClick={handleExportSelected}
                                         disabled={bulkOperation.isPending}
                                     >

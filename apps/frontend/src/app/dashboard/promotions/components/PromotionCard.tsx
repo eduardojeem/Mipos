@@ -15,6 +15,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { useToast } from '@/components/ui/use-toast';
 import { getErrorMessage } from '@/lib/api-helpers';
+import { createLogger } from '@/lib/logger';
 import { PromotionDetailsDialog } from './PromotionDetailsDialog';
 import { EditPromotionDialog } from './EditPromotionDialog';
 import { DuplicatePromotionDialog } from './DuplicatePromotionDialog';
@@ -43,24 +44,26 @@ interface PromotionCardProps {
   onToggleSelect?: (id: string) => void;
 }
 
-export const PromotionCard = memo(function PromotionCard({ 
-  promotion, 
+const logger = createLogger('PromotionCard');
+
+export const PromotionCard = memo(function PromotionCard({
+  promotion,
   productCount = 0, // ✅ Default value
-  onRefresh, 
-  isSelected = false, 
-  onToggleSelect 
+  onRefresh,
+  isSelected = false,
+  onToggleSelect
 }: PromotionCardProps) {
   const { toast } = useToast();
-  
-  // ✅ Debug log
-  console.log(`[PromotionCard] ${promotion.name} - productCount:`, productCount);
-  
+
+  // ✅ Debug log (development only)
+  logger.log(`${promotion.name} - productCount:`, productCount);
+
   // ✅ Loading states consolidados
   const [loadingStates, setLoadingStates] = useState({
     toggling: false,
     deleting: false,
   });
-  
+
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isDuplicateOpen, setIsDuplicateOpen] = useState(false);
@@ -102,20 +105,20 @@ export const PromotionCard = memo(function PromotionCard({
   const handleToggleStatus = useCallback(async () => {
     try {
       setLoadingStates(prev => ({ ...prev, toggling: true }));
-      
+
       await api.patch(`/promotions/${promotion.id}/status`, {
         isActive: !promotion.isActive,
       });
-      
+
       toast({
         title: 'Estado actualizado',
         description: `Promoción ${!promotion.isActive ? 'activada' : 'desactivada'} exitosamente`,
       });
-      
+
       onRefresh();
     } catch (error: any) {
-      console.error(`Failed to toggle promotion ${promotion.id}:`, error);
-      
+      logger.error(`Failed to toggle promotion ${promotion.id}:`, error);
+
       toast({
         title: 'Error',
         description: getErrorMessage(error),
@@ -130,18 +133,18 @@ export const PromotionCard = memo(function PromotionCard({
   const handleDelete = useCallback(async () => {
     try {
       setLoadingStates(prev => ({ ...prev, deleting: true }));
-      
+
       await api.delete(`/promotions/${promotion.id}`);
-      
+
       toast({
         title: 'Promoción eliminada',
         description: 'La promoción se ha eliminado exitosamente',
       });
-      
+
       onRefresh();
     } catch (error: any) {
-      console.error(`Failed to delete promotion ${promotion.id}:`, error);
-      
+      logger.error(`Failed to delete promotion ${promotion.id}:`, error);
+
       toast({
         title: 'Error',
         description: getErrorMessage(error),
@@ -154,16 +157,14 @@ export const PromotionCard = memo(function PromotionCard({
   }, [promotion.id, onRefresh, toast]);
 
   return (
-    <Card className={`group hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 border-slate-200 dark:border-slate-800 overflow-hidden ${
-      isSelected ? 'ring-2 ring-violet-600 dark:ring-violet-400' : ''
-    }`}>
-      <div className={`h-2 bg-gradient-to-r ${
-        status === 'active' ? 'from-green-500 to-emerald-500' :
-        status === 'scheduled' ? 'from-yellow-500 to-orange-500' :
-        status === 'expired' ? 'from-red-500 to-pink-500' :
-        'from-slate-400 to-slate-500'
-      }`} />
-      
+    <Card className={`group hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 border-slate-200 dark:border-slate-800 overflow-hidden ${isSelected ? 'ring-2 ring-violet-600 dark:ring-violet-400' : ''
+      }`}>
+      <div className={`h-2 bg-gradient-to-r ${status === 'active' ? 'from-green-500 to-emerald-500' :
+          status === 'scheduled' ? 'from-yellow-500 to-orange-500' :
+            status === 'expired' ? 'from-red-500 to-pink-500' :
+              'from-slate-400 to-slate-500'
+        }`} />
+
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
           {/* Checkbox */}
@@ -185,7 +186,7 @@ export const PromotionCard = memo(function PromotionCard({
               {statusConfig[status].label}
             </Badge>
           </div>
-          
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -198,8 +199,8 @@ export const PromotionCard = memo(function PromotionCard({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem 
-                onClick={handleToggleStatus} 
+              <DropdownMenuItem
+                onClick={handleToggleStatus}
                 disabled={loadingStates.toggling}
               >
                 {loadingStates.toggling ? (
@@ -222,7 +223,7 @@ export const PromotionCard = memo(function PromotionCard({
                 <Copy className="h-4 w-4 mr-2" />
                 Duplicar
               </DropdownMenuItem>
-              <DropdownMenuItem 
+              <DropdownMenuItem
                 onClick={() => setIsDeleteDialogOpen(true)}
                 className="text-red-600"
                 disabled={loadingStates.deleting}

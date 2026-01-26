@@ -28,6 +28,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { createLogger } from '@/lib/logger';
 
 interface Promotion {
   id: string;
@@ -42,6 +43,8 @@ interface Promotion {
   usageLimit?: number;
   applicableProducts?: unknown[];
 }
+
+const logger = createLogger('PromotionsPage');
 
 export default function PromotionsPage() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -75,7 +78,7 @@ export default function PromotionsPage() {
       setLoadingCounts(true);
 
       const ids = storeItems.map((p: Promotion) => p.id);
-      console.log('[ProductCounts] Fetching counts for IDs:', ids);
+      logger.log('Fetching counts for IDs:', ids);
 
       try {
         // Intentar usar el endpoint batch
@@ -87,11 +90,11 @@ export default function PromotionsPage() {
 
         if (response.data?.success) {
           setProductCounts(response.data.counts);
-          console.log('[ProductCounts] Counts set:', response.data.counts);
+          logger.log('Counts set:', response.data.counts);
           return;
         }
       } catch (batchError: unknown) {
-        console.log('[ProductCounts] Batch endpoint failed, using fallback', batchError);
+        logger.log('Batch endpoint failed, using fallback', batchError);
 
         // Fallback: usar counts mock para que funcione la UI
         const mockCounts: Record<string, number> = {};
@@ -100,10 +103,10 @@ export default function PromotionsPage() {
         });
 
         setProductCounts(mockCounts);
-        console.log('[ProductCounts] Mock counts set:', mockCounts);
+        logger.log('Mock counts set:', mockCounts);
       }
     } catch (error) {
-      console.error('[ProductCounts] Failed to fetch:', error);
+      logger.error('Failed to fetch:', error);
       // No mostrar toast para no molestar al usuario
     } finally {
       setLoadingCounts(false);
@@ -296,7 +299,7 @@ export default function PromotionsPage() {
 
           {/* Stats Cards - Integrado */}
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-             <PromotionStats promotions={storeItems} productCounts={productCounts} />
+            <PromotionStats promotions={storeItems} productCounts={productCounts} />
           </div>
 
           {/* Alerts */}
@@ -304,16 +307,16 @@ export default function PromotionsPage() {
 
           {/* Carousel Editor */}
           <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-             <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
-                <h3 className="font-semibold text-slate-900 dark:text-slate-200">Carrusel de Ofertas</h3>
-             </div>
-             <div className="p-4">
-                <CarouselEditor
-                    key={`carousel-v${carouselVersion}`}
-                    promotions={storeItems}
-                    isLoading={storeLoading}
-                />
-             </div>
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+              <h3 className="font-semibold text-slate-900 dark:text-slate-200">Carrusel de Ofertas</h3>
+            </div>
+            <div className="p-4">
+              <CarouselEditor
+                key={`carousel-v${carouselVersion}`}
+                promotions={storeItems}
+                isLoading={storeLoading}
+              />
+            </div>
           </div>
 
           {/* Audit Log (Collapsible) */}
@@ -329,12 +332,12 @@ export default function PromotionsPage() {
             {showAuditLog && (
               <div className="animate-in fade-in slide-in-from-top-2 duration-300">
                 <CarouselAuditLog
-                    onRevert={() => {
+                  onRevert={() => {
                     // Refresh promotions after revert
                     fetchStorePromotions();
                     // Force CarouselEditor refresh
                     setCarouselVersion(v => v + 1);
-                    }}
+                  }}
                 />
               </div>
             )}
@@ -342,90 +345,90 @@ export default function PromotionsPage() {
 
           {/* Search and Filters */}
           <div className="sticky top-4 z-30 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md rounded-xl border border-slate-200/60 dark:border-slate-800/60 shadow-sm p-4">
-              <div className="flex flex-col lg:flex-row gap-4">
-                <div className="flex-1 relative group">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
-                  <Input
-                    placeholder="Buscar por nombre, código o descripción..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 h-10 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-indigo-500/20 transition-all"
-                    aria-label="Buscar promociones"
-                  />
-                </div>
-
-                <PromotionFilters
-                  statusFilter={statusFilter}
-                  setStatusFilter={setStatusFilter}
-                  sortBy={sortBy}
-                  setSortBy={setSortBy}
-                  viewMode={viewMode}
-                  setViewMode={setViewMode}
+            <div className="flex flex-col lg:flex-row gap-4">
+              <div className="flex-1 relative group">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+                <Input
+                  placeholder="Buscar por nombre, código o descripción..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 h-10 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-indigo-500/20 transition-all"
+                  aria-label="Buscar promociones"
                 />
               </div>
+
+              <PromotionFilters
+                statusFilter={statusFilter}
+                setStatusFilter={setStatusFilter}
+                sortBy={sortBy}
+                setSortBy={setSortBy}
+                viewMode={viewMode}
+                setViewMode={setViewMode}
+              />
+            </div>
           </div>
 
           {/* Promotions Display */}
           <div className="min-h-[400px]">
             {storeError ? (
-                <div className="max-w-2xl mx-auto py-12">
-                    <ErrorState
-                    error={storeError}
-                    onRetry={() => fetchStorePromotions()}
-                    additionalInfo="Verifica tu conexión o contacta a soporte si el problema persiste."
-                    />
-                </div>
+              <div className="max-w-2xl mx-auto py-12">
+                <ErrorState
+                  error={storeError}
+                  onRetry={() => fetchStorePromotions()}
+                  additionalInfo="Verifica tu conexión o contacta a soporte si el problema persiste."
+                />
+              </div>
             ) : storeLoading ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {[...Array(6)].map((_, i) => (
-                    <Card key={i} className="animate-pulse border-slate-200 dark:border-slate-800">
+                  <Card key={i} className="animate-pulse border-slate-200 dark:border-slate-800">
                     <CardContent className="p-6 space-y-4">
-                        <div className="h-6 bg-slate-200 dark:bg-slate-800 rounded w-3/4" />
-                        <div className="h-4 bg-slate-100 dark:bg-slate-800/60 rounded w-full" />
-                        <div className="flex gap-2 pt-2">
-                            <div className="h-8 w-20 bg-slate-200 dark:bg-slate-800 rounded" />
-                            <div className="h-8 w-20 bg-slate-200 dark:bg-slate-800 rounded" />
-                        </div>
+                      <div className="h-6 bg-slate-200 dark:bg-slate-800 rounded w-3/4" />
+                      <div className="h-4 bg-slate-100 dark:bg-slate-800/60 rounded w-full" />
+                      <div className="flex gap-2 pt-2">
+                        <div className="h-8 w-20 bg-slate-200 dark:bg-slate-800 rounded" />
+                        <div className="h-8 w-20 bg-slate-200 dark:bg-slate-800 rounded" />
+                      </div>
                     </CardContent>
-                    </Card>
+                  </Card>
                 ))}
-                </div>
+              </div>
             ) : filteredPromotions.length === 0 ? (
-                <div className="py-12">
-                    <EmptyState
-                    type={storeItems.length === 0 ? 'no-promotions' : 'no-results'}
-                    onCreateClick={storeItems.length === 0 ? () => setIsCreateDialogOpen(true) : undefined}
-                    />
-                </div>
+              <div className="py-12">
+                <EmptyState
+                  type={storeItems.length === 0 ? 'no-promotions' : 'no-results'}
+                  onCreateClick={storeItems.length === 0 ? () => setIsCreateDialogOpen(true) : undefined}
+                />
+              </div>
             ) : (
-                <div className="space-y-6 animate-in fade-in duration-500">
+              <div className="space-y-6 animate-in fade-in duration-500">
                 <PromotionsList
-                    promotions={paginatedPromotions}
-                    viewMode={viewMode}
-                    onRefresh={() => {
+                  promotions={paginatedPromotions}
+                  viewMode={viewMode}
+                  onRefresh={() => {
                     fetchStorePromotions();
                     fetchProductCounts();
-                    }}
-                    selectedIds={selectedIds}
-                    onToggleSelect={handleToggleSelect}
-                    productCounts={productCounts}
-                    loadingCounts={loadingCounts}
+                  }}
+                  selectedIds={selectedIds}
+                  onToggleSelect={handleToggleSelect}
+                  productCounts={productCounts}
+                  loadingCounts={loadingCounts}
                 />
 
                 <div className="flex justify-center py-8">
-                    <Pagination
-                        currentPage={currentPage}
-                        totalPages={totalPages}
-                        totalItems={filteredPromotions.length}
-                        itemsPerPage={itemsPerPage}
-                        onPageChange={setCurrentPage}
-                        onItemsPerPageChange={(items) => {
-                        setItemsPerPage(items);
-                        setCurrentPage(1);
-                        }}
-                    />
+                  <Pagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    totalItems={filteredPromotions.length}
+                    itemsPerPage={itemsPerPage}
+                    onPageChange={setCurrentPage}
+                    onItemsPerPageChange={(items) => {
+                      setItemsPerPage(items);
+                      setCurrentPage(1);
+                    }}
+                  />
                 </div>
-                </div>
+              </div>
             )}
           </div>
         </div>

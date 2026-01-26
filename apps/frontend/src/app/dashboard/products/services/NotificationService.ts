@@ -1,4 +1,5 @@
 import { toast } from '@/lib/toast';
+import { createLogger } from '@/lib/logger';
 
 export interface ProductNotification {
   id: string;
@@ -30,6 +31,8 @@ export interface NotificationSettings {
   soundEnabled: boolean;
 }
 
+const logger = createLogger('NotificationService');
+
 class NotificationService {
   private static instance: NotificationService;
   private notifications: ProductNotification[] = [];
@@ -55,11 +58,11 @@ class NotificationService {
     try {
       // In a real implementation, this would connect to your WebSocket server
       // this.websocket = new WebSocket('ws://localhost:3000/products');
-      
+
       // Simulate real-time notifications for demo
       this.simulateRealTimeNotifications();
     } catch (error) {
-      console.error('Failed to initialize WebSocket:', error);
+      logger.error('Failed to initialize WebSocket:', error);
     }
   }
 
@@ -171,7 +174,7 @@ class NotificationService {
     };
 
     this.notifications.unshift(newNotification);
-    
+
     // Keep only last 100 notifications
     if (this.notifications.length > 100) {
       this.notifications = this.notifications.slice(0, 100);
@@ -300,7 +303,7 @@ class NotificationService {
         }));
       }
     } catch (error) {
-      console.error('Failed to load notifications:', error);
+      logger.error('Failed to load notifications:', error);
       this.notifications = [];
     }
   }
@@ -309,7 +312,7 @@ class NotificationService {
     try {
       localStorage.setItem('product-notifications', JSON.stringify(this.notifications));
     } catch (error) {
-      console.error('Failed to save notifications:', error);
+      logger.error('Failed to save notifications:', error);
     }
   }
 
@@ -320,7 +323,7 @@ class NotificationService {
         return { ...this.getDefaultSettings(), ...JSON.parse(stored) };
       }
     } catch (error) {
-      console.error('Failed to load notification settings:', error);
+      logger.error('Failed to load notification settings:', error);
     }
     return this.getDefaultSettings();
   }
@@ -329,7 +332,7 @@ class NotificationService {
     try {
       localStorage.setItem('notification-settings', JSON.stringify(this.settings));
     } catch (error) {
-      console.error('Failed to save notification settings:', error);
+      logger.error('Failed to save notification settings:', error);
     }
   }
 
@@ -348,7 +351,7 @@ class NotificationService {
   // Action handlers
   private handleRestock(productId: string) {
     // This would navigate to restock page or open restock dialog
-    console.log('Restock product:', productId);
+    logger.log('Restock product:', productId);
     toast.info('Función de reabastecimiento próximamente...');
   }
 

@@ -1,5 +1,7 @@
 'use client';
 
+import { createLogger } from '@/lib/logger';
+
 interface PerformanceMetric {
   id: string;
   name: string;
@@ -22,7 +24,9 @@ interface PerformanceReport {
   recommendations: string[];
 }
 
-class PerformanceMonitor {
+const logger = createLogger('PerformanceMonitor');
+
+export class PerformanceMonitor {
   private static instance: PerformanceMonitor;
   private metrics: PerformanceMetric[] = [];
   private observers: PerformanceObserver[] = [];
@@ -117,7 +121,7 @@ class PerformanceMonitor {
       this.observers.push(fidObserver);
 
     } catch (error) {
-      console.warn('Performance observers not supported:', error);
+      logger.warn('Performance observers not supported:', error);
     }
   }
 
@@ -213,8 +217,8 @@ class PerformanceMonitor {
     const networkMetrics = last24Hours.filter(m => m.category === 'network');
     const errorMetrics = last24Hours.filter(m => m.metadata?.success === false);
 
-    const averageLoadTime = loadMetrics.length > 0 
-      ? loadMetrics.reduce((sum, m) => sum + m.value, 0) / loadMetrics.length 
+    const averageLoadTime = loadMetrics.length > 0
+      ? loadMetrics.reduce((sum, m) => sum + m.value, 0) / loadMetrics.length
       : 0;
 
     const averageRenderTime = renderMetrics.length > 0
@@ -278,7 +282,7 @@ class PerformanceMonitor {
       const recentMetrics = this.metrics.slice(-100); // Keep last 100
       localStorage.setItem('performance-metrics', JSON.stringify(recentMetrics));
     } catch (error) {
-      console.warn('Failed to persist performance metrics:', error);
+      logger.warn('Failed to persist performance metrics:', error);
     }
   }
 
@@ -291,7 +295,7 @@ class PerformanceMonitor {
         this.metrics = [...this.metrics, ...metrics];
       }
     } catch (error) {
-      console.warn('Failed to load persisted metrics:', error);
+      logger.warn('Failed to load persisted metrics:', error);
     }
   }
 

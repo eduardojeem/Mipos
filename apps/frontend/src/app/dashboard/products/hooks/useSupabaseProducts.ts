@@ -3,7 +3,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { useSupabase } from '@/hooks/use-supabase';
-import type { Product, Category, Database } from '@/types';
+import type { Product, Category } from '@/types';
+import { supabase } from '@/lib/supabase/client';
+import { Database } from '@/lib/supabase/types';
+import { createLogger } from '@/lib/logger';
 import { toast } from '@/lib/toast';
 
 interface UseSupabaseProductsOptions {
@@ -22,12 +25,14 @@ interface DashboardStats {
   topCategory: string;
 }
 
+const logger = createLogger('SupabaseProducts');
+
 export function useSupabaseProducts(options: UseSupabaseProductsOptions = {}) {
-  const { 
-    filters = {}, 
-    enableRealtime = false, 
-    pageSize = 25, 
-    page = 1 
+  const {
+    filters = {},
+    enableRealtime = false,
+    pageSize = 25,
+    page = 1
   } = options;
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -45,13 +50,13 @@ export function useSupabaseProducts(options: UseSupabaseProductsOptions = {}) {
     topCategory: ''
   });
 
-  const { 
-    getProducts, 
-    getCategories, 
+  const {
+    getProducts,
+    getCategories,
     createProduct: supabaseCreateProduct,
     updateProduct: supabaseUpdateProduct,
     deleteProduct: supabaseDeleteProduct,
-    supabase 
+    supabase
   } = useSupabase();
 
   // Refs to prevent stale closures
@@ -80,7 +85,7 @@ export function useSupabaseProducts(options: UseSupabaseProductsOptions = {}) {
       const stats = await response.json();
       setDashboardStats(stats);
     } catch (err) {
-      console.error('Error fetching global stats:', err);
+      logger.error('Error fetching global stats:', err);
     }
   }, []);
 
@@ -99,13 +104,13 @@ export function useSupabaseProducts(options: UseSupabaseProductsOptions = {}) {
 
       const { data, error } = await getCategories();
       if (error) {
-        console.error('Error loading categories:', error);
+        logger.error('Error loading categories:', error);
         return [];
       }
 
       const categoriesData = data || [];
       setCategories(categoriesData);
-      
+
       // Cache for 5 minutes
       localStorage.setItem('supabase-categories-cache', JSON.stringify({
         data: categoriesData,
@@ -114,7 +119,7 @@ export function useSupabaseProducts(options: UseSupabaseProductsOptions = {}) {
 
       return categoriesData;
     } catch (err) {
-      console.error('Error in loadCategories:', err);
+      logger.error('Error in loadCategories:', err);
       return [];
     }
   }, [getCategories]);
@@ -220,7 +225,7 @@ export function useSupabaseProducts(options: UseSupabaseProductsOptions = {}) {
           }
           return (error as any)?.message || (error as any)?.details || String(error);
         })();
-        console.error('Error loading products:', { error, message: msg });
+        logger.error('Error loading products:', { error, message: msg });
         setError(msg);
         return;
       }
@@ -228,19 +233,19 @@ export function useSupabaseProducts(options: UseSupabaseProductsOptions = {}) {
       const productsData = data || [];
       setProducts(productsData);
       setTotal(count || 0);
-      
+
       const currentPage = pageRef.current;
       const currentPageSize = pageSizeRef.current;
       setHasMore((count || 0) > currentPage * currentPageSize);
 
       // Load categories and stats
       const categoriesData = await loadCategories();
-      
+
       // Fetch stats (independent of pagination)
       fetchGlobalStats();
 
     } catch (err) {
-      console.error('Error in loadProducts:', err);
+      logger.error('Error in loadProducts:', err);
       setError('Error loading products');
     } finally {
       if (showLoading) setIsLoading(false);
@@ -261,7 +266,7 @@ export function useSupabaseProducts(options: UseSupabaseProductsOptions = {}) {
   // Load more function
   const loadMoreProducts = useCallback(async () => {
     if (!hasMore || isLoading) return;
-    
+
     pageRef.current = pageRef.current + 1;
     await loadProducts(false);
   }, [hasMore, isLoading, loadProducts]);
@@ -277,7 +282,7 @@ export function useSupabaseProducts(options: UseSupabaseProductsOptions = {}) {
       }
       return false;
     } catch (err) {
-      console.error('Error creating product:', err);
+      logger.error('Error creating product:', err);
       toast.error('Error al crear producto');
       return false;
     }
@@ -293,7 +298,7 @@ export function useSupabaseProducts(options: UseSupabaseProductsOptions = {}) {
       }
       return false;
     } catch (err) {
-      console.error('Error updating product:', err);
+      logger.error('Error updating product:', err);
       toast.error('Error al actualizar producto');
       return false;
     }
@@ -309,7 +314,7 @@ export function useSupabaseProducts(options: UseSupabaseProductsOptions = {}) {
       }
       return false;
     } catch (err) {
-      console.error('Error deleting product:', err);
+      logger.error('Error deleting product:', err);
       toast.error('Error al eliminar producto');
       return false;
     }
@@ -327,10 +332,10 @@ export function useSupabaseProducts(options: UseSupabaseProductsOptions = {}) {
 
     const channel = supabase
       .channel('products-changes')
-      .on('postgres_changes', 
+      .on('postgres_changes',
         { event: '*', schema: 'public', table: 'products' },
         (payload: RealtimePostgresChangesPayload<Database['public']['Tables']['products']['Row']>) => {
-          console.log('Real-time update:', payload);
+          logger.log('Real-time update:', payload);
           // Refresh data on changes
           loadProducts(false);
         }
@@ -345,7 +350,7 @@ export function useSupabaseProducts(options: UseSupabaseProductsOptions = {}) {
   // Initial load
   useEffect(() => {
     let mounted = true;
-    
+
     const initialLoad = async () => {
       await loadProducts();
     };

@@ -1,20 +1,21 @@
 'use client';
 
 import { useState } from 'react';
-import { 
-  Dialog, DialogContent, DialogDescription, 
-  DialogFooter, DialogHeader, DialogTitle 
+import {
+  Dialog, DialogContent, DialogDescription,
+  DialogFooter, DialogHeader, DialogTitle
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { 
-  CheckCircle, XCircle, Clock, Package, 
-  User, Calendar, DollarSign 
+import {
+  CheckCircle, XCircle, Clock, Package,
+  User, Calendar, DollarSign
 } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/utils';
+import { createLogger } from '@/lib/logger';
 
 interface ReturnDetailsModalProps {
   return: {
@@ -44,12 +45,14 @@ interface ReturnDetailsModalProps {
   onProcess: (id: string) => void;
 }
 
-export function ReturnDetailsModal({ 
-  return: returnItem, 
-  open, 
-  onOpenChange, 
-  onUpdate, 
-  onProcess 
+const logger = createLogger('ReturnDetailsModal');
+
+export function ReturnDetailsModal({
+  return: returnItem,
+  open,
+  onOpenChange,
+  onUpdate,
+  onProcess
 }: ReturnDetailsModalProps) {
   const [notes, setNotes] = useState(returnItem.notes || '');
   const [isUpdating, setIsUpdating] = useState(false);
@@ -80,7 +83,7 @@ export function ReturnDetailsModal({
       await onUpdate(returnItem.id, status, notes);
       onOpenChange(false);
     } catch (error) {
-      console.error('Error updating return:', error);
+      logger.error('Error updating return:', error);
     } finally {
       setIsUpdating(false);
     }
@@ -92,7 +95,7 @@ export function ReturnDetailsModal({
       await onProcess(returnItem.id);
       onOpenChange(false);
     } catch (error) {
-      console.error('Error processing return:', error);
+      logger.error('Error processing return:', error);
     } finally {
       setIsUpdating(false);
     }
@@ -123,7 +126,7 @@ export function ReturnDetailsModal({
               </div>
               <p className="font-medium">{returnItem.customerName}</p>
             </div>
-            
+
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Package className="h-4 w-4" />
@@ -217,8 +220,8 @@ export function ReturnDetailsModal({
         </div>
 
         <DialogFooter className="flex gap-2">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={isUpdating}
           >
@@ -227,7 +230,7 @@ export function ReturnDetailsModal({
 
           {returnItem.status === 'pending' && (
             <>
-              <Button 
+              <Button
                 variant="destructive"
                 onClick={() => handleUpdateStatus('rejected')}
                 disabled={isUpdating}
@@ -235,7 +238,7 @@ export function ReturnDetailsModal({
                 <XCircle className="h-4 w-4 mr-2" />
                 Rechazar
               </Button>
-              <Button 
+              <Button
                 onClick={() => handleUpdateStatus('approved')}
                 disabled={isUpdating}
               >
@@ -246,7 +249,7 @@ export function ReturnDetailsModal({
           )}
 
           {returnItem.status === 'approved' && (
-            <Button 
+            <Button
               onClick={handleProcess}
               disabled={isUpdating}
             >

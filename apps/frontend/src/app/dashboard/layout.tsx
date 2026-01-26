@@ -29,40 +29,51 @@ export default function DashboardLayout({
   const { isAuthenticated, loading } = useIsAuthenticated();
   const { user } = useAuth();
 
-  // Iniciar el coordinador de sincronización de forma optimizada
+  // Iniciar el coordinador de sincronización de forma optimizada (NO BLOQUEANTE)
   useEffect(() => {
     if (!isAuthenticated) return;
 
     let syncStarted = false;
+    let cleanupDone = false;
 
-    // Delay sync start to not block initial render
+    // Delay sync start más para no interferir con la navegación inicial
     const timeoutId = setTimeout(() => {
       const load = async (attempt = 1) => {
         try {
-          const { syncCoordinator } = await import(/* webpackPrefetch: true */ '@/lib/sync/sync-coordinator');
-          syncCoordinator.start();
-          syncStarted = true;
+          // Verificar que no se haya limpiado antes de iniciar
+          if (cleanupDone) return;
+
+          const { syncCoordinator } = await import(/* webpackPrefetch: true, webpackChunkName: "sync-coordinator" */ '@/lib/sync/sync-coordinator');
+
+          // Double check antes de iniciar
+          if (!cleanupDone) {
+            syncCoordinator.start();
+            syncStarted = true;
+          }
         } catch (err: unknown) {
           const error = err as Error;
           const isChunkError = error && (error.name === 'ChunkLoadError' || /Loading chunk/i.test(String(error)));
-          if (isChunkError && attempt < 3) {
+          if (isChunkError && attempt < 3 && !cleanupDone) {
             setTimeout(() => load(attempt + 1), 1500 * attempt);
             return;
           }
-          console.warn('Sync coordinator failed to start:', error);
+          // Solo advertir en desarrollo
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('Sync coordinator failed to start:', error);
+          }
         }
       };
       void load();
-    }, 1000);
+    }, 2000); // Aumentado de 1s a 2s para no bloquear navegación
 
     return () => {
+      cleanupDone = true;
       clearTimeout(timeoutId);
       if (syncStarted) {
-        try {
-          import('@/lib/sync/sync-coordinator').then(({ syncCoordinator }) => {
-            syncCoordinator.stop();
-          });
-        } catch {/* noop */ }
+        // Cleanup asíncrono sin bloquear
+        void import('@/lib/sync/sync-coordinator').then(({ syncCoordinator }) => {
+          syncCoordinator.stop();
+        }).catch(() => {/* noop */ });
       }
     };
   }, [isAuthenticated]);
@@ -72,6 +83,7 @@ export default function DashboardLayout({
   };
 
   // ✅ Fuente unificada: reutilizar navegación del Sidebar para evitar desincronización
+  // Memoizado con useMemo para evitar recálculos innecesarios
   const navigationItems = useMemo(() => {
     const items: SidebarNavItem[] = sidebarNavigation;
     const userRole = user?.role || 'CASHIER';
@@ -79,7 +91,7 @@ export default function DashboardLayout({
       if (!item.roles) return true;
       return item.roles.includes(userRole) || (userRole === 'SUPER_ADMIN' && item.roles.includes('ADMIN'));
     });
-  }, [user]);
+  }, [user?.role]); // Solo re-calcular cuando cambie el rol, no todo el objeto user
 
   // Show loading state while checking authentication
   if (loading) {

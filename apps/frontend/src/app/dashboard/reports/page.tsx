@@ -11,6 +11,8 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { useBusinessConfig } from '@/contexts/BusinessConfigContext';
+import { createLogger } from '@/lib/logger';
 import { useToast } from '@/components/ui/use-toast';
 
 // Componentes UI
@@ -45,6 +47,8 @@ import { useAdvancedReportExport, ExportFormat } from './hooks/useAdvancedReport
 
 // Tipo para los reportes
 export type ReportType = 'sales' | 'inventory' | 'customers' | 'financial';
+
+const logger = createLogger('ReportsPage');
 
 export default function ReportsPage() {
   const { toast } = useToast();
@@ -297,7 +301,7 @@ export default function ReportsPage() {
         });
       }
     } catch (error) {
-      console.error('Error exporting report:', error);
+      logger.error('Error exporting report:', error);
     }
   };
 

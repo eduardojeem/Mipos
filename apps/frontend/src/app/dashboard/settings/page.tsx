@@ -1,13 +1,18 @@
 'use client';
 
-import React from 'react';
+import { lazy, Suspense } from 'react';
 import { PermissionProvider } from '@/components/ui/permission-guard';
-import SettingsPageContent from './components/SettingsPageContent';
+import { SettingsLoadingSkeleton } from './components/SettingsLoadingSkeleton';
+
+// Lazy load heavy components
+const SettingsPageContent = lazy(() => import('./components/SettingsPageContent'));
 
 export default function SettingsPage() {
   return (
     <PermissionProvider>
-      <SettingsPageContent />
+      <Suspense fallback={<SettingsLoadingSkeleton />}>
+        <SettingsPageContent />
+      </Suspense>
     </PermissionProvider>
   );
 }

@@ -1,8 +1,10 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import { useToast } from '@/components/ui/use-toast';
+import { createLogger } from '@/lib/logger';
 const lazyRecharts = (name: string) =>
   dynamic(() => import('recharts').then((m: any) => (props: any) => {
     const C = m[name];
@@ -111,8 +113,9 @@ const StatCard = ({ title, value, icon: Icon, trend, trendValue, color = "primar
 
 // --- Main Page Component ---
 
-export default function ProductViewPage() {
-  const params = useParams<{ id: string }>();
+const logger = createLogger('ProductViewPage');
+
+export default function ProductViewPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const productId = (params?.id ?? '') as string;
 
@@ -242,13 +245,13 @@ export default function ProductViewPage() {
       }
 
     } catch (err: any) {
-      console.error('Error fetching product data:', err);
+      logger.error('Error fetching product data:', err);
       if (typeof err === 'object' && err !== null) {
-        console.error('Full Error Object:', JSON.stringify(err, null, 2));
-        console.error('Error Message:', err.message);
-        console.error('Error Code:', err.code);
-        console.error('Error Details:', err.details);
-        console.error('Error Hint:', err.hint);
+        logger.error('Full Error Object:', JSON.stringify(err, null, 2));
+        logger.error('Error Message:', err.message);
+        logger.error('Error Code:', err.code);
+        logger.error('Error Details:', err.details);
+        logger.error('Error Hint:', err.hint);
       }
       setError(err.message || 'Error al cargar la información del producto');
     } finally {
@@ -459,28 +462,28 @@ export default function ProductViewPage() {
                 <CardHeader>
                   <CardTitle>Información Financiera</CardTitle>
                 </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
-                  <span className="text-sm font-medium">Costo Unitario</span>
-                  <span className="font-bold text-muted-foreground">{fmtCurrency(product.cost)}</span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-primary/5 rounded-lg border border-primary/10">
-                  <span className="text-sm font-medium text-primary">Precio Venta</span>
-                  <span className="font-bold text-primary">{fmtCurrency(product.price)}</span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
-                  <span className="text-sm font-medium">Precio Mayorista</span>
-                  <span className="font-bold">{product.wholesalePrice && product.wholesalePrice > 0 ? fmtCurrency(product.wholesalePrice) : '-'}</span>
-                </div>
-                <div className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
-                  <span className="text-sm font-medium">Precio Oferta</span>
-                  <span className="font-bold">{product.offerPrice && product.offerPrice > 0 ? fmtCurrency(product.offerPrice) : '-'}</span>
-                </div>
-                <div className="pt-4">
-                  <div className="flex justify-between text-sm mb-2">
-                    <span>Margen</span>
-                    <span className={profitMargin > 30 ? 'text-green-600' : 'text-orange-600'}>{profitMargin.toFixed(1)}%</span>
+                <CardContent className="space-y-4">
+                  <div className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
+                    <span className="text-sm font-medium">Costo Unitario</span>
+                    <span className="font-bold text-muted-foreground">{fmtCurrency(product.cost)}</span>
                   </div>
+                  <div className="flex justify-between items-center p-3 bg-primary/5 rounded-lg border border-primary/10">
+                    <span className="text-sm font-medium text-primary">Precio Venta</span>
+                    <span className="font-bold text-primary">{fmtCurrency(product.price)}</span>
+                  </div>
+                  <div className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
+                    <span className="text-sm font-medium">Precio Mayorista</span>
+                    <span className="font-bold">{product.wholesalePrice && product.wholesalePrice > 0 ? fmtCurrency(product.wholesalePrice) : '-'}</span>
+                  </div>
+                  <div className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
+                    <span className="text-sm font-medium">Precio Oferta</span>
+                    <span className="font-bold">{product.offerPrice && product.offerPrice > 0 ? fmtCurrency(product.offerPrice) : '-'}</span>
+                  </div>
+                  <div className="pt-4">
+                    <div className="flex justify-between text-sm mb-2">
+                      <span>Margen</span>
+                      <span className={profitMargin > 30 ? 'text-green-600' : 'text-orange-600'}>{profitMargin.toFixed(1)}%</span>
+                    </div>
                     <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full ${profitMargin > 30 ? 'bg-green-500' : 'bg-orange-500'}`}

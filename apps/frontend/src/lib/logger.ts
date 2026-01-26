@@ -5,6 +5,8 @@ interface LoggerOptions {
   enabled?: boolean;
 }
 
+const isDevelopment = process.env.NODE_ENV === 'development';
+
 class Logger {
   private namespace: string;
   private enabled: boolean;
@@ -12,6 +14,13 @@ class Logger {
   constructor(options: LoggerOptions = {}) {
     this.namespace = options.namespace || 'app';
     this.enabled = options.enabled ?? true;
+  }
+
+  private shouldLog(level: LogLevel): boolean {
+    // Always allow errors in production for monitoring
+    if (level === 'error') return this.enabled;
+    // Other levels only in development
+    return this.enabled && isDevelopment;
   }
 
   private formatMessage(level: LogLevel, message: any, ...args: any[]) {
@@ -34,27 +43,37 @@ class Logger {
   }
 
   debug(message: any, ...args: any[]) {
-    if (!this.enabled) return;
+    if (!this.shouldLog('debug')) return;
     // eslint-disable-next-line no-console
     console.debug(...this.formatMessage('debug', message, ...args));
   }
 
   info(message: any, ...args: any[]) {
-    if (!this.enabled) return;
+    if (!this.shouldLog('info')) return;
     // eslint-disable-next-line no-console
     console.info(...this.formatMessage('info', message, ...args));
   }
 
   warn(message: any, ...args: any[]) {
-    if (!this.enabled) return;
+    if (!this.shouldLog('warn')) return;
     // eslint-disable-next-line no-console
     console.warn(...this.formatMessage('warn', message, ...args));
   }
 
   error(message: any, ...args: any[]) {
-    if (!this.enabled) return;
+    if (!this.shouldLog('error')) return;
     // eslint-disable-next-line no-console
     console.error(...this.formatMessage('error', message, ...args));
+  }
+
+  /**
+   * Simple log method for backwards compatibility
+   * Only logs in development
+   */
+  log(message: any, ...args: any[]) {
+    if (!isDevelopment || !this.enabled) return;
+    // eslint-disable-next-line no-console
+    console.log(...this.formatMessage('info', message, ...args));
   }
 }
 

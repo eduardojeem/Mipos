@@ -4,6 +4,9 @@ import { customerService, type CustomerFilters, type CustomerStats } from '@/lib
 import { useCustomerOptimizations } from '@/hooks/useCustomerOptimizations';
 import { logger } from '@/lib/logger';
 import { PERFORMANCE_CONFIG } from '@/config/performance';
+import { supabase } from '@/lib/supabase/client';
+import { customersApi } from '../api/customers-api';
+import { createLogger } from '@/lib/logger';
 import type { Customer } from '@/types';
 import type { UICustomer } from '@/types/customer-page';
 
@@ -40,6 +43,8 @@ export interface UseCustomersDataReturn {
  * });
  * ```
  */
+const logger = createLogger('CustomersData');
+
 export function useCustomersData(config: UseCustomersDataConfig): UseCustomersDataReturn {
     const { filters, page, limit, enabled = true } = config;
 
@@ -178,7 +183,7 @@ export function useCustomersData(config: UseCustomersDataConfig): UseCustomersDa
                 }
             });
         } catch (error) {
-            console.error('Error loading customers:', error);
+            logger.error('Error loading customers:', error);
 
             setState(prev => ({
                 ...prev,

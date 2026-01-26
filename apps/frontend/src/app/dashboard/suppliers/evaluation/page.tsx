@@ -12,14 +12,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { 
-  Star, 
-  TrendingUp, 
-  TrendingDown, 
-  Clock, 
-  DollarSign, 
-  Truck, 
-  Shield, 
+import {
+  Star,
+  TrendingUp,
+  TrendingDown,
+  Clock,
+  DollarSign,
+  Truck,
+  Shield,
   Award,
   BarChart3,
   Filter,
@@ -35,6 +35,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import api from '@/lib/api';
+import { createLogger } from '@/lib/logger';
 
 // Types
 interface SupplierEvaluation {
@@ -198,10 +199,12 @@ const evaluationCriteria: EvaluationCriteria[] = [
   { name: 'communication', weight: 10, description: 'Comunicación y respuesta' }
 ];
 
+const logger = createLogger('SupplierEvaluation');
+
 export default function SupplierEvaluationPage() {
   const { user } = useAuth();
   const { toast } = useToast();
-  
+
   // State
   const [evaluations, setEvaluations] = useState<SupplierEvaluation[]>(mockEvaluations);
   const [ratings, setRatings] = useState<SupplierRating[]>(mockRatings);
@@ -211,13 +214,13 @@ export default function SupplierEvaluationPage() {
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [sortBy, setSortBy] = useState<string>('rating');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  
+
   // Dialog states
   const [showEvaluationDialog, setShowEvaluationDialog] = useState(false);
   const [showDetailsDialog, setShowDetailsDialog] = useState(false);
   const [selectedEvaluation, setSelectedEvaluation] = useState<SupplierEvaluation | null>(null);
   const [selectedRating, setSelectedRating] = useState<SupplierRating | null>(null);
-  
+
   // Form state
   const [formData, setFormData] = useState<Partial<SupplierEvaluation>>({
     criteria: {
@@ -243,7 +246,7 @@ export default function SupplierEvaluationPage() {
       // setEvaluations(response.data.evaluations);
       // setRatings(response.data.ratings);
     } catch (error) {
-      console.error('Error loading evaluations:', error);
+      logger.error('Error loading evaluations:', error);
       toast({
         title: 'Error',
         description: 'Error al cargar las evaluaciones',
@@ -258,7 +261,7 @@ export default function SupplierEvaluationPage() {
   const filteredRatings = ratings
     .filter(rating => {
       const matchesSearch = rating.supplierName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                           rating.category.toLowerCase().includes(searchQuery.toLowerCase());
+        rating.category.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesStatus = filterStatus === 'all' || rating.status === filterStatus;
       const matchesCategory = filterCategory === 'all' || rating.category === filterCategory;
       return matchesSearch && matchesStatus && matchesCategory;
@@ -286,7 +289,7 @@ export default function SupplierEvaluationPage() {
           aValue = a.overallRating;
           bValue = b.overallRating;
       }
-      
+
       if (sortOrder === 'asc') {
         return aValue > bValue ? 1 : -1;
       } else {
@@ -346,16 +349,16 @@ export default function SupplierEvaluationPage() {
 
   const calculateOverallRating = () => {
     if (!formData.criteria) return 0;
-    
+
     let totalWeightedScore = 0;
     let totalWeight = 0;
-    
+
     evaluationCriteria.forEach(criterion => {
       const score = formData.criteria![criterion.name as keyof typeof formData.criteria] || 0;
       totalWeightedScore += score * (criterion.weight / 100);
       totalWeight += criterion.weight / 100;
     });
-    
+
     return totalWeight > 0 ? totalWeightedScore / totalWeight : 0;
   };
 
@@ -373,12 +376,12 @@ export default function SupplierEvaluationPage() {
 
       // In a real app, save to API
       // await api.post('/suppliers/evaluations', evaluationData);
-      
+
       toast({
         title: 'Evaluación guardada',
         description: 'La evaluación del proveedor se ha guardado exitosamente',
       });
-      
+
       setShowEvaluationDialog(false);
       setFormData({
         criteria: {
@@ -391,7 +394,7 @@ export default function SupplierEvaluationPage() {
         }
       });
     } catch (error) {
-      console.error('Error saving evaluation:', error);
+      logger.error('Error saving evaluation:', error);
       toast({
         title: 'Error',
         description: 'Error al guardar la evaluación',
@@ -424,7 +427,7 @@ export default function SupplierEvaluationPage() {
                 Evalúa el desempeño del proveedor en diferentes criterios
               </DialogDescription>
             </DialogHeader>
-            
+
             <div className="space-y-6">
               {/* Basic Info */}
               <div className="grid grid-cols-2 gap-4">
@@ -467,11 +470,10 @@ export default function SupplierEvaluationPage() {
                               key={star}
                               type="button"
                               onClick={() => handleCriteriaChange(criterion.name, star)}
-                              className={`h-6 w-6 ${
-                                (formData.criteria?.[criterion.name as keyof typeof formData.criteria] || 0) >= star
+                              className={`h-6 w-6 ${(formData.criteria?.[criterion.name as keyof typeof formData.criteria] || 0) >= star
                                   ? 'text-yellow-400 fill-current'
                                   : 'text-gray-300'
-                              }`}
+                                }`}
                             >
                               <Star className="h-full w-full" />
                             </button>
@@ -495,11 +497,10 @@ export default function SupplierEvaluationPage() {
                       {[1, 2, 3, 4, 5].map((star) => (
                         <Star
                           key={star}
-                          className={`h-5 w-5 ${
-                            calculateOverallRating() >= star
+                          className={`h-5 w-5 ${calculateOverallRating() >= star
                               ? 'text-yellow-400 fill-current'
                               : 'text-gray-300'
-                          }`}
+                            }`}
                         />
                       ))}
                     </div>
@@ -615,11 +616,10 @@ export default function SupplierEvaluationPage() {
                           {[1, 2, 3, 4, 5].map((star) => (
                             <Star
                               key={star}
-                              className={`h-5 w-5 ${
-                                rating.overallRating >= star
+                              className={`h-5 w-5 ${rating.overallRating >= star
                                   ? 'text-yellow-400 fill-current'
                                   : 'text-gray-300'
-                              }`}
+                                }`}
                             />
                           ))}
                         </div>
@@ -871,11 +871,11 @@ export default function SupplierEvaluationPage() {
         <DialogContent className="max-w-2xl" aria-labelledby="evaluation-details-title">
           <DialogHeader>
             <DialogTitle id="evaluation-details-title">
-              {selectedRating ? `Detalles de ${selectedRating.supplierName}` : 
-               selectedEvaluation ? `Evaluación de ${selectedEvaluation.supplierName}` : ''}
+              {selectedRating ? `Detalles de ${selectedRating.supplierName}` :
+                selectedEvaluation ? `Evaluación de ${selectedEvaluation.supplierName}` : ''}
             </DialogTitle>
           </DialogHeader>
-          
+
           {selectedRating && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -886,11 +886,10 @@ export default function SupplierEvaluationPage() {
                       {[1, 2, 3, 4, 5].map((star) => (
                         <Star
                           key={star}
-                          className={`h-5 w-5 ${
-                            selectedRating.overallRating >= star
+                          className={`h-5 w-5 ${selectedRating.overallRating >= star
                               ? 'text-yellow-400 fill-current'
                               : 'text-gray-300'
-                          }`}
+                            }`}
                         />
                       ))}
                     </div>
@@ -906,7 +905,7 @@ export default function SupplierEvaluationPage() {
                   </div>
                 </div>
               </div>
-              
+
               <div>
                 <Label>Métricas de Rendimiento</Label>
                 <div className="grid grid-cols-2 gap-4 mt-2">
@@ -943,12 +942,12 @@ export default function SupplierEvaluationPage() {
                   <p>{selectedEvaluation.evaluatorName}</p>
                 </div>
               </div>
-              
+
               <div>
                 <Label>Comentarios</Label>
                 <p className="text-sm mt-1">{selectedEvaluation.comments}</p>
               </div>
-              
+
               <div>
                 <Label>Recomendaciones</Label>
                 <p className="text-sm mt-1">{selectedEvaluation.recommendations}</p>

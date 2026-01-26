@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 import api from '@/lib/api'
+import { createLogger } from '@/lib/logger'
 
 // Constants for configuration
 const INITIAL_DISPLAY_COUNT = 4
@@ -43,6 +44,8 @@ interface OfferProduct {
   rating?: number
   reviewCount?: number
 }
+
+const logger = createLogger('OfferPreview');
 
 export function OfferPreview({ promotion }: OfferPreviewProps) {
   const [products, setProducts] = useState<OfferProduct[]>([])
@@ -81,15 +84,15 @@ export function OfferPreview({ promotion }: OfferPreviewProps) {
   const fetchOfferProducts = useCallback(async () => {
     setLoading(true)
     setError(null)
-    
+
     try {
-      console.log('[OfferPreview] Fetching products for promotion:', promotion.id)
-      
+      logger.log('Fetching products for promotion:', promotion.id);
+
       // Simulate API delay for realistic UX
       await new Promise(resolve => setTimeout(resolve, 300))
-      
+
       const response = await api.get(`/promotions/${promotion.id}/products`)
-      
+
       if (response.data?.success) {
         const productsData = response.data.data || []
         const productsWithDiscount = productsData.map((p: any) => ({
@@ -104,13 +107,13 @@ export function OfferPreview({ promotion }: OfferPreviewProps) {
         }))
         setProducts(productsWithDiscount)
       } else {
-        console.log('[OfferPreview] API returned unsuccessful response')
+        logger.log('API returned unsuccessful response')
         setProducts([])
       }
     } catch (error) {
-      console.error('[OfferPreview] Error fetching products:', error)
+      logger.error('Error fetching products:', error);
       setError('Error al cargar productos. Mostrando datos de ejemplo.')
-      
+
       // Enhanced fallback with more realistic mock data
       const mockProducts: OfferProduct[] = [
         {
@@ -128,7 +131,7 @@ export function OfferPreview({ promotion }: OfferPreviewProps) {
           savings: 1200 - calculateDiscountedPrice(1200)
         },
         {
-          id: 'mock-offer-2', 
+          id: 'mock-offer-2',
           name: 'Mouse Gaming Wireless',
           price: 80,
           stock: 15,
@@ -286,11 +289,11 @@ export function OfferPreview({ promotion }: OfferPreviewProps) {
                 <Package className="h-12 w-12 text-slate-400" />
               </div>
             )}
-            
+
             {/* Badges overlay */}
             <div className="absolute top-2 right-2 flex flex-col gap-1">
               <Badge className="bg-red-600 text-white text-xs">
-                -{promotion.discountType === 'PERCENTAGE' 
+                -{promotion.discountType === 'PERCENTAGE'
                   ? `${promotion.discountValue}%`
                   : `$${promotion.discountValue}`
                 }
@@ -328,13 +331,13 @@ export function OfferPreview({ promotion }: OfferPreviewProps) {
                 </Badge>
               )}
             </div>
-            
+
             {product.category && (
               <Badge variant="secondary" className="text-xs">
                 {product.category}
               </Badge>
             )}
-            
+
             <div className="flex items-baseline gap-2">
               <span className="text-xl font-bold text-green-600">
                 ${product.discountedPrice.toFixed(2)}
@@ -343,7 +346,7 @@ export function OfferPreview({ promotion }: OfferPreviewProps) {
                 ${product.price.toFixed(2)}
               </span>
             </div>
-            
+
             <div className="flex items-center justify-between">
               <p className="text-xs text-green-600 font-medium">
                 Ahorra ${product.savings.toFixed(2)}
@@ -403,7 +406,7 @@ export function OfferPreview({ promotion }: OfferPreviewProps) {
             Así se verá esta promoción en el sitio público
           </p>
         </div>
-        
+
         <Button
           onClick={handleOpenInPublicSite}
           variant="outline"
@@ -448,7 +451,7 @@ export function OfferPreview({ promotion }: OfferPreviewProps) {
             )
           })}
         </div>
-        
+
         {/* Viewport Info */}
         <div className="text-center text-sm text-slate-500">
           Vista: {viewModeConfig[viewMode].description}
@@ -519,7 +522,7 @@ export function OfferPreview({ promotion }: OfferPreviewProps) {
       {/* Preview Container */}
       <div className="bg-slate-100 dark:bg-slate-900 rounded-lg p-6 flex justify-center">
         <div
-          style={{ 
+          style={{
             width: viewModeConfig[viewMode].width,
             maxWidth: '100%',
             transition: 'width 0.3s ease'
@@ -535,7 +538,7 @@ export function OfferPreview({ promotion }: OfferPreviewProps) {
                   {promotion.name}
                 </h2>
                 <Badge className="bg-gradient-to-r from-violet-600 to-indigo-600 text-white">
-                  {promotion.discountType === 'PERCENTAGE' 
+                  {promotion.discountType === 'PERCENTAGE'
                     ? `-${promotion.discountValue}%`
                     : `-$${promotion.discountValue}`
                   }
@@ -589,7 +592,7 @@ export function OfferPreview({ promotion }: OfferPreviewProps) {
                         )}
                         <div className="absolute top-2 right-2">
                           <Badge className="bg-red-600 text-white">
-                            -{promotion.discountType === 'PERCENTAGE' 
+                            -{promotion.discountType === 'PERCENTAGE'
                               ? `${promotion.discountValue}%`
                               : `$${promotion.discountValue}`
                             }

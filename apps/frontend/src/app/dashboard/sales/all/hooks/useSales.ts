@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { SalesFilters } from '../components/SalesFilters';
 import { Sale } from '../components/SalesDataTable';
+import { createLogger } from '@/lib/logger';
 
 interface SalesResponse {
   success: boolean;
@@ -24,17 +25,19 @@ interface UseSalesOptions {
   includeItems?: boolean;
 }
 
+const logger = createLogger('SalesHook');
+
 export function useSales({ filters, page, limit, includeItems = true }: UseSalesOptions) {
   const [isExporting, setIsExporting] = useState(false);
 
   // Build query parameters
   const buildQueryParams = useCallback(() => {
     const params = new URLSearchParams();
-    
+
     // Pagination
     params.set('page', String(page));
     params.set('limit', String(limit));
-    
+
     // Include items
     if (includeItems) {
       params.set('include', 'items');
@@ -107,12 +110,12 @@ export function useSales({ filters, page, limit, includeItems = true }: UseSales
       // Build export params (same as query but with larger limit)
       const exportParams = buildQueryParams();
       const exportUrl = `/api/sales?${exportParams}&limit=1000`;
-      
+
       const response = await fetch(exportUrl);
       if (!response.ok) {
         throw new Error('Error al exportar las ventas');
       }
-      
+
       const data = await response.json();
       const sales = data.sales || data.data || [];
 
@@ -182,7 +185,7 @@ export function useSales({ filters, page, limit, includeItems = true }: UseSales
         // Convert to CSV for now (Excel would require additional library)
         const headers = Object.keys(excelData[0]);
         const rows = excelData.map((row: any) => headers.map(header => row[header]));
-        
+
         const csvContent = [
           headers.join(','),
           ...rows.map((row: any[]) => row.map((cell: any) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
@@ -199,7 +202,7 @@ export function useSales({ filters, page, limit, includeItems = true }: UseSales
         document.body.removeChild(link);
       }
     } catch (error) {
-      console.error('Error exporting sales:', error);
+      logger.error('Error exporting sales:', error);
       throw error;
     } finally {
       setIsExporting(false);

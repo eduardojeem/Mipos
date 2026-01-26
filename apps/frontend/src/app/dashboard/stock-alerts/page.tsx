@@ -3,9 +3,11 @@
 import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { 
-  AlertTriangle, Settings, 
+import { createLogger } from '@/lib/logger';
+import {
+  AlertTriangle, Settings,
   TrendingDown, RefreshCw,
   Download
 } from 'lucide-react';
@@ -13,17 +15,19 @@ import { useToast } from '@/components/ui/use-toast';
 import { PermissionGuard, PermissionProvider } from '@/components/ui/permission-guard';
 
 // Components
-import { 
-  StockAlertsStats, 
-  StockAlertsTable, 
-  StockAlertsFilters, 
-  AlertConfigModal, 
-  BulkActionsBar, 
-  StockTrendsChart 
+import {
+  StockAlertsStats,
+  StockAlertsTable,
+  StockAlertsFilters,
+  AlertConfigModal,
+  BulkActionsBar,
+  StockTrendsChart
 } from './components';
 
 // Hooks
 import { useStockAlerts, useAlertFilters, useAlertConfig } from './hooks';
+
+const logger = createLogger('StockAlertsPage');
 
 export default function StockAlertsPage() {
   return (
@@ -42,10 +46,10 @@ function StockAlertsPageContent() {
   // Custom hooks
   const filters = useAlertFilters();
   const { config, updateConfig } = useAlertConfig();
-  const { 
-    alerts, 
-    stats, 
-    isLoading, 
+  const {
+    alerts,
+    stats,
+    isLoading,
     refreshAlerts,
     updateThreshold,
     createPurchaseOrder,
@@ -78,7 +82,7 @@ function StockAlertsPageContent() {
       }
       setSelectedProducts(new Set());
     } catch (error) {
-      console.error('Bulk action error:', error);
+      logger.error('Bulk action error:', error);
     }
   };
 
@@ -95,10 +99,10 @@ function StockAlertsPageContent() {
             Monitorea productos con stock bajo y gestiona reabastecimiento
           </p>
         </div>
-        
+
         <div className="flex gap-2">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             size="sm"
             onClick={() => refreshAlerts()}
             disabled={isLoading}
@@ -106,17 +110,17 @@ function StockAlertsPageContent() {
             <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
             Actualizar
           </Button>
-          
+
           <PermissionGuard permission="stock-alerts.export">
             <Button variant="outline" size="sm">
               <Download className="h-4 w-4 mr-2" />
               Exportar
             </Button>
           </PermissionGuard>
-          
+
           <PermissionGuard permission="stock-alerts.configure">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               size="sm"
               onClick={() => setIsConfigModalOpen(true)}
             >
@@ -132,7 +136,7 @@ function StockAlertsPageContent() {
 
       {/* Bulk Actions */}
       {selectedProducts.size > 0 && (
-        <BulkActionsBar 
+        <BulkActionsBar
           selectedCount={selectedProducts.size}
           onCreateOrder={() => handleBulkAction('create-order')}
           onMarkResolved={() => handleBulkAction('mark-resolved')}
@@ -151,7 +155,7 @@ function StockAlertsPageContent() {
                 <StockAlertsFilters filters={filters} />
               </div>
             </CardHeader>
-            
+
             <CardContent>
               <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
                 <TabsList className="grid w-full grid-cols-4">
@@ -170,7 +174,7 @@ function StockAlertsPageContent() {
                 </TabsList>
 
                 <TabsContent value={activeTab} className="space-y-4">
-                  <StockAlertsTable 
+                  <StockAlertsTable
                     alerts={filteredAlerts}
                     isLoading={isLoading}
                     selectedProducts={selectedProducts}
@@ -201,7 +205,7 @@ function StockAlertsPageContent() {
       </div>
 
       {/* Configuration Modal */}
-      <AlertConfigModal 
+      <AlertConfigModal
         open={isConfigModalOpen}
         onOpenChange={setIsConfigModalOpen}
         config={config}

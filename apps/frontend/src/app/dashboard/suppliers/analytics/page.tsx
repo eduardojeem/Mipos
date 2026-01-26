@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import { createLogger } from '@/lib/logger';
 
 // Optimized components
 import dynamic from 'next/dynamic';
@@ -44,14 +45,14 @@ const AnalyticsSkeleton = memo(function AnalyticsSkeleton() {
           <div className="h-10 w-32 bg-muted animate-pulse rounded" />
         </div>
       </div>
-      
+
       {/* KPI Cards skeleton */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="h-32 bg-muted animate-pulse rounded-lg" />
         ))}
       </div>
-      
+
       {/* Charts skeleton */}
       <div className="grid gap-4 md:grid-cols-2">
         <div className="h-96 bg-muted animate-pulse rounded-lg" />
@@ -61,10 +62,12 @@ const AnalyticsSkeleton = memo(function AnalyticsSkeleton() {
   );
 });
 
+const logger = createLogger('SuppliersAnalytics');
+
 const SuppliersAnalyticsPageContent = memo(function SuppliersAnalyticsPageContent() {
   const router = useRouter();
   const { toast } = useToast();
-  
+
   // State
   const [timeRange, setTimeRange] = useState<'3months' | '6months' | '12months' | '24months'>('12months');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -87,7 +90,7 @@ const SuppliersAnalyticsPageContent = memo(function SuppliersAnalyticsPageConten
 
   const handleExport = useCallback(() => {
     if (!data) return;
-    
+
     // Create CSV data
     const csvData = [
       ['Proveedor', 'Score', 'Total Compras', 'Órdenes', 'Valor Promedio'],
@@ -99,7 +102,7 @@ const SuppliersAnalyticsPageContent = memo(function SuppliersAnalyticsPageConten
         supplier.averageOrderValue.toString(),
       ])
     ];
-    
+
     const csvContent = csvData.map(row => row.join(',')).join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -110,7 +113,7 @@ const SuppliersAnalyticsPageContent = memo(function SuppliersAnalyticsPageConten
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    
+
     toast({
       title: 'Exportación completada',
       description: 'Los datos han sido exportados correctamente',
@@ -119,7 +122,7 @@ const SuppliersAnalyticsPageContent = memo(function SuppliersAnalyticsPageConten
 
   const handleViewSupplierDetails = useCallback((supplier: SupplierWithMetrics) => {
     // Navigate to supplier details or open modal
-    console.log('View supplier details:', supplier);
+    logger.log('View supplier details:', supplier);
     toast({
       title: 'Detalles del proveedor',
       description: `Mostrando información de ${supplier.name}`,
@@ -131,8 +134,8 @@ const SuppliersAnalyticsPageContent = memo(function SuppliersAnalyticsPageConten
     return (
       <div className="space-y-6">
         <div>
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             className="pl-0 hover:bg-transparent text-muted-foreground hover:text-foreground transition-colors"
             onClick={() => router.back()}
           >
@@ -140,7 +143,7 @@ const SuppliersAnalyticsPageContent = memo(function SuppliersAnalyticsPageConten
             Volver
           </Button>
         </div>
-        
+
         <Card className="border-destructive">
           <CardHeader>
             <CardTitle className="text-destructive">Error al cargar analytics</CardTitle>
@@ -162,8 +165,8 @@ const SuppliersAnalyticsPageContent = memo(function SuppliersAnalyticsPageConten
     return (
       <div className="space-y-6">
         <div>
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             className="pl-0 hover:bg-transparent text-muted-foreground hover:text-foreground transition-colors"
             onClick={() => router.back()}
           >
@@ -180,8 +183,8 @@ const SuppliersAnalyticsPageContent = memo(function SuppliersAnalyticsPageConten
     <div className="space-y-6">
       {/* Back Button */}
       <div>
-        <Button 
-          variant="ghost" 
+        <Button
+          variant="ghost"
           className="pl-0 hover:bg-transparent text-muted-foreground hover:text-foreground transition-colors"
           onClick={() => router.back()}
         >
@@ -206,7 +209,7 @@ const SuppliersAnalyticsPageContent = memo(function SuppliersAnalyticsPageConten
             </div>
           )}
         </div>
-        
+
         <div className="flex items-center space-x-2">
           <Select value={timeRange} onValueChange={(value: any) => setTimeRange(value)}>
             <SelectTrigger className="w-40">
@@ -219,7 +222,7 @@ const SuppliersAnalyticsPageContent = memo(function SuppliersAnalyticsPageConten
               <SelectItem value="24months">Últimos 2 años</SelectItem>
             </SelectContent>
           </Select>
-          
+
           <Select value={selectedCategory} onValueChange={setSelectedCategory}>
             <SelectTrigger className="w-40">
               <SelectValue />
@@ -233,12 +236,12 @@ const SuppliersAnalyticsPageContent = memo(function SuppliersAnalyticsPageConten
               ))}
             </SelectContent>
           </Select>
-          
+
           <Button variant="outline" onClick={handleRefresh} disabled={loading}>
             <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             Actualizar
           </Button>
-          
+
           <Button variant="outline" onClick={handleExport}>
             <Download className="mr-2 h-4 w-4" />
             Exportar
@@ -263,21 +266,21 @@ const SuppliersAnalyticsPageContent = memo(function SuppliersAnalyticsPageConten
             <MonthlyTrendsChart data={data.monthlyTrends} loading={loading} />
             <CategoryDistributionChart data={data.categoryDistribution} loading={loading} />
           </div>
-          
-          <TopPerformersTable 
-            data={data.topPerformers} 
+
+          <TopPerformersTable
+            data={data.topPerformers}
             loading={loading}
             onViewDetails={handleViewSupplierDetails}
           />
         </TabsContent>
 
         <TabsContent value="performance" className="space-y-6">
-          <PerformanceMetricsGrid 
+          <PerformanceMetricsGrid
             data={data.performanceMetrics}
             totalSuppliers={data.totalSuppliers}
             loading={loading}
           />
-          
+
           {/* Performance Chart */}
           <Card>
             <CardHeader>
@@ -308,7 +311,7 @@ const SuppliersAnalyticsPageContent = memo(function SuppliersAnalyticsPageConten
 
         <TabsContent value="trends" className="space-y-6">
           <MonthlyTrendsChart data={data.monthlyTrends} loading={loading} />
-          
+
           <Card>
             <CardHeader>
               <CardTitle>Análisis de Tendencias</CardTitle>
@@ -342,8 +345,8 @@ const SuppliersAnalyticsPageContent = memo(function SuppliersAnalyticsPageConten
         </TabsContent>
 
         <TabsContent value="suppliers" className="space-y-6">
-          <TopPerformersTable 
-            data={data.topPerformers} 
+          <TopPerformersTable
+            data={data.topPerformers}
             loading={loading}
             onViewDetails={handleViewSupplierDetails}
           />

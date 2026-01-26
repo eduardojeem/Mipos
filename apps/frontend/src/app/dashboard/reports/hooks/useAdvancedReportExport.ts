@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useToast } from '@/components/ui/use-toast';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+import { createLogger } from '@/lib/logger';
 import { useBusinessConfig } from '@/contexts/BusinessConfigContext';
 import { Chart, ChartConfiguration, registerables } from 'chart.js';
 
@@ -59,6 +61,8 @@ interface ReportSummary {
     averages?: Record<string, number>;
     highlights?: Array<{ label: string; value: string | number }>;
 }
+
+const logger = createLogger('AdvancedReportExport');
 
 export function useAdvancedReportExport() {
     const [isExporting, setIsExporting] = useState(false);
@@ -434,7 +438,7 @@ export function useAdvancedReportExport() {
             doc.save(`${filename}_${Date.now()}.pdf`);
             return true;
         } catch (error) {
-            console.error('Error exporting to PDF:', error);
+            logger.error('Error exporting to PDF:', error);
             return false;
         }
     };
@@ -523,7 +527,7 @@ export function useAdvancedReportExport() {
             XLSX.writeFile(workbook, `${filename}_${Date.now()}.xlsx`);
             return true;
         } catch (error) {
-            console.error('Error exporting to Excel:', error);
+            logger.error('Error exporting to Excel:', error);
             return false;
         }
     };
@@ -569,7 +573,7 @@ export function useAdvancedReportExport() {
 
             return true;
         } catch (error) {
-            console.error('Error exporting to CSV:', error);
+            logger.error('Error exporting to CSV:', error);
             return false;
         }
     };
@@ -633,7 +637,7 @@ export function useAdvancedReportExport() {
                 throw new Error('Error al exportar el reporte');
             }
         } catch (error) {
-            console.error('Export error:', error);
+            logger.error('Export error:', error);
             toast({
                 title: '❌ Error al exportar',
                 description: error instanceof Error ? error.message : 'No se pudo exportar el reporte',

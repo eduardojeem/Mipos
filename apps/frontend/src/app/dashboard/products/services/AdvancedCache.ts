@@ -16,6 +16,8 @@ interface CacheConfig {
   maxSize: number; // Maximum number of entries
 }
 
+const logger = createLogger('AdvancedCache');
+
 class AdvancedCache {
   private static instance: AdvancedCache;
   private db: IDBDatabase | null = null;
@@ -48,7 +50,7 @@ class AdvancedCache {
 
     this.initPromise = new Promise((resolve, reject) => {
       if (typeof window === 'undefined' || !window.indexedDB) {
-        console.warn('IndexedDB not available, using memory cache only');
+        logger.warn('IndexedDB not available, using memory cache only');
         resolve();
         return;
       }
@@ -56,7 +58,7 @@ class AdvancedCache {
       const request = indexedDB.open(this.config.dbName, this.config.version);
 
       request.onerror = () => {
-        console.error('Failed to open IndexedDB:', request.error);
+        logger.error('Failed to open IndexedDB:', request.error);
         reject(request.error);
       };
 
@@ -67,7 +69,7 @@ class AdvancedCache {
 
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
-        
+
         // Create object store for cache entries
         if (!db.objectStoreNames.contains('cache')) {
           const store = db.createObjectStore('cache', { keyPath: 'key' });
@@ -104,7 +106,7 @@ class AdvancedCache {
         store.put(entry);
       }
     } catch (error) {
-      console.warn('Failed to store in IndexedDB:', error);
+      logger.warn('Failed to store in IndexedDB:', error);
     }
   }
 
@@ -141,13 +143,13 @@ class AdvancedCache {
           };
 
           request.onerror = () => {
-            console.warn('Failed to get from IndexedDB:', request.error);
+            logger.warn('Failed to get from IndexedDB:', request.error);
             resolve(null);
           };
         });
       }
     } catch (error) {
-      console.warn('Failed to access IndexedDB:', error);
+      logger.warn('Failed to access IndexedDB:', error);
     }
 
     return null;
@@ -173,7 +175,7 @@ class AdvancedCache {
         store.delete(key);
       }
     } catch (error) {
-      console.warn('Failed to delete from IndexedDB:', error);
+      logger.warn('Failed to delete from IndexedDB:', error);
     }
   }
 
@@ -191,7 +193,7 @@ class AdvancedCache {
         store.clear();
       }
     } catch (error) {
-      console.warn('Failed to clear IndexedDB:', error);
+      logger.warn('Failed to clear IndexedDB:', error);
     }
   }
 
@@ -229,7 +231,7 @@ class AdvancedCache {
         }, 0);
       }
     } catch (error) {
-      console.warn('Failed to get cache stats:', error);
+      logger.warn('Failed to get cache stats:', error);
     }
 
     return {
@@ -259,7 +261,7 @@ class AdvancedCache {
         const store = transaction.objectStore('cache');
         const index = store.index('timestamp');
         const range = IDBKeyRange.upperBound(now - this.config.defaultTTL);
-        
+
         const request = index.openCursor(range);
         request.onsuccess = (event) => {
           const cursor = (event.target as IDBRequest).result;
@@ -273,7 +275,7 @@ class AdvancedCache {
         };
       }
     } catch (error) {
-      console.warn('Failed to cleanup IndexedDB:', error);
+      logger.warn('Failed to cleanup IndexedDB:', error);
     }
   }
 
@@ -296,14 +298,14 @@ class AdvancedCache {
       await this.set(key, data, ttl, metadata);
       return data;
     } catch (error) {
-      console.error('Failed to fetch data for cache:', error);
+      logger.error('Failed to fetch data for cache:', error);
       throw error;
     }
   }
 
   // Batch operations
   async setMany<T>(entries: Array<{ key: string; data: T; ttl?: number; metadata?: Record<string, any> }>): Promise<void> {
-    const promises = entries.map(entry => 
+    const promises = entries.map(entry =>
       this.set(entry.key, entry.data, entry.ttl, entry.metadata)
     );
     await Promise.all(promises);
@@ -328,7 +330,7 @@ class AdvancedCache {
       // Remove oldest entries
       const entries = Array.from(this.memoryCache.entries());
       entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
-      
+
       const toRemove = entries.slice(0, entries.length - this.config.maxSize);
       toRemove.forEach(([key]) => this.memoryCache.delete(key));
     }
