@@ -15,12 +15,44 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ShieldAlert, Building2, Users, BarChart3, Activity } from 'lucide-react';
 import { UnifiedPermissionGuard } from '@/components/auth/UnifiedPermissionGuard';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { useToast } from '@/components/ui/use-toast';
 
 export default function AdminDashboardPage() {
-  const { stats, loading: statsLoading, error } = useAdminData();
-  const [lastUpdated, setLastUpdated] = React.useState(new Date());
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('organizations');
   const [searchQuery, setSearchQuery] = useState('');
+  const [autoRefresh, setAutoRefresh] = useState(false);
+
+  // Admin data with auto-refresh capability
+  const { 
+    stats, 
+    loading: statsLoading, 
+    refreshing: statsRefreshing,
+    error,
+    lastFetch,
+    refresh: refreshStats 
+  } = useAdminData({
+    autoRefresh,
+    refreshInterval: 30000, // 30 seconds
+    onError: (error) => {
+      toast({
+        title: 'Error al cargar datos',
+        description: error,
+        variant: 'destructive',
+      });
+    },
+    onSuccess: () => {
+      if (autoRefresh) {
+        toast({
+          title: 'Datos actualizados',
+          description: 'Los datos se actualizaron automáticamente.',
+          duration: 2000,
+        });
+      }
+    },
+  });
 
   // Organizations filters
   const {
@@ -36,6 +68,7 @@ export default function AdminDashboardPage() {
     organizations,
     loading: orgsLoading,
     error: orgsError,
+    updating,
     refresh: refreshOrgs,
     suspendOrganization,
     activateOrganization,
@@ -46,12 +79,31 @@ export default function AdminDashboardPage() {
   });
 
   const handleRefresh = async () => {
-    await refreshOrgs();
-    setLastUpdated(new Date());
+    toast({
+      title: 'Actualizando datos...',
+      description: 'Por favor espera un momento.',
+    });
+    
+    await Promise.all([refreshStats(), refreshOrgs()]);
+    
+    toast({
+      title: 'Actualización completa',
+      description: 'Todos los datos se actualizaron correctamente.',
+    });
   };
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
+  };
+
+  const handleAutoRefreshToggle = (checked: boolean) => {
+    setAutoRefresh(checked);
+    toast({
+      title: checked ? 'Auto-actualización activada' : 'Auto-actualización desactivada',
+      description: checked 
+        ? 'Los datos se actualizarán cada 30 segundos.' 
+        : 'La actualización automática está desactivada.',
+    });
   };
 
   if (error) {
@@ -94,9 +146,26 @@ export default function AdminDashboardPage() {
         <AdminHeader
           onSearch={handleSearch}
           onRefresh={handleRefresh}
-          lastUpdated={lastUpdated}
-          isRefreshing={statsLoading || orgsLoading}
+          lastUpdated={lastFetch || undefined}
+          isRefreshing={statsLoading || statsRefreshing || orgsLoading}
         />
+
+        {/* Auto-refresh Toggle */}
+        <div className="flex items-center justify-between rounded-lg border p-4 bg-muted/50">
+          <div className="space-y-0.5">
+            <Label htmlFor="auto-refresh" className="text-base font-medium">
+              Actualización Automática
+            </Label>
+            <p className="text-sm text-muted-foreground">
+              Actualiza los datos cada 30 segundos automáticamente
+            </p>
+          </div>
+          <Switch
+            id="auto-refresh"
+            checked={autoRefresh}
+            onCheckedChange={handleAutoRefreshToggle}
+          />
+        </div>
 
         {/* Stats */}
         {statsLoading ? (
@@ -167,6 +236,7 @@ export default function AdminDashboardPage() {
                     onDelete={deleteOrganization}
                     onSuspend={suspendOrganization}
                     onActivate={activateOrganization}
+                    updatingId={updating}
                   />
                 )}
               </CardContent>

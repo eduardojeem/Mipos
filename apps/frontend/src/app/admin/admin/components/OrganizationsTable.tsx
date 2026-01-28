@@ -31,6 +31,7 @@ import {
   Users,
   ChevronDown,
   ChevronRight,
+  Loader2,
 } from 'lucide-react';
 import { Organization } from '../hooks/useAdminData';
 import { format } from 'date-fns';
@@ -42,6 +43,7 @@ interface OrganizationsTableProps {
   onDelete?: (id: string) => Promise<any>;
   onSuspend?: (id: string) => Promise<any>;
   onActivate?: (id: string) => Promise<any>;
+  updatingId?: string | null;
 }
 
 export function OrganizationsTable({
@@ -50,6 +52,7 @@ export function OrganizationsTable({
   onDelete,
   onSuspend,
   onActivate,
+  updatingId,
 }: OrganizationsTableProps) {
   const [sortBy, setSortBy] = useState<string>('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -199,22 +202,31 @@ export function OrganizationsTable({
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreHorizontal className="h-4 w-4" />
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8"
+                          disabled={updatingId === org.id}
+                        >
+                          {updatingId === org.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <MoreHorizontal className="h-4 w-4" />
+                          )}
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Acciones</DropdownMenuLabel>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem>
+                        <DropdownMenuItem disabled={updatingId === org.id}>
                           <ExternalLink className="mr-2 h-4 w-4" />
                           Ver Detalles
                         </DropdownMenuItem>
-                        <DropdownMenuItem>
+                        <DropdownMenuItem disabled={updatingId === org.id}>
                           <Edit className="mr-2 h-4 w-4" />
                           Editar
                         </DropdownMenuItem>
-                        <DropdownMenuItem>
+                        <DropdownMenuItem disabled={updatingId === org.id}>
                           <CreditCard className="mr-2 h-4 w-4" />
                           Gestionar Suscripción
                         </DropdownMenuItem>
@@ -223,6 +235,7 @@ export function OrganizationsTable({
                           <DropdownMenuItem
                             onClick={() => onSuspend?.(org.id)}
                             className="text-amber-600"
+                            disabled={updatingId === org.id}
                           >
                             <PauseCircle className="mr-2 h-4 w-4" />
                             Suspender
@@ -231,6 +244,7 @@ export function OrganizationsTable({
                           <DropdownMenuItem
                             onClick={() => onActivate?.(org.id)}
                             className="text-green-600"
+                            disabled={updatingId === org.id}
                           >
                             <PlayCircle className="mr-2 h-4 w-4" />
                             Activar
@@ -239,6 +253,7 @@ export function OrganizationsTable({
                         <DropdownMenuItem
                           onClick={() => onDelete?.(org.id)}
                           className="text-destructive"
+                          disabled={updatingId === org.id}
                         >
                           <Trash2 className="mr-2 h-4 w-4" />
                           Eliminar

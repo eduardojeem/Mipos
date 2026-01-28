@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Organization } from './useAdminData';
 import { OrganizationFilters } from './useAdminFilters';
+import { useToast } from '@/components/ui/use-toast';
 
 interface UseOrganizationsOptions {
     filters?: OrganizationFilters;
@@ -23,8 +24,10 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
     const [error, setError] = useState<string | null>(null);
     const [totalCount, setTotalCount] = useState(0);
     const [page, setPage] = useState(1);
+    const [updating, setUpdating] = useState<string | null>(null);
 
     const supabase = createClient();
+    const { toast } = useToast();
 
     const fetchOrganizations = useCallback(async () => {
         try {
@@ -59,9 +62,6 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
                 if (filters.dateTo) {
                     query = query.lte('created_at', filters.dateTo);
                 }
-
-                // Revenue filter - this is calculated, so we'll filter client-side
-                // Member count filter - would need a join or separate query
             }
 
             // Apply sorting
@@ -92,11 +92,17 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
             setTotalCount(count || 0);
         } catch (err: any) {
             console.error('Error fetching organizations:', err);
-            setError(err.message);
+            const errorMessage = err.message || 'Error al cargar organizaciones';
+            setError(errorMessage);
+            toast({
+                title: 'Error',
+                description: errorMessage,
+                variant: 'destructive',
+            });
         } finally {
             setLoading(false);
         }
-    }, [supabase, filters, sortBy, sortOrder, page, pageSize]);
+    }, [supabase, filters, sortBy, sortOrder, page, pageSize, toast]);
 
     useEffect(() => {
         fetchOrganizations();
@@ -110,11 +116,19 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
         return 0;
     };
 
-    // Update organization
+    // Update organization with optimistic update
     const updateOrganization = useCallback(async (
         id: string,
         updates: Partial<Organization>
     ) => {
+        setUpdating(id);
+        
+        // Optimistic update
+        const previousOrgs = [...organizations];
+        setOrganizations(orgs => 
+            orgs.map(org => org.id === id ? { ...org, ...updates } : org)
+        );
+
         try {
             const { error: updateError } = await supabase
                 .from('organizations')
@@ -123,17 +137,41 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
 
             if (updateError) throw updateError;
 
-            // Refresh data
+            toast({
+                title: 'Actualización exitosa',
+                description: 'La organización se actualizó correctamente.',
+            });
+
+            // Refresh to get latest data
             await fetchOrganizations();
             return { success: true };
         } catch (err: any) {
             console.error('Error updating organization:', err);
-            return { success: false, error: err.message };
+            
+            // Revert optimistic update
+            setOrganizations(previousOrgs);
+            
+            const errorMessage = err.message || 'Error al actualizar organización';
+            toast({
+                title: 'Error al actualizar',
+                description: errorMessage,
+                variant: 'destructive',
+            });
+            
+            return { success: false, error: errorMessage };
+        } finally {
+            setUpdating(null);
         }
-    }, [supabase, fetchOrganizations]);
+    }, [supabase, organizations, fetchOrganizations, toast]);
 
-    // Delete organization
+    // Delete organization with confirmation
     const deleteOrganization = useCallback(async (id: string) => {
+        setUpdating(id);
+        
+        // Optimistic update
+        const previousOrgs = [...organizations];
+        setOrganizations(orgs => orgs.filter(org => org.id !== id));
+
         try {
             const { error: deleteError } = await supabase
                 .from('organizations')
@@ -142,32 +180,73 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
 
             if (deleteError) throw deleteError;
 
-            // Refresh data
+            toast({
+                title: 'Eliminación exitosa',
+                description: 'La organización se eliminó correctamente.',
+            });
+
+            // Refresh to update counts
             await fetchOrganizations();
             return { success: true };
         } catch (err: any) {
             console.error('Error deleting organization:', err);
-            return { success: false, error: err.message };
+            
+            // Revert optimistic update
+            setOrganizations(previousOrgs);
+            
+            const errorMessage = err.message || 'Error al eliminar organización';
+            toast({
+                title: 'Error al eliminar',
+                description: errorMessage,
+                variant: 'destructive',
+            });
+            
+            return { success: false, error: errorMessage };
+        } finally {
+            setUpdating(null);
         }
-    }, [supabase, fetchOrganizations]);
+    }, [supabase, organizations, fetchOrganizations, toast]);
 
     // Suspend organization
     const suspendOrganization = useCallback(async (id: string) => {
-        return updateOrganization(id, { subscription_status: 'SUSPENDED' });
-    }, [updateOrganization]);
+        const result = await updateOrganization(id, { subscription_status: 'SUSPENDED' });
+        if (result.success) {
+            toast({
+                title: 'Organización suspendida',
+                description: 'La organización ha sido suspendida exitosamente.',
+                variant: 'default',
+            });
+        }
+        return result;
+    }, [updateOrganization, toast]);
 
     // Activate organization
     const activateOrganization = useCallback(async (id: string) => {
-        return updateOrganization(id, { subscription_status: 'ACTIVE' });
-    }, [updateOrganization]);
+        const result = await updateOrganization(id, { subscription_status: 'ACTIVE' });
+        if (result.success) {
+            toast({
+                title: 'Organización activada',
+                description: 'La organización ha sido activada exitosamente.',
+                variant: 'default',
+            });
+        }
+        return result;
+    }, [updateOrganization, toast]);
 
     // Change subscription plan
     const changeSubscriptionPlan = useCallback(async (
         id: string,
         plan: string
     ) => {
-        return updateOrganization(id, { subscription_plan: plan });
-    }, [updateOrganization]);
+        const result = await updateOrganization(id, { subscription_plan: plan });
+        if (result.success) {
+            toast({
+                title: 'Plan actualizado',
+                description: `El plan se cambió a ${plan} exitosamente.`,
+            });
+        }
+        return result;
+    }, [updateOrganization, toast]);
 
     return {
         organizations,
@@ -177,6 +256,7 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
         page,
         setPage,
         pageSize,
+        updating,
         refresh: fetchOrganizations,
         updateOrganization,
         deleteOrganization,

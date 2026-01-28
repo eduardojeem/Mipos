@@ -52,6 +52,14 @@ export const adminNavItems: AdminNavItem[] = [
     category: 'Principal'
   },
   {
+    title: 'Super Admin Panel',
+    href: '/admin/admin',
+    icon: Shield,
+    description: 'Panel de Super Administrador',
+    category: 'Principal',
+    badge: 'SUPER'
+  },
+  {
     title: 'Usuarios',
     href: '/admin/users',
     icon: Users,
