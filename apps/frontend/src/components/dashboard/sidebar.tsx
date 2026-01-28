@@ -23,7 +23,8 @@ import {
   Search,
   LogOut,
   Sparkles,
-  ShoppingBag
+  ShoppingBag,
+  Building2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth, useIsAdmin } from '@/hooks/use-auth';
@@ -186,6 +187,17 @@ export const navigation: NavItem[] = [
     color: 'text-indigo-600 dark:text-indigo-400',
     bgColor: 'bg-indigo-50 dark:bg-indigo-900/20',
     borderColor: 'border-indigo-200 dark:border-indigo-800'
+  },
+  {
+    name: 'Panel SaaS',
+    href: '/dashboard/admin',
+    icon: Building2,
+    roles: ['SUPER_ADMIN'],
+    category: 'admin',
+    description: 'Gestión Global SaaS',
+    color: 'text-red-600 dark:text-red-400',
+    bgColor: 'bg-red-50 dark:bg-red-900/20',
+    borderColor: 'border-red-200 dark:border-red-800'
   },
   {
     name: 'Administración',

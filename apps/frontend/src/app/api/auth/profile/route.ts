@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
         bio: (user.user_metadata as any)?.bio || '',
         location: (user.user_metadata as any)?.location || '',
         avatar_url: (user.user_metadata as any)?.avatar_url || '',
-        role: (user.user_metadata as any)?.role || 'user',
+        role: (user.user_metadata as any)?.role || (user.app_metadata as any)?.role || 'USER',
         created_at: (user as any).created_at,
         updated_at: (user as any).updated_at || (user as any).created_at
       };

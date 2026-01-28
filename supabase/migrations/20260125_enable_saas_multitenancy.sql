@@ -139,9 +139,11 @@ CREATE POLICY "Tenant Isolation" ON public.categories
     USING (organization_id IN (SELECT unnest(get_my_org_ids())));
 
 -- Organization Policies
+DROP POLICY IF EXISTS "Members can view their organizations" ON public.organizations;
 CREATE POLICY "Members can view their organizations" ON public.organizations
     FOR SELECT USING (id IN (SELECT unnest(get_my_org_ids())));
 
+DROP POLICY IF EXISTS "Members can view org members" ON public.organization_members;
 CREATE POLICY "Members can view org members" ON public.organization_members
     FOR SELECT USING (organization_id IN (SELECT unnest(get_my_org_ids())));
 
