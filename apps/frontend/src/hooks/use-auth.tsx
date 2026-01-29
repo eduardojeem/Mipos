@@ -12,7 +12,7 @@ import { useSessionInvalidation } from './use-session-invalidation';
 // Create Auth Context
 const AuthContext = createContext<AuthContextType | null>(null);
 
-// Enhanced auth provider with improved fallback functionality
+// Enhanced auth provider with improved fallback functionality and faster loading
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -98,7 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } as unknown as SupabaseUser;
   }, [extractNameFromEmail]);
 
-  // Enhanced function to fetch user data with better fallback
+  // Enhanced function to fetch user data with better fallback and TIMEOUT
   const fetchUserData = useCallback(async (authUser: SupabaseUser): Promise<User> => {
     // Evitar llamadas a la API en modo mock de desarrollo cuando Supabase no está configurado
     try {
@@ -114,12 +114,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
+      // ⚡ OPTIMIZACIÓN: Timeout de 3 segundos para evitar esperas largas
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+
       // Fetch user profile via backend API to avoid client-side Supabase probe issues
       const response = await fetch('/api/auth/profile', {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         console.warn('Profile API returned non-OK, using fallback:', response.statusText);
@@ -147,7 +154,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         lastLogin: authUser.last_sign_in_at,
       };
     } catch (err) {
-      console.warn('Error in fetchUserData, using enhanced fallback:', err);
+      // Si es un error de timeout u otro error, usar fallback inmediatamente
+      console.warn('Error in fetchUserData (timeout o error de red), using enhanced fallback:', err);
       return createFallbackUser(authUser);
     }
   }, [supabase, isDevMockMode, createFallbackUser, extractNameFromEmail]);
@@ -349,10 +357,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    // Get initial session
+    // Get initial session with timeout protection
     const getInitialSession = async () => {
       try {
-        const { data: { session }, error } = await supabase.auth.getSession();
+        // ⚡ TIMEOUT OPTIMIZADO: Máximo 5 segundos para evitar esperas eternas
+        const sessionPromise = supabase.auth.getSession();
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Session timeout')), 5000)
+        );
+
+        const result = await Promise.race([
+          sessionPromise,
+          timeoutPromise
+        ]) as { data: { session: Session | null }; error: Error | null };
+        
+        const { data: { session }, error } = result;
 
         if (error) {
           const msg = error?.message || '';
@@ -398,7 +417,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (err) {
         const msg = (err as Error)?.message || '';
-        const isSupabaseUnconfigured = msg.includes('Supabase no configurado') || msg.toLowerCase().includes('supabase not configured');
+        const isSupabaseUnconfigured = msg.includes('Supabase no configurado') || msg.toLowerCase().includes('supabase not configured') || msg.includes('timeout');
         if (isSupabaseUnconfigured) {
           console.warn('Auth: Supabase no configurado durante getInitialSession; usando usuario mock');
           setError(null);
@@ -415,6 +434,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(null);
         }
       } finally {
+        // ⚡ SIEMPRE establecer loading a false después del timeout
         setLoading(false);
       }
     };

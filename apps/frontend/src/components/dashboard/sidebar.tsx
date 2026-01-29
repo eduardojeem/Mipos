@@ -4,7 +4,6 @@ import { useState, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard,
   Package,
   ShoppingCart,
   Users,
@@ -26,8 +25,9 @@ import {
   ShoppingBag,
   Building2
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAuth, useIsAdmin } from '@/hooks/use-auth';
+import { useAuth } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -38,7 +38,7 @@ import { NavCategory } from './NavCategory';
 export type NavItem = {
   name: string;
   href: string;
-  icon: any;
+  icon: LucideIcon;
   roles?: string[];
   category?: string;
   description?: string;
@@ -49,7 +49,7 @@ export type NavItem = {
   subItems?: Array<{
     name: string;
     href: string;
-    icon: any;
+    icon: LucideIcon;
     description?: string;
   }>;
 };
@@ -282,7 +282,6 @@ export function Sidebar() {
   const [searchQuery, setSearchQuery] = useState('');
   const pathname = usePathname();
   const { user, signOut } = useAuth();
-  const isAdmin = useIsAdmin();
 
   const filteredNavigation = useMemo(() => {
     const userRole = user?.role || 'CASHIER';
