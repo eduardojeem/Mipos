@@ -12,13 +12,13 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { 
-  ShieldAlert, 
-  RefreshCw, 
-  Building2, 
-  BarChart3, 
+import {
+  ShieldAlert,
+  RefreshCw,
+  Building2,
+  BarChart3,
   Activity,
-  TrendingUp 
+  TrendingUp
 } from 'lucide-react';
 import { UnifiedPermissionGuard } from '@/components/auth/UnifiedPermissionGuard';
 import { useToast } from '@/components/ui/use-toast';
@@ -28,14 +28,14 @@ export default function SuperAdminPage() {
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
 
-  const { 
-    organizations, 
-    stats, 
-    loading, 
+  const {
+    organizations,
+    stats,
+    loading,
     refreshing,
     error,
     lastFetch,
-    refresh 
+    refresh
   } = useAdminData({
     autoRefresh,
     refreshInterval: 30000,
@@ -62,9 +62,9 @@ export default function SuperAdminPage() {
       title: 'Actualizando datos...',
       description: 'Por favor espera un momento.',
     });
-    
+
     await refresh();
-    
+
     toast({
       title: 'Actualización completa',
       description: 'Todos los datos se actualizaron correctamente.',
@@ -75,8 +75,8 @@ export default function SuperAdminPage() {
     setAutoRefresh(checked);
     toast({
       title: checked ? 'Auto-actualización activada' : 'Auto-actualización desactivada',
-      description: checked 
-        ? 'Los datos se actualizarán cada 30 segundos.' 
+      description: checked
+        ? 'Los datos se actualizarán cada 30 segundos.'
         : 'La actualización automática está desactivada.',
     });
   };
@@ -98,11 +98,59 @@ export default function SuperAdminPage() {
         <Alert variant="destructive">
           <ShieldAlert className="h-4 w-4" />
           <AlertTitle>Error de Acceso</AlertTitle>
-          <AlertDescription>
-            No se pudieron cargar los datos del panel de administración. 
-            Verifique que tiene permisos de Super Admin.
-            <br/>
-            Detalle: {error}
+          <AlertDescription className="space-y-3">
+            <p>
+              No se pudieron cargar los datos del panel de administración.
+              Verifique que tiene permisos de Super Admin.
+            </p>
+            <details className="mt-4 rounded border border-red-300 bg-red-50 dark:bg-red-950/20 p-3">
+              <summary className="cursor-pointer font-medium text-sm mb-2">
+                🔍 Información de debug (click para expandir)
+              </summary>
+              <div className="space-y-2 text-xs font-mono">
+                <div>
+                  <strong>Error:</strong> {error}
+                </div>
+                <div>
+                  <strong>Última actualización:</strong> {lastFetch ? lastFetch.toLocaleString() : 'Nunca'}
+                </div>
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const debugInfo = `
+=== Debug Info: SuperAdmin Error ===
+Error: ${error}
+Timestamp: ${new Date().toISOString()}
+Last Fetch: ${lastFetch ? lastFetch.toISOString() : 'Never'}
+User Agent: ${navigator.userAgent}
+URL: ${window.location.href}
+                      `.trim();
+                      navigator.clipboard.writeText(debugInfo);
+                      toast({
+                        title: 'Debug info copiada',
+                        description: 'La información de debug fue copiada al portapapeles',
+                      });
+                    }}
+                  >
+                    Copiar debug info
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => refresh()}
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Reintentar
+                  </Button>
+                </div>
+              </div>
+            </details>
+            <p className="text-xs mt-4">
+              💡 <strong>Sugerencias:</strong> Abre la consola del navegador (F12) para ver logs detallados.
+              Busca mensajes con prefijos como [SuperAdmin API] o [useAdminData].
+            </p>
           </AlertDescription>
         </Alert>
       </div>
@@ -156,7 +204,7 @@ export default function SuperAdminPage() {
             onCheckedChange={handleAutoRefreshToggle}
           />
         </div>
-        
+
         {loading ? (
           <div className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -170,7 +218,7 @@ export default function SuperAdminPage() {
           <div className="space-y-6">
             {/* Stats Cards */}
             <AdminStats stats={stats} />
-            
+
             {/* Tabs */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
               <TabsList className="grid w-full grid-cols-3 lg:w-[600px]">
@@ -190,7 +238,7 @@ export default function SuperAdminPage() {
 
               {/* Overview Tab */}
               <TabsContent value="overview" className="space-y-4">
-                <SystemOverview stats={stats} />
+                <SystemOverview />
               </TabsContent>
 
               {/* Organizations Tab */}

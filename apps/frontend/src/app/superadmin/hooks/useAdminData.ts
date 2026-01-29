@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 
 export interface Organization {
@@ -48,13 +48,20 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastFetch, setLastFetch] = useState<Date | null>(null);
-  
-  const supabase = createClient();
+
+  // Memoize the Supabase client to avoid creating new instances on every render
+  const supabase = useMemo(() => {
+    console.log('🔧 [useAdminData] Creating Supabase client instance');
+    return createClient();
+  }, []);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const fetchData = useCallback(async (isRefresh = false) => {
+    console.log(`🔄 [useAdminData] Starting data fetch (isRefresh: ${isRefresh})...`);
+
     if (abortControllerRef.current) {
+      console.log('⏹️ [useAdminData] Aborting previous request');
       abortControllerRef.current.abort();
     }
 
@@ -67,19 +74,33 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
         setLoading(true);
       }
       setError(null);
-      
+
       // Fetch stats from API
+      console.log('📊 [useAdminData] Fetching stats from /api/superadmin/stats...');
       const statsResponse = await fetch('/api/superadmin/stats', {
         signal: abortControllerRef.current.signal,
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
 
+      console.log('📊 [useAdminData] Stats API response status:', statsResponse.status);
+
       if (!statsResponse.ok) {
-        throw new Error(`Error al cargar estadísticas: ${statsResponse.statusText}`);
+        const errorText = await statsResponse.text();
+        console.error('❌ [useAdminData] Stats API error:', {
+          status: statsResponse.status,
+          statusText: statsResponse.statusText,
+          body: errorText
+        });
+        throw new Error(`Error al cargar estadísticas (${statsResponse.status}): ${statsResponse.statusText}`);
       }
 
       const statsData = await statsResponse.json();
+      console.log('✅ [useAdminData] Stats data received:', statsData);
 
       // Fetch organizations directly from Supabase
+      console.log('🏢 [useAdminData] Fetching organizations from Supabase...');
       const { data: orgsData, error: orgsError } = await supabase
         .from('organizations')
         .select('*')
@@ -87,10 +108,16 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
         .limit(100);
 
       if (orgsError) {
-        console.error('Error fetching organizations:', orgsError);
-        // Don't throw, just log and continue with empty array
+        console.error('❌ [useAdminData] Error fetching organizations:', {
+          code: orgsError.code,
+          message: orgsError.message,
+          details: orgsError.details,
+          hint: orgsError.hint
+        });
+        console.warn('⚠️ [useAdminData] Setting organizations to empty array due to error');
         setOrganizations([]);
       } else {
+        console.log('✅ [useAdminData] Organizations fetched:', orgsData?.length || 0);
         setOrganizations(orgsData || []);
       }
 
@@ -106,15 +133,21 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
       });
 
       setLastFetch(new Date());
+      console.log('✅ [useAdminData] Data fetch completed successfully');
       onSuccess?.();
 
     } catch (err: any) {
       if (err.name === 'AbortError') {
-        console.log('Request aborted');
+        console.log('⏹️ [useAdminData] Request was aborted');
         return;
       }
-      
-      console.error('Error fetching admin data:', err);
+
+      console.error('❌ [useAdminData] Fatal error fetching admin data:', {
+        name: err.name,
+        message: err.message,
+        stack: err.stack
+      });
+
       const errorMessage = err.message || 'Error desconocido al cargar datos';
       setError(errorMessage);
       onError?.(errorMessage);
@@ -122,6 +155,7 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
       setLoading(false);
       setRefreshing(false);
       abortControllerRef.current = null;
+      console.log('🏁 [useAdminData] Data fetch process completed');
     }
   }, [supabase, onError, onSuccess]);
 
@@ -158,13 +192,13 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
     };
   }, []);
 
-  return { 
-    organizations, 
-    stats, 
-    loading, 
+  return {
+    organizations,
+    stats,
+    loading,
     refreshing,
-    error, 
+    error,
     lastFetch,
-    refresh 
+    refresh
   };
 }

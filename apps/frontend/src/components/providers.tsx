@@ -84,9 +84,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
       const isApiCall = typeof urlStr === 'string' && (
         (urlStr.startsWith('/api') || (apiUrl ? urlStr.startsWith(apiUrl) : false)) && !isHealth && !isAuth && !isPermissions
       );
+      const didStartLoading = isApiCall;
 
       try {
-        if (isApiCall) {
+        if (didStartLoading) {
           if (activeFetches === 0) {
             const { startLoading } = useStore.getState();
             startLoading('Cargando datos...');
@@ -107,15 +108,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       } catch (err) {
         throw err;
       } finally {
-        const urlStrFinally = getUrlFromInput(input);
-        const isHealthFinally = typeof urlStrFinally === 'string' && (urlStrFinally.startsWith('/api/health') || urlStrFinally.startsWith('/health'));
-        const isAuthFinally = typeof urlStrFinally === 'string' && (urlStrFinally.startsWith('/api/auth/') || urlStrFinally.includes('/api/auth/'));
-        const isPermissionsFinally = typeof urlStrFinally === 'string' && /\/api\/users\/[^/]+\/permissions/.test(urlStrFinally || '');
-        const isApiCallFinally = typeof urlStrFinally === 'string' && (
-          (urlStrFinally.startsWith('/api') || (apiUrl ? urlStrFinally.startsWith(apiUrl) : false)) && !isHealthFinally && !isAuthFinally && !isPermissionsFinally
-        );
-
-        if (isApiCallFinally) {
+        if (didStartLoading) {
           activeFetches = Math.max(0, activeFetches - 1);
           if (activeFetches === 0) {
             try { clearTimeout(watchdogTimer); } catch {}
