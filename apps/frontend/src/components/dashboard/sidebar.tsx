@@ -190,7 +190,7 @@ export const navigation: NavItem[] = [
   },
   {
     name: 'Panel SaaS',
-    href: '/dashboard/admin',
+    href: '/superadmin',
     icon: Building2,
     roles: ['SUPER_ADMIN'],
     category: 'admin',

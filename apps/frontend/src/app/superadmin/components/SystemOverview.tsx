@@ -12,7 +12,7 @@ import {
 import { useAdminData } from '../hooks/useAdminData';
 
 export function SystemOverview() {
-  const { stats, loading, error } = useAdminData();
+  const { stats, organizations, loading, error } = useAdminData();
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -20,6 +20,10 @@ export function SystemOverview() {
       currency: 'USD',
       minimumFractionDigits: 0,
     }).format(amount);
+  };
+
+  const getPlanCount = (plan: string) => {
+    return organizations.filter(org => org.subscription_plan === plan).length;
   };
 
   if (loading) {
@@ -171,7 +175,7 @@ export function SystemOverview() {
               <div className="p-4 rounded-xl bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 border border-slate-200 dark:border-slate-700">
                 <div className="text-sm text-slate-600 dark:text-slate-400 mb-1">FREE</div>
                 <div className="text-2xl font-bold text-slate-800 dark:text-slate-200">
-                  {stats.totalOrganizations - stats.activeSubscriptions}
+                  {getPlanCount('FREE')}
                 </div>
                 <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                   {formatCurrency(0)}/mes
@@ -181,7 +185,7 @@ export function SystemOverview() {
               <div className="p-4 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-blue-950 dark:to-indigo-900 border border-blue-200 dark:border-blue-800">
                 <div className="text-sm text-blue-600 dark:text-blue-400 mb-1">PRO</div>
                 <div className="text-2xl font-bold text-blue-800 dark:text-blue-200">
-                  Estimado
+                  {getPlanCount('PRO') + getPlanCount('PROFESSIONAL')}
                 </div>
                 <div className="text-xs text-blue-500 dark:text-blue-400 mt-1">
                   $29/mes
@@ -191,7 +195,7 @@ export function SystemOverview() {
               <div className="p-4 rounded-xl bg-gradient-to-br from-purple-50 to-pink-100 dark:from-purple-950 dark:to-pink-900 border border-purple-200 dark:border-purple-800">
                 <div className="text-sm text-purple-600 dark:text-purple-400 mb-1">ENTERPRISE</div>
                 <div className="text-2xl font-bold text-purple-800 dark:text-purple-200">
-                  Estimado
+                  {getPlanCount('ENTERPRISE')}
                 </div>
                 <div className="text-xs text-purple-500 dark:text-purple-400 mt-1">
                   $99/mes

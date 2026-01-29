@@ -35,7 +35,7 @@ type SuperAdminUser = {
   full_name: string | null;
   role: string | null;
   created_at: string;
-  last_sign_in_at: string | null;
+  last_sign_in_at?: string | null;
 };
 
 export default function SuperAdminsPage() {
@@ -66,7 +66,7 @@ export default function SuperAdminsPage() {
       // Fetch only SUPER_ADMIN users
       const { data, error } = await supabase
         .from('users')
-        .select('id, email, full_name, role, created_at, last_sign_in_at')
+        .select('id, email, full_name, role, created_at')
         .eq('role', 'SUPER_ADMIN')
         .order('created_at', { ascending: false });
 
@@ -97,7 +97,7 @@ export default function SuperAdminsPage() {
     loadSuperAdmins();
   }, []);
 
-  const formatDate = (dateString: string | null) => {
+  const formatDate = (dateString?: string | null) => {
     if (!dateString) return '-';
     return new Date(dateString).toLocaleDateString('es-ES', {
       year: 'numeric',
@@ -108,7 +108,7 @@ export default function SuperAdminsPage() {
     });
   };
 
-  const getRelativeTime = (dateString: string | null) => {
+  const getRelativeTime = (dateString?: string | null) => {
     if (!dateString) return null;
     
     const date = new Date(dateString);

@@ -25,7 +25,7 @@ interface Organization {
   id: string;
   name: string;
   slug: string;
-  subscription_plan: 'FREE' | 'STARTER' | 'PROFESSIONAL' | 'ENTERPRISE';
+  subscription_plan: 'FREE' | 'STARTER' | 'PROFESSIONAL' | 'ENTERPRISE' | 'PRO';
   subscription_status: 'ACTIVE' | 'TRIAL' | 'PAST_DUE' | 'CANCELED';
   settings: {
     contactInfo?: {
@@ -37,7 +37,6 @@ interface Organization {
   };
   created_at: string;
   updated_at: string;
-  organization_members?: Array<{ count: number }>;
 }
 
 export default function OrganizationsPage() {
@@ -56,13 +55,10 @@ export default function OrganizationsPage() {
     try {
       setIsLoading(true);
       
-      // Fetch organizations with member count
+      // Fetch organizations - simplified without member count
       const { data, error } = await supabase
         .from('organizations')
-        .select(`
-          *,
-          organization_members(count)
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
       
       if (error) {
@@ -89,7 +85,8 @@ export default function OrganizationsPage() {
   const getPlanColor = (plan: string) => {
     switch (plan) {
       case 'ENTERPRISE': return 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-300 dark:border-purple-800';
-      case 'PROFESSIONAL': return 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800';
+      case 'PROFESSIONAL': 
+      case 'PRO': return 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800';
       case 'STARTER': return 'bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-300 dark:border-green-800';
       case 'FREE': return 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300 dark:border-orange-800';
       default: return 'bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800/50 dark:text-slate-300 dark:border-slate-700';
@@ -111,6 +108,7 @@ export default function OrganizationsPage() {
       'FREE': 'Gratuito',
       'STARTER': 'Starter',
       'PROFESSIONAL': 'Professional',
+      'PRO': 'Professional',
       'ENTERPRISE': 'Enterprise',
     };
     return labels[plan] || plan;
@@ -127,7 +125,8 @@ export default function OrganizationsPage() {
   };
 
   const getMemberCount = (org: Organization) => {
-    return org.organization_members?.[0]?.count || 0;
+    // Return 0 since we don't have organization_members table
+    return 0;
   };
 
   if (isLoading) {

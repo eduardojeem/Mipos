@@ -38,15 +38,6 @@ type UserWithOrganizations = {
   role: string | null;
   created_at: string;
   last_sign_in_at: string | null;
-  organization_members?: Array<{
-    organization_id: string;
-    role_id: string;
-    is_owner: boolean;
-    organizations: {
-      name: string;
-      slug: string;
-    } | null;
-  }>;
 };
 
 export default function SuperAdminUsersPage() {
@@ -80,7 +71,7 @@ export default function SuperAdminUsersPage() {
     }
 
     try {
-      // Fetch users with their organization memberships
+      // Fetch users - simplified query without organization joins
       const { data, error } = await supabase
         .from('users')
         .select(`
@@ -89,13 +80,7 @@ export default function SuperAdminUsersPage() {
           full_name,
           role,
           created_at,
-          last_sign_in_at,
-          organization_members(
-            organization_id,
-            role_id,
-            is_owner,
-            organizations(name, slug)
-          )
+          last_sign_in_at
         `)
         .order('created_at', { ascending: false })
         .limit(500);
@@ -108,8 +93,9 @@ export default function SuperAdminUsersPage() {
 
       // Calculate stats
       const total = data?.length || 0;
-      const withOrgs = data?.filter(u => u.organization_members && u.organization_members.length > 0).length || 0;
-      const withoutOrgs = total - withOrgs;
+      // Since we don't have organization_members table, set these to 0
+      const withOrgs = 0;
+      const withoutOrgs = total;
 
       setStats({ total, withOrgs, withoutOrgs });
 
@@ -356,22 +342,7 @@ export default function SuperAdminUsersPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          {user.organization_members && user.organization_members.length > 0 ? (
-                            <div className="space-y-1">
-                              {user.organization_members.map((membership, idx) => (
-                                <div key={idx} className="flex items-center gap-2">
-                                  <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300">
-                                    {membership.organizations?.name || 'Sin nombre'}
-                                  </Badge>
-                                  {membership.is_owner && (
-                                    <Crown className="h-3 w-3 text-yellow-600" />
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <span className="text-slate-400 text-sm">-</span>
-                          )}
+                          <span className="text-slate-400 text-sm">N/A</span>
                         </TableCell>
                         <TableCell className="text-sm text-slate-600 dark:text-slate-400">
                           {formatDate(user.created_at)}
