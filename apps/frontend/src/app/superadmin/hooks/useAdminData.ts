@@ -8,7 +8,8 @@ export interface Organization {
   subscription_plan: string;
   subscription_status: string;
   created_at: string;
-  member_count?: number;
+  updated_at?: string;
+  settings?: any;
 }
 
 export interface AdminStats {
@@ -16,11 +17,14 @@ export interface AdminStats {
   totalUsers: number;
   activeSubscriptions: number;
   totalRevenue: number;
+  monthlyRevenue?: number;
+  activeOrganizations?: number;
+  activeUsers?: number;
 }
 
 interface UseAdminDataOptions {
   autoRefresh?: boolean;
-  refreshInterval?: number; // in milliseconds
+  refreshInterval?: number;
   onError?: (error: string) => void;
   onSuccess?: () => void;
 }
@@ -28,7 +32,7 @@ interface UseAdminDataOptions {
 export function useAdminData(options: UseAdminDataOptions = {}) {
   const {
     autoRefresh = false,
-    refreshInterval = 30000, // 30 seconds default
+    refreshInterval = 30000,
     onError,
     onSuccess,
   } = options;
@@ -50,7 +54,6 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const fetchData = useCallback(async (isRefresh = false) => {
-    // Cancel previous request if still pending
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -65,40 +68,41 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
       }
       setError(null);
       
-      // Fetch Organizations and Users in parallel
-      const [orgsResult, usersResult] = await Promise.all([
-        supabase
-          .from('organizations')
-          .select('*')
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('users')
-          .select('*', { count: 'exact', head: true })
-      ]);
+      // Fetch stats from API
+      const statsResponse = await fetch('/api/superadmin/stats', {
+        signal: abortControllerRef.current.signal,
+      });
 
-      if (orgsResult.error) throw orgsResult.error;
-      if (usersResult.error) throw usersResult.error;
+      if (!statsResponse.ok) {
+        throw new Error(`Error al cargar estadísticas: ${statsResponse.statusText}`);
+      }
 
-      // Process Data
-      const orgs = orgsResult.data || [];
-      
-      // Calculate Stats
-      const activeSubs = orgs.filter(o => o.subscription_status === 'ACTIVE').length;
-      
-      // Revenue Calculation based on plan
-      const revenue = orgs.reduce((acc, org) => {
-        if (org.subscription_status !== 'ACTIVE') return acc;
-        if (org.subscription_plan === 'PRO') return acc + 29;
-        if (org.subscription_plan === 'ENTERPRISE') return acc + 99;
-        return acc;
-      }, 0);
+      const statsData = await statsResponse.json();
 
-      setOrganizations(orgs);
+      // Fetch organizations directly from Supabase
+      const { data: orgsData, error: orgsError } = await supabase
+        .from('organizations')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (orgsError) {
+        console.error('Error fetching organizations:', orgsError);
+        // Don't throw, just log and continue with empty array
+        setOrganizations([]);
+      } else {
+        setOrganizations(orgsData || []);
+      }
+
+      // Set stats from API
       setStats({
-        totalOrganizations: orgs.length,
-        totalUsers: usersResult.count || 0,
-        activeSubscriptions: activeSubs,
-        totalRevenue: revenue
+        totalOrganizations: statsData.totalOrganizations || 0,
+        totalUsers: statsData.totalUsers || 0,
+        activeSubscriptions: statsData.activeOrganizations || 0,
+        totalRevenue: statsData.totalRevenue || 0,
+        monthlyRevenue: statsData.monthlyRevenue || 0,
+        activeOrganizations: statsData.activeOrganizations || 0,
+        activeUsers: statsData.activeUsers || 0,
       });
 
       setLastFetch(new Date());
@@ -121,17 +125,14 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
     }
   }, [supabase, onError, onSuccess]);
 
-  // Manual refresh function
   const refresh = useCallback(() => {
     return fetchData(true);
   }, [fetchData]);
 
-  // Initial fetch
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // Auto-refresh setup
   useEffect(() => {
     if (!autoRefresh) return;
 
@@ -146,7 +147,6 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
     };
   }, [autoRefresh, refreshInterval, fetchData]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (abortControllerRef.current) {
