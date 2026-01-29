@@ -1,30 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
     
-    // Verificar autenticación y rol
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     
     if (authError || !user) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single();
+    let isSuperAdmin = false;
+    try {
+      const adminClient = await createAdminClient();
+      const { data: userRoles } = await adminClient
+        .from('user_roles')
+        .select('role:roles(name)')
+        .eq('user_id', user.id)
+        .eq('is_active', true);
+      isSuperAdmin = Array.isArray(userRoles) && userRoles.some((ur: any) => String(ur.role?.name || '').toUpperCase() === 'SUPER_ADMIN');
+    } catch {}
 
-    if (userError || userData?.role !== 'SUPER_ADMIN') {
+    if (!isSuperAdmin) {
+      try {
+        const { data: userData } = await supabase
+          .from('users')
+          .select('role')
+          .eq('id', user.id)
+          .single();
+        isSuperAdmin = String(userData?.role || '').toUpperCase() === 'SUPER_ADMIN';
+      } catch {}
+    }
+
+    if (!isSuperAdmin) {
+      const metaRole = String((user as any)?.user_metadata?.role || '').toUpperCase();
+      isSuperAdmin = metaRole === 'SUPER_ADMIN';
+    }
+
+    if (!isSuperAdmin) {
       return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
     }
 
-    // Obtener estadísticas reales
-    
-    // 1. Organizaciones
     const { count: totalOrgs, error: orgsError } = await supabase
       .from('organizations')
       .select('*', { count: 'exact', head: true });
@@ -34,18 +51,12 @@ export async function GET(request: NextRequest) {
       .select('*', { count: 'exact', head: true })
       .eq('subscription_status', 'ACTIVE');
 
-    // 2. Usuarios
     const { count: totalUsers, error: usersError } = await supabase
       .from('users')
       .select('*', { count: 'exact', head: true });
       
-    // Para usuarios activos, podríamos filtrar por last_sign_in_at si existiera en public.users,
-    // o asumir un porcentaje o query compleja. Por ahora usaremos el total.
     const activeUsers = totalUsers || 0; 
 
-    // 3. Ingresos (Revenue)
-    // Calcular basado en suscripciones activas si existen, o mockear si no hay datos aún
-    // Intentamos leer de saas_subscriptions
     let monthlyRevenue = 0;
     
     try {
