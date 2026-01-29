@@ -1,5 +1,11 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { ErrorState, classifyError } from '@/types/error-state';
+import { 
+  loadAdminDataCache, 
+  saveAdminDataCache, 
+  type CachedData 
+} from '@/lib/admin-data-cache';
 
 export interface Organization {
   id: string;
@@ -9,7 +15,7 @@ export interface Organization {
   subscription_status: string;
   created_at: string;
   updated_at?: string;
-  settings?: any;
+  settings?: Record<string, unknown>;
 }
 
 export interface AdminStats {
@@ -20,6 +26,11 @@ export interface AdminStats {
   monthlyRevenue?: number;
   activeOrganizations?: number;
   activeUsers?: number;
+}
+
+export interface PartialFailureState {
+  statsFailure: ErrorState | null;
+  organizationsFailure: ErrorState | null;
 }
 
 interface UseAdminDataOptions {
@@ -46,8 +57,13 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
   });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ErrorState | null>(null);
+  const [partialFailures, setPartialFailures] = useState<PartialFailureState>({
+    statsFailure: null,
+    organizationsFailure: null
+  });
   const [lastFetch, setLastFetch] = useState<Date | null>(null);
+  const [cachedData, setCachedData] = useState<CachedData | null>(null);
 
   // Memoize the Supabase client to avoid creating new instances on every render
   const supabase = useMemo(() => {
@@ -56,6 +72,38 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
   }, []);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  
+  // Refs for stable access in callbacks
+  const onErrorRef = useRef(onError);
+  const onSuccessRef = useRef(onSuccess);
+  const cachedDataRef = useRef(cachedData);
+
+  useEffect(() => {
+    onErrorRef.current = onError;
+    onSuccessRef.current = onSuccess;
+    cachedDataRef.current = cachedData;
+  }, [onError, onSuccess, cachedData]);
+
+  // Load cached data on initialization
+  useEffect(() => {
+    console.log('💾 [useAdminData] Loading cached data on initialization...');
+    const cached = loadAdminDataCache();
+    
+    if (cached) {
+      console.log('✅ [useAdminData] Cached data loaded:', {
+        organizationCount: cached.organizations.length,
+        isStale: cached.isStale,
+        timestamp: cached.timestamp
+      });
+      setCachedData(cached);
+      
+      // Pre-populate state with cached data
+      setOrganizations(cached.organizations);
+      setStats(cached.stats);
+    } else {
+      console.log('ℹ️ [useAdminData] No cached data available');
+    }
+  }, []);
 
   const fetchData = useCallback(async (isRefresh = false) => {
     console.log(`🔄 [useAdminData] Starting data fetch (isRefresh: ${isRefresh})...`);
@@ -74,94 +122,274 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
         setLoading(true);
       }
       setError(null);
+      setPartialFailures({ statsFailure: null, organizationsFailure: null });
 
-      // Fetch stats from API
-      console.log('📊 [useAdminData] Fetching stats from /api/superadmin/stats...');
-      const statsResponse = await fetch('/api/superadmin/stats', {
-        signal: abortControllerRef.current.signal,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      // Track partial failures
+      let statsError: ErrorState | null = null;
+      let orgsError: ErrorState | null = null;
+      let statsData: {
+        totalOrganizations?: number;
+        totalUsers?: number;
+        activeOrganizations?: number;
+        totalRevenue?: number;
+        monthlyRevenue?: number;
+        activeUsers?: number;
+      } | null = null;
+      let orgsData: Organization[] | null = null;
 
-      console.log('📊 [useAdminData] Stats API response status:', statsResponse.status);
-
-      if (!statsResponse.ok) {
-        const errorText = await statsResponse.text();
-        console.error('❌ [useAdminData] Stats API error:', {
-          status: statsResponse.status,
-          statusText: statsResponse.statusText,
-          body: errorText
+      // Fetch stats from API (independently)
+      try {
+        console.log('📊 [useAdminData] Fetching stats from /api/superadmin/stats...');
+        const statsResponse = await fetch('/api/superadmin/stats', {
+          signal: abortControllerRef.current.signal,
+          headers: {
+            'Content-Type': 'application/json',
+          },
         });
-        throw new Error(`Error al cargar estadísticas (${statsResponse.status}): ${statsResponse.statusText}`);
+
+        console.log('📊 [useAdminData] Stats API response status:', statsResponse.status);
+
+        if (!statsResponse.ok) {
+          const errorText = await statsResponse.text();
+          console.error('❌ [useAdminData] Stats API error:', {
+            status: statsResponse.status,
+            statusText: statsResponse.statusText,
+            body: errorText
+          });
+          const apiError = new Error(`Error al cargar estadísticas (${statsResponse.status}): ${statsResponse.statusText}`) as Error & { statusCode: number };
+          apiError.statusCode = statsResponse.status;
+          throw apiError;
+        }
+
+        statsData = await statsResponse.json();
+        console.log('✅ [useAdminData] Stats data received:', statsData);
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === 'AbortError') {
+          console.log('⏹️ [useAdminData] Stats request was aborted');
+          throw err; // Re-throw abort errors to stop the entire fetch
+        }
+
+        console.error('❌ [useAdminData] Error fetching stats:', {
+          name: err instanceof Error ? err.name : 'Unknown',
+          message: err instanceof Error ? err.message : String(err),
+          stack: err instanceof Error ? err.stack : undefined
+        });
+
+        // Classify the stats error
+        statsError = classifyError(err, {
+          url: '/api/superadmin/stats',
+          method: 'GET',
+        });
+
+        console.warn('⚠️ [useAdminData] Stats fetch failed, will use cached or default values');
       }
 
-      const statsData = await statsResponse.json();
-      console.log('✅ [useAdminData] Stats data received:', statsData);
+      // Fetch organizations from Supabase (independently)
+      try {
+        console.log('🏢 [useAdminData] Fetching organizations from Supabase...');
+        const { data, error: supabaseError } = await supabase
+          .from('organizations')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(100);
 
-      // Fetch organizations directly from Supabase
-      console.log('🏢 [useAdminData] Fetching organizations from Supabase...');
-      const { data: orgsData, error: orgsError } = await supabase
-        .from('organizations')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(100);
+        if (supabaseError) {
+          console.error('❌ [useAdminData] Error fetching organizations:', {
+            code: supabaseError.code,
+            message: supabaseError.message,
+            details: supabaseError.details,
+            hint: supabaseError.hint
+          });
+          throw supabaseError;
+        }
 
-      if (orgsError) {
+        orgsData = data || [];
+        console.log('✅ [useAdminData] Organizations fetched:', orgsData.length);
+      } catch (err: unknown) {
         console.error('❌ [useAdminData] Error fetching organizations:', {
-          code: orgsError.code,
-          message: orgsError.message,
-          details: orgsError.details,
-          hint: orgsError.hint
+          name: err instanceof Error ? err.name : 'Unknown',
+          message: err instanceof Error ? err.message : String(err),
+          stack: err instanceof Error ? err.stack : undefined
         });
-        console.warn('⚠️ [useAdminData] Setting organizations to empty array due to error');
-        setOrganizations([]);
-      } else {
-        console.log('✅ [useAdminData] Organizations fetched:', orgsData?.length || 0);
-        setOrganizations(orgsData || []);
+
+        // Classify the organizations error
+        orgsError = classifyError(err, {
+          url: 'supabase:organizations',
+          method: 'SELECT',
+        });
+
+        console.warn('⚠️ [useAdminData] Organizations fetch failed, will use cached or empty array');
       }
 
-      // Set stats from API
-      setStats({
-        totalOrganizations: statsData.totalOrganizations || 0,
-        totalUsers: statsData.totalUsers || 0,
-        activeSubscriptions: statsData.activeOrganizations || 0,
-        totalRevenue: statsData.totalRevenue || 0,
-        monthlyRevenue: statsData.monthlyRevenue || 0,
-        activeOrganizations: statsData.activeOrganizations || 0,
-        activeUsers: statsData.activeUsers || 0,
-      });
+      // Check if both fetches failed
+      if (statsError && orgsError) {
+        console.error('❌ [useAdminData] Both stats and organizations fetch failed');
+        
+        // Set the primary error to the stats error (as it's the main data source)
+        setError(statsError);
+        setPartialFailures({ statsFailure: statsError, organizationsFailure: orgsError });
+        
+        // Use cached data if available
+        setCachedData(prevCached => {
+          if (prevCached) {
+            console.log('💾 [useAdminData] Using cached data due to complete fetch failure');
+            setOrganizations(prevCached.organizations);
+            setStats(prevCached.stats);
+            
+            // Mark cached data as stale
+            return {
+              ...prevCached,
+              isStale: true
+            };
+          }
+          return prevCached;
+        });
+        
+        onErrorRef.current?.(statsError.message);
+        return;
+      }
+
+      // Handle partial success - update what we got
+      if (statsData) {
+        console.log('✅ [useAdminData] Updating stats with fresh data');
+        setStats({
+          totalOrganizations: statsData.totalOrganizations || 0,
+          totalUsers: statsData.totalUsers || 0,
+          activeSubscriptions: statsData.activeOrganizations || 0,
+          totalRevenue: statsData.totalRevenue || 0,
+          monthlyRevenue: statsData.monthlyRevenue || 0,
+          activeOrganizations: statsData.activeOrganizations || 0,
+          activeUsers: statsData.activeUsers || 0,
+        });
+      } else if (cachedDataRef.current) {
+        console.log('💾 [useAdminData] Using cached stats due to stats fetch failure');
+        setStats(cachedDataRef.current.stats);
+      }
+
+      if (orgsData) {
+        console.log('✅ [useAdminData] Updating organizations with fresh data');
+        setOrganizations(orgsData);
+      } else if (cachedDataRef.current) {
+        console.log('💾 [useAdminData] Using cached organizations due to organizations fetch failure');
+        setOrganizations(cachedDataRef.current.organizations);
+      } else {
+        console.log('⚠️ [useAdminData] No organizations data available, using empty array');
+        setOrganizations([]);
+      }
+
+      // Set partial failure indicators
+      if (statsError || orgsError) {
+        console.warn('⚠️ [useAdminData] Partial failure detected:', {
+          statsFailure: !!statsError,
+          organizationsFailure: !!orgsError
+        });
+        setPartialFailures({
+          statsFailure: statsError,
+          organizationsFailure: orgsError
+        });
+      }
 
       setLastFetch(new Date());
-      console.log('✅ [useAdminData] Data fetch completed successfully');
-      onSuccess?.();
+      
+      // Save successful data to cache (only save what we successfully fetched)
+      if (statsData || orgsData) {
+        console.log('💾 [useAdminData] Saving available data to cache...');
+        const dataToCache = {
+          organizations: orgsData || cachedDataRef.current?.organizations || [],
+          stats: statsData ? {
+            totalOrganizations: statsData.totalOrganizations || 0,
+            totalUsers: statsData.totalUsers || 0,
+            activeSubscriptions: statsData.activeOrganizations || 0,
+            totalRevenue: statsData.totalRevenue || 0,
+            monthlyRevenue: statsData.monthlyRevenue || 0,
+            activeOrganizations: statsData.activeOrganizations || 0,
+            activeUsers: statsData.activeUsers || 0,
+          } : cachedDataRef.current?.stats || {
+            totalOrganizations: 0,
+            totalUsers: 0,
+            activeSubscriptions: 0,
+            totalRevenue: 0,
+          }
+        };
 
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
+        const cacheSaved = saveAdminDataCache(dataToCache.organizations, dataToCache.stats);
+        
+        if (cacheSaved) {
+          // Update cached data state with fresh data
+          setCachedData({
+            organizations: dataToCache.organizations,
+            stats: dataToCache.stats,
+            timestamp: new Date(),
+            isStale: false,
+            version: '1.0.0'
+          });
+        }
+      }
+      
+      console.log('✅ [useAdminData] Data fetch completed (partial success allowed)');
+      onSuccessRef.current?.();
+
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') {
         console.log('⏹️ [useAdminData] Request was aborted');
         return;
       }
 
       console.error('❌ [useAdminData] Fatal error fetching admin data:', {
-        name: err.name,
-        message: err.message,
-        stack: err.stack
+        name: err instanceof Error ? err.name : 'Unknown',
+        message: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined
       });
 
-      const errorMessage = err.message || 'Error desconocido al cargar datos';
-      setError(errorMessage);
-      onError?.(errorMessage);
+      // Classify the error into a structured ErrorState
+      const errorState = classifyError(err, {
+        url: '/api/superadmin/stats',
+        method: 'GET',
+      });
+
+      console.error('❌ [useAdminData] Classified error:', {
+        type: errorState.type,
+        message: errorState.message,
+        statusCode: errorState.statusCode,
+        retryable: errorState.retryable
+      });
+
+      setError(errorState);
+      
+      // Display cached data when fresh data fails
+      // Use functional update to get the latest cached data
+      setCachedData(prevCached => {
+        if (prevCached) {
+          console.log('💾 [useAdminData] Using cached data due to fetch failure');
+          setOrganizations(prevCached.organizations);
+          setStats(prevCached.stats);
+          
+          // Mark cached data as stale
+          return {
+            ...prevCached,
+            isStale: true
+          };
+        }
+        return prevCached;
+      });
+      
+      onErrorRef.current?.(errorState.message);
     } finally {
       setLoading(false);
       setRefreshing(false);
       abortControllerRef.current = null;
       console.log('🏁 [useAdminData] Data fetch process completed');
     }
-  }, [supabase, onError, onSuccess]);
+  }, [supabase]);
 
   const refresh = useCallback(() => {
     return fetchData(true);
   }, [fetchData]);
+
+  const clearError = useCallback(() => {
+    console.log('🧹 [useAdminData] Clearing error state');
+    setError(null);
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -198,7 +426,10 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
     loading,
     refreshing,
     error,
+    partialFailures,
     lastFetch,
-    refresh
+    cachedData,
+    refresh,
+    clearError
   };
 }
