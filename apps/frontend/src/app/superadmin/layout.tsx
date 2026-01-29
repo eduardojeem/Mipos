@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -13,21 +12,15 @@ import {
   Settings,
   BarChart3,
   Shield,
-  Database,
-  Globe,
   CreditCard,
   Bell,
   Activity,
   UserCheck,
-  Zap,
-  TrendingUp,
-  Server,
-  Lock,
-  AlertTriangle,
   ChevronDown,
   LogOut,
   Crown,
   Sparkles,
+  Mail,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -73,11 +66,6 @@ const navigationItems: NavItem[] = [
         href: "/superadmin/organizations/settings",
         icon: Settings,
       },
-      {
-        title: "Facturación",
-        href: "/superadmin/organizations/billing",
-        icon: CreditCard,
-      },
     ],
   },
   {
@@ -92,87 +80,47 @@ const navigationItems: NavItem[] = [
         href: "/superadmin/users/super-admins",
         icon: Crown,
       },
-      {
-        title: "Roles y Permisos",
-        href: "/superadmin/users/roles",
-        icon: Shield,
-      },
-      {
-        title: "Sesiones Activas",
-        href: "/superadmin/users/sessions",
-        icon: Activity,
-      },
     ],
+  },
+  {
+    title: "Planes SaaS",
+    href: "/superadmin/plans",
+    icon: Sparkles,
+    badge: "Nuevo",
+    description: "Planes y límites del sistema",
+  },
+  {
+    title: "Facturación",
+    href: "/superadmin/billing",
+    icon: CreditCard,
+    description: "Suscripciones y pagos",
   },
   {
     title: "Monitoreo",
     href: "/superadmin/monitoring",
     icon: Activity,
     badge: "Live",
-    description: "Monitoreo en tiempo real",
-    children: [
-      { title: "Sistema", href: "/superadmin/monitoring/system", icon: Server },
-      {
-        title: "Performance",
-        href: "/superadmin/monitoring/performance",
-        icon: Zap,
-      },
-      {
-        title: "Errores",
-        href: "/superadmin/monitoring/errors",
-        icon: AlertTriangle,
-      },
-      { title: "Logs", href: "/superadmin/monitoring/logs", icon: Database },
-    ],
+    description: "Métricas del sistema",
   },
   {
-    title: "Facturación SaaS",
-    href: "/superadmin/billing",
-    icon: CreditCard,
+    title: "Audit Logs",
+    href: "/superadmin/audit-logs",
+    icon: Shield,
+    badge: "Nuevo",
+    description: "Registro de auditoría",
+  },
+  {
+    title: "Plantillas de Email",
+    href: "/superadmin/emails",
+    icon: Mail,
     badge: "Pro",
-    description: "Gestión de suscripciones y pagos",
-    children: [
-      {
-        title: "Suscripciones",
-        href: "/superadmin/billing/subscriptions",
-        icon: CreditCard,
-      },
-      { title: "Planes", href: "/superadmin/billing/plans", icon: Sparkles },
-      {
-        title: "Transacciones",
-        href: "/superadmin/billing/transactions",
-        icon: TrendingUp,
-      },
-      {
-        title: "Reportes",
-        href: "/superadmin/billing/reports",
-        icon: BarChart3,
-      },
-    ],
+    description: "Gestión de correos transaccionales",
   },
   {
     title: "Configuración Global",
     href: "/superadmin/settings",
     icon: Settings,
     description: "Configuraciones del sistema",
-    children: [
-      {
-        title: "General",
-        href: "/superadmin/settings/general",
-        icon: Settings,
-      },
-      { title: "Seguridad", href: "/superadmin/settings/security", icon: Lock },
-      {
-        title: "Integraciones",
-        href: "/superadmin/settings/integrations",
-        icon: Globe,
-      },
-      {
-        title: "Notificaciones",
-        href: "/superadmin/settings/notifications",
-        icon: Bell,
-      },
-    ],
   },
 ];
 
@@ -186,7 +134,7 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
   // Verificar permisos de super admin
   useEffect(() => {
     if (!user) {
-      router.push("/auth/login");
+      router.push("/auth/signin");
       return;
     }
 
@@ -209,7 +157,7 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
 
   const handleLogout = async () => {
     await signOut();
-    router.push("/auth/login");
+    router.push("/auth/signin");
   };
 
   if (!user) {

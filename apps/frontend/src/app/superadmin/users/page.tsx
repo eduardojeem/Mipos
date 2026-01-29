@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,97 +28,45 @@ import {
   Loader2
 } from 'lucide-react';
 import { SuperAdminGuard } from '../components/SuperAdminGuard';
-import { createClient } from '@/lib/supabase/client';
+import { useUsers } from '../hooks/useUsers';
 import { toast } from '@/lib/toast';
 
-type UserWithOrganizations = {
-  id: string;
-  email: string;
-  full_name: string | null;
-  role: string | null;
-  created_at: string;
-  last_sign_in_at: string | null;
-};
-
 export default function SuperAdminUsersPage() {
-  const [users, setUsers] = useState<UserWithOrganizations[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState('');
-  const [stats, setStats] = useState({
-    total: 0,
-    withOrgs: 0,
-    withoutOrgs: 0,
+  
+  // Use the custom hook for data fetching
+  const { 
+    users, 
+    loading, 
+    refresh, 
+    totalCount 
+  } = useUsers({
+    filters: { search: search },
+    sortBy: 'created_at',
+    sortOrder: 'desc',
+    pageSize: 100 // Load more users for better visibility
   });
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return users;
-    return users.filter(u =>
-      (u.email || '').toLowerCase().includes(q) ||
-      (u.full_name || '').toLowerCase().includes(q) ||
-      (u.role || '').toLowerCase().includes(q)
-    );
-  }, [users, search]);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const loadUsers = async (isRefresh = false) => {
-    const supabase = createClient();
-    
-    if (isRefresh) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
-    }
-
+  const handleRefresh = async () => {
+    setRefreshing(true);
     try {
-      // Fetch users - simplified query without organization joins
-      const { data, error } = await supabase
-        .from('users')
-        .select(`
-          id,
-          email,
-          full_name,
-          role,
-          created_at,
-          last_sign_in_at
-        `)
-        .order('created_at', { ascending: false })
-        .limit(500);
-
-      if (error) {
-        throw error;
-      }
-
-      setUsers(data || []);
-
-      // Calculate stats
-      const total = data?.length || 0;
-      // Since we don't have organization_members table, set these to 0
-      const withOrgs = 0;
-      const withoutOrgs = total;
-
-      setStats({ total, withOrgs, withoutOrgs });
-
-      if (isRefresh) {
-        toast.success('Usuarios actualizados', {
-          description: `Se han cargado ${total} usuarios`
-        });
-      }
+      await refresh();
+      toast.success('Usuarios actualizados');
     } catch (error) {
-      console.error('Error loading users:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
-      toast.error('Error al cargar usuarios', {
-        description: errorMessage
-      });
+      toast.error('Error al actualizar usuarios');
     } finally {
-      setLoading(false);
       setRefreshing(false);
     }
   };
 
-  useEffect(() => {
-    loadUsers();
-  }, []);
+  // Stats calculation (simplified as per original code)
+  const stats = {
+    total: totalCount,
+    withOrgs: 0,
+    withoutOrgs: totalCount,
+  };
 
   const getRoleBadge = (role: string | null) => {
     if (!role) return null;
@@ -254,8 +202,8 @@ export default function SuperAdminUsersPage() {
                   />
                 </div>
                 <Button
-                  onClick={() => loadUsers(true)}
-                  disabled={refreshing}
+                  onClick={handleRefresh}
+                  disabled={refreshing || loading}
                   variant="outline"
                   className="border-slate-300 dark:border-slate-700"
                 >
@@ -275,7 +223,7 @@ export default function SuperAdminUsersPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {loading ? (
+            {loading && users.length === 0 ? (
               <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
                 <Loader2 className="h-12 w-12 animate-spin text-purple-600" />
                 <div className="text-center">
@@ -326,7 +274,7 @@ export default function SuperAdminUsersPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filtered.map((user) => (
+                    {users.map((user) => (
                       <TableRow 
                         key={user.id}
                         className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors"
@@ -352,7 +300,7 @@ export default function SuperAdminUsersPage() {
                         </TableCell>
                       </TableRow>
                     ))}
-                    {filtered.length === 0 && (
+                    {users.length === 0 && (
                       <TableRow>
                         <TableCell colSpan={6} className="text-center py-12">
                           <div className="flex flex-col items-center gap-3">

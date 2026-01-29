@@ -18,7 +18,7 @@ export function SuperAdminGuard({ children, fallback }: SuperAdminGuardProps) {
 
   useEffect(() => {
     if (!loading && !user) {
-      router.push('/auth/login');
+      router.push('/auth/signin');
     }
   }, [user, loading, router]);
 

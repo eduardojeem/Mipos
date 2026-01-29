@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { UserFilters } from './useAdminFilters';
 
@@ -15,7 +15,7 @@ export interface AdminUser {
 }
 
 interface UseUsersOptions {
-    filters?: UserFilters;
+    filters?: Partial<UserFilters>;
     sortBy?: string;
     sortOrder?: 'asc' | 'desc';
     pageSize?: number;
@@ -36,39 +36,51 @@ export function useUsers(options: UseUsersOptions = {}) {
     const [page, setPage] = useState(1);
 
     const supabase = createClient();
+    
+    // Refs for stable dependencies
+    const filtersRef = useRef(filters);
+    const optionsRef = useRef({ sortBy, sortOrder, pageSize });
+
+    useEffect(() => {
+        filtersRef.current = filters;
+        optionsRef.current = { sortBy, sortOrder, pageSize };
+    }, [filters, sortBy, sortOrder, pageSize]);
 
     const fetchUsers = useCallback(async () => {
         try {
             setLoading(true);
             setError(null);
 
+            const currentFilters = filtersRef.current;
+            const { sortBy, sortOrder, pageSize } = optionsRef.current;
+
             let query = supabase
                 .from('users')
                 .select('*', { count: 'exact' });
 
             // Apply filters
-            if (filters) {
+            if (currentFilters) {
                 // Search filter
-                if (filters.search) {
-                    query = query.or(`email.ilike.%${filters.search}%,full_name.ilike.%${filters.search}%`);
+                if (currentFilters.search) {
+                    query = query.or(`email.ilike.%${currentFilters.search}%,full_name.ilike.%${currentFilters.search}%`);
                 }
 
                 // Role filter
-                if (filters.role && filters.role.length > 0) {
-                    query = query.in('role', filters.role);
+                if (currentFilters.role && currentFilters.role.length > 0) {
+                    query = query.in('role', currentFilters.role);
                 }
 
                 // Organization filter
-                if (filters.organization && filters.organization.length > 0) {
-                    query = query.in('organization_id', filters.organization);
+                if (currentFilters.organization && currentFilters.organization.length > 0) {
+                    query = query.in('organization_id', currentFilters.organization);
                 }
 
                 // Date range filter
-                if (filters.dateFrom) {
-                    query = query.gte('created_at', filters.dateFrom);
+                if (currentFilters.dateFrom) {
+                    query = query.gte('created_at', currentFilters.dateFrom);
                 }
-                if (filters.dateTo) {
-                    query = query.lte('created_at', filters.dateTo);
+                if (currentFilters.dateTo) {
+                    query = query.lte('created_at', currentFilters.dateTo);
                 }
             }
 
@@ -86,13 +98,14 @@ export function useUsers(options: UseUsersOptions = {}) {
 
             setUsers(data || []);
             setTotalCount(count || 0);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Error fetching users:', err);
-            setError(err.message);
+            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+            setError(errorMessage);
         } finally {
             setLoading(false);
         }
-    }, [supabase, filters, sortBy, sortOrder, page, pageSize]);
+    }, [supabase, page]); // Only depend on page and supabase
 
     useEffect(() => {
         fetchUsers();
@@ -104,9 +117,10 @@ export function useUsers(options: UseUsersOptions = {}) {
         updates: Partial<AdminUser>
     ) => {
         try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const { error: updateError } = await supabase
                 .from('users')
-                .update(updates)
+                .update(updates as any)
                 .eq('id', id);
 
             if (updateError) throw updateError;
@@ -114,9 +128,10 @@ export function useUsers(options: UseUsersOptions = {}) {
             // Refresh data
             await fetchUsers();
             return { success: true };
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Error updating user:', err);
-            return { success: false, error: err.message };
+            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+            return { success: false, error: errorMessage };
         }
     }, [supabase, fetchUsers]);
 
@@ -133,9 +148,10 @@ export function useUsers(options: UseUsersOptions = {}) {
             // Refresh data
             await fetchUsers();
             return { success: true };
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Error deleting user:', err);
-            return { success: false, error: err.message };
+            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+            return { success: false, error: errorMessage };
         }
     }, [supabase, fetchUsers]);
 

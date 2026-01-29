@@ -5,15 +5,15 @@ import { useAdminData } from '@/app/superadmin/hooks/useAdminData';
 import { AdminStats } from '@/app/superadmin/components/AdminStats';
 import { OrganizationsTable } from '@/app/superadmin/components/OrganizationsTable';
 import { SystemOverview } from '@/app/superadmin/components/SystemOverview';
+import { ErrorDisplay } from '@/app/superadmin/components/ErrorDisplay';
+import { PartialFailureWarning } from '@/app/superadmin/components/PartialFailureWarning';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import {
-  ShieldAlert,
   RefreshCw,
   Building2,
   BarChart3,
@@ -34,8 +34,11 @@ export default function SuperAdminPage() {
     loading,
     refreshing,
     error,
+    partialFailures,
     lastFetch,
-    refresh
+    cachedData,
+    refresh,
+    clearError
   } = useAdminData({
     autoRefresh,
     refreshInterval: 30000,
@@ -92,68 +95,66 @@ export default function SuperAdminPage() {
     return `Hace ${Math.floor(seconds / 3600)} h`;
   };
 
+  // Show error display when there's a complete failure
+  // (both stats and organizations failed, or a critical error occurred)
   if (error) {
     return (
-      <div className="p-8">
-        <Alert variant="destructive">
-          <ShieldAlert className="h-4 w-4" />
-          <AlertTitle>Error de Acceso</AlertTitle>
-          <AlertDescription className="space-y-3">
-            <p>
-              No se pudieron cargar los datos del panel de administración.
-              Verifique que tiene permisos de Super Admin.
+      <UnifiedPermissionGuard role="SUPER_ADMIN" allowSuperAdmin={true}>
+        <div className="p-8 space-y-6">
+          <div className="space-y-1">
+            <h2 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
+              Panel de Administración SaaS
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Gestiona organizaciones, usuarios y analíticas de tu plataforma
             </p>
-            <details className="mt-4 rounded border border-red-300 bg-red-50 dark:bg-red-950/20 p-3">
-              <summary className="cursor-pointer font-medium text-sm mb-2">
-                🔍 Información de debug (click para expandir)
-              </summary>
-              <div className="space-y-2 text-xs font-mono">
-                <div>
-                  <strong>Error:</strong> {error}
-                </div>
-                <div>
-                  <strong>Última actualización:</strong> {lastFetch ? lastFetch.toLocaleString() : 'Nunca'}
-                </div>
-                <div className="mt-3 flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      const debugInfo = `
-=== Debug Info: SuperAdmin Error ===
-Error: ${error}
-Timestamp: ${new Date().toISOString()}
-Last Fetch: ${lastFetch ? lastFetch.toISOString() : 'Never'}
-User Agent: ${navigator.userAgent}
-URL: ${window.location.href}
-                      `.trim();
-                      navigator.clipboard.writeText(debugInfo);
-                      toast({
-                        title: 'Debug info copiada',
-                        description: 'La información de debug fue copiada al portapapeles',
-                      });
-                    }}
-                  >
-                    Copiar debug info
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => refresh()}
-                  >
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Reintentar
-                  </Button>
-                </div>
-              </div>
-            </details>
-            <p className="text-xs mt-4">
-              💡 <strong>Sugerencias:</strong> Abre la consola del navegador (F12) para ver logs detallados.
-              Busca mensajes con prefijos como [SuperAdmin API] o [useAdminData].
-            </p>
-          </AlertDescription>
-        </Alert>
-      </div>
+          </div>
+          
+          <ErrorDisplay
+            error={error}
+            onRetry={refresh}
+            onDismiss={clearError}
+            showCachedDataWarning={cachedData?.isStale === true}
+            cachedDataTimestamp={cachedData?.timestamp}
+          />
+          
+          {/* Show cached data if available */}
+          {cachedData && cachedData.isStale && (
+            <div className="space-y-6">
+              <AdminStats stats={cachedData.stats} />
+              
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>Organizaciones Registradas (Datos en Caché)</CardTitle>
+                      <CardDescription>
+                        Mostrando datos guardados localmente
+                      </CardDescription>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {cachedData.organizations.length} organizacion{cachedData.organizations.length !== 1 ? 'es' : ''}
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {cachedData.organizations.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-12 text-center">
+                      <Building2 className="h-12 w-12 text-muted-foreground mb-4" />
+                      <h3 className="text-lg font-semibold mb-2">No hay organizaciones</h3>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        No hay datos de organizaciones en caché
+                      </p>
+                    </div>
+                  ) : (
+                    <OrganizationsTable organizations={cachedData.organizations} />
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </div>
+      </UnifiedPermissionGuard>
     );
   }
 
@@ -204,6 +205,15 @@ URL: ${window.location.href}
             onCheckedChange={handleAutoRefreshToggle}
           />
         </div>
+
+        {/* Partial Failure Warning */}
+        {(partialFailures.statsFailure || partialFailures.organizationsFailure) && (
+          <PartialFailureWarning
+            statsFailure={partialFailures.statsFailure}
+            organizationsFailure={partialFailures.organizationsFailure}
+            onRetry={refresh}
+          />
+        )}
 
         {loading ? (
           <div className="space-y-4">

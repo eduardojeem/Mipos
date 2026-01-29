@@ -32,7 +32,7 @@ export function useAdminAnalytics() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const supabase = createClient();
+    const supabase = useMemo(() => createClient(), []);
 
     useEffect(() => {
         async function fetchData() {
@@ -47,9 +47,10 @@ export function useAdminAnalytics() {
                 if (orgsError) throw orgsError;
 
                 setOrganizations(orgsData || []);
-            } catch (err: any) {
+            } catch (err: unknown) {
                 console.error('Error fetching analytics data:', err);
-                setError(err.message);
+                const errorMessage = err instanceof Error ? err.message : 'Error al cargar datos de análisis';
+                setError(errorMessage);
             } finally {
                 setLoading(false);
             }

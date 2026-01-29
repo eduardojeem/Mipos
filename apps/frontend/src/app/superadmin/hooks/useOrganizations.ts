@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Organization } from './useAdminData';
 import { OrganizationFilters } from './useAdminFilters';
 import { useToast } from '@/components/ui/use-toast';
 
 interface UseOrganizationsOptions {
-    filters?: OrganizationFilters;
+    filters?: Partial<OrganizationFilters>;
     sortBy?: string;
     sortOrder?: 'asc' | 'desc';
     pageSize?: number;
@@ -28,39 +28,53 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
 
     const supabase = createClient();
     const { toast } = useToast();
+    
+    // Refs for stable dependencies
+    const filtersRef = useRef(filters);
+    const optionsRef = useRef({ sortBy, sortOrder, pageSize });
+    const toastRef = useRef(toast);
+
+    useEffect(() => {
+        filtersRef.current = filters;
+        optionsRef.current = { sortBy, sortOrder, pageSize };
+        toastRef.current = toast;
+    }, [filters, sortBy, sortOrder, pageSize, toast]);
 
     const fetchOrganizations = useCallback(async () => {
         try {
             setLoading(true);
             setError(null);
+            
+            const currentFilters = filtersRef.current;
+            const { sortBy, sortOrder, pageSize } = optionsRef.current;
 
             let query = supabase
                 .from('organizations')
                 .select('*', { count: 'exact' });
 
             // Apply filters
-            if (filters) {
+            if (currentFilters) {
                 // Search filter
-                if (filters.search) {
-                    query = query.or(`name.ilike.%${filters.search}%,slug.ilike.%${filters.search}%`);
+                if (currentFilters.search) {
+                    query = query.or(`name.ilike.%${currentFilters.search}%,slug.ilike.%${currentFilters.search}%`);
                 }
 
                 // Plan filter
-                if (filters.plan && filters.plan.length > 0) {
-                    query = query.in('subscription_plan', filters.plan);
+                if (currentFilters.plan && currentFilters.plan.length > 0) {
+                    query = query.in('subscription_plan', currentFilters.plan);
                 }
 
                 // Status filter
-                if (filters.status && filters.status.length > 0) {
-                    query = query.in('subscription_status', filters.status);
+                if (currentFilters.status && currentFilters.status.length > 0) {
+                    query = query.in('subscription_status', currentFilters.status);
                 }
 
                 // Date range filter
-                if (filters.dateFrom) {
-                    query = query.gte('created_at', filters.dateFrom);
+                if (currentFilters.dateFrom) {
+                    query = query.gte('created_at', currentFilters.dateFrom);
                 }
-                if (filters.dateTo) {
-                    query = query.lte('created_at', filters.dateTo);
+                if (currentFilters.dateTo) {
+                    query = query.lte('created_at', currentFilters.dateTo);
                 }
             }
 
@@ -79,22 +93,22 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
             // Apply client-side filters if needed
             let filteredData = data || [];
 
-            if (filters?.revenueMin !== null || filters?.revenueMax !== null) {
+            if (currentFilters?.revenueMin !== null || currentFilters?.revenueMax !== null) {
                 filteredData = filteredData.filter(org => {
                     const revenue = calculateOrgRevenue(org);
-                    if (filters.revenueMin !== null && revenue < filters.revenueMin) return false;
-                    if (filters.revenueMax !== null && revenue > filters.revenueMax) return false;
+                    if (currentFilters?.revenueMin !== null && currentFilters?.revenueMin !== undefined && revenue < currentFilters.revenueMin) return false;
+                    if (currentFilters?.revenueMax !== null && currentFilters?.revenueMax !== undefined && revenue > currentFilters.revenueMax) return false;
                     return true;
                 });
             }
 
             setOrganizations(filteredData);
             setTotalCount(count || 0);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Error fetching organizations:', err);
-            const errorMessage = err.message || 'Error al cargar organizaciones';
+            const errorMessage = err instanceof Error ? err.message : 'Error al cargar organizaciones';
             setError(errorMessage);
-            toast({
+            toastRef.current({
                 title: 'Error',
                 description: errorMessage,
                 variant: 'destructive',
@@ -102,7 +116,7 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
         } finally {
             setLoading(false);
         }
-    }, [supabase, filters, sortBy, sortOrder, page, pageSize, toast]);
+    }, [supabase, page]); // Only depend on page and supabase
 
     useEffect(() => {
         fetchOrganizations();
@@ -130,14 +144,15 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
         );
 
         try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const { error: updateError } = await supabase
                 .from('organizations')
-                .update(updates)
+                .update(updates as any)
                 .eq('id', id);
 
             if (updateError) throw updateError;
 
-            toast({
+            toastRef.current({
                 title: 'Actualización exitosa',
                 description: 'La organización se actualizó correctamente.',
             });
@@ -145,14 +160,14 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
             // Refresh to get latest data
             await fetchOrganizations();
             return { success: true };
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Error updating organization:', err);
             
             // Revert optimistic update
             setOrganizations(previousOrgs);
             
-            const errorMessage = err.message || 'Error al actualizar organización';
-            toast({
+            const errorMessage = err instanceof Error ? err.message : 'Error al actualizar organización';
+            toastRef.current({
                 title: 'Error al actualizar',
                 description: errorMessage,
                 variant: 'destructive',
@@ -162,7 +177,7 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
         } finally {
             setUpdating(null);
         }
-    }, [supabase, organizations, fetchOrganizations, toast]);
+    }, [supabase, organizations, fetchOrganizations]);
 
     // Delete organization with confirmation
     const deleteOrganization = useCallback(async (id: string) => {
@@ -180,7 +195,7 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
 
             if (deleteError) throw deleteError;
 
-            toast({
+            toastRef.current({
                 title: 'Eliminación exitosa',
                 description: 'La organización se eliminó correctamente.',
             });
@@ -188,14 +203,14 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
             // Refresh to update counts
             await fetchOrganizations();
             return { success: true };
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Error deleting organization:', err);
             
             // Revert optimistic update
             setOrganizations(previousOrgs);
             
-            const errorMessage = err.message || 'Error al eliminar organización';
-            toast({
+            const errorMessage = err instanceof Error ? err.message : 'Error al eliminar organización';
+            toastRef.current({
                 title: 'Error al eliminar',
                 description: errorMessage,
                 variant: 'destructive',
@@ -205,33 +220,33 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
         } finally {
             setUpdating(null);
         }
-    }, [supabase, organizations, fetchOrganizations, toast]);
+    }, [supabase, organizations, fetchOrganizations]);
 
     // Suspend organization
     const suspendOrganization = useCallback(async (id: string) => {
         const result = await updateOrganization(id, { subscription_status: 'SUSPENDED' });
         if (result.success) {
-            toast({
+            toastRef.current({
                 title: 'Organización suspendida',
                 description: 'La organización ha sido suspendida exitosamente.',
                 variant: 'default',
             });
         }
         return result;
-    }, [updateOrganization, toast]);
+    }, [updateOrganization]);
 
     // Activate organization
     const activateOrganization = useCallback(async (id: string) => {
         const result = await updateOrganization(id, { subscription_status: 'ACTIVE' });
         if (result.success) {
-            toast({
+            toastRef.current({
                 title: 'Organización activada',
                 description: 'La organización ha sido activada exitosamente.',
                 variant: 'default',
             });
         }
         return result;
-    }, [updateOrganization, toast]);
+    }, [updateOrganization]);
 
     // Change subscription plan
     const changeSubscriptionPlan = useCallback(async (
@@ -240,13 +255,13 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
     ) => {
         const result = await updateOrganization(id, { subscription_plan: plan });
         if (result.success) {
-            toast({
+            toastRef.current({
                 title: 'Plan actualizado',
                 description: `El plan se cambió a ${plan} exitosamente.`,
             });
         }
         return result;
-    }, [updateOrganization, toast]);
+    }, [updateOrganization]);
 
     return {
         organizations,

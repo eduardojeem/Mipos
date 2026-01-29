@@ -21,12 +21,11 @@ export function useSessionInvalidation() {
         const { data: { user } } = await supabase.auth.getUser();
 
         // If no session or Supabase not configured, do nothing
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if (!session || !(supabase as any).channel) return;
 
-        const currentSessionId = (session as any)?.user?.id || session?.user?.id || null;
-        const supabaseSessionId = (session as any)?.access_token ? session.access_token : null;
-
         // Subscribe to user_sessions updates for this user
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const channel = (supabase as any)
           .channel('user-sessions-invalidation')
           .on(
@@ -37,14 +36,17 @@ export function useSessionInvalidation() {
               table: 'user_sessions',
               filter: `user_id=eq.${user?.id}`
             },
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             async (payload: any) => {
               const newRow = payload?.new || {};
               if (newRow && newRow.is_active === false) {
                 // Session invalidated: sign out and redirect to login
                 try {
                   await supabase.auth.signOut();
-                } catch {}
-                router.replace('/auth/login');
+                } catch {
+                  // Ignore errors during sign out
+                }
+                router.replace('/auth/signin');
               }
             }
           )

@@ -16,71 +16,26 @@ import {
   Activity,
   Loader2
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { toast } from '@/lib/toast';
-import { createClient } from '@/lib/supabase/client';
-
-interface Organization {
-  id: string;
-  name: string;
-  slug: string;
-  subscription_plan: 'FREE' | 'STARTER' | 'PROFESSIONAL' | 'ENTERPRISE' | 'PRO';
-  subscription_status: 'ACTIVE' | 'TRIAL' | 'PAST_DUE' | 'CANCELED';
-  settings: {
-    contactInfo?: {
-      email?: string;
-    };
-    limits?: {
-      maxUsers?: number;
-    };
-  };
-  created_at: string;
-  updated_at: string;
-}
+import { useOrganizations } from '../hooks/useOrganizations';
+import { Organization } from '../hooks/useAdminData';
 
 export default function OrganizationsPage() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
-  const [organizations, setOrganizations] = useState<Organization[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    fetchOrganizations();
-  }, []);
-
-  const fetchOrganizations = async () => {
-    const supabase = createClient();
-    
-    try {
-      setIsLoading(true);
-      
-      // Fetch organizations - simplified without member count
-      const { data, error } = await supabase
-        .from('organizations')
-        .select('*')
-        .order('created_at', { ascending: false });
-      
-      if (error) {
-        throw error;
-      }
-
-      setOrganizations(data || []);
-    } catch (error) {
-      console.error('Error fetching organizations:', error);
-      const errorMessage = error instanceof Error ? error.message : 'No se pudieron cargar las organizaciones. Por favor intenta nuevamente.';
-      toast.error('Error al cargar organizaciones', {
-        description: errorMessage
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const filteredOrganizations = organizations.filter(org =>
-    org.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    org.slug.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  
+  // Use custom hook
+  const { 
+    organizations, 
+    loading: isLoading, 
+    totalCount 
+  } = useOrganizations({
+    filters: { search: searchQuery },
+    sortBy: 'created_at',
+    sortOrder: 'desc',
+    pageSize: 100
+  });
 
   const getPlanColor = (plan: string) => {
     switch (plan) {
@@ -124,12 +79,7 @@ export default function OrganizationsPage() {
     return labels[status] || status;
   };
 
-  const getMemberCount = (org: Organization) => {
-    // Return 0 since we don't have organization_members table
-    return 0;
-  };
-
-  if (isLoading) {
+  if (isLoading && organizations.length === 0) {
     return (
       <SuperAdminGuard>
         <div className="flex items-center justify-center min-h-[400px]">
@@ -161,7 +111,7 @@ export default function OrganizationsPage() {
           
           <div className="flex items-center gap-3">
             <Badge variant="outline" className="bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950/30 dark:border-blue-800 dark:text-blue-300 px-4 py-2">
-              {filteredOrganizations.length} organizaciones
+              {totalCount} organizaciones
             </Badge>
             <Button 
               className="gap-2 bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 text-white border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105"
@@ -195,7 +145,7 @@ export default function OrganizationsPage() {
 
         {/* Organizations Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredOrganizations.map((org) => (
+          {organizations.map((org: Organization) => (
             <Card key={org.id} className="backdrop-blur-xl bg-white/80 dark:bg-slate-900/80 border-slate-200 dark:border-slate-800 shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-[1.02]">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
@@ -228,7 +178,7 @@ export default function OrganizationsPage() {
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div className="flex items-center gap-2">
                     <Users className="h-4 w-4 text-slate-400" />
-                    <span className="text-slate-600 dark:text-slate-300">{getMemberCount(org)} usuarios</span>
+                    <span className="text-slate-600 dark:text-slate-300">0 usuarios</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-slate-400" />
@@ -272,7 +222,7 @@ export default function OrganizationsPage() {
         </div>
 
         {/* Empty State */}
-        {filteredOrganizations.length === 0 && !isLoading && (
+        {organizations.length === 0 && !isLoading && (
           <Card className="backdrop-blur-xl bg-white/80 dark:bg-slate-900/80 border-slate-200 dark:border-slate-800 shadow-xl">
             <CardContent className="p-12 text-center">
               <Building2 className="h-12 w-12 text-slate-400 mx-auto mb-4" />

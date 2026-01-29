@@ -49,7 +49,7 @@ export function SystemOverview() {
         <CardContent className="p-6 text-center">
           <Activity className="h-12 w-12 mx-auto mb-3 text-red-500 opacity-50" />
           <p className="text-red-600 dark:text-red-400">Error al cargar las estadísticas</p>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{error}</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{error.message}</p>
         </CardContent>
       </Card>
     );
