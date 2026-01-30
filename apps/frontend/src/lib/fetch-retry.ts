@@ -166,7 +166,7 @@ export function isRetryableError(error: Error, response?: Response): boolean {
   }
 
   // Timeout errors are retryable
-  if (error.name === 'AbortError') {
+  if (error.name === 'AbortError' || error.name === 'TimeoutError') {
     return true;
   }
 

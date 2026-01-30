@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { createClient } from '@/lib/supabase/client';
 import { Organization } from './useAdminData';
 import { useToast } from '@/components/ui/use-toast';
 
@@ -9,7 +8,6 @@ export function useOrganization(id: string) {
     const [error, setError] = useState<string | null>(null);
     const [updating, setUpdating] = useState(false);
 
-    const supabase = createClient();
     const { toast } = useToast();
 
     const fetchOrganization = useCallback(async () => {
@@ -19,15 +17,14 @@ export function useOrganization(id: string) {
             setLoading(true);
             setError(null);
             
-            const { data, error: fetchError } = await supabase
-                .from('organizations')
-                .select('*')
-                .eq('id', id)
-                .single();
+            const response = await fetch(`/api/superadmin/organizations/${id}`);
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Error al cargar la organización');
+            }
 
-            if (fetchError) throw fetchError;
-
-            setOrganization(data);
+            const data = await response.json();
+            setOrganization(data.organization);
         } catch (err: unknown) {
             console.error('Error fetching organization:', err);
             const errorMessage = err instanceof Error ? err.message : 'Error al cargar la organización';
@@ -40,7 +37,7 @@ export function useOrganization(id: string) {
         } finally {
             setLoading(false);
         }
-    }, [supabase, id, toast]);
+    }, [id, toast]);
 
     useEffect(() => {
         fetchOrganization();
@@ -52,20 +49,25 @@ export function useOrganization(id: string) {
         setUpdating(true);
         
         try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const { error: updateError } = await supabase
-                .from('organizations')
-                .update(updates as any)
-                .eq('id', id);
+            const response = await fetch(`/api/superadmin/organizations/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updates),
+            });
 
-            if (updateError) throw updateError;
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Error al actualizar organización');
+            }
+
+            const data = await response.json();
+            setOrganization(data.organization);
 
             toast({
                 title: 'Actualización exitosa',
                 description: 'La organización se actualizó correctamente.',
             });
 
-            await fetchOrganization();
             return { success: true };
         } catch (err: unknown) {
             console.error('Error updating organization:', err);
@@ -79,7 +81,7 @@ export function useOrganization(id: string) {
         } finally {
             setUpdating(false);
         }
-    }, [supabase, id, fetchOrganization, toast]);
+    }, [id, toast]);
 
     return {
         organization,

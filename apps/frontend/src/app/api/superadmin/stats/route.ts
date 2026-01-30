@@ -299,229 +299,76 @@ export async function GET(request: NextRequest) {
     structuredLogger.info('Fetching data with admin client (bypassing RLS)', {
       component: 'SuperAdminStatsAPI',
       action: 'fetchData',
-      metadata: {
-        userId: user.id,
-        email: user.email,
-      },
+      metadata: { userId: user.id },
     });
     
     const adminClient = await createAdminClient();
 
-    // Fetch organizations count
-    structuredLogger.info('Querying organizations table', {
-      component: 'SuperAdminStatsAPI',
-      action: 'fetchOrganizations',
-      metadata: {
-        query: 'count all organizations',
-      },
-    });
-    
+    // Perform data queries in parallel
+    const [orgsRes, activeOrgsRes, usersRes, subsRes] = await Promise.all([
+      adminClient.from('organizations').select('*', { count: 'exact', head: true }),
+      adminClient.from('organizations').select('*', { count: 'exact', head: true }).eq('subscription_status', 'ACTIVE'),
+      adminClient.from('users').select('*', { count: 'exact', head: true }),
+      adminClient.from('saas_subscriptions').select('plan_id, billing_cycle, saas_plans(price_monthly, price_yearly)').eq('status', 'active')
+    ]);
+
+    // Process organizations
     let totalOrgs = 0;
-    try {
-      const { count, error: orgsError } = await adminClient
-        .from('organizations')
-        .select('*', { count: 'exact', head: true });
-        
-      if (orgsError) {
-        structuredLogger.warn('Error fetching organizations', {
-          component: 'SuperAdminStatsAPI',
-          action: 'fetchOrganizations',
-          metadata: {
-            errorCode: orgsError.code,
-            errorMessage: orgsError.message,
-            errorDetails: orgsError.details,
-            errorHint: orgsError.hint,
-          },
-        });
-      } else {
-        totalOrgs = count || 0;
-        structuredLogger.success('Organizations query completed', {
-          component: 'SuperAdminStatsAPI',
-          action: 'fetchOrganizations',
-          metadata: {
-            rowCount: totalOrgs,
-          },
-        });
-      }
-    } catch (e: unknown) {
-      const error = e as Error;
-      structuredLogger.warn('Exception fetching organizations', {
+    if (orgsRes.error) {
+      structuredLogger.warn('Error fetching organizations', {
         component: 'SuperAdminStatsAPI',
         action: 'fetchOrganizations',
-        metadata: {
-          error: error?.message,
-          stack: error?.stack,
-        },
+        metadata: orgsRes.error,
       });
+    } else {
+      totalOrgs = orgsRes.count || 0;
     }
-    
-    structuredLogger.info('Querying active organizations', {
-      component: 'SuperAdminStatsAPI',
-      action: 'fetchActiveOrganizations',
-      metadata: {
-        query: 'count organizations with subscription_status=ACTIVE',
-      },
-    });
-    
+
+    // Process active organizations
     let activeOrgs = 0;
-    try {
-      const { count, error: activeOrgsError } = await adminClient
-        .from('organizations')
-        .select('*', { count: 'exact', head: true })
-        .eq('subscription_status', 'ACTIVE');
-      
-      if (activeOrgsError) {
-        structuredLogger.warn('Error fetching active organizations', {
-          component: 'SuperAdminStatsAPI',
-          action: 'fetchActiveOrganizations',
-          metadata: {
-            errorCode: activeOrgsError.code,
-            errorMessage: activeOrgsError.message,
-            errorDetails: activeOrgsError.details,
-            errorHint: activeOrgsError.hint,
-          },
-        });
-      } else {
-        activeOrgs = count || 0;
-        structuredLogger.success('Active organizations query completed', {
-          component: 'SuperAdminStatsAPI',
-          action: 'fetchActiveOrganizations',
-          metadata: {
-            rowCount: activeOrgs,
-          },
-        });
-      }
-    } catch (e: unknown) {
-      const error = e as Error;
-      structuredLogger.warn('Exception fetching active organizations', {
+    if (activeOrgsRes.error) {
+      structuredLogger.warn('Error fetching active organizations', {
         component: 'SuperAdminStatsAPI',
         action: 'fetchActiveOrganizations',
-        metadata: {
-          error: error?.message,
-          stack: error?.stack,
-        },
+        metadata: activeOrgsRes.error,
       });
+    } else {
+      activeOrgs = activeOrgsRes.count || 0;
     }
 
-    // Fetch users count
-    structuredLogger.info('Querying users table', {
-      component: 'SuperAdminStatsAPI',
-      action: 'fetchUsers',
-      metadata: {
-        query: 'count all users',
-      },
-    });
-    
+    // Process users
     let totalUsers = 0;
-    try {
-      const { count, error: usersError } = await adminClient
-        .from('users')
-        .select('*', { count: 'exact', head: true });
-      
-      if (usersError) {
-        structuredLogger.warn('Error fetching users', {
-          component: 'SuperAdminStatsAPI',
-          action: 'fetchUsers',
-          metadata: {
-            errorCode: usersError.code,
-            errorMessage: usersError.message,
-            errorDetails: usersError.details,
-            errorHint: usersError.hint,
-          },
-        });
-      } else {
-        totalUsers = count || 0;
-        structuredLogger.success('Users query completed', {
-          component: 'SuperAdminStatsAPI',
-          action: 'fetchUsers',
-          metadata: {
-            rowCount: totalUsers,
-          },
-        });
-      }
-    } catch (e: unknown) {
-      const error = e as Error;
-      structuredLogger.warn('Exception fetching users', {
+    if (usersRes.error) {
+      structuredLogger.warn('Error fetching users', {
         component: 'SuperAdminStatsAPI',
         action: 'fetchUsers',
-        metadata: {
-          error: error?.message,
-          stack: error?.stack,
-        },
+        metadata: usersRes.error,
       });
+    } else {
+      totalUsers = usersRes.count || 0;
     }
-      
-    const activeUsers = totalUsers || 0; 
 
-    // Fetch revenue data
+    // Process revenue calculation
     let monthlyRevenue = 0;
-    structuredLogger.info('Querying subscriptions for revenue calculation', {
-      component: 'SuperAdminStatsAPI',
-      action: 'fetchRevenue',
-      metadata: {
-        query: 'select active subscriptions with plan details',
-      },
-    });
-    
-    try {
-      const { data: subscriptions, error: subsError } = await adminClient
-        .from('saas_subscriptions')
-        .select('plan_id, billing_cycle, saas_plans(price_monthly, price_yearly)')
-        .eq('status', 'active');
-      
-      if (subsError) {
-        structuredLogger.warn('Error fetching subscriptions', {
-          component: 'SuperAdminStatsAPI',
-          action: 'fetchRevenue',
-          metadata: {
-            errorCode: subsError.code,
-            errorMessage: subsError.message,
-            errorDetails: subsError.details,
-            errorHint: subsError.hint,
-          },
-        });
-      } else {
-        const subscriptionCount = subscriptions?.length || 0;
-        structuredLogger.success('Subscriptions query completed', {
-          component: 'SuperAdminStatsAPI',
-          action: 'fetchRevenue',
-          metadata: {
-            rowCount: subscriptionCount,
-          },
-        });
-        
-        if (subscriptions && subscriptions.length > 0) {
-          subscriptions.forEach((sub: { billing_cycle: string | null; saas_plans: { price_monthly: number; price_yearly: number } | null }) => {
-            if (sub.saas_plans) {
-              if (sub.billing_cycle === 'yearly') {
-                monthlyRevenue += (sub.saas_plans.price_yearly || 0) / 12;
-              } else {
-                monthlyRevenue += (sub.saas_plans.price_monthly || 0);
-              }
-            }
-          });
-          
-          structuredLogger.info('Revenue calculated from subscriptions', {
-            component: 'SuperAdminStatsAPI',
-            action: 'fetchRevenue',
-            metadata: {
-              subscriptionCount,
-              monthlyRevenue,
-            },
-          });
-        }
-      }
-    } catch (e: unknown) {
-      const error = e as Error;
-      structuredLogger.warn('Exception fetching subscriptions', {
+    if (subsRes.error) {
+      structuredLogger.warn('Error fetching subscriptions', {
         component: 'SuperAdminStatsAPI',
         action: 'fetchRevenue',
-        metadata: {
-          error: error?.message,
-          stack: error?.stack,
-        },
+        metadata: subsRes.error,
+      });
+    } else if (subsRes.data) {
+      subsRes.data.forEach((sub: { billing_cycle: string | null; saas_plans: { price_monthly: number; price_yearly: number } | null }) => {
+        if (sub.saas_plans) {
+          if (sub.billing_cycle === 'yearly') {
+            monthlyRevenue += (sub.saas_plans.price_yearly || 0) / 12;
+          } else {
+            monthlyRevenue += (sub.saas_plans.price_monthly || 0);
+          }
+        }
       });
     }
+    
+    const activeUsers = totalUsers;
     
     if (monthlyRevenue === 0 && (totalOrgs || 0) > 0) {
       structuredLogger.info('Using estimated revenue based on organization count', {

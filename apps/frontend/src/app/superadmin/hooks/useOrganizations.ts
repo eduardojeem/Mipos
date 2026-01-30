@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { createClient } from '@/lib/supabase/client';
 import { Organization } from './useAdminData';
 import { OrganizationFilters } from './useAdminFilters';
 import { useToast } from '@/components/ui/use-toast';
@@ -26,7 +25,6 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
     const [page, setPage] = useState(1);
     const [updating, setUpdating] = useState<string | null>(null);
 
-    const supabase = createClient();
     const { toast } = useToast();
     
     // Refs for stable dependencies
@@ -48,62 +46,31 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
             const currentFilters = filtersRef.current;
             const { sortBy, sortOrder, pageSize } = optionsRef.current;
 
-            let query = supabase
-                .from('organizations')
-                .select('*', { count: 'exact' });
+            // Build query params
+            const params = new URLSearchParams({
+                page: page.toString(),
+                pageSize: pageSize.toString(),
+                sortBy,
+                sortOrder,
+            });
 
-            // Apply filters
-            if (currentFilters) {
-                // Search filter
-                if (currentFilters.search) {
-                    query = query.or(`name.ilike.%${currentFilters.search}%,slug.ilike.%${currentFilters.search}%`);
-                }
-
-                // Plan filter
-                if (currentFilters.plan && currentFilters.plan.length > 0) {
-                    query = query.in('subscription_plan', currentFilters.plan);
-                }
-
-                // Status filter
-                if (currentFilters.status && currentFilters.status.length > 0) {
-                    query = query.in('subscription_status', currentFilters.status);
-                }
-
-                // Date range filter
-                if (currentFilters.dateFrom) {
-                    query = query.gte('created_at', currentFilters.dateFrom);
-                }
-                if (currentFilters.dateTo) {
-                    query = query.lte('created_at', currentFilters.dateTo);
-                }
+            if (currentFilters?.search) params.append('search', currentFilters.search);
+            if (currentFilters?.status && currentFilters.status.length > 0) {
+                params.append('status', currentFilters.status[0]); // API currently supports single status from URL
+            }
+            if (currentFilters?.plan && currentFilters.plan.length > 0) {
+                params.append('plan', currentFilters.plan[0]);
             }
 
-            // Apply sorting
-            query = query.order(sortBy, { ascending: sortOrder === 'asc' });
-
-            // Apply pagination
-            const from = (page - 1) * pageSize;
-            const to = from + pageSize - 1;
-            query = query.range(from, to);
-
-            const { data, error: fetchError, count } = await query;
-
-            if (fetchError) throw fetchError;
-
-            // Apply client-side filters if needed
-            let filteredData = data || [];
-
-            if (currentFilters?.revenueMin !== null || currentFilters?.revenueMax !== null) {
-                filteredData = filteredData.filter(org => {
-                    const revenue = calculateOrgRevenue(org);
-                    if (currentFilters?.revenueMin !== null && currentFilters?.revenueMin !== undefined && revenue < currentFilters.revenueMin) return false;
-                    if (currentFilters?.revenueMax !== null && currentFilters?.revenueMax !== undefined && revenue > currentFilters.revenueMax) return false;
-                    return true;
-                });
+            const response = await fetch(`/api/superadmin/organizations?${params.toString()}`);
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Error al cargar organizaciones');
             }
 
-            setOrganizations(filteredData);
-            setTotalCount(count || 0);
+            const data = await response.json();
+            setOrganizations(data.organizations || []);
+            setTotalCount(data.total || 0);
         } catch (err: unknown) {
             console.error('Error fetching organizations:', err);
             const errorMessage = err instanceof Error ? err.message : 'Error al cargar organizaciones';
@@ -116,19 +83,12 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
         } finally {
             setLoading(false);
         }
-    }, [supabase, page]); // Only depend on page and supabase
+    }, [page]); // Only depend on page
 
     useEffect(() => {
         fetchOrganizations();
     }, [fetchOrganizations]);
 
-    // Calculate revenue for an organization
-    const calculateOrgRevenue = (org: Organization): number => {
-        if (org.subscription_status !== 'ACTIVE') return 0;
-        if (org.subscription_plan === 'PRO') return 29;
-        if (org.subscription_plan === 'ENTERPRISE') return 99;
-        return 0;
-    };
 
     // Update organization with optimistic update
     const updateOrganization = useCallback(async (
@@ -144,13 +104,16 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
         );
 
         try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const { error: updateError } = await supabase
-                .from('organizations')
-                .update(updates as any)
-                .eq('id', id);
+            const response = await fetch('/api/superadmin/organizations', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, ...updates }),
+            });
 
-            if (updateError) throw updateError;
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Error al actualizar organización');
+            }
 
             toastRef.current({
                 title: 'Actualización exitosa',
@@ -177,7 +140,7 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
         } finally {
             setUpdating(null);
         }
-    }, [supabase, organizations, fetchOrganizations]);
+    }, [organizations, fetchOrganizations]);
 
     // Delete organization with confirmation
     const deleteOrganization = useCallback(async (id: string) => {
@@ -188,12 +151,14 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
         setOrganizations(orgs => orgs.filter(org => org.id !== id));
 
         try {
-            const { error: deleteError } = await supabase
-                .from('organizations')
-                .delete()
-                .eq('id', id);
+            const response = await fetch(`/api/superadmin/organizations?id=${id}`, {
+                method: 'DELETE',
+            });
 
-            if (deleteError) throw deleteError;
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Error al eliminar organización');
+            }
 
             toastRef.current({
                 title: 'Eliminación exitosa',
@@ -220,7 +185,7 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
         } finally {
             setUpdating(null);
         }
-    }, [supabase, organizations, fetchOrganizations]);
+    }, [organizations, fetchOrganizations]);
 
     // Suspend organization
     const suspendOrganization = useCallback(async (id: string) => {

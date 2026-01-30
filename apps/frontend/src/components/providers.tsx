@@ -67,7 +67,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
     const originalFetch = window.fetch;
     let activeFetches = 0;
-    let watchdogTimer: NodeJS.Timeout | null = null;
+    let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
 
     const getUrlFromInput = (input: RequestInfo | URL): string | undefined => {
       if (typeof input === 'string') return input;
@@ -92,7 +92,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
       // Timeout handling: 15-second timeout for all requests
       // Requirements: 7.1, 7.2, 7.3
-      const TIMEOUT_MS = 15_000;
+      const TIMEOUT_MS = 30_000;
       const startTime = Date.now();
 
       // Log request start
@@ -148,7 +148,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
         // Reset watchdog timer for all active requests
         // The watchdog should only fire if ALL requests are stuck
-        try { if (watchdogTimer) clearTimeout(watchdogTimer as any); } catch {}
+        try { if (watchdogTimer !== null) clearTimeout(watchdogTimer); } catch {}
         watchdogTimer = setTimeout(() => {
           // Watchdog timer fired - log warning but don't interfere
           // Requirement: 5.4
@@ -174,7 +174,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         const response = await fetchWithRetry(
           async () => {
             const timeoutController = new AbortController();
-            let timeoutId: NodeJS.Timeout | null = null;
+            let timeoutId: ReturnType<typeof setTimeout> | null = null;
 
             try {
               // Set up timeout
@@ -206,8 +206,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
               });
 
               // Clear timeout on successful response
-              if (timeoutId) {
-                clearTimeout(timeoutId as any);
+              if (timeoutId !== null) {
+                clearTimeout(timeoutId);
                 timeoutId = null;
               }
 
@@ -233,8 +233,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
               return response;
             } catch (err) {
               // Clear timeout on error
-              if (timeoutId) {
-                clearTimeout(timeoutId as any);
+              if (timeoutId !== null) {
+                clearTimeout(timeoutId);
                 timeoutId = null;
               }
 
@@ -293,8 +293,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
               throw err;
             } finally {
               // Ensure timeout is always cleaned up
-              if (timeoutId) {
-                clearTimeout(timeoutId as any);
+              if (timeoutId !== null) {
+                clearTimeout(timeoutId);
                 timeoutId = null;
               }
             }
@@ -373,7 +373,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             // Requirement: 5.2 - proper cleanup of timers
             try { 
               if (watchdogTimer !== null) {
-                clearTimeout(watchdogTimer as any); 
+                clearTimeout(watchdogTimer); 
                 watchdogTimer = null;
                 
                 structuredLogger.debug('Watchdog timer cleared', {
@@ -455,7 +455,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       // Clear watchdog timer on unmount
       if (watchdogTimer !== null) {
         try {
-          clearTimeout(watchdogTimer as any);
+          clearTimeout(watchdogTimer);
           watchdogTimer = null;
           
           structuredLogger.debug('Watchdog timer cleared on unmount', {

@@ -16,6 +16,7 @@ export interface Organization {
   created_at: string;
   updated_at?: string;
   settings?: Record<string, unknown>;
+  organization_members?: { count: number }[];
 }
 
 export interface AdminStats {
@@ -72,6 +73,7 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
   }, []);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const isFetchingRef = useRef<boolean>(false);
   
   // Refs for stable access in callbacks
   const onErrorRef = useRef(onError);
@@ -108,12 +110,13 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
   const fetchData = useCallback(async (isRefresh = false) => {
     console.log(`🔄 [useAdminData] Starting data fetch (isRefresh: ${isRefresh})...`);
 
-    if (abortControllerRef.current) {
+    if (abortControllerRef.current && isFetchingRef.current) {
       console.log('⏹️ [useAdminData] Aborting previous request');
       abortControllerRef.current.abort();
     }
 
     abortControllerRef.current = new AbortController();
+    isFetchingRef.current = true;
 
     try {
       if (isRefresh) {
@@ -166,7 +169,8 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
       } catch (err: unknown) {
         if (err instanceof Error && err.name === 'AbortError') {
           console.log('⏹️ [useAdminData] Stats request was aborted');
-          throw err; // Re-throw abort errors to stop the entire fetch
+          // Do not re-throw abort errors; simply stop stats fetch gracefully
+          return;
         }
 
         console.error('❌ [useAdminData] Error fetching stats:', {
@@ -211,6 +215,12 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
           message: err instanceof Error ? err.message : String(err),
           stack: err instanceof Error ? err.stack : undefined
         });
+
+        // Gracefully handle aborts
+        if (err instanceof Error && err.name === 'AbortError') {
+          console.log('⏹️ [useAdminData] Organizations request was aborted');
+          return;
+        }
 
         // Classify the organizations error
         orgsError = classifyError(err, {
@@ -377,6 +387,7 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
     } finally {
       setLoading(false);
       setRefreshing(false);
+      isFetchingRef.current = false;
       abortControllerRef.current = null;
       console.log('🏁 [useAdminData] Data fetch process completed');
     }
@@ -411,9 +422,9 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
 
   useEffect(() => {
     return () => {
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
+      // No abort en cleanup para evitar mensajes en consola; dejamos finalizar silenciosamente
+      isFetchingRef.current = false;
+      abortControllerRef.current = null;
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
       }

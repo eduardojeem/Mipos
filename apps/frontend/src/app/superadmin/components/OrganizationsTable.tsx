@@ -280,7 +280,7 @@ export function OrganizationsTable({
                             </div>
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Miembros:</span>
-                              <span>{org.member_count || 'N/A'}</span>
+                              <span>—</span>
                             </div>
                           </div>
                         </div>

@@ -113,10 +113,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    // Track timeout id for cleanup
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
     try {
       // ⚡ OPTIMIZACIÓN: Timeout de 3 segundos para evitar esperas largas
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      timeoutId = setTimeout(() => {
+        controller.abort();
+      }, 3000);
 
       // Fetch user profile via backend API to avoid client-side Supabase probe issues
       const response = await fetch('/api/auth/profile', {
@@ -125,8 +129,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         cache: 'no-store',
         signal: controller.signal,
       });
-
-      clearTimeout(timeoutId);
 
       if (!response.ok) {
         console.warn('Profile API returned non-OK, using fallback:', response.statusText);
@@ -154,9 +156,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         lastLogin: authUser.last_sign_in_at,
       };
     } catch (err) {
-      // Si es un error de timeout u otro error, usar fallback inmediatamente
-      console.warn('Error in fetchUserData (timeout o error de red), using enhanced fallback:', err);
+      // Si es un AbortError por timeout, usar fallback silencioso sin ensuciar consola
+      if (err instanceof Error && err.name === 'AbortError') {
+        return createFallbackUser(authUser);
+      }
+      // Otros errores de red: log mínimo
+      console.warn('Error de red en fetchUserData, usando fallback.');
       return createFallbackUser(authUser);
+    } finally {
+      // Asegurar limpieza del timeout en cualquier caso
+      if (timeoutId) clearTimeout(timeoutId);
     }
   }, [supabase, isDevMockMode, createFallbackUser, extractNameFromEmail]);
 

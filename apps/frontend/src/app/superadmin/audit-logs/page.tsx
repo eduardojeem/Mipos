@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { SuperAdminGuard } from '../components/SuperAdminGuard';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -45,7 +45,7 @@ interface AuditLog {
   user_email: string | null;
   organization_id: string | null;
   organization_name: string | null;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
   ip_address: string | null;
   user_agent: string | null;
   severity: 'INFO' | 'WARNING' | 'CRITICAL';
@@ -83,12 +83,23 @@ export default function AuditLogsPage() {
   const [actionFilter, setActionFilter] = useState<string>('all');
   const [entityFilter, setEntityFilter] = useState<string>('all');
   const [severityFilter, setSeverityFilter] = useState<string>('all');
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [refreshInterval] = useState(30000);
 
-  useEffect(() => {
-    loadLogs();
-  }, []);
+  const getErrorMessage = (error: unknown): string => {
+    if (error instanceof Error) return error.message;
+    if (typeof error === 'string') return error;
+    if (error && typeof error === 'object') {
+      const e = error as { message?: string; error?: string; details?: string; hint?: string; code?: string; status?: number };
+      const base = e.message || e.error || e.details || e.hint;
+      const code = e.code ? ` [${e.code}]` : '';
+      const status = typeof e.status === 'number' ? ` (HTTP ${e.status})` : '';
+      return base ? `${base}${code}${status}` : 'Error desconocido';
+    }
+    return 'Error desconocido';
+  };
 
-  const loadLogs = async (isRefresh = false) => {
+  const loadLogs = useCallback(async (isRefresh = false) => {
     const supabase = createClient();
 
     if (isRefresh) {
@@ -114,15 +125,28 @@ export default function AuditLogsPage() {
         });
       }
     } catch (error) {
-      console.error('Error loading audit logs:', error);
+      const message = getErrorMessage(error);
+      console.error('Error loading audit logs:', message);
       toast.error('Error al cargar logs', {
-        description: error instanceof Error ? error.message : 'Error desconocido'
+        description: message
       });
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadLogs();
+  }, [loadLogs]);
+
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const handle = setInterval(() => loadLogs(true), refreshInterval);
+    return () => clearInterval(handle);
+  }, [autoRefresh, refreshInterval, loadLogs]);
+
+  
 
   const filteredLogs = useMemo(() => {
     return logs.filter(log => {
@@ -261,6 +285,13 @@ export default function AuditLogsPage() {
                 </>
               )}
             </Button>
+            <Button
+              variant={autoRefresh ? 'default' : 'outline'}
+              onClick={() => setAutoRefresh(!autoRefresh)}
+              className="border-slate-300 dark:border-slate-700"
+            >
+              {autoRefresh ? 'Auto-Refresh: ON' : 'Auto-Refresh: OFF'}
+            </Button>
           </div>
         </div>
 
@@ -343,7 +374,7 @@ export default function AuditLogsPage() {
               Registros de Auditoría
             </CardTitle>
             <CardDescription>
-              Últimos 100 eventos del sistema
+              Últimos 100 eventos del sistema · Info: {logs.filter(l => l.severity === 'INFO').length} · Warn: {logs.filter(l => l.severity === 'WARNING').length} · Critical: {logs.filter(l => l.severity === 'CRITICAL').length}
             </CardDescription>
           </CardHeader>
           <CardContent>

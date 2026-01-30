@@ -1,32 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { structuredLogger } from '@/lib/logger';
+
+const COMPONENT = 'SuperAdminOrganizationsAPI';
 
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
     
-    // Verificar autenticación
+    // Auth check
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
     if (authError || !user) {
-      return NextResponse.json(
-        { error: 'No autorizado' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
-    // Verificar que el usuario sea SUPER_ADMIN
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-
-    if (userError || userData?.role !== 'SUPER_ADMIN') {
-      return NextResponse.json(
-        { error: 'Acceso denegado. Se requieren permisos de Super Admin.' },
-        { status: 403 }
-      );
+    // Role check
+    const { data: userData } = await supabase.from('users').select('role').eq('id', user.id).single();
+    if (userData?.role !== 'SUPER_ADMIN') {
+      return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
     }
 
     const body = await request.json();
@@ -55,56 +46,30 @@ export async function POST(request: NextRequest) {
       trialDays,
     } = body;
 
-    // Validaciones
+    // Validations
     if (!name || !slug || !email || !adminName || !adminEmail) {
-      return NextResponse.json(
-        { error: 'Faltan campos obligatorios' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Faltan campos obligatorios' }, { status: 400 });
     }
 
-    // Verificar que el slug no exista
-    const { data: existingOrg } = await supabase
-      .from('organizations')
-      .select('id')
-      .eq('slug', slug)
-      .single();
-
+    // Check slug
+    const { data: existingOrg } = await supabase.from('organizations').select('id').eq('slug', slug).single();
     if (existingOrg) {
-      return NextResponse.json(
-        { error: 'El slug ya está en uso. Por favor elige otro.' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'El slug ya está en uso' }, { status: 400 });
     }
 
-    // Preparar settings JSONB
+    // Prepare settings
     const organizationSettings = {
       ...settings,
       description,
       industry,
-      contactInfo: {
-        email,
-        phone,
-        website,
-      },
-      address: {
-        street: address,
-        city,
-        state,
-        country,
-        postalCode,
-      },
-      limits: {
-        maxUsers,
-      },
+      contactInfo: { email, phone, website },
+      address: { street: address, city, state, country, postalCode },
+      limits: { maxUsers },
       features,
-      trial: allowTrialPeriod ? {
-        enabled: true,
-        days: trialDays,
-      } : null,
+      trial: allowTrialPeriod ? { enabled: true, days: trialDays } : null,
     };
 
-    // Crear la organización
+    // Create organization
     const { data: organization, error: orgError } = await supabase
       .from('organizations')
       .insert({
@@ -118,15 +83,11 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (orgError) {
-      console.error('Error creating organization:', orgError);
-      return NextResponse.json(
-        { error: 'Error al crear la organización: ' + orgError.message },
-        { status: 500 }
-      );
+      structuredLogger.error('Error creating organization', orgError, { component: COMPONENT, action: 'POST' });
+      return NextResponse.json({ error: orgError.message }, { status: 500 });
     }
 
-    // Crear el usuario administrador en auth.users (invitación)
-    // Nota: Esto requiere permisos de service_role
+    // Invite admin
     const { data: adminUser, error: adminAuthError } = await supabase.auth.admin.inviteUserByEmail(
       adminEmail,
       {
@@ -141,105 +102,141 @@ export async function POST(request: NextRequest) {
     );
 
     if (adminAuthError) {
-      console.error('Error inviting admin user:', adminAuthError);
-      // No fallar completamente, pero registrar el error
-      // La organización ya fue creada
+      structuredLogger.error('Error inviting admin user', adminAuthError, { component: COMPONENT, action: 'POST_INVITE', metadata: { orgId: organization.id } });
     }
 
-    // Si el usuario fue creado, agregarlo como miembro de la organización
     if (adminUser?.user) {
-      // Obtener el rol ADMIN
-      const { data: adminRole } = await supabase
-        .from('roles')
-        .select('id')
-        .eq('name', 'ADMIN')
-        .single();
-
+      const { data: adminRole } = await supabase.from('roles').select('id').eq('name', 'ADMIN').single();
       if (adminRole) {
-        // Agregar como miembro de la organización
-        await supabase
-          .from('organization_members')
-          .insert({
-            organization_id: organization.id,
-            user_id: adminUser.user.id,
-            role_id: adminRole.id,
-            is_owner: true,
-          });
+        await supabase.from('organization_members').insert({
+          organization_id: organization.id,
+          user_id: adminUser.user.id,
+          role_id: adminRole.id,
+          is_owner: true,
+        });
       }
     }
 
-    return NextResponse.json({
-      success: true,
-      organization,
-      message: 'Organización creada exitosamente',
-    });
-
+    return NextResponse.json({ success: true, organization, message: 'Organización creada exitosamente' });
   } catch (error) {
-    console.error('Error in POST /api/superadmin/organizations:', error);
-    return NextResponse.json(
-      { error: 'Error interno del servidor' },
-      { status: 500 }
-    );
+    structuredLogger.error('Unexpected error in POST organizations', error as Error, { component: COMPONENT, action: 'POST' });
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
+    const { searchParams } = new URL(request.url);
     
-    // Verificar autenticación
+    // Auth check
     const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
     if (authError || !user) {
-      return NextResponse.json(
-        { error: 'No autorizado' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
-    // Verificar que el usuario sea SUPER_ADMIN
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
+    // Role check
+    const { data: userData } = await supabase.from('users').select('role').eq('id', user.id).single();
+    if (userData?.role !== 'SUPER_ADMIN') {
+      return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
+    }
+
+    // Filtering
+    const search = searchParams.get('search');
+    const status = searchParams.get('status');
+    const plan = searchParams.get('plan');
+    const page = parseInt(searchParams.get('page') || '1');
+    const pageSize = parseInt(searchParams.get('pageSize') || '50');
+
+    let query = supabase
+      .from('organizations')
+      .select('*, organization_members(count)', { count: 'exact' });
+
+    if (search) {
+      query = query.or(`name.ilike.%${search}%,slug.ilike.%${search}%`);
+    }
+    if (status && status !== 'ALL') {
+      query = query.eq('subscription_status', status);
+    }
+    if (plan && plan !== 'ALL') {
+      query = query.eq('subscription_plan', plan);
+    }
+
+    const { data: organizations, error, count } = await query
+      .order('created_at', { ascending: false })
+      .range((page - 1) * pageSize, page * pageSize - 1);
+
+    if (error) {
+      structuredLogger.error('Error fetching organizations', error, { component: COMPONENT, action: 'GET' });
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true, organizations, total: count });
+  } catch (error) {
+    structuredLogger.error('Unexpected error in GET organizations', error as Error, { component: COMPONENT, action: 'GET' });
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const supabase = await createClient();
+    const body = await request.json();
+    const { id, ...updates } = body;
+
+    if (!id) return NextResponse.json({ error: 'ID requerido' }, { status: 400 });
+
+    // Auth check
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: userData } = await supabase.from('users').select('role').eq('id', user?.id).single();
+    if (userData?.role !== 'SUPER_ADMIN') {
+      return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
+    }
+
+    const { data, error } = await supabase
+      .from('organizations')
+      .update(updates)
+      .eq('id', id)
+      .select()
       .single();
 
-    if (userError || userData?.role !== 'SUPER_ADMIN') {
-      return NextResponse.json(
-        { error: 'Acceso denegado. Se requieren permisos de Super Admin.' },
-        { status: 403 }
-      );
+    if (error) {
+      structuredLogger.error('Error updating organization', error, { component: COMPONENT, action: 'PATCH', metadata: { id } });
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Obtener todas las organizaciones con conteo de miembros
-    const { data: organizations, error: orgsError } = await supabase
-      .from('organizations')
-      .select(`
-        *,
-        organization_members (
-          count
-        )
-      `)
-      .order('created_at', { ascending: false });
-
-    if (orgsError) {
-      console.error('Error fetching organizations:', orgsError);
-      return NextResponse.json(
-        { error: 'Error al obtener organizaciones' },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      organizations,
-    });
-
+    return NextResponse.json({ success: true, organization: data });
   } catch (error) {
-    console.error('Error in GET /api/superadmin/organizations:', error);
-    return NextResponse.json(
-      { error: 'Error interno del servidor' },
-      { status: 500 }
-    );
+    structuredLogger.error('Unexpected error in PATCH organization', error as Error, { component: COMPONENT, action: 'PATCH' });
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const supabase = await createClient();
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (!id) return NextResponse.json({ error: 'ID requerido' }, { status: 400 });
+
+    // Auth check
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: userData } = await supabase.from('users').select('role').eq('id', user?.id).single();
+    if (userData?.role !== 'SUPER_ADMIN') {
+      return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
+    }
+
+    const { error } = await supabase.from('organizations').delete().eq('id', id);
+
+    if (error) {
+      structuredLogger.error('Error deleting organization', error, { component: COMPONENT, action: 'DELETE', metadata: { id } });
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    structuredLogger.error('Unexpected error in DELETE organization', error as Error, { component: COMPONENT, action: 'DELETE' });
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

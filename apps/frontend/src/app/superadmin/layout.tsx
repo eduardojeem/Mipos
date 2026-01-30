@@ -17,6 +17,8 @@ import {
   Activity,
   UserCheck,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   LogOut,
   Crown,
   Sparkles,
@@ -193,20 +195,34 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
         >
           {/* Header */}
           <div className="p-6 border-b border-white/20 dark:border-slate-700/50">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-600 via-pink-600 to-blue-600 flex items-center justify-center shadow-lg shadow-purple-500/50 animate-pulse">
-                <Crown className="h-6 w-6 text-white" />
-              </div>
-              {!isCollapsed && (
-                <div>
-                  <h1 className="text-xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent">
-                    Super Admin
-                  </h1>
-                  <p className="text-xs text-slate-600 dark:text-slate-400 font-medium">
-                    Panel de Control SaaS
-                  </p>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-600 via-pink-600 to-blue-600 flex items-center justify-center shadow-lg shadow-purple-500/50 animate-pulse">
+                  <Crown className="h-6 w-6 text-white" />
                 </div>
-              )}
+                {!isCollapsed && (
+                  <div>
+                    <h1 className="text-xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent">
+                      Super Admin
+                    </h1>
+                    <p className="text-xs text-slate-600 dark:text-slate-400 font-medium">
+                      Panel de Control SaaS
+                    </p>
+                  </div>
+                )}
+              </div>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setIsCollapsed(!isCollapsed)}
+                className="border-purple-300 dark:border-purple-700 hover:bg-purple-100 dark:hover:bg-purple-900/30"
+              >
+                {isCollapsed ? (
+                  <ChevronRight className="h-4 w-4" />
+                ) : (
+                  <ChevronLeft className="h-4 w-4" />
+                )}
+              </Button>
             </div>
           </div>
 
