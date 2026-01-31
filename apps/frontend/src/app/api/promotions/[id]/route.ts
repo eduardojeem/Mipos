@@ -20,12 +20,17 @@ export async function PATCH(
     }
 
     const supabase = await createClient()
+    const orgId = (request.headers.get('x-organization-id') || '').trim()
+    if (!orgId) {
+      return NextResponse.json({ success: false, message: 'Organization header missing' }, { status: 400 })
+    }
 
     // Verify promotion exists
-    const { data: existing, error: existError } = await (supabase as any)
+    const { data: existing, error: existError } = await supabase
       .from('promotions')
       .select('*')
       .eq('id', promotionId)
+      .eq('organization_id', orgId)
       .single()
 
     if (existError || !existing) {
@@ -36,7 +41,7 @@ export async function PATCH(
     }
 
     // Prepare update payload
-    const updatePayload: any = {}
+    const updatePayload: Record<string, unknown> = {}
     
     if (body.name !== undefined) updatePayload.name = body.name
     if (body.description !== undefined) updatePayload.description = body.description
@@ -50,10 +55,11 @@ export async function PATCH(
     if (body.usageLimit !== undefined) updatePayload.usage_limit = body.usageLimit
 
     // Update promotion
-    const { data, error } = await (supabase as any)
+    const { data, error } = await supabase
       .from('promotions')
       .update(updatePayload)
       .eq('id', promotionId)
+      .eq('organization_id', orgId)
       .select()
       .single()
 
@@ -65,10 +71,10 @@ export async function PATCH(
     }
 
     // Log audit
-    const { data: userData } = await (supabase as any).auth.getUser()
+    const { data: userData } = await supabase.auth.getUser()
     const userId = userData?.user?.id || 'system'
     
-    await (supabase as any)
+    await supabase
       .from('audit_logs')
       .insert({
         user_id: userId,
@@ -94,10 +100,11 @@ export async function PATCH(
       data,
       message: 'Promoción actualizada exitosamente'
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error in PATCH /api/promotions/[id]:', error)
+    const message = error instanceof Error ? error.message : 'Error interno del servidor'
     return NextResponse.json(
-      { success: false, message: error?.message || 'Error interno del servidor' },
+      { success: false, message },
       { status: 500 }
     )
   }
@@ -119,12 +126,17 @@ export async function DELETE(
     }
 
     const supabase = await createClient()
+    const orgId = (request.headers.get('x-organization-id') || '').trim()
+    if (!orgId) {
+      return NextResponse.json({ success: false, message: 'Organization header missing' }, { status: 400 })
+    }
 
     // Verify promotion exists
-    const { data: existing, error: existError } = await (supabase as any)
+    const { data: existing, error: existError } = await supabase
       .from('promotions')
       .select('*')
       .eq('id', promotionId)
+      .eq('organization_id', orgId)
       .single()
 
     if (existError || !existing) {
@@ -135,16 +147,18 @@ export async function DELETE(
     }
 
     // Delete promotion-product relationships first
-    await (supabase as any)
+    await supabase
       .from('promotions_products')
       .delete()
       .eq('promotion_id', promotionId)
+      .eq('organization_id', orgId)
 
     // Delete promotion
-    const { error: deleteError } = await (supabase as any)
+    const { error: deleteError } = await supabase
       .from('promotions')
       .delete()
       .eq('id', promotionId)
+      .eq('organization_id', orgId)
 
     if (deleteError) {
       return NextResponse.json(
@@ -154,10 +168,10 @@ export async function DELETE(
     }
 
     // Log audit
-    const { data: userData } = await (supabase as any).auth.getUser()
+    const { data: userData } = await supabase.auth.getUser()
     const userId = userData?.user?.id || 'system'
     
-    await (supabase as any)
+    await supabase
       .from('audit_logs')
       .insert({
         user_id: userId,
@@ -179,10 +193,11 @@ export async function DELETE(
       success: true,
       message: 'Promoción eliminada exitosamente'
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error in DELETE /api/promotions/[id]:', error)
+    const message = error instanceof Error ? error.message : 'Error interno del servidor'
     return NextResponse.json(
-      { success: false, message: error?.message || 'Error interno del servidor' },
+      { success: false, message },
       { status: 500 }
     )
   }
@@ -204,11 +219,14 @@ export async function GET(
     }
 
     const supabase = await createClient()
+    const orgId = (request.headers.get('x-organization-id') || '').trim()
+    if (!orgId) return NextResponse.json({ success: false, message: 'Organization header missing' }, { status: 400 })
 
-    const { data, error } = await (supabase as any)
+    const { data, error } = await supabase
       .from('promotions')
       .select('*')
       .eq('id', promotionId)
+      .eq('organization_id', orgId)
       .single()
 
     if (error || !data) {
@@ -219,12 +237,13 @@ export async function GET(
     }
 
     // Get associated products
-    const { data: links } = await (supabase as any)
+    const { data: links } = await supabase
       .from('promotions_products')
       .select('product_id')
       .eq('promotion_id', promotionId)
+      .eq('organization_id', orgId)
 
-    const productIds = (links || []).map((l: any) => l.product_id)
+    const productIds = (links || []).map((l: { product_id: string }) => l.product_id)
 
     return NextResponse.json({
       success: true,
@@ -233,10 +252,11 @@ export async function GET(
         productCount: productIds.length
       }
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error in GET /api/promotions/[id]:', error)
+    const message = error instanceof Error ? error.message : 'Error interno del servidor'
     return NextResponse.json(
-      { success: false, message: error?.message || 'Error interno del servidor' },
+      { success: false, message },
       { status: 500 }
     )
   }

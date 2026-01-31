@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
 
@@ -18,18 +18,30 @@ export async function GET() {
       return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 })
     }
 
-    const { data, error } = await supabase
+    const { searchParams } = new URL(request.url)
+    const search = (searchParams.get('search') || '').trim()
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
+    const pageSize = Math.max(1, Math.min(100, parseInt(searchParams.get('pageSize') || '20', 10)))
+    const from = (page - 1) * pageSize
+    const to = from + pageSize - 1
+
+    let query = supabase
       .from('saas_plans')
-      .select('*')
-      .order('price_monthly', { ascending: true })
+      .select('*', { count: 'exact' })
+
+    if (search) {
+      query = query.or(`name.ilike.%${search}%,slug.ilike.%${search}%`)
+    }
+
+    const { data, error, count } = await query.eq('is_active', true).order('price_monthly', { ascending: true }).range(from, to)
 
     if (error) {
       // Si la tabla no existe, devolver estructura vacía sin romper UI
-      if (error.code === '42P01') return NextResponse.json({ plans: [] })
+      if (error.code === '42P01') return NextResponse.json({ plans: [], total: 0, page, pageSize })
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ plans: data ?? [] })
+    return NextResponse.json({ plans: data ?? [], total: count || 0, page, pageSize })
   } catch (err) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }
@@ -52,21 +64,147 @@ export async function PATCH() {
     }
 
     const defaults = [
-      { name: 'Free', slug: 'free', price_monthly: 0, price_yearly: 0, features: ['Hasta 5 usuarios','1 local','100 productos','Reportes básicos','Soporte por email'], is_active: true },
-      { name: 'Starter', slug: 'starter', price_monthly: 15, price_yearly: 180, features: ['Hasta 15 usuarios','3 locales','1.000 productos','Reportes intermedios','Soporte estándar'], is_active: true },
-      { name: 'Professional', slug: 'professional', price_monthly: 30, price_yearly: 360, features: ['Usuarios ilimitados','Locales ilimitados','Productos ilimitados','Reportes avanzados','Soporte prioritario'], is_active: true },
-      { name: 'Premium', slug: 'premium', price_monthly: 49, price_yearly: 588, features: ['Usuarios ilimitados','Soporte 24/7','Automatizaciones','Reportes personalizados','Integraciones avanzadas'], is_active: true },
-      { name: 'Enterprise', slug: 'enterprise', price_monthly: 99, price_yearly: 1188, features: ['SLA empresarial','Onboarding dedicado','Soporte técnico premium','Reportes a medida','Integraciones a la carta'], is_active: true },
+      { 
+        name: 'Free', 
+        slug: 'free', 
+        price_monthly: 0, 
+        price_yearly: 0, 
+        features: ['Soporte por email','Reportes básicos'], 
+        limits: { maxUsers: 2, maxProducts: 50, maxTransactionsPerMonth: 200, maxLocations: 1 },
+        is_active: true 
+      },
+      { 
+        name: 'PRO', 
+        slug: 'pro', 
+        price_monthly: 49, 
+        price_yearly: 588, 
+        features: ['Usuarios ilimitados','Locales ilimitados','Productos ilimitados','Reportes avanzados','Soporte prioritario'], 
+        limits: { maxUsers: -1, maxProducts: -1, maxTransactionsPerMonth: -1, maxLocations: -1 },
+        is_active: true 
+      }
     ]
 
-    const { error } = await supabase
+    let { error } = await supabase
       .from('saas_plans')
-      // @ts-ignore onConflict es soportado por supabase-js
       .upsert(defaults, { onConflict: 'slug' })
+
+    if (error && String(error.code) === '42703') {
+      const minimal = defaults.map((p) => ({
+        name: p.name,
+        slug: p.slug,
+        price_monthly: p.price_monthly,
+        price_yearly: p.price_yearly,
+        is_active: p.is_active,
+      }))
+      const r = await supabase
+        .from('saas_plans')
+        .upsert(minimal, { onConflict: 'slug' })
+      error = r.error as any
+    }
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+    const allowed = ['free','pro']
+    await supabase
+      .from('saas_plans')
+      .update({ is_active: false })
+      .not('slug','in', allowed)
+
     return NextResponse.json({ success: true, message: 'Planes sincronizados correctamente' })
+  } catch (err) {
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+
+    const { data: roleRow } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if ((roleRow?.role || '').toUpperCase() !== 'SUPER_ADMIN') {
+      return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 })
+    }
+
+    const body = await request.json()
+    const plan = {
+      name: String(body.name || ''),
+      slug: String(body.slug || '').toLowerCase(),
+      description: String(body.description || ''),
+      price_monthly: Number(body.price_monthly ?? 0),
+      price_yearly: Number(body.price_yearly ?? 0),
+      currency: String(body.currency || 'USD'),
+      trial_days: Number(body.trial_days ?? 0),
+      is_active: Boolean(body.is_active ?? true),
+      features: body.features ?? [],
+      limits: body.limits ?? { maxUsers: 5, maxProducts: 100, maxTransactionsPerMonth: 1000, maxLocations: 1 },
+    }
+
+    if (!plan.name || !plan.slug) {
+      return NextResponse.json({ error: 'Nombre y slug son requeridos' }, { status: 400 })
+    }
+
+    const { data, error } = await supabase
+      .from('saas_plans')
+      .insert(plan)
+      .select('*')
+      .single()
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ success: true, plan: data })
+  } catch (err) {
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+
+    const { data: roleRow } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if ((roleRow?.role || '').toUpperCase() !== 'SUPER_ADMIN') {
+      return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 })
+    }
+
+    const body = await request.json()
+    const id = String(body.id || '')
+    if (!id) return NextResponse.json({ error: 'ID requerido' }, { status: 400 })
+
+    const updates: any = {
+      name: body.name,
+      description: body.description,
+      price_monthly: body.price_monthly,
+      price_yearly: body.price_yearly,
+      currency: body.currency,
+      trial_days: body.trial_days,
+      is_active: body.is_active,
+      features: body.features,
+      limits: body.limits,
+      updated_at: new Date().toISOString(),
+    }
+
+    const { data, error } = await supabase
+      .from('saas_plans')
+      .update(updates)
+      .eq('id', id)
+      .select('*')
+      .single()
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ success: true, plan: data })
   } catch (err) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }
@@ -104,4 +242,3 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }
 }
-

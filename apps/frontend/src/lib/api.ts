@@ -115,6 +115,25 @@ api.interceptors.request.use(
     } catch (error: unknown) {
       console.error('Error getting session:', error);
     }
+    // Inject tenant header from selected organization (client-side)
+    try {
+      if (typeof window !== 'undefined') {
+        const raw = window.localStorage.getItem('selected_organization');
+        if (raw) {
+          let orgId: string | null = null;
+          try {
+            const parsed = JSON.parse(raw);
+            orgId = parsed?.id || parsed?.organization_id || null;
+          } catch {
+            // If not JSON, maybe it's a plain id
+            orgId = raw;
+          }
+          if (orgId && String(orgId).trim()) {
+            (safeConfig.headers as any)['x-organization-id'] = String(orgId).trim();
+          }
+        }
+      }
+    } catch {}
     try {
       const method = String((safeConfig.method || 'get')).toUpperCase();
       const isMutable = method !== 'GET';

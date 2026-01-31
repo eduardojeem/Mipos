@@ -1,38 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase';
+import { requireOrganization } from '@/lib/organization';
 
 /**
- * Quick Dashboard Stats API - Ultra Fast Version
+ * Quick Dashboard Stats API - Ultra Fast Version with Multitenancy
  * 
  * Provides essential dashboard metrics with minimal database queries
  * Optimized for speed over completeness
+ * Filtered by organization for SaaS multitenancy
  */
 
 export async function GET(request: NextRequest) {
   try {
+    // Validate and get organization ID
+    const orgId = await requireOrganization(request);
     const supabase = createClient();
 
     // Use simple, fast queries with minimal data
+    // All queries filtered by organization for multitenancy
     const [
       salesCount,
       customersCount,
       productsCount
     ] = await Promise.allSettled([
-      // Just count today's sales - fastest possible query
+      // Just count today's sales - fastest possible query (organization-filtered)
       supabase
         .from('sales')
         .select('*', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
         .gte('created_at', new Date().toISOString().split('T')[0]),
 
-      // Count customers
+      // Count customers (organization-filtered)
       supabase
         .from('customers')
-        .select('*', { count: 'exact', head: true }),
+        .select('*', { count: 'exact', head: true })
+        .eq('organization_id', orgId),
 
-      // Count products
+      // Count products (organization-filtered)
       supabase
         .from('products')
         .select('*', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
     ]);
 
     // Provide minimal but useful data
@@ -59,6 +67,14 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Quick stats error:', error);
+    
+    // Return specific error if it's an organization validation error
+    if (error instanceof Error && error.message.includes('No valid organization')) {
+      return NextResponse.json(
+        { error: 'Organization required', message: error.message },
+        { status: 400 }
+      );
+    }
     
     // Ultra-minimal fallback
     return NextResponse.json({

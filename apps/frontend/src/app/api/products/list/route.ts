@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { requireOrganization } from '@/lib/organization';
 
 export async function GET(request: NextRequest) {
   try {
+    // Validate and get organization ID
+    const orgId = await requireOrganization(request);
+    
     const { searchParams } = new URL(request.url);
     
     // Pagination parameters
@@ -52,6 +56,9 @@ export async function GET(request: NextRequest) {
           name
         )
       `, { count: 'exact' });
+
+    // Filter by organization for multitenancy
+    query = query.eq('organization_id', orgId);
 
     // Apply filters
     if (search) {
@@ -176,6 +183,14 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Products list error:', error);
+    
+    // Return specific error if it's an organization validation error
+    if (error instanceof Error && error.message.includes('No valid organization')) {
+      return NextResponse.json(
+        { error: 'Organization required', message: error.message },
+        { status: 400 }
+      );
+    }
     
     return NextResponse.json({
       products: [],

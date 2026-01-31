@@ -1,16 +1,20 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase';
+import { requireOrganization } from '@/lib/organization';
 
 /**
- * Fast Dashboard Summary API - Ultra Optimized
+ * Fast Dashboard Summary API - Ultra Optimized with Multitenancy
  * 
  * Provides essential dashboard metrics with minimal database load
  * Optimized for speed with smart caching and simplified queries
+ * Filtered by organization for SaaS multitenancy
  */
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient();
+    // Validate and get organization ID
+    const orgId = await requireOrganization(request);
+    const supabase = await createClient();
 
     // Get current date for today's calculations
     const today = new Date();
@@ -22,19 +26,22 @@ export async function GET() {
       basicCounts,
       ordersStats
     ] = await Promise.all([
-      // Single optimized query for today's sales
+      // Single optimized query for today's sales (organization-filtered)
       supabase
-        .rpc('get_today_sales_summary', { date_start: todayStart })
+        .rpc('get_today_sales_summary', { 
+          date_start: todayStart,
+          org_id: orgId 
+        })
         .single(),
       
-      // Basic counts in one query using RPC
+      // Basic counts in one query using RPC (organization-filtered)
       supabase
-        .rpc('get_dashboard_counts')
+        .rpc('get_dashboard_counts', { org_id: orgId })
         .single(),
 
-      // Web orders statistics
+      // Web orders statistics (organization-filtered)
       supabase
-        .rpc('get_orders_dashboard_stats')
+        .rpc('get_orders_dashboard_stats', { org_id: orgId })
         .single()
     ]);
 
@@ -99,6 +106,14 @@ export async function GET() {
   } catch (error) {
     console.error('Fast dashboard summary error:', error);
     
+    // Return specific error if it's an organization validation error
+    if (error instanceof Error && error.message.includes('No valid organization')) {
+      return NextResponse.json(
+        { error: 'Organization required', message: error.message },
+        { status: 400 }
+      );
+    }
+    
     // Ultra-fast fallback with static data
     return NextResponse.json({
       todaySales: 0,
@@ -120,7 +135,7 @@ export async function GET() {
 // Create the required RPC functions if they don't exist
 export async function POST() {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     
     // Create optimized RPC functions for dashboard
     const createRPCFunctions = `

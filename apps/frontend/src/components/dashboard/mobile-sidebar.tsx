@@ -10,6 +10,7 @@ import { useBusinessConfig } from '@/contexts/BusinessConfigContext';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { navigation as sidebarNavigation, type NavItem as SidebarNavItem } from '@/components/dashboard/sidebar';
+import { OrganizationSelector } from '@/components/organizations/OrganizationSelector';
 
 export function MobileSidebar() {
   const [open, setOpen] = useState(false);
@@ -84,6 +85,10 @@ export function MobileSidebar() {
                   </h1>
                 </div>
               </div>
+            </div>
+
+            <div className="px-6 pt-3 border-b border-gray-200 dark:border-gray-700">
+              <OrganizationSelector className="w-full h-9" />
             </div>
 
             <nav

@@ -28,6 +28,10 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
     const { searchParams } = new URL(request.url);
+    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    if (!orgId) {
+      return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
+    }
     
     // Parámetros de consulta
     const page = parseInt(searchParams.get('page') || '1');
@@ -45,6 +49,8 @@ export async function GET(request: NextRequest) {
         category:categories(id, name),
         supplier:suppliers(id, name)
       `);
+
+    query = query.eq('organization_id', orgId);
     
     // Aplicar filtros
     if (search) {
@@ -143,6 +149,12 @@ export async function POST(request: NextRequest) {
     }
     
     const productData = validationResult.data;
+
+    // Multitenancy: require organization header
+    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    if (!orgId) {
+      return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
+    }
     
     // Crear cliente con service role para operaciones de escritura
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -166,8 +178,9 @@ export async function POST(request: NextRequest) {
     // Verificar que la categoría existe
     const { data: category, error: categoryError } = await adminClient
       .from('categories')
-      .select('id')
+      .select('id, organization_id')
       .eq('id', productData.category_id)
+      .eq('organization_id', orgId)
       .single();
     
     if (categoryError || !category) {
@@ -180,8 +193,9 @@ export async function POST(request: NextRequest) {
     // Verificar que el SKU es único
     const { data: existingProduct, error: skuError } = await adminClient
       .from('products')
-      .select('id')
+      .select('id, organization_id')
       .eq('sku', productData.sku)
+      .eq('organization_id', orgId)
       .single();
     
     if (existingProduct) {
@@ -196,6 +210,7 @@ export async function POST(request: NextRequest) {
       .from('products')
       .insert([{
         ...productData,
+        organization_id: orgId,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }])

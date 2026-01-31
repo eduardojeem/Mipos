@@ -1,54 +1,44 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Organization } from './useAdminData';
 import { useToast } from '@/components/ui/use-toast';
 
 export function useOrganization(id: string) {
-    const [organization, setOrganization] = useState<Organization | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [updating, setUpdating] = useState(false);
-
+    const queryClient = useQueryClient();
     const { toast } = useToast();
 
-    const fetchOrganization = useCallback(async () => {
-        if (!id) return;
-        
-        try {
-            setLoading(true);
-            setError(null);
-            
+    // Query key for caching
+    const queryKey = useMemo(() => ['admin', 'organization', id], [id]);
+
+    // Fetch organization using React Query
+    const {
+        data,
+        isLoading: loading,
+        error: queryError,
+        refetch,
+    } = useQuery({
+        queryKey,
+        queryFn: async () => {
+            if (!id) return null;
             const response = await fetch(`/api/superadmin/organizations/${id}`);
             if (!response.ok) {
                 const errorData = await response.json();
                 throw new Error(errorData.error || 'Error al cargar la organización');
             }
+            const result = await response.json();
+            return result.organization as Organization;
+        },
+        enabled: !!id,
+        staleTime: 5 * 60 * 1000,
+    });
 
-            const data = await response.json();
-            setOrganization(data.organization);
-        } catch (err: unknown) {
-            console.error('Error fetching organization:', err);
-            const errorMessage = err instanceof Error ? err.message : 'Error al cargar la organización';
-            setError(errorMessage);
-            toast({
-                title: 'Error',
-                description: errorMessage,
-                variant: 'destructive',
-            });
-        } finally {
-            setLoading(false);
-        }
-    }, [id, toast]);
+    const organization = data || null;
+    const error = queryError instanceof Error ? queryError.message : null;
 
-    useEffect(() => {
-        fetchOrganization();
-    }, [fetchOrganization]);
-
-    const updateOrganization = useCallback(async (updates: Partial<Organization>) => {
-        if (!id) return { success: false, error: 'No ID provided' };
-
-        setUpdating(true);
-        
-        try {
+    // Mutation for updating the organization
+    const updateMutation = useMutation({
+        mutationFn: async (updates: Partial<Organization>) => {
+            if (!id) throw new Error('No ID provided');
             const response = await fetch(`/api/superadmin/organizations/${id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
@@ -60,35 +50,53 @@ export function useOrganization(id: string) {
                 throw new Error(errorData.error || 'Error al actualizar organización');
             }
 
-            const data = await response.json();
-            setOrganization(data.organization);
+            const result = await response.json();
+            return result.organization as Organization;
+        },
+        onMutate: async (updates) => {
+            await queryClient.cancelQueries({ queryKey });
+            const previousData = queryClient.getQueryData<Organization>(queryKey);
 
+            if (previousData) {
+                queryClient.setQueryData<Organization>(queryKey, {
+                    ...previousData,
+                    ...updates,
+                });
+            }
+
+            return { previousData };
+        },
+        onError: (err, variables, context) => {
+            if (context?.previousData) {
+                queryClient.setQueryData(queryKey, context.previousData);
+            }
+            toast({
+                title: 'Error al actualizar',
+                description: err instanceof Error ? err.message : 'Error desconocido',
+                variant: 'destructive',
+            });
+        },
+        onSuccess: (updatedOrg) => {
+            queryClient.setQueryData(queryKey, updatedOrg);
             toast({
                 title: 'Actualización exitosa',
                 description: 'La organización se actualizó correctamente.',
             });
+            // Also invalidate the list query to keep it in sync
+            queryClient.invalidateQueries({ queryKey: ['admin', 'organizations'] });
+        },
+    });
 
-            return { success: true };
-        } catch (err: unknown) {
-            console.error('Error updating organization:', err);
-            const errorMessage = err instanceof Error ? err.message : 'Error al actualizar organización';
-            toast({
-                title: 'Error al actualizar',
-                description: errorMessage,
-                variant: 'destructive',
-            });
-            return { success: false, error: errorMessage };
-        } finally {
-            setUpdating(false);
-        }
-    }, [id, toast]);
+    const updateOrganization = useCallback(async (updates: Partial<Organization>) => {
+        return updateMutation.mutateAsync(updates);
+    }, [updateMutation]);
 
     return {
         organization,
         loading,
         error,
-        updating,
-        refresh: fetchOrganization,
+        updating: updateMutation.isPending,
+        refresh: refetch,
         updateOrganization,
     };
 }

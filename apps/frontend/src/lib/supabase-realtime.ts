@@ -1336,13 +1336,56 @@ export class SupabaseRealtimeService {
    * - products, categories, customers, sales, sale_items, inventory_movements, roles, permissions, cash_sessions, cash_movements
    */
   subscribeToAllEntities(callback: (payload: EntityChangePayload) => void) {
-    // products
+    let orgId: string | null = null;
+    let orgIds: string[] = [];
+    try {
+      if (typeof window !== 'undefined') {
+        const raw = window.localStorage.getItem('selected_organization');
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            orgId = parsed?.id || parsed?.organization_id || null;
+          } catch {
+            orgId = raw;
+          }
+        }
+      }
+      // Resolve orgIds asynchronously without blocking subscription creation
+      const ses = (this.supabase as any).auth?.getSession?.();
+      if (!orgId && ses && typeof ses.then === 'function') {
+        ses
+          .then((res: any) => {
+            const session = res?.data || res;
+            const uid = session?.session?.user?.id || session?.user?.id || null;
+            if (uid) {
+              return this.supabase
+                .from('organization_members')
+                .select('organization_id')
+                .eq('user_id', uid);
+            }
+            return null;
+          })
+          .then((r: any) => {
+            if (r && r.data) {
+              orgIds = (r.data || []).map((m: any) => String(m.organization_id)).filter(Boolean);
+              if (!orgId && orgIds.length === 1) orgId = orgIds[0];
+            }
+          })
+          .catch(() => { /* no-op */ });
+      }
+    } catch { /* no-op */ }
+    const orgFilter = orgId && String(orgId).trim() ? `organization_id=eq.${String(orgId).trim()}` : undefined;
+
     const productsSub = this.supabase
       .channel('all-products')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'products' },
+        orgFilter ? { event: '*', schema: 'public', table: 'products', filter: orgFilter } : { event: '*', schema: 'public', table: 'products' },
         (payload: RealtimePostgresChangesPayload<Product>) => {
+          if (orgIds.length > 0) {
+            const oid = (payload.new as any)?.organization_id || (payload.old as any)?.organization_id;
+            if (oid && !orgIds.includes(String(oid))) return;
+          }
           const change: EntityChangePayload = {
             entity: 'products',
             eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
@@ -1665,6 +1708,25 @@ export class SupabaseRealtimeService {
       const safeProduct: any = { ...product };
       delete safeProduct.offer_price;
 
+      // Ensure organization_id for multitenancy (read from localStorage if available)
+      try {
+        if (typeof window !== 'undefined') {
+          const raw = window.localStorage.getItem('selected_organization');
+          if (raw && !safeProduct.organization_id) {
+            let orgId: string | null = null;
+            try {
+              const parsed = JSON.parse(raw);
+              orgId = parsed?.id || parsed?.organization_id || null;
+            } catch {
+              orgId = raw;
+            }
+            if (orgId && String(orgId).trim()) {
+              safeProduct.organization_id = String(orgId).trim();
+            }
+          }
+        }
+      } catch {}
+
       const { data, error } = await this.supabase
         .from('products')
         .insert(safeProduct)
@@ -1702,11 +1764,26 @@ export class SupabaseRealtimeService {
   async updateProduct(id: string, updates: ProductUpdate): Promise<Product | null> {
     try {
       const safeUpdates: any = __makeSafeUpdates(updates as any);
+      let orgId: string | null = null;
+      try {
+        if (typeof window !== 'undefined') {
+          const raw = window.localStorage.getItem('selected_organization');
+          if (raw) {
+            try {
+              const parsed = JSON.parse(raw);
+              orgId = parsed?.id || parsed?.organization_id || null;
+            } catch {
+              orgId = raw;
+            }
+          }
+        }
+      } catch {}
 
       const { data, error } = await this.supabase
         .from('products')
         .update(safeUpdates)
         .eq('id', id)
+        .eq('organization_id', orgId as any)
         .select()
         .single();
 
@@ -1740,10 +1817,26 @@ export class SupabaseRealtimeService {
 
   async deleteProduct(id: string): Promise<boolean> {
     try {
+      let orgId: string | null = null;
+      try {
+        if (typeof window !== 'undefined') {
+          const raw = window.localStorage.getItem('selected_organization');
+          if (raw) {
+            try {
+              const parsed = JSON.parse(raw);
+              orgId = parsed?.id || parsed?.organization_id || null;
+            } catch {
+              orgId = raw;
+            }
+          }
+        }
+      } catch {}
+
       const { error } = await this.supabase
         .from('products')
         .delete()
-        .eq('id', id);
+        .eq('id', id)
+        .eq('organization_id', orgId as any);
 
       if (error) {
         const message = (error as any)?.message || 'Error al eliminar producto en Supabase';
@@ -1839,6 +1932,36 @@ export class SupabaseRealtimeService {
       let query = this.supabase
         .from('products')
         .select('*', { count: countMode });
+
+      let orgId: string | null = null;
+      let orgIds: string[] = [];
+      try {
+        if (typeof window !== 'undefined') {
+          const raw = window.localStorage.getItem('selected_organization');
+          if (raw) {
+            try {
+              const parsed = JSON.parse(raw);
+              orgId = parsed?.id || parsed?.organization_id || null;
+            } catch {
+              orgId = raw;
+            }
+          }
+        }
+        if (!orgId) {
+          const { data: session } = await (this.supabase as any).auth.getSession?.();
+          const uid = session?.session?.user?.id || session?.user?.id || null;
+          if (uid) {
+            const { data: mem } = await this.supabase.from('organization_members').select('organization_id').eq('user_id', uid);
+            orgIds = (mem || []).map((m: any) => String(m.organization_id)).filter(Boolean);
+            if (orgIds.length === 1) orgId = orgIds[0];
+          }
+        }
+      } catch {}
+      if (orgId && String(orgId).trim()) {
+        query = query.eq('organization_id', String(orgId).trim());
+      } else if (orgIds.length > 0) {
+        query = query.in('organization_id', orgIds);
+      }
 
       // Aplicar filtros
       if (filters?.search) {
@@ -1936,6 +2059,11 @@ export class SupabaseRealtimeService {
           .from('products')
           .select('*', { count: fbCountMode })
           .order(orderField, { ascending });
+        if (orgId && String(orgId).trim()) {
+          fb = fb.eq('organization_id', String(orgId).trim());
+        } else if (orgIds.length > 0) {
+          fb = fb.in('organization_id', orgIds);
+        }
         if (filters?.search) {
           const term = filters.search.replace(/%/g, '').trim();
           if (term) {
@@ -2007,6 +2135,11 @@ export class SupabaseRealtimeService {
             .from('products')
             .select('*', { count: fbCountMode })
             .order(orderField, { ascending });
+          if (orgId && String(orgId).trim()) {
+            fb2 = fb2.eq('organization_id', String(orgId).trim());
+          } else if (orgIds.length > 0) {
+            fb2 = fb2.in('organization_id', orgIds);
+          }
           if (filters?.search) {
             const term = filters.search.replace(/%/g, '').trim();
             if (term) {

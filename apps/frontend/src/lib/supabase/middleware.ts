@@ -184,6 +184,26 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
+  if (user && request.nextUrl.pathname.startsWith('/dashboard') && !request.nextUrl.pathname.startsWith('/dashboard/reports')) {
+    let role = String((user as any)?.user_metadata?.role || '').toUpperCase();
+    try {
+      const { data: profile } = await (supabase as any)
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+      const dbRole = String((profile as any)?.role || '').toUpperCase();
+      role = dbRole || role;
+    } catch {}
+    const allowedRoles = ['ADMIN', 'MANAGER', 'CASHIER', 'SUPER_ADMIN'];
+    const canViewDashboard = allowedRoles.includes(role);
+    if (!canViewDashboard && !isMockAuth) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/home';
+      return NextResponse.redirect(url);
+    }
+  }
+
   // Proteger API de reportes por rol (ADMIN/MANAGER)
   if (request.nextUrl.pathname.startsWith('/api/reports')) {
     if (!user && !isMockAuth) {

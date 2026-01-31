@@ -129,6 +129,22 @@ export default function ProductViewPage({ params }: { params: { id: string } }) 
   const businessConfig = useBusinessConfigData();
   const supabase = createClient();
 
+  const getSelectedOrganizationId = () => {
+    try {
+      if (typeof window === 'undefined') return null;
+      const raw = window.localStorage.getItem('selected_organization');
+      if (!raw) return null;
+      try {
+        const parsed = JSON.parse(raw);
+        return parsed?.id || parsed?.organization_id || null;
+      } catch {
+        return raw;
+      }
+    } catch {
+      return null;
+    }
+  };
+
   // --- Helpers ---
 
   const fmtCurrency = (val: number) => {
@@ -160,15 +176,21 @@ export default function ProductViewPage({ params }: { params: { id: string } }) 
       setError(null);
 
       // 1. Fetch Product Details (Critical)
-      const { data: p, error: err } = await supabase
+      let productQuery = supabase
         .from('products')
         .select(`
           *,
           category:categories!products_category_id_fkey(name),
           supplier:suppliers!products_supplier_id_fkey(name)
         `)
-        .eq('id', productId)
-        .single();
+        .eq('id', productId);
+
+      const orgId = getSelectedOrganizationId();
+      if (orgId) {
+        productQuery = productQuery.eq('organization_id', orgId);
+      }
+
+      const { data: p, error: err } = await productQuery.single();
 
       if (err) throw err;
       if (!p) throw new Error('Producto no encontrado');
@@ -199,20 +221,26 @@ export default function ProductViewPage({ params }: { params: { id: string } }) 
       // 2. Fetch Analytics & Movements (Non-critical, parallel)
       const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
 
-      const [salesResponse, movementsResponse] = await Promise.all([
-        supabase
-          .from('sale_items')
-          .select('quantity, unit_price, created_at')
-          .eq('product_id', productId)
-          .gte('created_at', thirtyDaysAgo)
-          .order('created_at', { ascending: true }),
-        supabase
-          .from('inventory_movements')
-          .select('*')
-          .eq('product_id', productId)
-          .order('created_at', { ascending: false })
-          .limit(10)
-      ]);
+      const salesQuery = supabase
+        .from('sale_items')
+        .select('quantity, unit_price, created_at')
+        .eq('product_id', productId)
+        .gte('created_at', thirtyDaysAgo)
+        .order('created_at', { ascending: true });
+
+      const movementsQuery = supabase
+        .from('inventory_movements')
+        .select('*')
+        .eq('product_id', productId)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (orgId) {
+        (salesQuery as any).eq('organization_id', orgId);
+        (movementsQuery as any).eq('organization_id', orgId);
+      }
+
+      const [salesResponse, movementsResponse] = await Promise.all([salesQuery, movementsQuery]);
 
       // Process Sales Data
       if (salesResponse.data) {

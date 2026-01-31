@@ -72,15 +72,17 @@ export class CarouselService {
    * 
    * @returns Promise<CarouselData> - Current carousel state
    */
-  async getCarousel(): Promise<CarouselData> {
+  async getCarousel(orgId?: string): Promise<CarouselData> {
     if (!supabase) {
       throw new Error('Supabase client not initialized');
     }
 
-    const { data, error } = await supabase
+    let q = supabase
       .from('promotions_carousel')
       .select('*')
       .order('position', { ascending: true });
+    if (orgId) q = q.eq('organization_id', orgId);
+    const { data, error } = await q;
 
     if (error) {
       throw new Error(`Database error: ${error.message}`);
@@ -108,7 +110,7 @@ export class CarouselService {
    * @param context - Request context for audit logging
    * @returns Promise<CarouselData> - Updated carousel state
    */
-  async saveCarousel(ids: string[], context: RequestContext): Promise<CarouselData> {
+  async saveCarousel(ids: string[], context: RequestContext, orgId?: string): Promise<CarouselData> {
     if (!supabase) {
       throw new Error('Supabase client not initialized');
     }
@@ -126,7 +128,7 @@ export class CarouselService {
     // Get current state for audit
     let currentState: CarouselData;
     try {
-      currentState = await this.getCarousel();
+      currentState = await this.getCarousel(orgId);
     } catch (error) {
       // If carousel doesn't exist yet, use empty state
       currentState = {
@@ -138,10 +140,9 @@ export class CarouselService {
     }
 
     // Delete existing carousel items
-    const { error: deleteError } = await supabase
-      .from('promotions_carousel')
-      .delete()
-      .neq('position', -1); // Delete all (using neq as a workaround for "delete all")
+    let dq = supabase.from('promotions_carousel').delete().neq('position', -1);
+    if (orgId) dq = dq.eq('organization_id', orgId);
+    const { error: deleteError } = await dq;
 
     if (deleteError) {
       throw new Error(`Delete error: ${deleteError.message}`);
@@ -154,6 +155,7 @@ export class CarouselService {
         position: idx,
         modified_by: context.userId,
         updated_at: new Date().toISOString(),
+        organization_id: orgId,
       }));
 
       const { data: inserted, error: insertError } = await supabase
@@ -320,7 +322,7 @@ export class CarouselService {
     }
 
     // Get current state for audit
-    const currentState = await this.getCarousel();
+    const currentState = await this.getCarousel(orgId);
 
     // Revert to the previous state from that log entry
     const previousIds = log.previous_state || [];

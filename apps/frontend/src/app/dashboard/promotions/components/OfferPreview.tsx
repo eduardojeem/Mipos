@@ -112,96 +112,9 @@ export function OfferPreview({ promotion }: OfferPreviewProps) {
       }
     } catch (error) {
       logger.error('Error fetching products:', error);
-      setError('Error al cargar productos. Mostrando datos de ejemplo.')
-
-      // Enhanced fallback with more realistic mock data
-      const mockProducts: OfferProduct[] = [
-        {
-          id: 'mock-offer-1',
-          name: 'Laptop Gaming ROG Strix',
-          price: 1200,
-          stock: 3,
-          brand: 'ASUS',
-          imageUrl: '',
-          category: 'Electrónicos',
-          isAvailable: true,
-          rating: 4.5,
-          reviewCount: 89,
-          discountedPrice: calculateDiscountedPrice(1200),
-          savings: 1200 - calculateDiscountedPrice(1200)
-        },
-        {
-          id: 'mock-offer-2',
-          name: 'Mouse Gaming Wireless',
-          price: 80,
-          stock: 15,
-          brand: 'Logitech',
-          imageUrl: '',
-          category: 'Accesorios',
-          isAvailable: true,
-          rating: 4.2,
-          reviewCount: 156,
-          discountedPrice: calculateDiscountedPrice(80),
-          savings: 80 - calculateDiscountedPrice(80)
-        },
-        {
-          id: 'mock-offer-3',
-          name: 'Monitor 4K 27"',
-          price: 350,
-          stock: 0,
-          brand: 'Dell',
-          imageUrl: '',
-          category: 'Electrónicos',
-          isAvailable: false,
-          rating: 4.7,
-          reviewCount: 203,
-          discountedPrice: calculateDiscountedPrice(350),
-          savings: 350 - calculateDiscountedPrice(350)
-        },
-        {
-          id: 'mock-offer-4',
-          name: 'Teclado Mecánico RGB',
-          price: 120,
-          stock: 8,
-          brand: 'Corsair',
-          imageUrl: '',
-          category: 'Accesorios',
-          isAvailable: true,
-          rating: 4.3,
-          reviewCount: 67,
-          discountedPrice: calculateDiscountedPrice(120),
-          savings: 120 - calculateDiscountedPrice(120)
-        },
-        {
-          id: 'mock-offer-5',
-          name: 'Auriculares Bluetooth Premium',
-          price: 200,
-          stock: 2,
-          brand: 'Sony',
-          imageUrl: '',
-          category: 'Audio',
-          isAvailable: true,
-          rating: 4.6,
-          reviewCount: 134,
-          discountedPrice: calculateDiscountedPrice(200),
-          savings: 200 - calculateDiscountedPrice(200)
-        },
-        {
-          id: 'mock-offer-6',
-          name: 'Webcam HD 1080p',
-          price: 60,
-          stock: 25,
-          brand: 'Logitech',
-          imageUrl: '',
-          category: 'Accesorios',
-          isAvailable: true,
-          rating: 4.1,
-          reviewCount: 78,
-          discountedPrice: calculateDiscountedPrice(60),
-          savings: 60 - calculateDiscountedPrice(60)
-        }
-      ]
-      setProducts(mockProducts)
+      setError('Error al cargar productos desde Supabase.')
+      // No usar datos de ejemplo; reflejar estado real sin productos
+      setProducts([])
     } finally {
       setLoading(false)
     }

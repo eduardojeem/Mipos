@@ -119,7 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // ⚡ OPTIMIZACIÓN: Timeout de 3 segundos para evitar esperas largas
       const controller = new AbortController();
       timeoutId = setTimeout(() => {
-        controller.abort();
+        controller.abort('timeout'); // Proporcionar una razón para la cancelación
       }, 3000);
 
       // Fetch user profile via backend API to avoid client-side Supabase probe issues
@@ -143,7 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       const userData = data as { name?: string; role?: string; id?: string; email?: string; created_at?: string; updated_at?: string };
       const name = userData.name || extractNameFromEmail(authUser.email || '');
-      const role = userData.role || USER_ROLES.CASHIER;
+      const role = normalizeRole(userData.role || USER_ROLES.CASHIER);
 
       return {
         id: userData.id || authUser.id,
@@ -256,6 +256,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (data.user) {
         const userData = await fetchUserData(data.user);
         setUser(userData);
+        try {
+          const uid = String(userData.id || data.user.id);
+          const last = typeof window !== 'undefined' ? window.localStorage.getItem('last_user_id') : null;
+          if (typeof window !== 'undefined' && last && last !== uid) {
+            window.localStorage.removeItem('selected_organization');
+          }
+          if (typeof window !== 'undefined') {
+            window.localStorage.setItem('last_user_id', uid);
+          }
+        } catch {}
 
         // Update last login - always try to update (but users table doesn't have last_login column)
         // This is commented out since the users table schema doesn't include last_login
@@ -404,14 +414,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else if (session?.user) {
           // Optimistic update for instant UI feedback
           const fallbackUser = createFallbackUser(session.user);
-          setUser(fallbackUser);
+          // Normalizar rol desde fallback para que Sidebar no oculte secciones
+          setUser({ ...fallbackUser, role: normalizeRole(fallbackUser.role) });
           
           // Fetch fresh data in background
           fetchUserData(session.user)
             .then(userData => {
               // Only update if data actually changed to avoid re-renders
               if (JSON.stringify(userData) !== JSON.stringify(fallbackUser)) {
-                setUser(userData);
+                setUser({ ...userData, role: normalizeRole(userData.role) });
+                try {
+                  const uid = String(userData.id || session.user.id);
+                  const last = typeof window !== 'undefined' ? window.localStorage.getItem('last_user_id') : null;
+                  if (typeof window !== 'undefined' && last && last !== uid) {
+                    window.localStorage.removeItem('selected_organization');
+                  }
+                  if (typeof window !== 'undefined') {
+                    window.localStorage.setItem('last_user_id', uid);
+                  }
+                } catch {}
               }
             })
             .catch(err => console.error('Background user fetch failed:', err));
@@ -460,7 +481,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setUser(fallbackUser);
             
             // Background update
-            fetchUserData(session.user).then(setUser);
+            fetchUserData(session.user).then((ud) => {
+              setUser(ud);
+              try {
+                const uid = String(ud.id || session.user.id);
+                const last = typeof window !== 'undefined' ? window.localStorage.getItem('last_user_id') : null;
+                if (typeof window !== 'undefined' && last && last !== uid) {
+                  window.localStorage.removeItem('selected_organization');
+                }
+                if (typeof window !== 'undefined') {
+                  window.localStorage.setItem('last_user_id', uid);
+                }
+              } catch {}
+            });
           } else if (event === 'SIGNED_OUT') {
             setUser(null);
           } else if (event === 'TOKEN_REFRESHED' && session?.user) {

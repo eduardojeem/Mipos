@@ -18,12 +18,16 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
-  Clock
+  Clock,
+  ChevronLeft,
+  ChevronRight,
+  RefreshCcw
 } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useOrganizations } from '../hooks/useOrganizations';
 import { Organization } from '../hooks/useAdminData';
+import { useDebounce } from 'use-debounce';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,24 +48,33 @@ import {
 export default function OrganizationsPage() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch] = useDebounce(searchQuery, 500);
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
   
   const { 
     organizations, 
     loading: isLoading, 
     totalCount,
+    error,
+    refresh,
+    updating,
     suspendOrganization,
     activateOrganization,
     deleteOrganization
   } = useOrganizations({
     filters: { 
-      search: searchQuery,
+      search: debouncedSearch,
       status: statusFilter !== 'ALL' ? [statusFilter] : []
     },
     sortBy: 'created_at',
     sortOrder: 'desc',
-    pageSize: 100
+    pageSize,
+    page: currentPage
   });
+
+  const totalPages = Math.ceil(totalCount / pageSize);
 
   const metrics = useMemo(() => {
     return {
@@ -113,14 +126,19 @@ export default function OrganizationsPage() {
     }
   };
 
-  if (isLoading && organizations.length === 0) {
+  if (error) {
     return (
       <SuperAdminGuard>
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="text-center">
-            <Loader2 className="h-12 w-12 animate-spin text-purple-600 mx-auto mb-4" />
-            <p className="text-slate-600 dark:text-slate-400 font-medium">Cargando organizaciones...</p>
+        <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
+          <div className="bg-rose-50 dark:bg-rose-950/20 p-4 rounded-full">
+            <AlertCircle className="h-12 w-12 text-rose-600 dark:text-rose-400" />
           </div>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Error al cargar datos</h2>
+          <p className="text-slate-500 dark:text-slate-400 max-w-md text-center">{error}</p>
+          <Button onClick={() => refresh()} className="gap-2">
+            <RefreshCcw className="h-4 w-4" />
+            Reintentar
+          </Button>
         </div>
       </SuperAdminGuard>
     );
@@ -131,7 +149,7 @@ export default function OrganizationsPage() {
       <div className="space-y-8 max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-2 border-b border-slate-100 dark:border-slate-800">
-          <div>
+          <div className="relative">
             <div className="flex items-center gap-3 mb-2 text-purple-600 dark:text-purple-400 font-semibold tracking-wider uppercase text-xs">
               <Building2 className="h-4 w-4" />
               SaaS Administration
@@ -142,6 +160,11 @@ export default function OrganizationsPage() {
             <p className="text-slate-500 dark:text-slate-400 mt-3 text-lg font-medium max-w-2xl leading-relaxed">
               Supervisión global de todas las empresas en el ecosistema MiPOS.
             </p>
+            {isLoading && (
+              <div className="absolute top-0 right-0 -mr-8 mt-6">
+                <Loader2 className="h-5 w-5 animate-spin text-purple-500 opacity-50" />
+              </div>
+            )}
           </div>
           
           <Button 
@@ -163,7 +186,11 @@ export default function OrganizationsPage() {
                 </div>
                 <Badge variant="outline" className="border-slate-200 dark:border-slate-800">Total</Badge>
               </div>
-              <h3 className="text-3xl font-black text-slate-900 dark:text-white">{metrics.total}</h3>
+              <div className="flex items-baseline gap-2">
+                <h3 className="text-3xl font-black text-slate-900 dark:text-white">
+                  {isLoading && metrics.total === 0 ? <Loader2 className="h-6 w-6 animate-spin text-slate-300" /> : metrics.total}
+                </h3>
+              </div>
               <p className="text-xs text-slate-500 font-medium mt-1">Suscripciones registradas</p>
             </CardContent>
           </Card>
@@ -176,7 +203,9 @@ export default function OrganizationsPage() {
                 </div>
                 <Badge variant="outline" className="border-emerald-200 dark:border-emerald-800/50 text-emerald-600">Activas</Badge>
               </div>
-              <h3 className="text-3xl font-black text-slate-900 dark:text-white">{metrics.active}</h3>
+              <h3 className="text-3xl font-black text-slate-900 dark:text-white">
+                {isLoading && metrics.active === 0 && metrics.total === 0 ? <Loader2 className="h-6 w-6 animate-spin text-slate-300" /> : metrics.active}
+              </h3>
               <p className="text-xs text-slate-500 font-medium mt-1">Negocios en producción</p>
             </CardContent>
           </Card>
@@ -189,7 +218,9 @@ export default function OrganizationsPage() {
                 </div>
                 <Badge variant="outline" className="border-blue-200 dark:border-blue-800/50 text-blue-600">Trial</Badge>
               </div>
-              <h3 className="text-3xl font-black text-slate-900 dark:text-white">{metrics.trial}</h3>
+              <h3 className="text-3xl font-black text-slate-900 dark:text-white">
+                {isLoading && metrics.trial === 0 && metrics.total === 0 ? <Loader2 className="h-6 w-6 animate-spin text-slate-300" /> : metrics.trial}
+              </h3>
               <p className="text-xs text-slate-500 font-medium mt-1">Período de prueba vigente</p>
             </CardContent>
           </Card>
@@ -202,7 +233,9 @@ export default function OrganizationsPage() {
                 </div>
                 <Badge variant="outline" className="border-rose-200 dark:border-rose-800/50 text-rose-600">Suspendidas</Badge>
               </div>
-              <h3 className="text-3xl font-black text-slate-900 dark:text-white">{metrics.suspended}</h3>
+              <h3 className="text-3xl font-black text-slate-900 dark:text-white">
+                {isLoading && metrics.suspended === 0 && metrics.total === 0 ? <Loader2 className="h-6 w-6 animate-spin text-slate-300" /> : metrics.suspended}
+              </h3>
               <p className="text-xs text-slate-500 font-medium mt-1">Acceso restringido</p>
             </CardContent>
           </Card>
@@ -219,8 +252,16 @@ export default function OrganizationsPage() {
                     placeholder="Buscar por nombre, slug o email..." 
                     className="pl-12 h-12 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-2xl focus-visible:ring-purple-500"
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setCurrentPage(1);
+                    }}
                   />
+                  {searchQuery !== debouncedSearch && (
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                      <Loader2 className="h-4 w-4 animate-spin text-slate-300" />
+                    </div>
+                  )}
                 </div>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -232,23 +273,25 @@ export default function OrganizationsPage() {
                   <DropdownMenuContent className="w-56 rounded-xl p-2">
                     <DropdownMenuLabel>Filtrar por Estado</DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => setStatusFilter('ALL')}>Todos</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setStatusFilter('ACTIVE')}>Activas</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setStatusFilter('TRIAL')}>En Prueba</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setStatusFilter('SUSPENDED')}>Suspendidas</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => { setStatusFilter('ALL'); setCurrentPage(1); }}>Todos</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => { setStatusFilter('ACTIVE'); setCurrentPage(1); }}>Activas</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => { setStatusFilter('TRIAL'); setCurrentPage(1); }}>En Prueba</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => { setStatusFilter('SUSPENDED'); setCurrentPage(1); }}>Suspendidas</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
               <div className="flex items-center gap-2">
-                <p className="text-sm font-bold text-slate-400 mr-2 uppercase tracking-widest">{organizations.length} Resultados</p>
+                <p className="text-sm font-bold text-slate-400 mr-2 uppercase tracking-widest">{totalCount} Resultados</p>
                 <div className="flex items-center gap-1">
-                   <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9"><ArrowUpDown className="h-4 w-4" /></Button>
+                   <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9" onClick={() => refresh()}>
+                    <RefreshCcw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+                   </Button>
                 </div>
               </div>
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto min-h-[400px]">
               <Table>
                 <TableHeader className="bg-slate-50/50 dark:bg-slate-900/50">
                   <TableRow className="border-slate-100 dark:border-slate-800">
@@ -261,77 +304,90 @@ export default function OrganizationsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {organizations.map((org: Organization) => (
-                    <TableRow 
-                      key={org.id} 
-                      className="group border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-900/50 transition-colors cursor-pointer"
-                      onClick={() => router.push(`/superadmin/organizations/${org.id}`)}
-                    >
-                      <TableCell className="py-5">
-                        <div className="flex items-center gap-4">
-                          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900 flex items-center justify-center text-slate-500 group-hover:scale-110 group-hover:bg-purple-500 group-hover:text-white transition-all duration-300">
-                            <Building2 className="h-5 w-5" />
+                  {isLoading && organizations.length === 0 ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <TableRow key={i} className="animate-pulse">
+                        <TableCell><div className="h-10 bg-slate-100 dark:bg-slate-800 rounded-lg w-full" /></TableCell>
+                        <TableCell><div className="h-6 bg-slate-100 dark:bg-slate-800 rounded-full w-20" /></TableCell>
+                        <TableCell><div className="h-6 bg-slate-100 dark:bg-slate-800 rounded-full w-24" /></TableCell>
+                        <TableCell><div className="h-6 bg-slate-100 dark:bg-slate-800 rounded-lg w-10 mx-auto" /></TableCell>
+                        <TableCell><div className="h-6 bg-slate-100 dark:bg-slate-800 rounded-lg w-28" /></TableCell>
+                        <TableCell><div className="h-9 bg-slate-100 dark:bg-slate-800 rounded-lg w-9 ml-auto" /></TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    organizations.map((org: Organization) => (
+                      <TableRow 
+                        key={org.id} 
+                        className={`group border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-900/50 transition-colors cursor-pointer ${updating === org.id ? 'opacity-50 pointer-events-none' : ''}`}
+                        onClick={() => router.push(`/superadmin/organizations/${org.id}`)}
+                      >
+                        <TableCell className="py-5">
+                          <div className="flex items-center gap-4">
+                            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900 flex items-center justify-center text-slate-500 group-hover:scale-110 group-hover:bg-purple-500 group-hover:text-white transition-all duration-300">
+                              <Building2 className="h-5 w-5" />
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="font-bold text-slate-900 dark:text-white group-hover:text-purple-600 transition-colors">
+                                {org.name}
+                              </span>
+                              <span className="text-xs font-medium text-slate-400 tracking-tight">
+                                /{org.slug}
+                              </span>
+                            </div>
                           </div>
-                          <div className="flex flex-col">
-                            <span className="font-bold text-slate-900 dark:text-white group-hover:text-purple-600 transition-colors">
-                              {org.name}
-                            </span>
-                            <span className="text-xs font-medium text-slate-400 tracking-tight">
-                              /{org.slug}
-                            </span>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {getStatusBadge(org.subscription_status)}
-                      </TableCell>
-                      <TableCell>
-                        {getPlanBadge(org.subscription_plan)}
-                      </TableCell>
-                      <TableCell className="text-center font-bold text-slate-600 dark:text-slate-400">
-                        {org.organization_members?.[0]?.count || 0}
-                      </TableCell>
-                      <TableCell className="text-sm font-medium text-slate-500">
-                        {new Date(org.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
-                      </TableCell>
-                      <TableCell className="text-right px-8" onClick={(e) => e.stopPropagation()}>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-9 w-9 p-0 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800">
-                              <MoreHorizontal className="h-5 w-5" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-52 rounded-xl p-2">
-                            <DropdownMenuLabel>Acciones de Gestión</DropdownMenuLabel>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => router.push(`/superadmin/organizations/${org.id}`)}>
-                              <Activity className="mr-2 h-4 w-4" /> Detalle Completo
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => router.push(`/superadmin/organizations/${org.id}/billing`)}>
-                              <CreditCard className="mr-2 h-4 w-4" /> Facturación
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            {org.subscription_status === 'ACTIVE' ? (
-                              <DropdownMenuItem className="text-rose-600" onClick={() => suspendOrganization(org.id)}>
-                                <XCircle className="mr-2 h-4 w-4" /> Suspender Acceso
+                        </TableCell>
+                        <TableCell>
+                          {getStatusBadge(org.subscription_status)}
+                        </TableCell>
+                        <TableCell>
+                          {getPlanBadge(org.subscription_plan)}
+                        </TableCell>
+                        <TableCell className="text-center font-bold text-slate-600 dark:text-slate-400">
+                          {org.organization_members?.[0]?.count || 0}
+                        </TableCell>
+                        <TableCell className="text-sm font-medium text-slate-500">
+                          {new Date(org.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </TableCell>
+                        <TableCell className="text-right px-8" onClick={(e) => e.stopPropagation()}>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-9 w-9 p-0 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800">
+                                {updating === org.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <MoreHorizontal className="h-5 w-5" />}
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-52 rounded-xl p-2">
+                              <DropdownMenuLabel>Acciones de Gestión</DropdownMenuLabel>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => router.push(`/superadmin/organizations/${org.id}`)}>
+                                <Activity className="mr-2 h-4 w-4" /> Detalle Completo
                               </DropdownMenuItem>
-                            ) : (
-                              <DropdownMenuItem className="text-emerald-600" onClick={() => activateOrganization(org.id)}>
-                                <CheckCircle2 className="mr-2 h-4 w-4" /> Activar Organización
+                              <DropdownMenuItem onClick={() => router.push(`/superadmin/organizations/${org.id}`)}>
+                                <CreditCard className="mr-2 h-4 w-4" /> Facturación
                               </DropdownMenuItem>
-                            )}
-                            <DropdownMenuItem className="text-rose-700 font-bold" onClick={() => {
-                              if (confirm(`¿Estás seguro de ELIMINAR permanentemente a ${org.name}?`)) {
-                                deleteOrganization(org.id);
-                              }
-                            }}>
-                              <Plus className="mr-2 h-4 w-4 rotate-45" /> Eliminar Permanentemente
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                              <DropdownMenuSeparator />
+                              {org.subscription_status === 'ACTIVE' || org.subscription_status === 'TRIAL' ? (
+                                <DropdownMenuItem className="text-rose-600" onClick={() => suspendOrganization(org.id)}>
+                                  <XCircle className="mr-2 h-4 w-4" /> Suspender Acceso
+                                </DropdownMenuItem>
+                              ) : (
+                                <DropdownMenuItem className="text-emerald-600" onClick={() => activateOrganization(org.id)}>
+                                  <CheckCircle2 className="mr-2 h-4 w-4" /> Activar Organización
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem className="text-rose-700 font-bold" onClick={() => {
+                                if (confirm(`¿Estás seguro de ELIMINAR permanentemente a ${org.name}?`)) {
+                                  deleteOrganization(org.id);
+                                }
+                              }}>
+                                <Plus className="mr-2 h-4 w-4 rotate-45" /> Eliminar Permanentemente
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </div>
@@ -346,6 +402,54 @@ export default function OrganizationsPage() {
                 <Button variant="link" className="mt-4 text-purple-600 font-bold" onClick={() => { setSearchQuery(''); setStatusFilter('ALL'); }}>
                   Limpiar todos los filtros
                 </Button>
+              </div>
+            )}
+
+            {/* Pagination Controls */}
+            {totalCount > pageSize && (
+              <div className="p-6 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                <p className="text-sm font-medium text-slate-500">
+                  Mostrando {(currentPage - 1) * pageSize + 1} a {Math.min(currentPage * pageSize, totalCount)} de {totalCount}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
+                    disabled={currentPage === 1 || isLoading}
+                    className="rounded-lg gap-1"
+                  >
+                    <ChevronLeft className="h-4 w-4" /> Anterior
+                  </Button>
+                  <div className="flex items-center gap-1 mx-2">
+                    {Array.from({ length: Math.min(5, totalPages) }).map((_, i) => {
+                      // Simple pagination logic for first 5 pages, can be improved
+                      const pageNum = i + 1;
+                      return (
+                        <Button 
+                          key={pageNum} 
+                          variant={currentPage === pageNum ? "default" : "ghost"} 
+                          size="sm" 
+                          className="w-9 h-9 p-0 rounded-lg"
+                          onClick={() => setCurrentPage(pageNum)}
+                          disabled={isLoading}
+                        >
+                          {pageNum}
+                        </Button>
+                      );
+                    })}
+                    {totalPages > 5 && <span className="text-slate-300">...</span>}
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} 
+                    disabled={currentPage === totalPages || isLoading}
+                    className="rounded-lg gap-1"
+                  >
+                    Siguiente <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             )}
           </CardContent>

@@ -18,12 +18,15 @@ export async function GET(
     }
 
     const supabase = await createClient()
+    const orgId = (request.headers.get('x-organization-id') || '').trim()
+    if (!orgId) return NextResponse.json({ success: false, message: 'Organization header missing' }, { status: 400 })
 
     // Get promotion-product relationships
     const { data: links, error: linksError } = await (supabase as any)
       .from('promotions_products')
       .select('product_id')
       .eq('promotion_id', promotionId)
+      .eq('organization_id', orgId)
 
     if (linksError) {
       return NextResponse.json(
@@ -47,6 +50,7 @@ export async function GET(
       .from('products')
       .select('id, name, price, image_url, category_id, stock')
       .in('id', productIds)
+      .eq('organization_id', orgId)
 
     if (productsError) {
       return NextResponse.json(
@@ -70,6 +74,7 @@ export async function GET(
         .from('categories')
         .select('id, name')
         .in('id', categoryIds)
+        .eq('organization_id', orgId)
 
       categoryMap = (categories || []).reduce((acc: any, cat: any) => {
         acc[String(cat.id)] = cat.name
@@ -129,12 +134,15 @@ export async function POST(
     }
 
     const supabase = await createClient()
+    const orgId = (request.headers.get('x-organization-id') || '').trim()
+    if (!orgId) return NextResponse.json({ success: false, message: 'Organization header missing' }, { status: 400 })
 
     // Verify promotion exists
     const { data: promotion, error: promoError } = await (supabase as any)
       .from('promotions')
       .select('id')
       .eq('id', promotionId)
+      .eq('organization_id', orgId)
       .single()
 
     if (promoError || !promotion) {
@@ -149,6 +157,7 @@ export async function POST(
       .from('promotions_products')
       .select('product_id')
       .eq('promotion_id', promotionId)
+      .eq('organization_id', orgId)
 
     const existingIds = new Set(
       (existing || []).map((e: any) => String(e.product_id))
@@ -169,7 +178,8 @@ export async function POST(
     // Insert new associations
     const rows = newProductIds.map(productId => ({
       promotion_id: promotionId,
-      product_id: productId
+      product_id: productId,
+      organization_id: orgId
     }))
 
     const { error: insertError } = await (supabase as any)
@@ -240,6 +250,8 @@ export async function DELETE(
     }
 
     const supabase = await createClient()
+    const orgId = (request.headers.get('x-organization-id') || '').trim()
+    if (!orgId) return NextResponse.json({ success: false, message: 'Organization header missing' }, { status: 400 })
 
     // Delete the association
     const { error: deleteError } = await (supabase as any)
@@ -247,6 +259,7 @@ export async function DELETE(
       .delete()
       .eq('promotion_id', promotionId)
       .eq('product_id', productId)
+      .eq('organization_id', orgId)
 
     if (deleteError) {
       return NextResponse.json(

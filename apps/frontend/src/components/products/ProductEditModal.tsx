@@ -126,12 +126,37 @@ export const ProductEditModal = memo(function ProductEditModal({
         return;
       }
 
+      let orgId: string | null = null;
+      let orgIds: string[] = [];
+      try {
+        const raw = typeof window !== 'undefined' ? window.localStorage.getItem('selected_organization') : null;
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            orgId = parsed?.id || parsed?.organization_id || null;
+          } catch {
+            orgId = raw;
+          }
+        }
+        if (!orgId) {
+          const { data: mem } = await supabase
+            .from('organization_members')
+            .select('organization_id')
+            .eq('user_id', user.id);
+          orgIds = (mem || []).map((m: any) => String(m.organization_id)).filter(Boolean);
+          if (orgIds.length === 1) orgId = orgIds[0];
+        }
+      } catch {}
+
       // Cargar categorías
-      const { data: categoriesData, error: categoriesError } = await supabase
+      let catQuery = supabase
         .from('categories')
         .select('id, name')
         .eq('is_active', true)
         .order('name');
+      if (orgId) catQuery = catQuery.eq('organization_id', orgId);
+      else if (orgIds.length) catQuery = catQuery.in('organization_id', orgIds);
+      const { data: categoriesData, error: categoriesError } = await catQuery;
 
       if (categoriesError) {
         console.error('Error loading categories:', categoriesError);
@@ -145,11 +170,14 @@ export const ProductEditModal = memo(function ProductEditModal({
       }
 
       // Cargar proveedores
-      const { data: suppliersData, error: suppliersError } = await supabase
+      let supQuery = supabase
         .from('suppliers')
         .select('id, name')
         .eq('is_active', true)
         .order('name');
+      if (orgId) supQuery = supQuery.eq('organization_id', orgId);
+      else if (orgIds.length) supQuery = supQuery.in('organization_id', orgIds);
+      const { data: suppliersData, error: suppliersError } = await supQuery;
 
       if (suppliersError) {
         console.error('Error loading suppliers:', suppliersError);
@@ -285,11 +313,22 @@ export const ProductEditModal = memo(function ProductEditModal({
 
       // Validación adicional para SKU único (solo si no es auto-generado)
       if (!autoGenerateSku && data.sku) {
-        const { data: existingProduct } = await supabase
+        let orgId: string | null = null;
+        try {
+          const raw = typeof window !== 'undefined' ? window.localStorage.getItem('selected_organization') : null;
+          if (raw) {
+            try {
+              const parsed = JSON.parse(raw);
+              orgId = parsed?.id || parsed?.organization_id || null;
+            } catch { orgId = raw; }
+          }
+        } catch {}
+        let skuQuery = supabase
           .from('products')
           .select('id')
-          .eq('sku', data.sku)
-          .single();
+          .eq('sku', data.sku);
+        if (orgId) skuQuery = skuQuery.eq('organization_id', orgId);
+        const { data: existingProduct } = await skuQuery.single();
           
         if (existingProduct && existingProduct.id !== product?.id) {
           toast.error('Ya existe un producto con este SKU');
@@ -562,13 +601,29 @@ export const ProductEditModal = memo(function ProductEditModal({
 
     setCreatingCategory(true);
     try {
+      let orgId: string | null = null;
+      try {
+        const raw = typeof window !== 'undefined' ? window.localStorage.getItem('selected_organization') : null;
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            orgId = parsed?.id || parsed?.organization_id || null;
+          } catch { orgId = raw; }
+        }
+      } catch {}
+      if (!orgId) {
+        toast.error('Selecciona una organización antes de crear categorías');
+        setCreatingCategory(false);
+        return;
+      }
       const { data, error } = await supabase
         .from('categories')
         .insert([
           {
             name: newCategoryName.trim(),
             description: `Categoría creada desde productos: ${newCategoryName.trim()}`,
-            is_active: true
+            is_active: true,
+            organization_id: orgId
           }
         ])
         .select('id, name')
@@ -616,13 +671,29 @@ export const ProductEditModal = memo(function ProductEditModal({
 
     setCreatingSupplier(true);
     try {
+      let orgId: string | null = null;
+      try {
+        const raw = typeof window !== 'undefined' ? window.localStorage.getItem('selected_organization') : null;
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            orgId = parsed?.id || parsed?.organization_id || null;
+          } catch { orgId = raw; }
+        }
+      } catch {}
+      if (!orgId) {
+        toast.error('Selecciona una organización antes de crear proveedores');
+        setCreatingSupplier(false);
+        return;
+      }
       const { data, error } = await supabase
         .from('suppliers')
         .insert([
           {
             name: newSupplierName.trim(),
             contact_info: `Proveedor creado desde productos: ${newSupplierName.trim()}`,
-            is_active: true
+            is_active: true,
+            organization_id: orgId
           }
         ])
         .select('id, name')

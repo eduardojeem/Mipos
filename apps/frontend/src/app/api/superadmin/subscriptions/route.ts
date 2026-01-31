@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 
 type SubscriptionRecord = {
   id: string;
+  organization_id?: string | null;
   organizations?: { name?: string | null } | null;
   saas_plans?: { name?: string | null; price_monthly?: number | null; price_yearly?: number | null } | null;
   status?: string | null;
@@ -54,6 +55,7 @@ export async function GET() {
     // Transformar datos para el frontend
     const formattedSubscriptions = (subscriptions ?? []).map((sub: SubscriptionRecord) => ({
       id: sub.id,
+      organizationId: sub.organization_id || null,
       organization: sub.organizations?.name || 'Organización desconocida',
       plan: sub.saas_plans?.name?.toLowerCase() || 'custom',
       status: sub.status,

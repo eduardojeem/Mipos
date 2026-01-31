@@ -73,9 +73,14 @@ export async function GET(request: NextRequest) {
         return NextResponse.json(payload, { headers: { ...headers, 'x-cache': 'MISS' } })
       }
 
+      const orgId = (request.headers.get('x-organization-id') || '').trim()
+      if (!orgId) {
+        return NextResponse.json({ success: false, message: 'Organization header missing' }, { status: 400 })
+      }
       let query = (supabase as any)
         .from('promotions')
         .select('*', { count: 'exact' })
+        .eq('organization_id', orgId)
 
       if (search) {
         query = query.ilike('name', `%${search}%`)
@@ -95,6 +100,7 @@ export async function GET(request: NextRequest) {
           .from('categories')
           .select('id,name')
           .or(`id.eq.${category},name.ilike.%${category}%`)
+          .eq('organization_id', orgId)
 
         const catIds: string[] = Array.isArray(catRows) ? catRows.map((c: any) => String(c.id)) : []
         if (catIds.length === 0) {
@@ -108,6 +114,7 @@ export async function GET(request: NextRequest) {
           .from('products')
           .select('id')
           .in('category_id', catIds)
+          .eq('organization_id', orgId)
 
         const productIds: string[] = Array.isArray(prodsForCat) ? prodsForCat.map((p: any) => String(p.id)) : []
         if (productIds.length === 0) {
@@ -121,6 +128,7 @@ export async function GET(request: NextRequest) {
           .from('promotions_products')
           .select('promotion_id')
           .in('product_id', productIds)
+          .eq('organization_id', orgId)
 
         const promoIdsForCategory: string[] = Array.isArray(linksCat)
           ? Array.from(new Set(linksCat.map((l: any) => String(l.promotion_id))))
@@ -179,6 +187,7 @@ export async function GET(request: NextRequest) {
           .from('products')
           .select('id,name,category_id')
           .in('id', allProductIds)
+          .eq('organization_id', orgId)
         const catIds: string[] = []
         ;(prods || []).forEach((p: any) => {
           const id = String(p.id)
@@ -192,6 +201,7 @@ export async function GET(request: NextRequest) {
             .from('categories')
             .select('id,name')
             .in('id', uniqueCatIds)
+            .eq('organization_id', orgId)
           const catMap: Record<string, string> = {}
           ;(cats || []).forEach((c: any) => { catMap[String(c.id)] = String(c.name) })
           Object.keys(productMap).forEach(pid => {
@@ -250,6 +260,8 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as PromotionCreateInput
     if (isSupabaseActive()) {
       const supabase = await createClient()
+      const orgId = (request.headers.get('x-organization-id') || '').trim()
+      if (!orgId) return NextResponse.json({ success: false, message: 'Organization header missing' }, { status: 400 })
       const payload: any = {
         name: body.name,
         description: body.description,
@@ -262,6 +274,7 @@ export async function POST(request: NextRequest) {
         max_discount_amount: body.maxDiscountAmount,
         usage_limit: body.usageLimit,
         usage_count: 0,
+        organization_id: orgId,
       }
       const { data, error } = await (supabase as any)
         .from('promotions')
@@ -271,7 +284,7 @@ export async function POST(request: NextRequest) {
       if (error) return NextResponse.json({ success: false, message: 'No se pudo crear la promoción' }, { status: 500 })
       const appIds: string[] = Array.isArray((body as any).applicableProductIds) ? (body as any).applicableProductIds.map((x: any) => String(x)) : []
       if (data?.id && appIds.length > 0) {
-        const rows = appIds.map(pid => ({ promotion_id: String(data.id), product_id: pid }))
+        const rows = appIds.map(pid => ({ promotion_id: String(data.id), product_id: pid, organization_id: orgId }))
         await (supabase as any).from('promotions_products').insert(rows)
       }
       const { data: userData } = await (supabase as any).auth.getUser()

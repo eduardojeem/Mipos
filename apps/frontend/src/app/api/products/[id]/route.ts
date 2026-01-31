@@ -9,6 +9,10 @@ export async function GET(
   try {
     const { id } = await params;
     const supabase = await createClient();
+    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    if (!orgId) {
+      return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
+    }
 
     const { data: product, error } = await supabase
       .from('products')
@@ -27,6 +31,7 @@ export async function GET(
         )
       `)
       .eq('id', id)
+      .eq('organization_id', orgId)
       .single();
 
     if (error) throw error;
@@ -84,6 +89,7 @@ export async function PUT(
         .select('id')
         .eq('sku', body.sku)
         .neq('id', id)
+        .eq('organization_id', orgId)
         .single();
 
       if (duplicateProduct) {
@@ -117,6 +123,7 @@ export async function PUT(
       .from('products')
       .update(updateData)
       .eq('id', id)
+      .eq('organization_id', orgId)
       .select()
       .single();
 
@@ -149,12 +156,17 @@ export async function DELETE(
   try {
     const { id } = await params;
     const supabase = await createClient();
+    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    if (!orgId) {
+      return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
+    }
 
     // Check if product exists
     const { data: existingProduct } = await supabase
       .from('products')
       .select('id, name')
       .eq('id', id)
+      .eq('organization_id', orgId)
       .single();
 
     if (!existingProduct) {
@@ -169,6 +181,7 @@ export async function DELETE(
       .from('sale_items')
       .select('id')
       .eq('product_id', id)
+      .eq('organization_id', orgId)
       .limit(1);
 
     if (salesItems && salesItems.length > 0) {
@@ -179,7 +192,8 @@ export async function DELETE(
           is_active: false,
           updated_at: new Date().toISOString()
         })
-        .eq('id', id);
+        .eq('id', id)
+        .eq('organization_id', orgId);
 
       if (updateError) throw updateError;
 
@@ -194,7 +208,8 @@ export async function DELETE(
     const { error } = await supabase
       .from('products')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('organization_id', orgId);
 
     if (error) throw error;
 

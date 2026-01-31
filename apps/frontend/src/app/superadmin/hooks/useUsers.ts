@@ -1,6 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useCallback, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { createClient } from '@/lib/supabase/client';
 import { UserFilters } from './useAdminFilters';
+import { useToast } from '@/components/ui/use-toast';
 
 export interface AdminUser {
     id: string;
@@ -19,6 +21,7 @@ interface UseUsersOptions {
     sortBy?: string;
     sortOrder?: 'asc' | 'desc';
     pageSize?: number;
+    page?: number;
 }
 
 export function useUsers(options: UseUsersOptions = {}) {
@@ -27,60 +30,48 @@ export function useUsers(options: UseUsersOptions = {}) {
         sortBy = 'created_at',
         sortOrder = 'desc',
         pageSize = 50,
+        page = 1,
     } = options;
 
-    const [users, setUsers] = useState<AdminUser[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [totalCount, setTotalCount] = useState(0);
-    const [page, setPage] = useState(1);
+    const queryClient = useQueryClient();
+    const { toast } = useToast();
+    const supabase = useMemo(() => createClient(), []);
 
-    const supabase = createClient();
-    
-    // Refs for stable dependencies
-    const filtersRef = useRef(filters);
-    const optionsRef = useRef({ sortBy, sortOrder, pageSize });
+    // Query key for caching
+    const queryKey = useMemo(() => 
+        ['admin', 'users', { filters, sortBy, sortOrder, pageSize, page }], 
+        [filters, sortBy, sortOrder, pageSize, page]
+    );
 
-    useEffect(() => {
-        filtersRef.current = filters;
-        optionsRef.current = { sortBy, sortOrder, pageSize };
-    }, [filters, sortBy, sortOrder, pageSize]);
-
-    const fetchUsers = useCallback(async () => {
-        try {
-            setLoading(true);
-            setError(null);
-
-            const currentFilters = filtersRef.current;
-            const { sortBy, sortOrder, pageSize } = optionsRef.current;
-
+    // Fetch users using React Query
+    const {
+        data,
+        isLoading: loading,
+        error: queryError,
+        refetch,
+    } = useQuery({
+        queryKey,
+        queryFn: async () => {
             let query = supabase
                 .from('users')
                 .select('*', { count: 'exact' });
 
             // Apply filters
-            if (currentFilters) {
-                // Search filter
-                if (currentFilters.search) {
-                    query = query.or(`email.ilike.%${currentFilters.search}%,full_name.ilike.%${currentFilters.search}%`);
+            if (filters) {
+                if (filters.search) {
+                    query = query.or(`email.ilike.%${filters.search}%,full_name.ilike.%${filters.search}%`);
                 }
-
-                // Role filter
-                if (currentFilters.role && currentFilters.role.length > 0) {
-                    query = query.in('role', currentFilters.role);
+                if (filters.role && filters.role.length > 0) {
+                    query = query.in('role', filters.role);
                 }
-
-                // Organization filter
-                if (currentFilters.organization && currentFilters.organization.length > 0) {
-                    query = query.in('organization_id', currentFilters.organization);
+                if (filters.organization && filters.organization.length > 0) {
+                    query = query.in('organization_id', filters.organization);
                 }
-
-                // Date range filter
-                if (currentFilters.dateFrom) {
-                    query = query.gte('created_at', currentFilters.dateFrom);
+                if (filters.dateFrom) {
+                    query = query.gte('created_at', filters.dateFrom);
                 }
-                if (currentFilters.dateTo) {
-                    query = query.lte('created_at', currentFilters.dateTo);
+                if (filters.dateTo) {
+                    query = query.lte('created_at', filters.dateTo);
                 }
             }
 
@@ -92,83 +83,130 @@ export function useUsers(options: UseUsersOptions = {}) {
             const to = from + pageSize - 1;
             query = query.range(from, to);
 
-            const { data, error: fetchError, count } = await query;
+            const { data: userData, error: fetchError, count } = await query;
 
             if (fetchError) throw fetchError;
 
-            setUsers(data || []);
-            setTotalCount(count || 0);
-        } catch (err: unknown) {
-            console.error('Error fetching users:', err);
-            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-            setError(errorMessage);
-        } finally {
-            setLoading(false);
-        }
-    }, [supabase, page]); // Only depend on page and supabase
+            return {
+                users: userData || [],
+                total: count || 0,
+            };
+        },
+        staleTime: 2 * 60 * 1000, // 2 minutes
+    });
 
-    useEffect(() => {
-        fetchUsers();
-    }, [fetchUsers]);
+    const users = data?.users || [];
+    const totalCount = data?.total || 0;
+    const error = queryError instanceof Error ? queryError.message : null;
 
-    // Update user
-    const updateUser = useCallback(async (
-        id: string,
-        updates: Partial<AdminUser>
-    ) => {
-        try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // Mutation for updating a user
+    const updateMutation = useMutation({
+        mutationFn: async ({ id, updates }: { id: string; updates: Partial<AdminUser> }) => {
             const { error: updateError } = await supabase
                 .from('users')
-                .update(updates as any)
+                .update(updates)
                 .eq('id', id);
 
             if (updateError) throw updateError;
+            return { id, updates };
+        },
+        onMutate: async ({ id, updates }) => {
+            await queryClient.cancelQueries({ queryKey: ['admin', 'users'] });
+            const previousData = queryClient.getQueryData<{ users: AdminUser[]; total: number }>(queryKey);
 
-            // Refresh data
-            await fetchUsers();
-            return { success: true };
-        } catch (err: unknown) {
-            console.error('Error updating user:', err);
-            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-            return { success: false, error: errorMessage };
-        }
-    }, [supabase, fetchUsers]);
+            queryClient.setQueryData<{ users: AdminUser[]; total: number }>(queryKey, (old) => {
+                if (!old) return previousData || { users: [], total: 0 };
+                return {
+                    ...old,
+                    users: old.users?.map((user: AdminUser) => 
+                        user.id === id ? { ...user, ...updates } : user
+                    ) || [],
+                    total: old.total || 0,
+                };
+            });
 
-    // Delete user
-    const deleteUser = useCallback(async (id: string) => {
-        try {
+            return { previousData };
+        },
+        onError: (err, variables, context) => {
+            queryClient.setQueryData(queryKey, context?.previousData);
+            toast({
+                title: 'Error al actualizar usuario',
+                description: err instanceof Error ? err.message : 'Error desconocido',
+                variant: 'destructive',
+            });
+        },
+        onSuccess: () => {
+            toast({
+                title: 'Usuario actualizado',
+                description: 'Los cambios se guardaron correctamente.',
+            });
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+        },
+    });
+
+    // Mutation for deleting a user
+    const deleteMutation = useMutation({
+        mutationFn: async (id: string) => {
             const { error: deleteError } = await supabase
                 .from('users')
                 .delete()
                 .eq('id', id);
 
             if (deleteError) throw deleteError;
+            return id;
+        },
+        onMutate: async (id) => {
+            await queryClient.cancelQueries({ queryKey: ['admin', 'users'] });
+            const previousData = queryClient.getQueryData<{ users: AdminUser[]; total: number }>(queryKey);
 
-            // Refresh data
-            await fetchUsers();
-            return { success: true };
-        } catch (err: unknown) {
-            console.error('Error deleting user:', err);
-            const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-            return { success: false, error: errorMessage };
-        }
-    }, [supabase, fetchUsers]);
+            queryClient.setQueryData<{ users: AdminUser[]; total: number }>(queryKey, (old) => {
+                if (!old) return previousData || { users: [], total: 0 };
+                return {
+                    ...old,
+                    users: old.users?.filter((user: AdminUser) => user.id !== id) || [],
+                    total: (old.total || 0) - 1,
+                };
+            });
 
-    // Change user role
-    const changeUserRole = useCallback(async (
-        id: string,
-        role: string
-    ) => {
+            return { previousData };
+        },
+        onError: (err, id, context) => {
+            queryClient.setQueryData(queryKey, context?.previousData);
+            toast({
+                title: 'Error al eliminar usuario',
+                description: err instanceof Error ? err.message : 'Error desconocido',
+                variant: 'destructive',
+            });
+        },
+        onSuccess: () => {
+            toast({
+                title: 'Usuario eliminado',
+                description: 'El usuario ha sido eliminado permanentemente.',
+            });
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+        },
+    });
+
+    const updateUser = useCallback(async (id: string, updates: Partial<AdminUser>) => {
+        return updateMutation.mutateAsync({ id, updates });
+    }, [updateMutation]);
+
+    const deleteUser = useCallback(async (id: string) => {
+        return deleteMutation.mutateAsync(id);
+    }, [deleteMutation]);
+
+    const changeUserRole = useCallback(async (id: string, role: string) => {
         return updateUser(id, { role });
     }, [updateUser]);
 
-    // Deactivate user
     const deactivateUser = useCallback(async (id: string) => {
         return updateUser(id, { is_active: false });
     }, [updateUser]);
 
-    // Activate user
     const activateUser = useCallback(async (id: string) => {
         return updateUser(id, { is_active: true });
     }, [updateUser]);
@@ -178,10 +216,8 @@ export function useUsers(options: UseUsersOptions = {}) {
         loading,
         error,
         totalCount,
-        page,
-        setPage,
-        pageSize,
-        refresh: fetchUsers,
+        refresh: refetch,
+        updating: updateMutation.isPending || deleteMutation.isPending,
         updateUser,
         deleteUser,
         changeUserRole,

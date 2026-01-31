@@ -53,13 +53,15 @@ export default function MonitoringPage() {
     });
   }, [organizations, usageByOrg]);
 
-  const handleUpdateLimits = async (id: string, limits: any) => {
+  const handleUpdateLimits = async (id: string, limits: Record<string, number>) => {
     const org = organizations.find(o => o.id === id);
-    const currentSettings = (org?.settings as any) || {};
+    const currentSettings = (org?.settings as Record<string, unknown>) || {};
+    const currentLimits = (currentSettings.limits as Record<string, number>) || {};
+    
     const newSettings = {
       ...currentSettings,
       limits: {
-        ...currentSettings.limits,
+        ...currentLimits,
         ...limits,
       },
     };

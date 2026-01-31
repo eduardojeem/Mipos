@@ -263,17 +263,27 @@ export default function MainDashboard() {
             try {
                 // Try fast API first (should be under 500ms)
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 1500); // 1.5 second timeout
-
-                const response = await fetch('/api/dashboard/fast-summary', {
-                    signal: controller.signal
-                });
-                clearTimeout(timeoutId);
-
-                if (!response.ok) throw new Error(`Fast API failed: ${response.status}`);
-                return response.json();
+                const timeoutId = setTimeout(() => controller.abort('timeout'), 2000); // 2s timeout
+                try {
+                    const response = await fetch('/api/dashboard/fast-summary', {
+                        signal: controller.signal
+                    });
+                    if (!response.ok) throw new Error(`Fast API failed: ${response.status}`);
+                    return response.json();
+                } catch (err) {
+                    // Ignore AbortError noise and fallback silently
+                    const isAbort = err instanceof DOMException && err.name === 'AbortError';
+                    if (!isAbort) {
+                        console.warn('Fast dashboard API failed, using quick stats:', err);
+                    }
+                    const fallbackResponse = await fetch('/api/dashboard/quick-stats');
+                    if (!fallbackResponse.ok) throw new Error('All APIs failed');
+                    return fallbackResponse.json();
+                } finally {
+                    clearTimeout(timeoutId);
+                }
             } catch (error) {
-                console.warn('Fast dashboard API failed, using quick stats:', error);
+                console.warn('Dashboard data load failed:', error);
                 // Fallback to quick stats API
                 const fallbackResponse = await fetch('/api/dashboard/quick-stats');
                 if (!fallbackResponse.ok) throw new Error('All APIs failed');

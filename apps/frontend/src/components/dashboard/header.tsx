@@ -49,6 +49,8 @@ import { SearchResults } from '@/components/search/SearchResults';
 import { NotificationsList } from '@/components/notifications/NotificationsList';
 import { SyncStatusIndicator } from '@/components/sync/SyncStatusIndicator';
 import { cn } from '@/lib/utils';
+import { OrganizationSwitcher } from './OrganizationSwitcher';
+import { useUserOrganizations } from '@/hooks/use-user-organizations';
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -60,6 +62,7 @@ export function Header({ onMenuClick, isMobileMenuOpen, compact = false }: Heade
   const router = useRouter();
   const { user, signOut } = useAuth();
   const { config } = useBusinessConfig();
+  const { selectedOrganization } = useUserOrganizations(user?.id);
   const deviceType = useDeviceType();
   const isMobile = deviceType === 'mobile';
   const [searchQuery, setSearchQuery] = useState('');
@@ -210,6 +213,11 @@ export function Header({ onMenuClick, isMobileMenuOpen, compact = false }: Heade
                 <span className="text-sm font-bold bg-gradient-to-r from-slate-900 to-slate-600 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">
                   {config.businessName || 'BeautyPOS'}
                 </span>
+                {selectedOrganization?.name && (
+                  <span className="text-[11px] font-medium text-slate-600 dark:text-slate-400">
+                    {selectedOrganization.name}
+                  </span>
+                )}
               </span>
             </Link>
           </div>
@@ -262,6 +270,18 @@ export function Header({ onMenuClick, isMobileMenuOpen, compact = false }: Heade
 
           {/* Right side actions */}
           <div className="flex items-center gap-1.5">
+            {isMobile && (
+              <div className="lg:hidden">
+                <OrganizationSwitcher />
+              </div>
+            )}
+            {/* Organization Switcher (SaaS multitenancy) */}
+            {!isMobile && (
+              <div className="hidden lg:block">
+                <OrganizationSwitcher />
+              </div>
+            )}
+
             {/* Current Time (desktop only) */}
             {!isMobile && (
               <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100/80 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400">

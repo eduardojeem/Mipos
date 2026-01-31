@@ -45,6 +45,22 @@ export const productService = {
       `)
       .eq('is_active', true);
 
+    try {
+      if (typeof window !== 'undefined') {
+        const raw = window.localStorage.getItem('selected_organization');
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            const orgId = parsed?.id || parsed?.organization_id || raw;
+            if (orgId) query = query.eq('organization_id', orgId);
+          } catch {
+            const orgId = raw;
+            if (orgId) query = query.eq('organization_id', orgId);
+          }
+        }
+      }
+    } catch {}
+
     if (filters?.category_id) {
       query = query.eq('category_id', filters.category_id);
     }
@@ -121,14 +137,31 @@ export const productService = {
   },
 
   async getById(id: string) {
-    let { data, error } = await supabase
+    let base = supabase
       .from('products')
       .select(`
         *,
         category:categories!products_category_id_fkey(*)
       `)
-      .eq('id', id)
-      .single();
+      .eq('id', id);
+
+    try {
+      if (typeof window !== 'undefined') {
+        const raw = window.localStorage.getItem('selected_organization');
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            const orgId = parsed?.id || parsed?.organization_id || raw;
+            if (orgId) base = base.eq('organization_id', orgId);
+          } catch {
+            const orgId = raw;
+            if (orgId) base = base.eq('organization_id', orgId);
+          }
+        }
+      }
+    } catch {}
+
+    let { data, error } = await base.single();
 
     if (error) {
       console.error('Error fetching product by id:', {

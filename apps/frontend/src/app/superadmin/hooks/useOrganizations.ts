@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useCallback, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Organization } from './useAdminData';
 import { OrganizationFilters } from './useAdminFilters';
 import { useToast } from '@/components/ui/use-toast';
@@ -8,6 +9,7 @@ interface UseOrganizationsOptions {
     sortBy?: string;
     sortOrder?: 'asc' | 'desc';
     pageSize?: number;
+    page?: number;
 }
 
 export function useOrganizations(options: UseOrganizationsOptions = {}) {
@@ -15,38 +17,28 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
         filters,
         sortBy = 'created_at',
         sortOrder = 'desc',
-        pageSize = 50,
+        pageSize = 100,
+        page = 1,
     } = options;
 
-    const [organizations, setOrganizations] = useState<Organization[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [totalCount, setTotalCount] = useState(0);
-    const [page, setPage] = useState(1);
-    const [updating, setUpdating] = useState<string | null>(null);
-
+    const queryClient = useQueryClient();
     const { toast } = useToast();
-    
-    // Refs for stable dependencies
-    const filtersRef = useRef(filters);
-    const optionsRef = useRef({ sortBy, sortOrder, pageSize });
-    const toastRef = useRef(toast);
 
-    useEffect(() => {
-        filtersRef.current = filters;
-        optionsRef.current = { sortBy, sortOrder, pageSize };
-        toastRef.current = toast;
-    }, [filters, sortBy, sortOrder, pageSize, toast]);
+    // Query key for caching
+    const queryKey = useMemo(() => 
+        ['admin', 'organizations', { filters, sortBy, sortOrder, pageSize, page }], 
+        [filters, sortBy, sortOrder, pageSize, page]
+    );
 
-    const fetchOrganizations = useCallback(async () => {
-        try {
-            setLoading(true);
-            setError(null);
-            
-            const currentFilters = filtersRef.current;
-            const { sortBy, sortOrder, pageSize } = optionsRef.current;
-
-            // Build query params
+    // Fetch organizations using React Query
+    const {
+        data,
+        isLoading: loading,
+        error: queryError,
+        refetch,
+    } = useQuery({
+        queryKey,
+        queryFn: async () => {
             const params = new URLSearchParams({
                 page: page.toString(),
                 pageSize: pageSize.toString(),
@@ -54,12 +46,12 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
                 sortOrder,
             });
 
-            if (currentFilters?.search) params.append('search', currentFilters.search);
-            if (currentFilters?.status && currentFilters.status.length > 0) {
-                params.append('status', currentFilters.status[0]); // API currently supports single status from URL
+            if (filters?.search) params.append('search', filters.search);
+            if (filters?.status && filters.status.length > 0) {
+                params.append('status', filters.status[0]);
             }
-            if (currentFilters?.plan && currentFilters.plan.length > 0) {
-                params.append('plan', currentFilters.plan[0]);
+            if (filters?.plan && filters.plan.length > 0) {
+                params.append('plan', filters.plan[0]);
             }
 
             const response = await fetch(`/api/superadmin/organizations?${params.toString()}`);
@@ -68,42 +60,18 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
                 throw new Error(errorData.error || 'Error al cargar organizaciones');
             }
 
-            const data = await response.json();
-            setOrganizations(data.organizations || []);
-            setTotalCount(data.total || 0);
-        } catch (err: unknown) {
-            console.error('Error fetching organizations:', err);
-            const errorMessage = err instanceof Error ? err.message : 'Error al cargar organizaciones';
-            setError(errorMessage);
-            toastRef.current({
-                title: 'Error',
-                description: errorMessage,
-                variant: 'destructive',
-            });
-        } finally {
-            setLoading(false);
-        }
-    }, [page]); // Only depend on page
+            return await response.json();
+        },
+        staleTime: 5 * 60 * 1000, // 5 minutes
+    });
 
-    useEffect(() => {
-        fetchOrganizations();
-    }, [fetchOrganizations]);
+    const organizations = data?.organizations || [];
+    const totalCount = data?.total || 0;
+    const error = queryError instanceof Error ? queryError.message : null;
 
-
-    // Update organization with optimistic update
-    const updateOrganization = useCallback(async (
-        id: string,
-        updates: Partial<Organization>
-    ) => {
-        setUpdating(id);
-        
-        // Optimistic update
-        const previousOrgs = [...organizations];
-        setOrganizations(orgs => 
-            orgs.map(org => org.id === id ? { ...org, ...updates } : org)
-        );
-
-        try {
+    // Mutation for updating an organization
+    const updateMutation = useMutation({
+        mutationFn: async ({ id, updates }: { id: string; updates: Partial<Organization> }) => {
             const response = await fetch('/api/superadmin/organizations', {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
@@ -115,42 +83,50 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
                 throw new Error(errorData.error || 'Error al actualizar organización');
             }
 
-            toastRef.current({
+            return await response.json();
+        },
+        onMutate: async ({ id, updates }) => {
+            // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
+            await queryClient.cancelQueries({ queryKey: ['admin', 'organizations'] });
+
+            // Snapshot the previous value
+            const previousData = queryClient.getQueryData(queryKey);
+
+            // Optimistically update to the new value
+            queryClient.setQueryData(queryKey, (old: { organizations: Organization[]; total: number } | undefined) => ({
+                ...old,
+                organizations: old?.organizations?.map((org: Organization) => 
+                    org.id === id ? { ...org, ...updates } : org
+                ) || [],
+                total: old?.total || 0,
+            }));
+
+            return { previousData };
+        },
+        onError: (err, variables, context) => {
+            // If the mutation fails, use the context returned from onMutate to roll back
+            queryClient.setQueryData(queryKey, context?.previousData);
+            toast({
+                title: 'Error al actualizar',
+                description: err instanceof Error ? err.message : 'Error desconocido',
+                variant: 'destructive',
+            });
+        },
+        onSuccess: () => {
+            toast({
                 title: 'Actualización exitosa',
                 description: 'La organización se actualizó correctamente.',
             });
+        },
+        onSettled: () => {
+            // Always refetch after error or success to ensure we have the correct data
+            queryClient.invalidateQueries({ queryKey: ['admin', 'organizations'] });
+        },
+    });
 
-            // Refresh to get latest data
-            await fetchOrganizations();
-            return { success: true };
-        } catch (err: unknown) {
-            console.error('Error updating organization:', err);
-            
-            // Revert optimistic update
-            setOrganizations(previousOrgs);
-            
-            const errorMessage = err instanceof Error ? err.message : 'Error al actualizar organización';
-            toastRef.current({
-                title: 'Error al actualizar',
-                description: errorMessage,
-                variant: 'destructive',
-            });
-            
-            return { success: false, error: errorMessage };
-        } finally {
-            setUpdating(null);
-        }
-    }, [organizations, fetchOrganizations]);
-
-    // Delete organization with confirmation
-    const deleteOrganization = useCallback(async (id: string) => {
-        setUpdating(id);
-        
-        // Optimistic update
-        const previousOrgs = [...organizations];
-        setOrganizations(orgs => orgs.filter(org => org.id !== id));
-
-        try {
+    // Mutation for deleting an organization
+    const deleteMutation = useMutation({
+        mutationFn: async (id: string) => {
             const response = await fetch(`/api/superadmin/organizations?id=${id}`, {
                 method: 'DELETE',
             });
@@ -160,72 +136,57 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
                 throw new Error(errorData.error || 'Error al eliminar organización');
             }
 
-            toastRef.current({
+            return await response.json();
+        },
+        onMutate: async (id) => {
+            await queryClient.cancelQueries({ queryKey: ['admin', 'organizations'] });
+            const previousData = queryClient.getQueryData(queryKey);
+
+            queryClient.setQueryData(queryKey, (old: { organizations: Organization[]; total: number } | undefined) => ({
+                ...old,
+                organizations: old?.organizations?.filter((org: Organization) => org.id !== id) || [],
+                total: (old?.total || 0) - 1,
+            }));
+
+            return { previousData };
+        },
+        onError: (err, id, context) => {
+            queryClient.setQueryData(queryKey, context?.previousData);
+            toast({
+                title: 'Error al eliminar',
+                description: err instanceof Error ? err.message : 'Error desconocido',
+                variant: 'destructive',
+            });
+        },
+        onSuccess: () => {
+            toast({
                 title: 'Eliminación exitosa',
                 description: 'La organización se eliminó correctamente.',
             });
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'organizations'] });
+        },
+    });
 
-            // Refresh to update counts
-            await fetchOrganizations();
-            return { success: true };
-        } catch (err: unknown) {
-            console.error('Error deleting organization:', err);
-            
-            // Revert optimistic update
-            setOrganizations(previousOrgs);
-            
-            const errorMessage = err instanceof Error ? err.message : 'Error al eliminar organización';
-            toastRef.current({
-                title: 'Error al eliminar',
-                description: errorMessage,
-                variant: 'destructive',
-            });
-            
-            return { success: false, error: errorMessage };
-        } finally {
-            setUpdating(null);
-        }
-    }, [organizations, fetchOrganizations]);
+    const updateOrganization = useCallback(async (id: string, updates: Partial<Organization>) => {
+        return updateMutation.mutateAsync({ id, updates });
+    }, [updateMutation]);
 
-    // Suspend organization
+    const deleteOrganization = useCallback(async (id: string) => {
+        return deleteMutation.mutateAsync(id);
+    }, [deleteMutation]);
+
     const suspendOrganization = useCallback(async (id: string) => {
-        const result = await updateOrganization(id, { subscription_status: 'SUSPENDED' });
-        if (result.success) {
-            toastRef.current({
-                title: 'Organización suspendida',
-                description: 'La organización ha sido suspendida exitosamente.',
-                variant: 'default',
-            });
-        }
-        return result;
+        return updateOrganization(id, { subscription_status: 'SUSPENDED' });
     }, [updateOrganization]);
 
-    // Activate organization
     const activateOrganization = useCallback(async (id: string) => {
-        const result = await updateOrganization(id, { subscription_status: 'ACTIVE' });
-        if (result.success) {
-            toastRef.current({
-                title: 'Organización activada',
-                description: 'La organización ha sido activada exitosamente.',
-                variant: 'default',
-            });
-        }
-        return result;
+        return updateOrganization(id, { subscription_status: 'ACTIVE' });
     }, [updateOrganization]);
 
-    // Change subscription plan
-    const changeSubscriptionPlan = useCallback(async (
-        id: string,
-        plan: string
-    ) => {
-        const result = await updateOrganization(id, { subscription_plan: plan });
-        if (result.success) {
-            toastRef.current({
-                title: 'Plan actualizado',
-                description: `El plan se cambió a ${plan} exitosamente.`,
-            });
-        }
-        return result;
+    const changeSubscriptionPlan = useCallback(async (id: string, plan: string) => {
+        return updateOrganization(id, { subscription_plan: plan });
     }, [updateOrganization]);
 
     return {
@@ -233,11 +194,8 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
         loading,
         error,
         totalCount,
-        page,
-        setPage,
-        pageSize,
-        updating,
-        refresh: fetchOrganizations,
+        refresh: refetch,
+        updating: updateMutation.isPending || deleteMutation.isPending ? 'loading' : null,
         updateOrganization,
         deleteOrganization,
         suspendOrganization,

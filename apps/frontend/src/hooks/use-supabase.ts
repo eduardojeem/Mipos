@@ -133,11 +133,29 @@ export function useSupabase() {
   };
 
   const getCustomers = async () => {
-    const { data, error } = await supabase
+    let query = supabase
       .from('customers')
       .select('*')
       .eq('is_active', true)
       .order('name');
+
+    try {
+      if (typeof window !== 'undefined') {
+        const raw = window.localStorage.getItem('selected_organization');
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            const orgId = parsed?.id || parsed?.organization_id || raw;
+            if (orgId) query = query.eq('organization_id', orgId);
+          } catch {
+            const orgId = raw;
+            if (orgId) query = query.eq('organization_id', orgId);
+          }
+        }
+      }
+    } catch {}
+
+    const { data, error } = await query;
 
     if (error) {
       console.error('Error fetching customers (hook):', {
@@ -152,11 +170,29 @@ export function useSupabase() {
   };
 
   const getSuppliers = async () => {
-    const { data, error } = await supabase
+    let query = supabase
       .from('suppliers')
       .select('*')
       .eq('is_active', true)
       .order('name');
+
+    try {
+      if (typeof window !== 'undefined') {
+        const raw = window.localStorage.getItem('selected_organization');
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            const orgId = parsed?.id || parsed?.organization_id || raw;
+            if (orgId) query = query.eq('organization_id', orgId);
+          } catch {
+            const orgId = raw;
+            if (orgId) query = query.eq('organization_id', orgId);
+          }
+        }
+      }
+    } catch {}
+
+    const { data, error } = await query;
 
     if (error) {
       console.error('Error fetching suppliers (hook):', {

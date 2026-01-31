@@ -30,8 +30,10 @@ import {
   Zap,
   XCircle,
   Clock,
-  MoreVertical
+  MoreVertical,
+  RefreshCcw
 } from 'lucide-react';
+import { AdminUser } from '../../hooks/useUsers';
 import {
   Table,
   TableBody,
@@ -58,13 +60,17 @@ export default function OrganizationDetailsPage() {
     organization, 
     loading: orgLoading, 
     updating: orgUpdating,
-    updateOrganization 
+    updateOrganization,
+    error: orgError,
+    refresh: refreshOrg
   } = useOrganization(id);
 
   const {
     users,
     loading: usersLoading,
-    totalCount: usersCount
+    totalCount: usersCount,
+    error: usersError,
+    refresh: refreshUsers
   } = useUsers({
     filters: { organization: [id] },
     pageSize: 100
@@ -115,12 +121,34 @@ export default function OrganizationDetailsPage() {
     }
   };
 
-  if (orgLoading) {
+  if (orgLoading && !organization) {
     return (
       <SuperAdminGuard>
         <div className="flex items-center justify-center min-h-[600px] flex-col gap-4">
           <Loader2 className="h-10 w-10 animate-spin text-purple-600" />
-          <p className="text-slate-500 font-medium animate-pulse">Cargando ecosistema MiPOS...</p>
+          <p className="text-slate-500 font-medium animate-pulse">Invocando el núcleo MiPOS...</p>
+        </div>
+      </SuperAdminGuard>
+    );
+  }
+
+  if (orgError) {
+    return (
+      <SuperAdminGuard>
+        <div className="flex flex-col items-center justify-center min-h-[600px] gap-6 text-center max-w-md mx-auto">
+          <div className="w-20 h-20 bg-rose-50 dark:bg-rose-950/20 rounded-full flex items-center justify-center">
+            <AlertTriangle className="h-10 w-10 text-rose-500" />
+          </div>
+          <div>
+            <h2 className="text-3xl font-black text-slate-900 dark:text-white">Error de Conexión</h2>
+            <p className="text-slate-500 mt-2">{orgError}</p>
+          </div>
+          <Button 
+            className="w-full bg-slate-900 text-white rounded-xl h-12 font-bold gap-2"
+            onClick={() => refreshOrg()}
+          >
+            <RefreshCcw className="h-4 w-4" /> Reintentar Sincronización
+          </Button>
         </div>
       </SuperAdminGuard>
     );
@@ -357,13 +385,29 @@ export default function OrganizationDetailsPage() {
                     </h2>
                     <p className="text-slate-500 font-medium mt-1">Gestión de usuarios y talentos asociados a esta organización.</p>
                   </div>
-                  <Button className="rounded-xl bg-slate-900 text-white hover:bg-slate-800 font-bold h-11 px-8">
-                    Vincular Usuario
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="icon" 
+                      onClick={() => refreshUsers()}
+                      disabled={usersLoading}
+                    >
+                      <RefreshCcw className={`h-4 w-4 ${usersLoading ? 'animate-spin' : ''}`} />
+                    </Button>
+                    <Button className="rounded-xl bg-slate-900 text-white hover:bg-slate-800 font-bold h-11 px-8">
+                      Vincular Usuario
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="p-0">
-                {usersLoading ? (
+                {usersError ? (
+                  <div className="flex justify-center p-20 flex-col items-center gap-4 text-center">
+                    <AlertTriangle className="h-10 w-10 text-rose-500" />
+                    <p className="text-slate-500 font-medium">{usersError}</p>
+                    <Button onClick={() => refreshUsers()} variant="outline">Reintentar Carga</Button>
+                  </div>
+                ) : usersLoading ? (
                   <div className="flex justify-center p-20 flex-col items-center gap-4">
                     <Loader2 className="h-10 w-10 animate-spin text-purple-200" />
                     <span className="font-bold text-slate-300 uppercase tracking-widest">Sincronizando Nómina...</span>
@@ -392,7 +436,7 @@ export default function OrganizationDetailsPage() {
                             </TableCell>
                           </TableRow>
                         ) : (
-                          users.map((user) => (
+                          (users as AdminUser[]).map((user) => (
                             <TableRow key={user.id} className="group hover:bg-purple-50/30 dark:hover:bg-purple-950/10 transition-colors border-slate-50 dark:border-slate-800/50">
                               <TableCell className="px-12 py-6">
                                 <div className="flex items-center gap-4">

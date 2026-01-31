@@ -132,9 +132,18 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
       const supabase = createClient()
       const now = new Date()
       const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
+      const orgId = (() => {
+        try {
+          if (typeof window === 'undefined') return null
+          const raw = window.localStorage.getItem('selected_organization')
+          if (!raw) return null
+          try { const p = JSON.parse(raw); return p?.id || p?.organization_id || null } catch { return raw }
+        } catch { return null }
+      })()
+
       const [{ data: today }, { data: counts }] = await Promise.all([
-        supabase.rpc('get_today_sales_summary', { date_start: startOfDay }).single(),
-        supabase.rpc('get_dashboard_counts').single()
+        supabase.rpc('get_today_sales_summary', { date_start: startOfDay, org_id: orgId }).single(),
+        supabase.rpc('get_dashboard_counts', { org_id: orgId }).single()
       ])
       const todayTotal = Number((today as any)?.total_sales || 0)
       const todayCount = Number((today as any)?.sales_count || 0)
@@ -199,13 +208,33 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
       const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString()
       const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0).toISOString()
 
+      const orgId = (() => {
+        try {
+          if (typeof window === 'undefined') return null
+          const raw = window.localStorage.getItem('selected_organization')
+          if (!raw) return null
+          try { const p = JSON.parse(raw); return p?.id || p?.organization_id || null } catch { return raw }
+        } catch { return null }
+      })()
+
+      const todayQuery = supabase.from('sales').select('total, created_at').gte('created_at', startOfDay).lte('created_at', endOfDay)
+      const monthQuery = supabase.from('sales').select('total, created_at').gte('created_at', startOfMonth)
+      const lastMonthQuery = supabase.from('sales').select('total, created_at').gte('created_at', startOfLastMonth).lte('created_at', endOfLastMonth)
+      const lowStockQuery = supabase.from('products').select('id, stock, min_stock').lt('stock', 'min_stock')
+      const activeSalesQuery = supabase.from('sales').select('customer_name, created_at').gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+      const totalProductsQuery = supabase.from('products').select('id', { count: 'exact', head: true })
+
+      if (orgId) {
+        (todayQuery as any).eq('organization_id', orgId)
+        (monthQuery as any).eq('organization_id', orgId)
+        (lastMonthQuery as any).eq('organization_id', orgId)
+        (lowStockQuery as any).eq('organization_id', orgId)
+        (activeSalesQuery as any).eq('organization_id', orgId)
+        (totalProductsQuery as any).eq('organization_id', orgId)
+      }
+
       const [{ data: todaySales }, { data: monthSales }, { data: lastMonthSales }, { data: lowStock }, { data: activeSales }, { count: totalProducts }] = await Promise.all([
-        supabase.from('sales').select('total, created_at').gte('created_at', startOfDay).lte('created_at', endOfDay),
-        supabase.from('sales').select('total, created_at').gte('created_at', startOfMonth),
-        supabase.from('sales').select('total, created_at').gte('created_at', startOfLastMonth).lte('created_at', endOfLastMonth),
-        supabase.from('products').select('id, stock, min_stock').lt('stock', 'min_stock'),
-        supabase.from('sales').select('customer_name, created_at').gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()),
-        supabase.from('products').select('id', { count: 'exact', head: true })
+        todayQuery, monthQuery, lastMonthQuery, lowStockQuery, activeSalesQuery, totalProductsQuery
       ])
 
       const todayTotal = (todaySales || []).reduce((s: number, v: any) => s + (v.total || 0), 0)
@@ -270,11 +299,22 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
   const loadRecentSales = useCallback(async (limit: number = 10): Promise<RecentSale[]> => {
     if (isSupabaseActive()) {
       const supabase = createClient()
-      const { data } = await supabase
+      let query = supabase
         .from('sales')
         .select('id, total, payment_method, created_at, customer_name')
         .order('created_at', { ascending: false })
         .limit(limit)
+
+      try {
+        if (typeof window !== 'undefined') {
+          const raw = window.localStorage.getItem('selected_organization')
+          if (raw) {
+            try { const p = JSON.parse(raw); const orgId = p?.id || p?.organization_id || raw; if (orgId) query = query.eq('organization_id', orgId) } catch { const orgId = raw; if (orgId) query = query.eq('organization_id', orgId) }
+          }
+        }
+      } catch {}
+
+      const { data } = await query
       return (data || []).map((sale: any) => ({
         id: sale.id,
         total: sale.total || 0,

@@ -19,7 +19,7 @@ export interface Organization {
 export interface OrganizationMember {
   organization_id: string;
   user_id: string;
-  role: string;
+  role_id: string;
   created_at: string;
 }
 
@@ -44,15 +44,24 @@ export function useUserOrganizations(userId?: string) {
     }
   }, []);
 
+  const selectOrganization = useCallback((org: Organization) => {
+    setSelectedOrganization(org);
+    try {
+      localStorage.setItem('selected_organization', JSON.stringify(org));
+    } catch (e) {
+      console.error('Error saving selected organization:', e);
+    }
+  }, []);
+
   const fetchOrganizations = useCallback(async (currentUserId: string) => {
     setLoading(true);
     setError(null);
     
     try {
-      // Fetch organization memberships
+      // Fetch organization memberships - FIXED: Changed 'role' to 'role_id'
       const { data: memberData, error: memberError } = await supabase
         .from('organization_members')
-        .select('organization_id, role')
+        .select('organization_id, role_id')
         .eq('user_id', currentUserId);
 
       if (memberError) {
@@ -65,7 +74,7 @@ export function useUserOrganizations(userId?: string) {
         return;
       }
 
-      const orgIds = memberData.map(m => m.organization_id);
+      const orgIds = memberData.map((m: OrganizationMember) => m.organization_id);
 
       // Fetch organization details
       const { data: orgsData, error: orgsError } = await supabase
@@ -84,22 +93,22 @@ export function useUserOrganizations(userId?: string) {
       if (orgsData && orgsData.length === 1 && !selectedOrganization) {
         selectOrganization(orgsData[0]);
       }
-    } catch (err: any) {
-      console.error('Error fetching organizations:', err);
-      setError(err.message || 'Failed to fetch organizations');
+    } catch (err) {
+      const error = err as { name?: string; message?: string; code?: string; status?: number; details?: string; hint?: string };
+      const name = error?.name ?? 'Unknown';
+      const message = error?.message ?? (typeof err === 'string' ? err : '');
+      const code = error?.code ?? error?.status;
+      const details = error?.details ?? error?.hint ?? undefined;
+      console.error('Error fetching organizations:', { name, message, code, details });
+      const friendly =
+        message?.toLowerCase().includes('row-level security')
+          ? 'Sin permisos para ver organizaciones. Contacta al administrador.'
+          : message || 'Failed to fetch organizations';
+      setError(friendly);
     } finally {
       setLoading(false);
     }
-  }, [supabase, selectedOrganization]);
-
-  const selectOrganization = useCallback((org: Organization) => {
-    setSelectedOrganization(org);
-    try {
-      localStorage.setItem('selected_organization', JSON.stringify(org));
-    } catch (e) {
-      console.error('Error saving selected organization:', e);
-    }
-  }, []);
+  }, [supabase, selectedOrganization, selectOrganization]);
 
   const clearSelectedOrganization = useCallback(() => {
     setSelectedOrganization(null);

@@ -48,6 +48,8 @@ export const LazyImage: React.FC<LazyImageProps> = ({
     );
   }
 
+  const safeSrc = (src || '').trim().replace(/\)+\s*$/, '');
+
   return (
     <div className={cn("relative overflow-hidden rounded-lg", className)}>
       {/* Loading skeleton */}
@@ -65,7 +67,7 @@ export const LazyImage: React.FC<LazyImageProps> = ({
       {/* Actual image */}
       {!error && (
         <Image
-          src={src}
+          src={safeSrc}
           alt={alt}
           fill
           sizes="100%"

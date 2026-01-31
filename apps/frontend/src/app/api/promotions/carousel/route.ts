@@ -5,7 +5,8 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic';
 
-type CachedEntry = { expiresAt: number; payload: any }
+type CarouselPayload = { success: boolean; ids: string[] }
+type CachedEntry = { expiresAt: number; payload: CarouselPayload }
 const carouselCache = new Map<string, CachedEntry>()
 
 // Create admin client with service role key for bypassing RLS
@@ -55,9 +56,14 @@ export async function GET() {
       console.error('[API/Carousel] Supabase error:', error)
 
       // If table doesn't exist, return empty list instead of error
-      // Check code 42P01 or message content
-      if (error.code === '42P01' || error.message?.includes('does not exist')) {
-        console.warn('[API/Carousel] Table promotions_carousel does not exist. Returning empty list.')
+      // Check code 42P01 (Postgres), PGRST205 (PostgREST) or message content
+      if (
+        error.code === '42P01' || 
+        error.code === 'PGRST205' || 
+        error.message?.includes('does not exist') || 
+        error.message?.includes('schema cache')
+      ) {
+        console.warn('[API/Carousel] Table promotions_carousel does not exist or schema cache is stale. Returning empty list.')
         return NextResponse.json({ success: true, ids: [] })
       }
 
@@ -74,7 +80,7 @@ export async function GET() {
       )
     }
 
-    const ids = (data || []).map((r: any) => String(r.promotion_id))
+    const ids = (data || []).map((r: { promotion_id: string }) => String(r.promotion_id))
     console.log('[API/Carousel] Loaded carousel IDs:', ids)
 
     const payload = { success: true, ids }
@@ -128,7 +134,7 @@ export async function PUT(request: NextRequest) {
     console.log('[API/Carousel] User authenticated:', user.id)
 
     const body = await request.json()
-    const ids: string[] = Array.isArray(body?.ids) ? body.ids.map((x: any) => String(x)) : []
+    const ids: string[] = Array.isArray(body?.ids) ? body.ids.map((x: unknown) => String(x)) : []
 
     console.log('[API/Carousel] PUT request with ids:', ids)
 
@@ -180,7 +186,7 @@ export async function PUT(request: NextRequest) {
       .select('promotion_id')
       .order('position', { ascending: true })
 
-    const previousState = existingData ? existingData.map((r: any) => String(r.promotion_id)) : []
+    const previousState = existingData ? existingData.map((r: { promotion_id: string }) => String(r.promotion_id)) : []
     const newState = ids
 
     // Delete ALL existing carousel items using a simple approach

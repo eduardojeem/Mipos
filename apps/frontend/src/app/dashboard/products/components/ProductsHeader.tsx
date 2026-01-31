@@ -15,6 +15,7 @@ import Image from 'next/image';
 import { useState } from 'react';
 import { Activity } from 'lucide-react';
 import { ProductsThemeToggle } from './ProductsThemeToggle';
+import { OrganizationSelector } from '@/components/organizations/OrganizationSelector';
 
 // Dynamic imports for heavy components
 const NotificationCenter = dynamic(() => import('./NotificationCenter'), { ssr: false });
@@ -84,6 +85,8 @@ export function ProductsHeader() {
       </div>
 
       <div className="flex items-center space-x-2">
+        {/* Organization Selector for SaaS multitenancy */}
+        <OrganizationSelector className="w-56 h-9" />
         {/* Theme Toggle */}
         <ProductsThemeToggle />
         

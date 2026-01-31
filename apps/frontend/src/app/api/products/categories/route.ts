@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { requireOrganization } from '@/lib/organization';
 
 export async function GET(request: NextRequest) {
   try {
+    // Validate and get organization ID
+    const orgId = await requireOrganization(request);
+    
     const supabase = await createClient();
 
     // Get categories with product counts
+    // Filtered by organization for multitenancy
     const { data: categories, error } = await supabase
       .from('categories')
       .select(`
@@ -20,6 +25,7 @@ export async function GET(request: NextRequest) {
         )
       `)
       .eq('is_active', true)
+      .eq('organization_id', orgId)
       .order('name');
 
     if (error) throw error;
@@ -43,6 +49,14 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Categories error:', error);
+    
+    // Return specific error if it's an organization validation error
+    if (error instanceof Error && error.message.includes('No valid organization')) {
+      return NextResponse.json(
+        { error: 'Organization required', message: error.message },
+        { status: 400 }
+      );
+    }
     
     // Return fallback categories
     return NextResponse.json({

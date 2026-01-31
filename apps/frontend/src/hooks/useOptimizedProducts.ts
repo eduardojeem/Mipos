@@ -29,6 +29,22 @@ interface UseOptimizedProductsResult {
 }
 
 // Función auxiliar para construir query optimizada - solo campos esenciales
+function getSelectedOrganizationId(): string | null {
+  try {
+    if (typeof window === 'undefined') return null;
+    const raw = window.localStorage.getItem('selected_organization');
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed?.id || parsed?.organization_id || null;
+    } catch {
+      return raw;
+    }
+  } catch {
+    return null;
+  }
+}
+
 function buildProductQuery(supabase: any, filters: any) {
   let query = supabase
     .from('products')
@@ -37,6 +53,11 @@ function buildProductQuery(supabase: any, filters: any) {
       min_stock, category_id, images, is_active,
       category:categories!fk_products_category(id, name)
     `, { count: 'exact' });
+
+  const orgId = getSelectedOrganizationId();
+  if (orgId) {
+    query = query.eq('organization_id', orgId);
+  }
 
   if (filters.search) {
     query = query.or(`name.ilike.%${filters.search}%,sku.ilike.%${filters.search}%`);
@@ -147,10 +168,17 @@ export function useProductStats() {
     queryKey: ['product-stats'],
     queryFn: async () => {
       // Query optimizada - solo campos necesarios para stats
-      const { data, error } = await supabase
+      let query = supabase
         .from('products')
         .select('stock_quantity, min_stock, sale_price, cost_price')
         .eq('is_active', true);
+
+      const orgId = getSelectedOrganizationId();
+      if (orgId) {
+        query = query.eq('organization_id', orgId);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
 

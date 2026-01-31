@@ -7,13 +7,15 @@ import { carouselService } from '../services/carouselService';
 const router = Router();
 
 router.get('/', async (req, res) => {
+  const orgId = String(req.get('x-organization-id') || '').trim();
+  if (!orgId) return res.status(400).json({ success: false, message: 'Organization header missing' });
   const { page = '1', limit = '10', search = '', type, status, isActive, stacking, dateFrom, dateTo } = req.query as any;
   const p = Math.max(1, Number(page) || 1);
   const l = Math.max(1, Math.min(100, Number(limit) || 10));
   const s = String(search || '').trim();
   if (supabase) {
     const nowIso = new Date().toISOString();
-    let q = supabase.from('promotions').select('*', { count: 'exact' });
+    let q = supabase.from('promotions').select('*', { count: 'exact' }).eq('organization_id', orgId);
     if (s) q = q.ilike('name', `%${s}%`);
     if (type) q = q.eq('type', String(type).toUpperCase());
     if (typeof stacking !== 'undefined') q = q.eq('stacking', String(stacking) === 'true');
@@ -42,7 +44,7 @@ router.get('/', async (req, res) => {
     const ids = base.map(r => r.id);
     let linksMap: Record<string, string[]> = {};
     if (ids.length > 0) {
-      const { data: links } = await supabase.from('promotions_products').select('promotion_id,product_id').in('promotion_id', ids);
+      const { data: links } = await supabase.from('promotions_products').select('promotion_id,product_id').eq('organization_id', orgId).in('promotion_id', ids);
       (links || []).forEach((l: any) => {
         const pid = String(l.product_id);
         const k = String(l.promotion_id);
@@ -52,7 +54,7 @@ router.get('/', async (req, res) => {
     const allProductIds = Array.from(new Set(Object.values(linksMap).flat()));
     let prodMap: Record<string, { name?: string; category?: string }> = {};
     if (allProductIds.length > 0) {
-      const { data: prods } = await supabase.from('products').select('*').in('id', allProductIds);
+      const { data: prods } = await supabase.from('products').select('*').eq('organization_id', orgId).in('id', allProductIds);
       const catIds: string[] = [];
       (prods || []).forEach((p: any) => {
         const id = String(p.id);
@@ -65,7 +67,7 @@ router.get('/', async (req, res) => {
       });
       const uniqueCatIds = Array.from(new Set(catIds)).filter(Boolean);
       if (uniqueCatIds.length > 0) {
-        const { data: cats } = await supabase.from('categories').select('id,name').in('id', uniqueCatIds);
+        const { data: cats } = await supabase.from('categories').select('id,name').eq('organization_id', orgId).in('id', uniqueCatIds);
         const catMap: Record<string, string> = {};
         (cats || []).forEach((c: any) => { catMap[String(c.id)] = String(c.name); });
         Object.keys(prodMap).forEach(pid => {
@@ -88,6 +90,8 @@ router.get('/', async (req, res) => {
 
 // Productos en oferta (vinculados a promociones activas)
 router.get('/offers-products', async (req, res) => {
+  const orgId = String(req.get('x-organization-id') || '').trim();
+  if (!orgId) return res.status(400).json({ success: false, message: 'Organization header missing' });
   if (!supabase) return res.status(503).json({ success: false, message: 'Supabase no está configurado' });
   res.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
   const nowIso = new Date().toISOString();
@@ -98,6 +102,7 @@ router.get('/offers-products', async (req, res) => {
   const { data: activePromos, error: promoErr } = await supabase
     .from('promotions')
     .select('id,name,discount_type,discount_value,is_active,start_date,end_date')
+    .eq('organization_id', orgId)
     .eq('is_active', true)
     .lte('start_date', nowIso)
     .gte('end_date', nowIso);
@@ -109,6 +114,7 @@ router.get('/offers-products', async (req, res) => {
   const { data: links, error: linkErr } = await supabase
     .from('promotions_products')
     .select('promotion_id,product_id')
+    .eq('organization_id', orgId)
     .in('promotion_id', promoIds);
   if (linkErr) return res.status(500).json({ success: false, message: 'Error al consultar enlaces de promociones', error: linkErr.message });
   const productIds = Array.from(new Set((links || []).map((l: any) => String(l.product_id))));
@@ -117,6 +123,7 @@ router.get('/offers-products', async (req, res) => {
   const { data: products, error: prodErr } = await supabase
     .from('products')
     .select('id,name,images,sale_price,offer_price,brand,category_id')
+    .eq('organization_id', orgId)
     .in('id', productIds)
     .eq('is_active', true);
   if (prodErr) return res.status(500).json({ success: false, message: 'Error al consultar productos', error: prodErr.message });
@@ -125,7 +132,7 @@ router.get('/offers-products', async (req, res) => {
   const catIds = Array.from(new Set((products || []).map((p: any) => String(p.category_id || '')).filter(Boolean)));
   let catNameMap: Record<string, string> = {};
   if (catIds.length > 0) {
-    const { data: cats, error: catErr } = await supabase.from('categories').select('id,name').in('id', catIds);
+    const { data: cats, error: catErr } = await supabase.from('categories').select('id,name').eq('organization_id', orgId).in('id', catIds);
     if (!catErr) {
       (cats || []).forEach((c: any) => { catNameMap[String(c.id)] = String(c.name); });
     }
@@ -247,6 +254,8 @@ const promotionSchema = z.object({
 
 router.post('/', async (req, res) => {
   if (!supabase) return res.status(503).json({ success: false, message: 'Supabase no está configurado' });
+  const orgId = String(req.get('x-organization-id') || '').trim();
+  if (!orgId) return res.status(400).json({ success: false, message: 'Organization header missing' });
   const parsed = promotionSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ success: false, message: 'Datos inválidos', errors: parsed.error.flatten() });
@@ -262,14 +271,15 @@ router.post('/', async (req, res) => {
     is_active: payload.isActive,
     start_date: new Date(payload.startDate).toISOString(),
     end_date: new Date(payload.endDate).toISOString(),
-    created_at: new Date().toISOString()
+    created_at: new Date().toISOString(),
+    organization_id: orgId
   };
   const { data, error } = await supabase.from('promotions').insert([row]).select('*').single();
   if (error) return res.status(500).json({ success: false, message: 'Error creando promoción', error: error.message });
   const r: any = data;
   const ids: string[] = Array.isArray(payload.applicableProductIds) ? payload.applicableProductIds : [];
   if (ids.length > 0) {
-    const links = ids.map((pid) => ({ promotion_id: r.id, product_id: pid }));
+    const links = ids.map((pid) => ({ promotion_id: r.id, product_id: pid, organization_id: orgId }));
     await supabase.from('promotions_products').insert(links);
   }
   let prodMap: Record<string, { name?: string; category?: string }> = {};
@@ -312,13 +322,15 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
   if (!supabase) return res.status(503).json({ success: false, message: 'Supabase no está configurado' });
+  const orgId = String(req.get('x-organization-id') || '').trim();
+  if (!orgId) return res.status(400).json({ success: false, message: 'Organization header missing' });
   const id = String(req.params.id || '').trim();
   const parsed = promotionSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ success: false, message: 'Datos inválidos', errors: parsed.error.flatten() });
   }
   const payload = parsed.data as any;
-  const { data: existing, error: e0 } = await supabase.from('promotions').select('*').eq('id', id).single();
+  const { data: existing, error: e0 } = await supabase.from('promotions').select('*').eq('id', id).eq('organization_id', orgId).single();
   if (e0 && (e0 as any).code !== 'PGRST116') return res.status(500).json({ success: false, message: 'Error consultando promoción', error: e0.message });
   if (!existing) return res.status(404).json({ success: false, message: 'Promoción no encontrada' });
   const row = {
@@ -332,20 +344,20 @@ router.put('/:id', async (req, res) => {
     start_date: new Date(payload.startDate).toISOString(),
     end_date: new Date(payload.endDate).toISOString()
   };
-  const { data, error } = await supabase.from('promotions').update(row).eq('id', id).select('*').single();
+  const { data, error } = await supabase.from('promotions').update(row).eq('id', id).eq('organization_id', orgId).select('*').single();
   if (error) return res.status(500).json({ success: false, message: 'Error actualizando promoción', error: error.message });
   const r: any = data;
   const ids: string[] = Array.isArray(payload.applicableProductIds) ? payload.applicableProductIds : [];
   if (Array.isArray(payload.applicableProductIds)) {
-    await supabase.from('promotions_products').delete().eq('promotion_id', id);
+    await supabase.from('promotions_products').delete().eq('promotion_id', id).eq('organization_id', orgId);
     if (ids.length > 0) {
-      const links = ids.map((pid) => ({ promotion_id: id, product_id: pid }));
+      const links = ids.map((pid) => ({ promotion_id: id, product_id: pid, organization_id: orgId }));
       await supabase.from('promotions_products').insert(links);
     }
   }
   let prodMap: Record<string, { name?: string; category?: string }> = {};
   if (ids.length > 0) {
-    const { data: prods } = await supabase.from('products').select('*').in('id', ids);
+    const { data: prods } = await supabase.from('products').select('*').eq('organization_id', orgId).in('id', ids);
     const catIds: string[] = [];
     (prods || []).forEach((p: any) => {
       const id2 = String(p.id);
@@ -355,7 +367,7 @@ router.put('/:id', async (req, res) => {
     });
     const uniqueCatIds = Array.from(new Set(catIds)).filter(Boolean);
     if (uniqueCatIds.length > 0) {
-      const { data: cats } = await supabase.from('categories').select('id,name').in('id', uniqueCatIds);
+      const { data: cats } = await supabase.from('categories').select('id,name').eq('organization_id', orgId).in('id', uniqueCatIds);
       const catMap: Record<string, string> = {};
       (cats || []).forEach((c: any) => { catMap[String(c.id)] = String(c.name); });
       Object.keys(prodMap).forEach(pid => {
@@ -383,20 +395,24 @@ router.put('/:id', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   if (!supabase) return res.status(503).json({ success: false, message: 'Supabase no está configurado' });
+  const orgId = String(req.get('x-organization-id') || '').trim();
+  if (!orgId) return res.status(400).json({ success: false, message: 'Organization header missing' });
   const id = String(req.params.id || '').trim();
-  const { data: existing, error: e0 } = await supabase.from('promotions').select('id').eq('id', id).limit(1);
+  const { data: existing, error: e0 } = await supabase.from('promotions').select('id').eq('id', id).eq('organization_id', orgId).limit(1);
   if (e0) return res.status(500).json({ success: false, message: 'Error consultando promoción', error: e0.message });
   if ((existing || []).length === 0) return res.status(404).json({ success: false, message: 'Promoción no encontrada' });
-  const { error } = await supabase.from('promotions').delete().eq('id', id);
+  const { error } = await supabase.from('promotions').delete().eq('id', id).eq('organization_id', orgId);
   if (error) return res.status(500).json({ success: false, message: 'Error eliminando promoción', error: error.message });
   return res.json({ success: true, message: 'Promoción eliminada' });
 });
 
 router.patch('/:id/status', async (req, res) => {
   if (!supabase) return res.status(503).json({ success: false, message: 'Supabase no está configurado' });
+  const orgId = String(req.get('x-organization-id') || '').trim();
+  if (!orgId) return res.status(400).json({ success: false, message: 'Organization header missing' });
   const id = String(req.params.id || '').trim();
   const isActive = String((req.body || {}).isActive).toLowerCase() === 'true' || (req.body || {}).isActive === true;
-  const { data, error } = await supabase.from('promotions').update({ is_active: isActive }).eq('id', id).select('id,is_active').single();
+  const { data, error } = await supabase.from('promotions').update({ is_active: isActive }).eq('id', id).eq('organization_id', orgId).select('id,is_active').single();
   if (error) return res.status(500).json({ success: false, message: 'Error actualizando estado', error: error.message });
   if (!data) return res.status(404).json({ success: false, message: 'Promoción no encontrada' });
   return res.json({ success: true, data: { id: data.id, isActive: data.is_active } });
@@ -404,6 +420,8 @@ router.patch('/:id/status', async (req, res) => {
 
 router.patch('/:id/approval', async (req, res) => {
   if (!supabase) return res.status(503).json({ success: false, message: 'Supabase no está configurado' });
+  const orgId = String(req.get('x-organization-id') || '').trim();
+  if (!orgId) return res.status(400).json({ success: false, message: 'Organization header missing' });
   const id = String(req.params.id || '').trim();
   const status = String((req.body || {}).status || '').toLowerCase();
   const comment = String((req.body || {}).comment || '');
@@ -414,7 +432,7 @@ router.patch('/:id/approval', async (req, res) => {
     approved_by: approved ? (req as any).user?.email || (req as any).user?.id || null : null,
     approved_at: approved ? new Date().toISOString() : null
   };
-  const { data, error } = await supabase.from('promotions').update(row).eq('id', id).select('id,approval_status,approval_comment,approved_by,approved_at').single();
+  const { data, error } = await supabase.from('promotions').update(row).eq('id', id).eq('organization_id', orgId).select('id,approval_status,approval_comment,approved_by,approved_at').single();
   if (error) return res.status(500).json({ success: false, message: 'Error actualizando aprobación', error: error.message });
   if (!data) return res.status(404).json({ success: false, message: 'Promoción no encontrada' });
   return res.json({ success: true, data });
@@ -434,6 +452,8 @@ router.patch('/:id/approval', async (req, res) => {
  */
 router.get('/carousel/public', async (req, res) => {
   try {
+    const orgId = String(req.get('x-organization-id') || '').trim();
+    if (!orgId) return res.status(400).json({ success: false, message: 'Organization header missing' });
     // Set cache headers for better performance
     res.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
     
@@ -446,7 +466,7 @@ router.get('/carousel/public', async (req, res) => {
     }
 
     // Get carousel configuration
-    const carousel = await carouselService.getCarousel();
+    const carousel = await carouselService.getCarousel(orgId);
     
     if (!carousel.ids || carousel.ids.length === 0) {
       return res.json({
@@ -462,6 +482,7 @@ router.get('/carousel/public', async (req, res) => {
       .from('promotions')
       .select('*')
       .in('id', carousel.ids)
+      .eq('organization_id', orgId)
       .eq('is_active', true)
       .lte('start_date', now)
       .or(`end_date.gte.${now},end_date.is.null`);
@@ -488,7 +509,8 @@ router.get('/carousel/public', async (req, res) => {
     const { data: promoProducts, error: ppError } = await supabase
       .from('promotions_products')
       .select('promotion_id, product_id')
-      .in('promotion_id', promoIds);
+      .in('promotion_id', promoIds)
+      .eq('organization_id', orgId);
 
     if (ppError) {
       console.error('Error fetching promotion products:', ppError);
@@ -509,7 +531,8 @@ router.get('/carousel/public', async (req, res) => {
     const { data: products, error: prodError } = await supabase
       .from('products')
       .select('*')
-      .in('id', productIds);
+      .in('id', productIds)
+      .eq('organization_id', orgId);
 
     if (prodError) {
       console.error('Error fetching products:', prodError);
@@ -606,9 +629,11 @@ router.get('/carousel/public', async (req, res) => {
  * 
  * @returns {object} - Carousel data with ids, lastModified, modifiedBy, version
  */
-router.get('/carousel', authenticateToken, async (req, res) => {
+router.get('/carousel', authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const carousel = await carouselService.getCarousel();
+    const orgId = String(req.get('x-organization-id') || '').trim();
+    if (!orgId) return res.status(400).json({ success: false, message: 'Organization header missing' });
+    const carousel = await carouselService.getCarousel(orgId);
     
     res.json({
       success: true,
@@ -642,6 +667,8 @@ router.get('/carousel', authenticateToken, async (req, res) => {
 router.put('/carousel', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const userId = (req as any).user?.id;
+    const orgId = String(req.get('x-organization-id') || '').trim();
+    if (!orgId) return res.status(400).json({ success: false, message: 'Organization header missing' });
     
     if (!userId) {
       return res.status(401).json({
@@ -670,7 +697,7 @@ router.put('/carousel', authenticateToken, requireAdmin, async (req, res) => {
     };
 
     // Save carousel (includes validation and audit logging)
-    const result = await carouselService.saveCarousel(ids, context);
+    const result = await carouselService.saveCarousel(ids, context, orgId);
 
     res.json({
       success: true,
@@ -716,6 +743,8 @@ router.put('/carousel', authenticateToken, requireAdmin, async (req, res) => {
  */
 router.get('/carousel/audit', authenticateToken, requireAdmin, async (req, res) => {
   try {
+    const orgId = String(req.get('x-organization-id') || '').trim();
+    if (!orgId) return res.status(400).json({ success: false, message: 'Organization header missing' });
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
     const offset = Math.max(0, parseInt(req.query.offset as string) || 0);
 
@@ -756,6 +785,8 @@ router.post('/carousel/revert/:versionId', authenticateToken, requireAdmin, asyn
   try {
     const userId = (req as any).user?.id;
     const { versionId } = req.params;
+    const orgId = String(req.get('x-organization-id') || '').trim();
+    if (!orgId) return res.status(400).json({ success: false, message: 'Organization header missing' });
 
     if (!userId) {
       return res.status(401).json({
@@ -819,6 +850,8 @@ router.post('/carousel/revert/:versionId', authenticateToken, requireAdmin, asyn
  */
 router.post('/carousel/validate', authenticateToken, requireAdmin, async (req, res) => {
   try {
+    const orgId = String(req.get('x-organization-id') || '').trim();
+    if (!orgId) return res.status(400).json({ success: false, message: 'Organization header missing' });
     const ids = req.body?.ids;
 
     if (!Array.isArray(ids)) {
@@ -855,6 +888,8 @@ router.post('/carousel/validate', authenticateToken, requireAdmin, async (req, r
 router.get('/:id/products', async (req, res) => {
   try {
     const promotionId = req.params.id;
+    const orgId = String(req.get('x-organization-id') || '').trim();
+    if (!orgId) return res.status(400).json({ success: false, message: 'Organization header missing' });
     console.log('[DEBUG] GET /promotions/:id/products called with ID:', promotionId);
 
     if (!supabase) {
@@ -870,7 +905,8 @@ router.get('/:id/products', async (req, res) => {
     const { data: links, error: linksError } = await supabase
       .from('promotions_products')
       .select('product_id')
-      .eq('promotion_id', promotionId);
+      .eq('promotion_id', promotionId)
+      .eq('organization_id', orgId);
 
     console.log('[DEBUG] Links result:', { links: links?.length || 0, error: linksError?.message });
 
@@ -897,7 +933,8 @@ router.get('/:id/products', async (req, res) => {
     const { data: products, error: productsError } = await supabase
       .from('products')
       .select('id, name, sale_price, image, images, category_id, stock_quantity')
-      .in('id', productIds);
+      .in('id', productIds)
+      .eq('organization_id', orgId);
 
     if (productsError) {
       console.error('Error fetching products details:', productsError);
@@ -918,7 +955,8 @@ router.get('/:id/products', async (req, res) => {
       const { data: categories } = await supabase
         .from('categories')
         .select('id, name')
-        .in('id', categoryIds);
+        .in('id', categoryIds)
+        .eq('organization_id', orgId);
 
       (categories || []).forEach((c: any) => {
         categoryMap[c.id] = c.name;
@@ -974,6 +1012,8 @@ router.post('/:id/products', async (req, res) => {
   try {
     const promotionId = req.params.id;
     const { productIds } = req.body;
+    const orgId = String(req.get('x-organization-id') || '').trim();
+    if (!orgId) return res.status(400).json({ success: false, message: 'Organization header missing' });
 
     console.log('[DEBUG] POST /promotions/:id/products called');
     console.log('[DEBUG] promotionId:', promotionId);
@@ -1000,6 +1040,7 @@ router.post('/:id/products', async (req, res) => {
       .from('promotions')
       .select('id')
       .eq('id', promotionId)
+      .eq('organization_id', orgId)
       .single();
 
     if (promoError || !promotion) {
@@ -1010,9 +1051,17 @@ router.post('/:id/products', async (req, res) => {
     }
 
     // Crear las asociaciones
-    const links = productIds.map(productId => ({
+    // Validar que los productos pertenezcan a la misma organización
+    const { data: validProducts } = await supabase
+      .from('products')
+      .select('id')
+      .eq('organization_id', orgId)
+      .in('id', productIds);
+    const validIds = (validProducts || []).map((p: any) => p.id);
+    const links = validIds.map(productId => ({
       promotion_id: promotionId,
       product_id: productId,
+      organization_id: orgId,
     }));
 
     const { error: insertError } = await supabase

@@ -94,16 +94,9 @@ export default function PromotionsPage() {
           return;
         }
       } catch (batchError: unknown) {
-        logger.log('Batch endpoint failed, using fallback', batchError);
-
-        // Fallback: usar counts mock para que funcione la UI
-        const mockCounts: Record<string, number> = {};
-        ids.forEach((id) => {
-          mockCounts[id] = Math.floor(Math.random() * 10) + 1; // 1-10 productos mock
-        });
-
-        setProductCounts(mockCounts);
-        logger.log('Mock counts set:', mockCounts);
+        logger.log('Batch endpoint failed, skipping mock counts', batchError);
+        // No usar datos mock; mantener counts vacíos para reflejar estado real
+        setProductCounts({});
       }
     } catch (error) {
       logger.error('Failed to fetch:', error);
@@ -398,6 +391,10 @@ export default function PromotionsPage() {
                 <EmptyState
                   type={storeItems.length === 0 ? 'no-promotions' : 'no-results'}
                   onCreateClick={storeItems.length === 0 ? () => setIsCreateDialogOpen(true) : undefined}
+                  onClearFilters={() => {
+                    setSearchTerm('');
+                    setStatusFilter('all');
+                  }}
                 />
               </div>
             ) : (

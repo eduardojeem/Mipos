@@ -27,6 +27,22 @@ interface DashboardStats {
 
 const logger = createLogger('SupabaseProducts');
 
+function getSelectedOrganizationId(): string | null {
+  try {
+    if (typeof window === 'undefined') return null;
+    const raw = window.localStorage.getItem('selected_organization');
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed?.id || parsed?.organization_id || null;
+    } catch {
+      return raw;
+    }
+  } catch {
+    return null;
+  }
+}
+
 export function useSupabaseProducts(options: UseSupabaseProductsOptions = {}) {
   const {
     filters = {},
@@ -80,7 +96,10 @@ export function useSupabaseProducts(options: UseSupabaseProductsOptions = {}) {
   // Fetch global stats from API
   const fetchGlobalStats = useCallback(async () => {
     try {
-      const response = await fetch('/api/products/summary');
+      const orgId = getSelectedOrganizationId();
+      const response = await fetch('/api/products/summary', {
+        headers: orgId ? { 'x-organization-id': orgId } : undefined
+      });
       if (!response.ok) throw new Error('Failed to fetch stats');
       const stats = await response.json();
       setDashboardStats(stats);
@@ -137,6 +156,11 @@ export function useSupabaseProducts(options: UseSupabaseProductsOptions = {}) {
         category:categories!products_category_id_fkey(id, name),
         supplier:suppliers!products_supplier_id_fkey(id, name)
       `, { count: 'estimated' });
+
+    const orgId = getSelectedOrganizationId();
+    if (orgId) {
+      query = query.eq('organization_id', orgId);
+    }
 
     // Apply filters
     if (currentFilters.search) {

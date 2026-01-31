@@ -17,7 +17,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Badge } from '@/components/ui/badge';
 import {
   Building2,
   ArrowLeft,
@@ -35,6 +34,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 interface OrganizationFormData {
   // Información básica
@@ -110,7 +110,7 @@ const availableFeatures = [
 
 export default function CreateOrganizationPage() {
   const router = useRouter();
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const queryClient = useQueryClient();
   const [formData, setFormData] = useState<OrganizationFormData>({
     name: '',
     slug: '',
@@ -164,73 +164,46 @@ export default function CreateOrganizationPage() {
     }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Validación básica
-    if (!formData.name || !formData.slug || !formData.email || !formData.adminName || !formData.adminEmail) {
-      toast.error('Error de validación', { 
-        description: 'Por favor completa todos los campos obligatorios marcados con *' 
-      });
-      return;
-    }
-
-    // Validar formato de email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email) || !emailRegex.test(formData.adminEmail)) {
-      toast.error('Email inválido', { 
-        description: 'Por favor ingresa direcciones de email válidas' 
-      });
-      return;
-    }
-
-    setIsSubmitting(true);
-    const supabase = createClient();
-
-    try {
-      // 1. Crear la organización en Supabase
-      const { data: organization, error: orgError } = await supabase
-        .from('organizations')
+  const createMutation = useMutation({
+    mutationFn: async (data: OrganizationFormData) => {
+      const supabase = createClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: organization, error: orgError } = await (supabase
+        .from('organizations') as any)
         .insert({
-          name: formData.name,
-          slug: formData.slug,
-          subscription_plan: formData.subscriptionPlan,
-          subscription_status: formData.subscriptionStatus,
+          name: data.name,
+          slug: data.slug,
+          subscription_plan: data.subscriptionPlan,
+          subscription_status: data.subscriptionStatus,
           settings: {
-            // Información de contacto
             contactInfo: {
-              email: formData.email,
-              phone: formData.phone,
-              website: formData.website,
-              address: formData.address,
-              city: formData.city,
-              state: formData.state,
-              country: formData.country,
-              postalCode: formData.postalCode,
+              email: data.email,
+              phone: data.phone,
+              website: data.website,
+              address: data.address,
+              city: data.city,
+              state: data.state,
+              country: data.country,
+              postalCode: data.postalCode,
             },
-            // Configuraciones regionales
-            taxRate: formData.settings.taxRate,
-            currency: formData.settings.currency,
-            timezone: formData.settings.timezone,
-            language: formData.settings.language,
-            // Configuraciones adicionales
-            industry: formData.industry,
-            description: formData.description,
-            // Límites y características
+            taxRate: data.settings.taxRate,
+            currency: data.settings.currency,
+            timezone: data.settings.timezone,
+            language: data.settings.language,
+            industry: data.industry,
+            description: data.description,
             limits: {
-              maxUsers: formData.maxUsers,
+              maxUsers: data.maxUsers,
             },
-            features: formData.features,
-            // Administrador
+            features: data.features,
             adminInfo: {
-              name: formData.adminName,
-              email: formData.adminEmail,
-              phone: formData.adminPhone,
+              name: data.adminName,
+              email: data.adminEmail,
+              phone: data.adminPhone,
             },
-            // Período de prueba
-            trial: formData.allowTrialPeriod ? {
+            trial: data.allowTrialPeriod ? {
               enabled: true,
-              days: formData.trialDays,
+              days: data.trialDays,
             } : null,
           },
         })
@@ -244,23 +217,45 @@ export default function CreateOrganizationPage() {
         throw orgError;
       }
 
+      return organization;
+    },
+    onSuccess: (newOrg: { name: string }) => {
       toast.success('¡Organización creada!', { 
-        description: `La organización "${formData.name}" ha sido creada exitosamente.` 
+        description: `La organización "${newOrg?.name || 'Nueva'}" ha sido creada exitosamente.` 
       });
-      
-      // Redirigir a la lista de organizaciones
+      queryClient.invalidateQueries({ queryKey: ['admin', 'organizations'] });
       setTimeout(() => {
         router.push('/superadmin/organizations');
       }, 500);
-    } catch (error) {
+    },
+    onError: (error) => {
       console.error('Error creating organization:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado. Por favor intenta nuevamente.';
+      const errorMessage = error instanceof Error ? error.message : 'Ocurrió un error inesperado.';
       toast.error('Error al crear organización', { 
         description: errorMessage
       });
-    } finally {
-      setIsSubmitting(false);
     }
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!formData.name || !formData.slug || !formData.email || !formData.adminName || !formData.adminEmail) {
+      toast.error('Error de validación', { 
+        description: 'Por favor completa todos los campos obligatorios marcados con *' 
+      });
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email) || !emailRegex.test(formData.adminEmail)) {
+      toast.error('Email inválido', { 
+        description: 'Por favor ingresa direcciones de email válidas' 
+      });
+      return;
+    }
+
+    createMutation.mutate(formData);
   };
 
   return (
@@ -803,17 +798,17 @@ export default function CreateOrganizationPage() {
               type="button"
               variant="outline"
               onClick={() => router.back()}
-              disabled={isSubmitting}
+              disabled={createMutation.isPending}
               className="border-slate-300 dark:border-slate-700"
             >
               Cancelar
             </Button>
             <Button
               type="submit"
-              disabled={isSubmitting}
+              disabled={createMutation.isPending}
               className="bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 text-white border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 min-w-[200px]"
             >
-              {isSubmitting ? (
+              {createMutation.isPending ? (
                 <>
                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
                   Creando...

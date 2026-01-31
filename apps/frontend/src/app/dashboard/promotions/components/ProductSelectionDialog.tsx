@@ -193,50 +193,11 @@ export function ProductSelectionDialog({
       })
 
     } catch (error) {
-      logger.error('Error fetching products from API:', error)
-      setError('Error al cargar productos. Intentando con datos de respaldo...')
-
-      // Fallback to mock data if API fails
-      const fallbackProducts: Product[] = [
-        {
-          id: 'mock-1',
-          name: 'Producto de Respaldo 1',
-          price: 100,
-          imageUrl: '',
-          category: 'General',
-          stock: 10,
-          brand: 'Fallback',
-          rating: 4.0,
-          reviewCount: 50,
-          isPopular: false,
-          isFeatured: false,
-          tags: ['respaldo', 'offline']
-        },
-        {
-          id: 'mock-2',
-          name: 'Producto de Respaldo 2',
-          price: 200,
-          imageUrl: '',
-          category: 'General',
-          stock: 5,
-          brand: 'Fallback',
-          rating: 3.8,
-          reviewCount: 25,
-          isPopular: false,
-          isFeatured: false,
-          tags: ['respaldo', 'offline']
-        }
-      ]
-
-      // Filter out already associated products
-      const availableProducts = fallbackProducts.filter(
-        (p: Product) => !excludeProductIds.includes(String(p.id))
-      )
-
-      setProducts(availableProducts)
-
-      // Set fallback categories
-      setCategories(['General'])
+      logger.error('Error fetching productos desde API:', error)
+      setError('Error al cargar productos desde Supabase. Por favor, intenta nuevamente.')
+      // No usar datos de respaldo mock; reflejar estado real sin productos
+      setProducts([])
+      setCategories([])
     } finally {
       setLoading(false)
     }
@@ -254,12 +215,12 @@ export function ProductSelectionDialog({
         setCategories(categoryNames.sort())
         logger.log('Categories loaded:', categoryNames.length)
       } else {
-        logger.warn('Failed to load categories, using fallback')
-        setCategories(['General', 'Electrónicos', 'Accesorios'])
+        logger.warn('Failed to load categories; no mock categories will be used')
+        setCategories([])
       }
     } catch (error) {
       logger.error('Error fetching categories:', error)
-      setCategories(['General', 'Electrónicos', 'Accesorios'])
+      setCategories([])
     }
   }, [])
 
