@@ -33,6 +33,7 @@ const PRIMARY_HEX_MAP: Record<string, string> = {
     cyan: '#0891b2',
     sky: '#0284c7',
     slate: '#64748b',
+    black: '#000000',
 };
 
 const DENSITY_OPTIONS = [
@@ -51,7 +52,7 @@ export function AppearanceTab() {
     const { data: userSettings, isLoading } = useUserSettings();
     const updateUserSettings = useUpdateUserSettings();
     const { toast } = useToast();
-    
+
     // Estado local para cambios pendientes
     const [localSettings, setLocalSettings] = useState<any>({});
     const [hasChanges, setHasChanges] = useState(false);
@@ -370,7 +371,7 @@ export function AppearanceTab() {
                     </CardContent>
                 </Card>
             </div>
-            
+
             {/* Sticky Save Button */}
             {hasChanges && (
                 <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-4 duration-500">

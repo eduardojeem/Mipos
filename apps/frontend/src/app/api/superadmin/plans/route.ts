@@ -105,3 +105,101 @@ export async function DELETE(request: NextRequest) {
   }
 }
 
+export async function POST(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+
+    const { data: roleRow } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if ((roleRow?.role || '').toUpperCase() !== 'SUPER_ADMIN') {
+      return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 })
+    }
+
+    const body = await request.json()
+    
+    // Validate required fields
+    if (!body.name || !body.slug) {
+      return NextResponse.json({ error: 'Nombre y Slug son requeridos' }, { status: 400 })
+    }
+
+    const { data, error } = await supabase
+      .from('saas_plans')
+      .insert([{
+        name: body.name,
+        slug: body.slug,
+        description: body.description || '',
+        price_monthly: body.price_monthly || 0,
+        price_yearly: body.price_yearly || 0,
+        currency: body.currency || 'USD',
+        trial_days: body.trial_days || 0,
+        features: body.features || [],
+        limits: body.limits || {},
+        is_active: body.is_active ?? true
+      }])
+      .select()
+      .single()
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    return NextResponse.json({ plan: data })
+  } catch (err) {
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+  }
+}
+
+export async function PUT(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+
+    const { data: roleRow } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if ((roleRow?.role || '').toUpperCase() !== 'SUPER_ADMIN') {
+      return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 })
+    }
+
+    const body = await request.json()
+    
+    if (!body.id) {
+      return NextResponse.json({ error: 'ID es requerido' }, { status: 400 })
+    }
+
+    const { data, error } = await supabase
+      .from('saas_plans')
+      .update({
+        name: body.name,
+        // slug usually shouldn't be changed if it's used as a key, but allowing it if needed
+        slug: body.slug,
+        description: body.description,
+        price_monthly: body.price_monthly,
+        price_yearly: body.price_yearly,
+        currency: body.currency,
+        trial_days: body.trial_days,
+        features: body.features,
+        limits: body.limits,
+        is_active: body.is_active,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', body.id)
+      .select()
+      .single()
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    return NextResponse.json({ plan: data })
+  } catch (err) {
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+  }
+}
+

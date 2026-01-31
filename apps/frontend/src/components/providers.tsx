@@ -90,9 +90,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
       );
       const didStartLoading = isApiCall;
 
-      // Timeout handling: 15-second timeout for all requests
+      // Timeout handling: 60-second timeout for all requests to accommodate slow networks/cold starts
       // Requirements: 7.1, 7.2, 7.3
-      const TIMEOUT_MS = 30_000;
+      const TIMEOUT_MS = 60_000;
       const startTime = Date.now();
 
       // Log request start
@@ -203,7 +203,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
               const response = await originalFetch(input as RequestInfo | URL, {
                 ...init,
                 signal: mergedSignal,
-              });
+                // Ensure keepalive is not used with AbortSignal in older browsers/environments if needed
+                // but generally Next.js polyfills this. 
+                // Fix: explicit casting to any to avoid type conflict with RequestInit
+              } as any);
 
               // Clear timeout on successful response
               if (timeoutId !== null) {

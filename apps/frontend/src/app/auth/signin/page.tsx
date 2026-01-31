@@ -189,8 +189,25 @@ export default function SignInPage() {
 
       // Get current user session to fetch organizations
       const { data: sessionData } = await supabase.auth.getSession();
-      if (sessionData?.session?.user) {
-        await fetchUserOrganizations(sessionData.session.user.id);
+      const currentUser = sessionData?.session?.user;
+
+      if (currentUser) {
+        // Check for SUPER_ADMIN role immediately to bypass organization check
+        const rawRole = currentUser.user_metadata?.role;
+        const role = typeof rawRole === 'string' ? rawRole.toUpperCase() : '';
+        
+        if (role === 'SUPER_ADMIN') {
+          toast({
+            title: 'Bienvenido Super Admin',
+            description: 'Redirigiendo al panel de administración global...',
+          });
+          setTimeout(() => {
+            router.push('/superadmin');
+          }, 800);
+          return;
+        }
+
+        await fetchUserOrganizations(currentUser.id);
       } else {
         // Fallback: redirect to dashboard if no session (mock mode)
         toast({

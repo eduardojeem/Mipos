@@ -61,10 +61,10 @@ export function AdminHeader({
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div className="space-y-1">
                     <div className="flex items-center gap-3">
-                        <h2 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-blue-600 to-violet-600 bg-clip-text text-transparent">
+                        <h2 className="text-3xl font-bold tracking-tight text-foreground">
                             Panel de Administración SaaS
                         </h2>
-                        <Badge variant="outline" className="hidden md:flex items-center gap-1 px-2">
+                        <Badge variant="outline" className="hidden md:flex items-center gap-1 px-2 border-green-500/20 bg-green-500/10 text-green-700 dark:text-green-400">
                             <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
                             En línea
                         </Badge>

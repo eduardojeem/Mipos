@@ -164,58 +164,53 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
 
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 dark:from-slate-950 dark:via-indigo-950 dark:to-purple-950 relative overflow-hidden">
-      {/* Animated Background Elements */}
+    <div className="min-h-screen bg-background relative overflow-hidden">
+      {/* Background Elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-400/30 dark:bg-purple-600/20 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-primary/5 rounded-full blur-3xl"></div>
         <div
-          className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-400/30 dark:bg-blue-600/20 rounded-full blur-3xl animate-pulse"
-          style={{ animationDelay: "1s" }}
-        ></div>
-        <div
-          className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-pink-400/20 dark:bg-pink-600/10 rounded-full blur-3xl animate-pulse"
-          style={{ animationDelay: "2s" }}
+          className="absolute -bottom-40 -left-40 w-80 h-80 bg-primary/5 rounded-full blur-3xl"
         ></div>
       </div>
 
       <div className="flex h-screen relative z-10">
-        {/* Sidebar with Glassmorphism */}
+        {/* Sidebar */}
         <div
           className={cn(
-            "backdrop-blur-xl bg-white/80 dark:bg-slate-900/80 border-r border-white/20 dark:border-slate-700/50 transition-all duration-300 flex flex-col shadow-2xl",
+            "bg-card border-r border-border transition-all duration-300 flex flex-col shadow-sm",
             isCollapsed ? "w-20" : "w-80",
           )}
         >
           {/* Header */}
-          <div className="p-6 border-b border-white/20 dark:border-slate-700/50">
+          <div className="p-6 border-b border-border">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-600 via-pink-600 to-blue-600 flex items-center justify-center shadow-lg shadow-purple-500/50 animate-pulse">
-                  <Crown className="h-6 w-6 text-white" />
+                <div className="w-12 h-12 rounded-2xl bg-primary flex items-center justify-center shadow-md">
+                  <Crown className="h-6 w-6 text-primary-foreground" />
                 </div>
                 {!isCollapsed && (
                   <div>
-                    <h1 className="text-xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent">
+                    <h1 className="text-xl font-bold text-foreground">
                       Super Admin
                     </h1>
-                    <p className="text-xs text-slate-600 dark:text-slate-400 font-medium">
+                    <p className="text-xs text-muted-foreground font-medium">
                       Panel de Control SaaS
                     </p>
                   </div>
                 )}
               </div>
               <Button
-                variant="outline"
+                variant="ghost"
                 size="icon"
                 onClick={() => setIsCollapsed(!isCollapsed)}
-                className="border-purple-300 dark:border-purple-700 hover:bg-purple-100 dark:hover:bg-purple-900/30"
+                className="hover:bg-muted"
               >
                 {isCollapsed ? (
                   <ChevronRight className="h-4 w-4" />
@@ -237,8 +232,8 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
                       "w-full justify-start gap-3 h-auto py-3 px-4 transition-all duration-200",
                       !isCollapsed && "text-left",
                       activeItem === item.href &&
-                        "bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-blue-500/10 dark:from-purple-500/20 dark:via-pink-500/20 dark:to-blue-500/20 border border-purple-300/50 dark:border-purple-500/50 shadow-lg shadow-purple-500/20",
-                      "hover:bg-gradient-to-r hover:from-purple-500/5 hover:via-pink-500/5 hover:to-blue-500/5 hover:scale-[1.02] hover:shadow-md",
+                        "bg-primary/10 text-primary hover:bg-primary/15",
+                      "hover:bg-muted",
                     )}
                     onClick={() => {
                       if (item.children) {
@@ -253,16 +248,16 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
                       className={cn(
                         "p-2 rounded-xl transition-all duration-200",
                         activeItem === item.href
-                          ? "bg-gradient-to-br from-purple-600 via-pink-600 to-blue-600 shadow-lg shadow-purple-500/50"
-                          : "bg-slate-100 dark:bg-slate-800 group-hover:bg-gradient-to-br group-hover:from-purple-600 group-hover:via-pink-600 group-hover:to-blue-600",
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted group-hover:bg-primary/10 group-hover:text-primary",
                       )}
                     >
                       <item.icon
                         className={cn(
                           "h-5 w-5 transition-colors",
                           activeItem === item.href
-                            ? "text-white"
-                            : "text-slate-600 dark:text-slate-400 group-hover:text-white",
+                            ? "text-primary-foreground"
+                            : "text-muted-foreground group-hover:text-primary",
                         )}
                       />
                     </div>
@@ -270,17 +265,20 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
                       <>
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
-                            <span className="font-semibold text-slate-800 dark:text-slate-200">
+                            <span className={cn(
+                                "font-semibold",
+                                activeItem === item.href ? "text-primary" : "text-foreground"
+                            )}>
                               {item.title}
                             </span>
                             {item.badge && (
-                              <Badge className="text-xs px-2 py-0.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white border-0">
+                              <Badge className="text-xs px-2 py-0.5 bg-primary text-primary-foreground border-0 hover:bg-primary/90">
                                 {item.badge}
                               </Badge>
                             )}
                           </div>
                           {item.description && (
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                            <p className="text-xs text-muted-foreground mt-0.5">
                               {item.description}
                             </p>
                           )}
@@ -288,7 +286,7 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
                         {item.children && (
                           <ChevronDown
                             className={cn(
-                              "h-4 w-4 transition-transform text-slate-600 dark:text-slate-400",
+                              "h-4 w-4 transition-transform text-muted-foreground",
                               expandedItems.has(item.title) && "rotate-180",
                             )}
                           />
@@ -301,7 +299,7 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
                   {!isCollapsed &&
                     item.children &&
                     expandedItems.has(item.title) && (
-                      <div className="ml-8 mt-1 space-y-1 border-l-2 border-purple-200 dark:border-purple-800/50 pl-4 py-2">
+                      <div className="ml-8 mt-1 space-y-1 border-l-2 border-border pl-4 py-2">
                         {item.children.map((child) => (
                           <Button
                             key={child.href}
@@ -309,8 +307,8 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
                             className={cn(
                               "w-full justify-start gap-3 h-10 px-3 text-sm transition-all duration-200",
                               activeItem === child.href &&
-                                "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300",
-                              "hover:bg-purple-50 dark:hover:bg-purple-900/20 hover:translate-x-1",
+                                "bg-primary/10 text-primary font-medium",
+                              "hover:bg-muted hover:translate-x-1",
                             )}
                             onClick={() => {
                               setActiveItem(child.href);
@@ -318,7 +316,7 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
                             }}
                           >
                             <child.icon className="h-4 w-4" />
-                            <span className="font-medium">{child.title}</span>
+                            <span>{child.title}</span>
                           </Button>
                         ))}
                       </div>
@@ -329,20 +327,20 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
           </ScrollArea>
 
           {/* User Info & Actions */}
-          <div className="p-4 border-t border-white/20 dark:border-slate-700/50">
+          <div className="p-4 border-t border-border">
             {!isCollapsed && (
-              <div className="mb-4 p-4 rounded-2xl bg-gradient-to-br from-purple-500/10 via-pink-500/10 to-blue-500/10 dark:from-purple-500/20 dark:via-pink-500/20 dark:to-blue-500/20 border border-purple-300/50 dark:border-purple-500/30 backdrop-blur-sm">
+              <div className="mb-4 p-4 rounded-2xl bg-muted/50 border border-border">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-600 via-pink-600 to-blue-600 flex items-center justify-center shadow-lg shadow-purple-500/50">
-                    <UserCheck className="h-6 w-6 text-white" />
+                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                    <UserCheck className="h-6 w-6 text-primary" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm truncate text-slate-800 dark:text-slate-200">
+                    <p className="font-semibold text-sm truncate text-foreground">
                       {user.name || user.email}
                     </p>
                     <div className="flex items-center gap-1.5 mt-1">
-                      <Crown className="h-3 w-3 text-purple-600 dark:text-purple-400" />
-                      <span className="text-xs font-medium text-purple-700 dark:text-purple-400">
+                      <Crown className="h-3 w-3 text-primary" />
+                      <span className="text-xs font-medium text-primary">
                         Super Admin
                       </span>
                     </div>
@@ -357,7 +355,7 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
                 size="sm"
                 onClick={() => setIsCollapsed(!isCollapsed)}
                 className={cn(
-                  "flex-1 border-purple-300 dark:border-purple-700 hover:bg-purple-100 dark:hover:bg-purple-900/30",
+                  "flex-1 border-border hover:bg-muted",
                   isCollapsed && "w-full",
                 )}
               >
@@ -368,7 +366,7 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
                   variant="outline"
                   size="sm"
                   onClick={handleLogout}
-                  className="flex-1 gap-2 border-red-300 dark:border-red-700 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400"
+                  className="flex-1 gap-2 border-destructive/20 hover:bg-destructive/10 text-destructive hover:text-destructive"
                 >
                   <LogOut className="h-4 w-4" />
                   Salir
@@ -379,23 +377,23 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Top Bar with Glassmorphism */}
-          <div className="backdrop-blur-xl bg-white/80 dark:bg-slate-900/80 border-b border-white/20 dark:border-slate-700/50 px-8 py-6 shadow-lg">
+        <div className="flex-1 flex flex-col overflow-hidden bg-muted/10">
+          {/* Top Bar */}
+          <div className="bg-background/80 backdrop-blur-sm border-b border-border px-8 py-6">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-3xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent">
+                <h2 className="text-3xl font-bold text-foreground">
                   Panel Super Admin
                 </h2>
-                <p className="text-slate-600 dark:text-slate-400 mt-1 font-medium">
+                <p className="text-muted-foreground mt-1 font-medium">
                   Gestión completa del sistema SaaS
                 </p>
               </div>
 
               <div className="flex items-center gap-4">
                 {/* System Status */}
-                <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700">
-                  <div className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse shadow-lg shadow-green-500/50"></div>
+                <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-green-500/10 border border-green-500/20">
+                  <div className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"></div>
                   <span className="text-sm font-semibold text-green-700 dark:text-green-400">
                     Sistema Operativo
                   </span>
@@ -405,10 +403,10 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="gap-2 border-purple-300 dark:border-purple-700 hover:bg-purple-100 dark:hover:bg-purple-900/30 relative"
+                  className="gap-2 relative"
                 >
                   <Bell className="h-4 w-4" />
-                  <Badge className="absolute -top-2 -right-2 text-xs px-1.5 py-0.5 bg-gradient-to-r from-red-600 to-pink-600 text-white border-0 shadow-lg shadow-red-500/50">
+                  <Badge className="absolute -top-2 -right-2 text-xs px-1.5 py-0.5 bg-destructive text-destructive-foreground border-0">
                     3
                   </Badge>
                 </Button>

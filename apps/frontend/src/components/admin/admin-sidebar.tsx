@@ -161,21 +161,21 @@ export function AdminSidebar() {
   return (
     <TooltipProvider delayDuration={0}>
       <div className={cn(
-        'flex flex-col h-full bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-r border-slate-200/60 dark:border-slate-700/60 transition-all duration-300 shadow-xl',
+        'flex flex-col h-full bg-card border-r border-border transition-all duration-300 shadow-sm',
         isCollapsed ? 'w-[72px]' : 'w-72'
       )}>
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-slate-200/60 dark:border-slate-700/60">
+        <div className="flex items-center justify-between p-4 border-b border-border">
           {!isCollapsed && (
             <div className="flex items-center gap-3">
               <div className="relative">
-                <div className="w-10 h-10 bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/25">
-                  <Zap className="w-5 h-5 text-white" />
+                <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-md">
+                  <Zap className="w-5 h-5 text-primary-foreground" />
                 </div>
-                <div className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white dark:border-slate-900 animate-pulse" />
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-background animate-pulse" />
               </div>
               <div>
-                <h2 className="font-bold text-lg bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">
+                <h2 className="font-bold text-lg text-foreground">
                   Admin Panel
                 </h2>
                 <p className="text-xs text-muted-foreground">Control Center</p>
@@ -335,11 +335,11 @@ export function AdminSidebar() {
             <Button
               variant="outline"
               size="sm"
-              className="w-full justify-start gap-2 bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 hover:from-slate-100 hover:to-slate-200 dark:hover:from-slate-700 dark:hover:to-slate-800 border-slate-200 dark:border-slate-700"
+              className="w-full justify-start gap-2 bg-muted/50 hover:bg-muted border-border"
               asChild
             >
               <Link href="/dashboard">
-                <LayoutDashboard className="w-4 h-4 text-slate-500" />
+                <LayoutDashboard className="w-4 h-4 text-muted-foreground" />
                 <span>Ir al Dashboard</span>
               </Link>
             </Button>
@@ -347,15 +347,15 @@ export function AdminSidebar() {
         )}
 
         {/* User Info */}
-        <div className="p-3 border-t border-slate-200/60 dark:border-slate-700/60 bg-gradient-to-r from-slate-50/50 to-slate-100/50 dark:from-slate-800/50 dark:to-slate-900/50">
+        <div className="p-3 border-t border-border bg-muted/30">
           {!isCollapsed ? (
             <div className="space-y-3">
-              <div className="flex items-center gap-3 p-2 rounded-xl bg-white/60 dark:bg-slate-800/60 backdrop-blur-sm">
+              <div className="flex items-center gap-3 p-2 rounded-xl bg-background border border-border">
                 <div className="relative">
-                  <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-purple-600 rounded-full flex items-center justify-center shadow-lg">
-                    <User className="w-5 h-5 text-white" />
+                  <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                    <User className="w-5 h-5 text-primary" />
                   </div>
-                  <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white dark:border-slate-800" />
+                  <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-background" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm truncate text-slate-900 dark:text-white">

@@ -29,8 +29,6 @@ export function AdminStats({ stats, trends }: AdminStatsProps) {
       description: 'Empresas registradas',
       icon: Building2,
       trend: trends?.organizations,
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-50 dark:bg-blue-950',
     },
     {
       title: 'Usuarios Totales',
@@ -38,8 +36,6 @@ export function AdminStats({ stats, trends }: AdminStatsProps) {
       description: 'Usuarios en todas las orgs',
       icon: Users,
       trend: trends?.users,
-      color: 'text-violet-600',
-      bgColor: 'bg-violet-50 dark:bg-violet-950',
     },
     {
       title: 'Suscripciones Activas',
@@ -47,8 +43,6 @@ export function AdminStats({ stats, trends }: AdminStatsProps) {
       description: 'Organizaciones pagando',
       icon: CreditCard,
       trend: trends?.subscriptions,
-      color: 'text-green-600',
-      bgColor: 'bg-green-50 dark:bg-green-950',
     },
     {
       title: 'MRR Estimado',
@@ -56,8 +50,6 @@ export function AdminStats({ stats, trends }: AdminStatsProps) {
       description: 'Ingreso recurrente mensual',
       icon: DollarSign,
       trend: trends?.revenue,
-      color: 'text-amber-600',
-      bgColor: 'bg-amber-50 dark:bg-amber-950',
     },
   ];
 
@@ -73,21 +65,20 @@ export function AdminStats({ stats, trends }: AdminStatsProps) {
           return (
             <Card
               key={index}
-              className="relative overflow-hidden transition-all hover:shadow-lg hover:-translate-y-1 cursor-pointer border-l-4"
-              style={{ borderLeftColor: stat.color.replace('text-', '#') }}
+              className="relative overflow-hidden transition-all hover:shadow-lg hover:-translate-y-1 cursor-pointer border-l-4 border-l-primary"
             >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
                   {stat.title}
                 </CardTitle>
-                <div className={`${stat.bgColor} p-2 rounded-lg`}>
-                  <Icon className={`h-4 w-4 ${stat.color}`} />
+                <div className="bg-primary/10 p-2 rounded-lg">
+                  <Icon className="h-4 w-4 text-primary" />
                 </div>
               </CardHeader>
               <CardContent>
                 <div className="flex items-end justify-between">
                   <div className="space-y-1">
-                    <div className="text-2xl font-bold">{stat.value}</div>
+                    <div className="text-2xl font-bold text-foreground">{stat.value}</div>
                     <p className="text-xs text-muted-foreground">
                       {stat.description}
                     </p>
@@ -99,9 +90,9 @@ export function AdminStats({ stats, trends }: AdminStatsProps) {
                         <div
                           className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full ${
                             isPositive
-                              ? 'text-green-600 bg-green-50 dark:bg-green-950'
+                              ? 'text-green-600 bg-green-50 dark:bg-green-950/30 dark:text-green-400'
                               : isNegative
-                              ? 'text-red-600 bg-red-50 dark:bg-red-950'
+                              ? 'text-destructive bg-destructive/10'
                               : 'text-muted-foreground bg-muted'
                           }`}
                         >
