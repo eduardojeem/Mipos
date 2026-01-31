@@ -2,7 +2,6 @@
 
 import { SuperAdminGuard } from '../components/SuperAdminGuard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { 
   Activity, 
@@ -10,7 +9,6 @@ import {
   HardDrive,
   Globe,
   Users,
-  AlertTriangle,
   RefreshCw
 } from 'lucide-react';
 import { useState, useMemo } from 'react';
@@ -37,8 +35,8 @@ export default function MonitoringPage() {
 
   const aggregates = useMemo(() => {
     return organizations.reduce((acc, org) => {
-      const settings = (org.settings as any) || {};
-      const usage = settings.usage || {};
+      const settings = (org.settings as Record<string, unknown>) || {};
+      const usage = (settings.usage as Record<string, number>) || {};
       const computed = usageByOrg[org.id];
 
       return {

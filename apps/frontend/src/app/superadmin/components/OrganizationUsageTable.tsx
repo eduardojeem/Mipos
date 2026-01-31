@@ -39,11 +39,11 @@ import { Card, CardContent } from '@/components/ui/card';
 
 interface OrganizationUsageTableProps {
   organizations: Organization[];
-  onUpdateLimits?: (id: string, limits: any) => Promise<void>;
+  onUpdateLimits?: (id: string, limits: Record<string, number>) => Promise<void>;
   usageByOrg?: Record<string, {
-    db_size_mb: number;
-    storage_size_mb: number;
-    bandwidth_mb: number;
+    db_size_mb: number | null;
+    storage_size_mb: number | null;
+    bandwidth_mb: number | null;
   }>;
 }
 
@@ -66,7 +66,8 @@ export function OrganizationUsageTable({
   const handleOpenLimits = (org: Organization) => {
     setSelectedOrg(org);
     // Extract limits from settings or use defaults
-    const orgLimits = (org.settings as any)?.limits || {};
+    const orgSettings = (org.settings as Record<string, unknown>) || {};
+    const orgLimits = (orgSettings.limits as Record<string, number>) || {};
     setLimits({
       dbSizeLimit: orgLimits.db_size_mb || 1000,
       storageSizeLimit: orgLimits.storage_size_mb || 5000,
@@ -90,13 +91,14 @@ export function OrganizationUsageTable({
 
   // Enhance organizations with usage data
   const enhancedOrgs = organizations.map(org => {
-    const orgSettings = (org.settings as any) || {};
-    const orgLimits = orgSettings.limits || {};
+    const orgSettings = (org.settings as Record<string, unknown>) || {};
+    const orgLimits = (orgSettings.limits as Record<string, number>) || {};
+    const orgUsage = (orgSettings.usage as Record<string, number>) || {};
     const computed = usageByOrg?.[org.id];
 
-    const dbSize = computed?.db_size_mb ?? orgSettings.usage?.db_size_mb ?? null;
-    const storageSize = computed?.storage_size_mb ?? orgSettings.usage?.storage_size_mb ?? null;
-    const bandwidth = computed?.bandwidth_mb ?? orgSettings.usage?.bandwidth_mb ?? null;
+    const dbSize = computed?.db_size_mb ?? orgUsage.db_size_mb ?? null;
+    const storageSize = computed?.storage_size_mb ?? orgUsage.storage_size_mb ?? null;
+    const bandwidth = computed?.bandwidth_mb ?? orgUsage.bandwidth_mb ?? null;
 
     const dbLimit = orgLimits.db_size_mb || 1000;
     const storageLimit = orgLimits.storage_size_mb || 5000;
