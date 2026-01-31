@@ -39,16 +39,15 @@ import { es } from 'date-fns/locale';
 
 interface OrganizationsTableProps {
   organizations: Organization[];
-  onUpdate?: (id: string, updates: Partial<Organization>) => Promise<any>;
-  onDelete?: (id: string) => Promise<any>;
-  onSuspend?: (id: string) => Promise<any>;
-  onActivate?: (id: string) => Promise<any>;
+  onUpdate?: (id: string, updates: Partial<Organization>) => Promise<void>;
+  onDelete?: (id: string) => Promise<void>;
+  onSuspend?: (id: string) => Promise<void>;
+  onActivate?: (id: string) => Promise<void>;
   updatingId?: string | null;
 }
 
 export function OrganizationsTable({
   organizations,
-  onUpdate,
   onDelete,
   onSuspend,
   onActivate,
@@ -68,24 +67,29 @@ export function OrganizationsTable({
   };
 
   const sortedOrganizations = [...organizations].sort((a, b) => {
-    let aVal: any = a[sortBy as keyof Organization];
-    let bVal: any = b[sortBy as keyof Organization];
+    const key = sortBy as keyof Organization;
+    const aVal = a[key];
+    const bVal = b[key];
 
     if (sortBy === 'created_at') {
-      aVal = new Date(aVal).getTime();
-      bVal = new Date(bVal).getTime();
+      const aTime = new Date(aVal as string).getTime();
+      const bTime = new Date(bVal as string).getTime();
+      return sortOrder === 'asc' ? aTime - bTime : bTime - aTime;
     }
 
+    const aString = String(aVal).toLowerCase();
+    const bString = String(bVal).toLowerCase();
+
     if (sortOrder === 'asc') {
-      return aVal > bVal ? 1 : -1;
+      return aString > bString ? 1 : -1;
     } else {
-      return aVal < bVal ? 1 : -1;
+      return aString < bString ? 1 : -1;
     }
   });
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, { variant: any; className: string; label: string }> = {
-      ACTIVE: { variant: 'default', className: 'bg-green-500 hover:bg-green-600', label: 'Activo' },
+    const variants: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; className: string; label: string }> = {
+      ACTIVE: { variant: 'default', className: 'bg-green-500 hover:bg-green-600 text-white', label: 'Activo' },
       TRIAL: { variant: 'secondary', className: 'bg-blue-500 hover:bg-blue-600 text-white', label: 'Prueba' },
       SUSPENDED: { variant: 'secondary', className: 'bg-amber-500 hover:bg-amber-600 text-white', label: 'Suspendido' },
       CANCELLED: { variant: 'secondary', className: 'bg-red-500 hover:bg-red-600 text-white', label: 'Cancelado' },
