@@ -58,6 +58,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
+    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    if (!orgId) {
+      return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
+    }
+
     const url = new URL(request.url);
     const page = parseInt(url.searchParams.get('page') || '1');
     const limit = parseInt(url.searchParams.get('limit') || '20');
@@ -79,6 +84,7 @@ export async function GET(request: NextRequest) {
           product_name
         )
       `)
+      .eq('organization_id', orgId)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
@@ -150,6 +156,11 @@ export async function POST(request: NextRequest) {
 
     if (!['CASH', 'CARD', 'TRANSFER'].includes(paymentMethod)) {
       return NextResponse.json({ error: 'Método de pago inválido' }, { status: 400 });
+    }
+
+    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    if (!orgId) {
+      return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
     }
 
     const supabase = await createClient();
@@ -251,7 +262,8 @@ export async function POST(request: NextRequest) {
         total,
         notes: notes || null,
         status: 'PENDING',
-        order_source: 'WEB'
+        order_source: 'WEB',
+        organization_id: orgId
       })
       .select()
       .single();

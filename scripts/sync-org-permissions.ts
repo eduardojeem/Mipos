@@ -16,21 +16,21 @@ if (!supabaseUrl || !supabaseKey) {
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const PLAN_LIMITS = {
-  free: { maxUsers: 2, maxProducts: 50, maxTransactionsPerMonth: 200, maxLocations: 1 },
-  starter: { maxUsers: 5, maxProducts: 500, maxTransactionsPerMonth: 1000, maxLocations: 1 },
-  pro: { maxUsers: 10, maxProducts: 2000, maxTransactionsPerMonth: 5000, maxLocations: 3 },
-  professional: { maxUsers: 10, maxProducts: 2000, maxTransactionsPerMonth: 5000, maxLocations: 3 },
+  free: { maxUsers: 1, maxProducts: 20, maxTransactionsPerMonth: 50, maxLocations: 1 },
+  starter: { maxUsers: 2, maxProducts: 100, maxTransactionsPerMonth: 200, maxLocations: 1 },
+  pro: { maxUsers: 5, maxProducts: 1000, maxTransactionsPerMonth: 5000, maxLocations: 3 },
+  professional: { maxUsers: 5, maxProducts: 1000, maxTransactionsPerMonth: 5000, maxLocations: 3 },
   premium: { maxUsers: -1, maxProducts: -1, maxTransactionsPerMonth: -1, maxLocations: -1 },
   enterprise: { maxUsers: -1, maxProducts: -1, maxTransactionsPerMonth: -1, maxLocations: -1 }
 };
 
 const PLAN_FEATURES_DESC = {
-  free: ['Soporte por email', 'Reportes básicos', 'Gestión de inventario simple'],
-  starter: ['Soporte prioritario', 'Reportes detallados', 'Gestión de clientes', 'Control de stock avanzado'],
-  pro: ['Múltiples sucursales', 'API de integración', 'Roles y permisos avanzados', 'Soporte 24/7'],
-  professional: ['Múltiples sucursales', 'API de integración', 'Roles y permisos avanzados', 'Soporte 24/7'],
-  premium: ['Todo ilimitado', 'Gerente de cuenta dedicado', 'Auditoría de logs', 'Marca blanca'],
-  enterprise: ['Todo ilimitado', 'Gerente de cuenta dedicado', 'Auditoría de logs', 'Marca blanca']
+  free: ['Soporte por email', 'Gestión de inventario simple'],
+  starter: ['Soporte por email', 'Reportes básicos', 'Gestión de inventario', '1 Vendedor'],
+  pro: ['Soporte prioritario', 'Reportes avanzados', 'Gestión de clientes', 'Control de stock avanzado', 'Múltiples roles'],
+  professional: ['Soporte prioritario', 'Reportes avanzados', 'Gestión de clientes', 'Control de stock avanzado', 'Múltiples roles'],
+  premium: ['Todo ilimitado', 'Gerente de cuenta dedicado', 'Auditoría de logs', 'Marca blanca', 'API Access'],
+  enterprise: ['Todo ilimitado', 'Gerente de cuenta dedicado', 'Auditoría de logs', 'Marca blanca', 'API Access']
 };
 
 const PLAN_PERMISSIONS = {
@@ -38,15 +38,15 @@ const PLAN_PERMISSIONS = {
     can_access_analytics: false,
     can_export_reports: false,
     can_manage_team: false,
-    can_access_admin_panel: false,
+    can_access_admin_panel: false, // Limited admin panel
     can_manage_inventory_advanced: false
   },
   starter: {
     can_access_analytics: true,
     can_export_reports: false,
-    can_manage_team: true,
-    can_access_admin_panel: false,
-    can_manage_inventory_advanced: true
+    can_manage_team: true, // Limited to cashier/employee
+    can_access_admin_panel: true,
+    can_manage_inventory_advanced: false
   },
   pro: {
     can_access_analytics: true,

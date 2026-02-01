@@ -48,6 +48,11 @@ export async function GET(request: NextRequest) {
 
     // Parse query params
     const { searchParams } = new URL(request.url);
+    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    if (!orgId) {
+      return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
+    }
+
     const page = Number(searchParams.get('page') || 1);
     const limit = Number(searchParams.get('limit') || 50);
     const customerId = searchParams.get('customer_id') || undefined;
@@ -147,6 +152,7 @@ export async function GET(request: NextRequest) {
       let query = (supabase as any)
         .from('sales')
         .select(selectFields, { count: 'exact' })
+        .eq('organization_id', orgId)
         .order('created_at', { ascending: false });
 
       if (saleId) query = query.eq('id', saleId);
@@ -330,6 +336,11 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
+    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    if (!orgId) {
+      return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
+    }
+
     const supabase = await createClient();
     const { data: { user }, error: userError } = await (supabase as any).auth.getUser();
 
@@ -486,6 +497,7 @@ export async function POST(request: NextRequest) {
       status: 'COMPLETED',
       sale_type: sale_type || 'RETAIL',
       notes: notes || null,
+      organization_id: orgId,
     };
     // Intentar incluir discount_type si la columna existe; en caso de error, habrá fallback al backend
     if (typeof body?.discount_type === 'string') {
@@ -572,6 +584,7 @@ export async function POST(request: NextRequest) {
         )
       `)
       .eq('id', insertedSale.id)
+      .eq('organization_id', orgId)
       .single();
 
     if (!saleFullError && saleFull) {

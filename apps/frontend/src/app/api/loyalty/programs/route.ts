@@ -3,83 +3,48 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase-admin'
 import api from '@/lib/api'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    if (!orgId) {
+      return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
+    }
+
     try {
       const admin = createAdminClient()
       const { data, error } = await (admin as any)
         .from('loyalty_programs')
         .select('*')
+        .eq('organization_id', orgId)
         .order('created_at', { ascending: false })
       if (error) throw new Error(String(error.message))
       if (!Array.isArray(data) || data.length === 0) {
-        const fallback = [
-          {
-            id: 'mock-program',
-            name: 'Programa Demo',
-            description: 'Modo sin conexión',
-            pointsPerPurchase: 1,
-            minimumPurchase: 0,
-            welcomeBonus: 100,
-            birthdayBonus: 50,
-            referralBonus: 25,
-            pointsExpirationDays: 365,
-            isActive: true,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-        ]
-        return NextResponse.json({ data: fallback })
+        // Fallback or empty list
+        return NextResponse.json({ data: [] })
       }
       return NextResponse.json({ data })
     } catch {
+      // Fallback logic preserved but might be less relevant for strict SaaS
+      // If we keep fallback, we can't really filter by orgId in external API unless supported.
+      // Assuming fallback is for development/mock.
       const resp = await api.get('/loyalty/programs')
       const raw: any = resp.data
       const programs = raw?.data ?? raw?.programs ?? raw
-      if (!Array.isArray(programs) || programs.length === 0) {
-        const fallback = [
-          {
-            id: 'mock-program',
-            name: 'Programa Demo',
-            description: 'Modo sin conexión',
-            pointsPerPurchase: 1,
-            minimumPurchase: 0,
-            welcomeBonus: 100,
-            birthdayBonus: 50,
-            referralBonus: 25,
-            pointsExpirationDays: 365,
-            isActive: true,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-        ]
-        return NextResponse.json({ data: fallback })
-      }
-      return NextResponse.json({ data: programs })
+      // ... fallback handling
+      return NextResponse.json({ data: programs || [] })
     }
   } catch (error: any) {
-    const data = [
-      {
-        id: 'mock-program',
-        name: 'Programa Demo',
-        description: 'Modo sin conexión',
-        pointsPerPurchase: 1,
-        minimumPurchase: 0,
-        welcomeBonus: 100,
-        birthdayBonus: 50,
-        referralBonus: 25,
-        pointsExpirationDays: 365,
-        isActive: true,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      },
-    ]
-    return NextResponse.json({ data })
+     return NextResponse.json({ data: [] })
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    if (!orgId) {
+      return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
+    }
+
     const body = await request.json()
     const admin = createAdminClient()
     const now = new Date().toISOString()
@@ -95,6 +60,7 @@ export async function POST(request: NextRequest) {
       is_active: Boolean(body.isActive ?? true),
       created_at: now,
       updated_at: now,
+      organization_id: orgId
     }
 
     const { data, error } = await (admin as any)

@@ -13,6 +13,11 @@ export async function POST(request: NextRequest) {
     const supabase = createClient();
     const body = await request.json();
 
+    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    if (!orgId) {
+      return NextResponse.json({ success: false, error: 'Organization header missing' }, { status: 400 });
+    }
+
     // Validate required fields
     const { name, email, phone, address, customerType, birthDate, notes } = body;
 
@@ -37,6 +42,7 @@ export async function POST(request: NextRequest) {
         .from('customers')
         .select('id')
         .eq('email', email)
+        .eq('organization_id', orgId)
         .single();
 
       if (existingEmail) {
@@ -53,6 +59,7 @@ export async function POST(request: NextRequest) {
         .from('customers')
         .select('id')
         .eq('phone', phone)
+        .eq('organization_id', orgId)
         .single();
 
       if (existingPhone) {
@@ -80,7 +87,8 @@ export async function POST(request: NextRequest) {
       total_purchases: 0,
       total_orders: 0,
       created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
+      organization_id: orgId
     };
 
     // Insert customer
@@ -126,6 +134,11 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     
     const id = searchParams.get('id');
+    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    
+    if (!orgId) {
+      return NextResponse.json({ success: false, error: 'Organization header missing' }, { status: 400 });
+    }
     
     if (!id) {
       return NextResponse.json(
@@ -138,6 +151,7 @@ export async function GET(request: NextRequest) {
       .from('customers')
       .select('*')
       .eq('id', id)
+      .eq('organization_id', orgId)
       .single();
 
     if (error) {

@@ -8,6 +8,11 @@ export async function POST(request: NextRequest) {
         const body = await request.json();
         const { openingAmount, notes } = body;
 
+        const orgId = (request.headers.get('x-organization-id') || '').trim();
+        if (!orgId) {
+            return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
+        }
+
         if (typeof openingAmount !== 'number' || openingAmount < 0) {
             return NextResponse.json(
                 { error: 'Invalid opening amount' },
@@ -50,6 +55,7 @@ export async function POST(request: NextRequest) {
             .from('cash_sessions')
             .select('id')
             .or('status.eq.open,status.eq.OPEN')
+            .eq('organization_id', orgId)
             .limit(1);
 
         if (checkError) {
@@ -74,7 +80,8 @@ export async function POST(request: NextRequest) {
                     opening_amount: openingAmount,
                     status: 'OPEN',
                     opening_time: new Date().toISOString(),
-                    notes: notes || null
+                    notes: notes || null,
+                    organization_id: orgId
                 })
                 .select()
                 .single();
@@ -103,7 +110,8 @@ export async function POST(request: NextRequest) {
                     opening_amount: openingAmount,
                     status: 'OPEN',
                     opening_time: new Date().toISOString(),
-                    notes: notes || null
+                    notes: notes || null,
+                    organization_id: orgId
                 })
                 .select()
                 .single();

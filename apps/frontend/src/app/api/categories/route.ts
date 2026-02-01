@@ -13,10 +13,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, categories: [], data: [], count: 0 })
     }
 
-    const { data: categories, error } = await (supabase as any)
+    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    if (!orgId) {
+      return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
+    }
+
+    let query = (supabase as any)
       .from('categories')
       .select('id, name, description')
+      .eq('organization_id', orgId)
       .order('name')
+
+    const { data: categories, error } = await query
 
     if (error) {
       console.error('Error fetching categories:', error)
@@ -54,6 +62,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
     }
 
+    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    if (!orgId) {
+      return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
+    }
+
     const body = await request.json()
     const name = String(body?.name || '').trim()
     const description = typeof body?.description === 'string' ? body.description : ''
@@ -68,6 +81,7 @@ export async function POST(request: NextRequest) {
       .from('categories')
       .select('id')
       .eq('name', name)
+      .eq('organization_id', orgId)
       .maybeSingle()
 
     if (existing) {
@@ -76,7 +90,7 @@ export async function POST(request: NextRequest) {
 
     const { data, error } = await (supabase as any)
       .from('categories')
-      .insert([{ name, description, is_active }])
+      .insert([{ name, description, is_active, organization_id: orgId }])
       .select('id,name,description,is_active,created_at,updated_at')
       .single()
 

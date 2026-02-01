@@ -13,6 +13,11 @@ export async function GET(request: NextRequest) {
     const supabase = createClient();
     const { searchParams } = new URL(request.url);
 
+    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    if (!orgId) {
+      return NextResponse.json({ success: false, error: 'Organization header missing' }, { status: 400 });
+    }
+
     // Parse query parameters
     const page = parseInt(searchParams.get('page') || '1');
     const limit = Math.min(parseInt(searchParams.get('limit') || '30'), 100); // Max 100 items
@@ -39,7 +44,8 @@ export async function GET(request: NextRequest) {
         last_purchase,
         created_at,
         updated_at
-      `);
+      `, { count: 'exact' })
+      .eq('organization_id', orgId);
 
     // Apply filters
     if (status === 'active') {

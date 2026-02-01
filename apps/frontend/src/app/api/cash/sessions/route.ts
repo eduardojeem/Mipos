@@ -31,6 +31,11 @@ export async function GET(request: NextRequest) {
 
     // Filtros y paginación
     const { searchParams } = request.nextUrl
+    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    if (!orgId) {
+      return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
+    }
+
     const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10))
     const limit = Math.max(1, parseInt(searchParams.get('limit') || '20', 10))
     const status = searchParams.get('status') || undefined
@@ -57,6 +62,7 @@ export async function GET(request: NextRequest) {
         opened_by_user:opened_by(id, email, full_name),
         closed_by_user:closed_by(id, email, full_name)
       `, { count: 'exact' })
+      .eq('organization_id', orgId)
       .order(orderColumn, { ascending: orderDir === 'asc' })
 
     if (status && status !== 'all') {

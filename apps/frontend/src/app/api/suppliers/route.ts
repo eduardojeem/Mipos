@@ -18,9 +18,15 @@ export async function GET(request: NextRequest) {
     const cookieStore = await cookies()
     const supabase = await createServerClient(cookieStore)
 
+    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    if (!orgId) {
+      return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
+    }
+
     let query = supabase
       .from('suppliers')
       .select('*', { count: 'exact' })
+      .eq('organization_id', orgId)
       .range(offset, offset + limit - 1)
       .order('created_at', { ascending: false })
 
@@ -87,6 +93,11 @@ export async function POST(request: NextRequest) {
     const cookieStore = await cookies()
     const supabase = await createServerClient(cookieStore)
 
+    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    if (!orgId) {
+      return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
+    }
+
     // Validate required fields
     if (!body.name) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 })
@@ -100,7 +111,8 @@ export async function POST(request: NextRequest) {
       phone: body.contactInfo?.phone,
       address: body.contactInfo?.address,
       tax_id: body.taxId,
-      is_active: body.status === 'active'
+      is_active: body.status === 'active',
+      organization_id: orgId
     }
 
     const { data, error } = await supabase
