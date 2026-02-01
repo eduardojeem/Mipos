@@ -13,6 +13,11 @@ export async function GET(request: NextRequest) {
     const supabase = createClient();
     const { searchParams } = new URL(request.url);
     
+    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    if (!orgId) {
+      return NextResponse.json({ success: false, error: 'Organization header missing' }, { status: 400 });
+    }
+
     const period = searchParams.get('period') || '30'; // days
     const includeSegmentation = searchParams.get('segmentation') === 'true';
     const includeTrends = searchParams.get('trends') === 'true';
@@ -33,7 +38,8 @@ export async function GET(request: NextRequest) {
         total_orders,
         last_purchase,
         created_at
-      `);
+      `)
+      .eq('organization_id', orgId);
 
     if (!customers) {
       throw new Error('Failed to fetch customer data');
@@ -43,7 +49,7 @@ export async function GET(request: NextRequest) {
     const analytics = {
       overview: calculateOverviewMetrics(customers),
       ...(includeSegmentation && { segmentation: calculateSegmentation(customers) }),
-      ...(includeTrends && { trends: await calculateTrends(supabase, periodDays) }),
+      ...(includeTrends && { trends: await calculateTrends(supabase, periodDays, orgId) }),
       riskAnalysis: calculateRiskAnalysis(customers),
       valueAnalysis: calculateValueAnalysis(customers),
       generatedAt: new Date().toISOString()
@@ -133,7 +139,7 @@ function calculateSegmentation(customers: any[]) {
   return segmentationWithPercentages;
 }
 
-async function calculateTrends(supabase: any, periodDays: number) {
+async function calculateTrends(supabase: any, periodDays: number, orgId: string) {
   const intervals = Math.min(periodDays, 30); // Max 30 data points
   const intervalDays = Math.ceil(periodDays / intervals);
   
@@ -150,6 +156,7 @@ async function calculateTrends(supabase: any, periodDays: number) {
     const { count: newCustomers } = await supabase
       .from('customers')
       .select('*', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
       .gte('created_at', startDate.toISOString())
       .lt('created_at', endDate.toISOString());
 
@@ -157,6 +164,7 @@ async function calculateTrends(supabase: any, periodDays: number) {
     const { data: salesData } = await supabase
       .from('sales')
       .select('total, customer_id')
+      .eq('organization_id', orgId)
       .gte('created_at', startDate.toISOString())
       .lt('created_at', endDate.toISOString());
 

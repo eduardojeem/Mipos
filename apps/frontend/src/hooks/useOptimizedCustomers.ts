@@ -1,6 +1,34 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/components/ui/use-toast';
 
+// Helper to get current organization ID
+const getOrganizationId = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem('selected_organization');
+    if (!raw) return null;
+    if (raw.startsWith('{')) {
+      const parsed = JSON.parse(raw);
+      return parsed?.id || parsed?.organization_id || null;
+    }
+    return raw;
+  } catch {
+    return null;
+  }
+};
+
+// Helper to create headers with org ID
+const getHeaders = () => {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  const orgId = getOrganizationId();
+  if (orgId) {
+    headers['x-organization-id'] = orgId;
+  }
+  return headers;
+};
+
 /**
  * Optimized Customer Management Hooks - Phase 5 Optimization
  * 
@@ -69,7 +97,9 @@ export function useCustomerSummary() {
   return useQuery({
     queryKey: customerKeys.summary(),
     queryFn: async (): Promise<CustomerSummary> => {
-      const response = await fetch('/api/customers/summary');
+      const response = await fetch('/api/customers/summary', {
+        headers: getHeaders()
+      });
       if (!response.ok) {
         throw new Error('Failed to fetch customer summary');
       }
@@ -101,7 +131,9 @@ export function useCustomerList(params: CustomerListParams = {}) {
       if (params.sortBy) searchParams.set('sortBy', params.sortBy);
       if (params.sortOrder) searchParams.set('sortOrder', params.sortOrder);
 
-      const response = await fetch(`/api/customers/list?${searchParams}`);
+      const response = await fetch(`/api/customers/list?${searchParams}`, {
+        headers: getHeaders()
+      });
       if (!response.ok) {
         throw new Error('Failed to fetch customer list');
       }
@@ -130,7 +162,9 @@ export function useCustomerAnalytics(period: string = '30', options: { segmentat
         trends: options.trends ? 'true' : 'false'
       });
 
-      const response = await fetch(`/api/customers/analytics?${searchParams}`);
+      const response = await fetch(`/api/customers/analytics?${searchParams}`, {
+        headers: getHeaders()
+      });
       if (!response.ok) {
         throw new Error('Failed to fetch customer analytics');
       }
@@ -159,7 +193,9 @@ export function useCustomerSearch(params: CustomerSearchParams) {
         stats: params.stats ? 'true' : 'false'
       });
 
-      const response = await fetch(`/api/customers/search?${searchParams}`);
+      const response = await fetch(`/api/customers/search?${searchParams}`, {
+        headers: getHeaders()
+      });
       if (!response.ok) {
         throw new Error('Failed to search customers');
       }
@@ -181,7 +217,9 @@ export function useCustomerDetail(id: string) {
   return useQuery({
     queryKey: customerKeys.detail(id),
     queryFn: async () => {
-      const response = await fetch(`/api/customers/${id}`);
+      const response = await fetch(`/api/customers/${id}`, {
+        headers: getHeaders()
+      });
       if (!response.ok) {
         throw new Error('Failed to fetch customer details');
       }
@@ -207,7 +245,7 @@ export function useCreateCustomer() {
     mutationFn: async (customerData: any) => {
       const response = await fetch('/api/customers', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeaders(),
         body: JSON.stringify(customerData),
       });
       
@@ -271,7 +309,7 @@ export function useUpdateCustomer() {
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
       const response = await fetch(`/api/customers/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeaders(),
         body: JSON.stringify(data),
       });
       
@@ -338,6 +376,7 @@ export function useDeleteCustomer() {
     mutationFn: async (id: string) => {
       const response = await fetch(`/api/customers/${id}`, {
         method: 'DELETE',
+        headers: getHeaders()
       });
       
       if (!response.ok) {
@@ -402,7 +441,7 @@ export function useBulkCustomerOperation() {
     mutationFn: async ({ action, customerIds }: { action: string; customerIds: string[] }) => {
       const response = await fetch('/api/customers/bulk', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getHeaders(),
         body: JSON.stringify({ action, customerIds }),
       });
       

@@ -11,6 +11,11 @@ import { createClient } from '@/lib/supabase';
 export async function GET(request: NextRequest) {
   try {
     const supabase = createClient();
+    
+    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    if (!orgId) {
+      return NextResponse.json({ success: false, error: 'Organization header missing' }, { status: 400 });
+    }
 
     // Get basic customer counts with parallel queries
     const [
@@ -21,12 +26,12 @@ export async function GET(request: NextRequest) {
       { count: wholesaleCount },
       { count: regularCount }
     ] = await Promise.all([
-      supabase.from('customers').select('*', { count: 'exact', head: true }),
-      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('is_active', true),
-      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('is_active', false),
-      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('customer_type', 'VIP'),
-      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('customer_type', 'WHOLESALE'),
-      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('customer_type', 'REGULAR')
+      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('organization_id', orgId),
+      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('is_active', true).eq('organization_id', orgId),
+      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('is_active', false).eq('organization_id', orgId),
+      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('customer_type', 'VIP').eq('organization_id', orgId),
+      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('customer_type', 'WHOLESALE').eq('organization_id', orgId),
+      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('customer_type', 'REGULAR').eq('organization_id', orgId)
     ]);
 
     // Get recent customer activity (last 30 days)
@@ -36,12 +41,14 @@ export async function GET(request: NextRequest) {
     const { count: newCustomersCount } = await supabase
       .from('customers')
       .select('*', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
       .gte('created_at', thirtyDaysAgo.toISOString());
 
     // Get customer value metrics
     const { data: valueMetrics } = await supabase
       .from('customers')
       .select('total_purchases, total_orders')
+      .eq('organization_id', orgId)
       .not('total_purchases', 'is', null);
 
     // Calculate aggregated metrics

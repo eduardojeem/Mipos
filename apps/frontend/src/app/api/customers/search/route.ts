@@ -13,6 +13,11 @@ export async function GET(request: NextRequest) {
     const supabase = createClient();
     const { searchParams } = new URL(request.url);
     
+    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    if (!orgId) {
+      return NextResponse.json({ success: false, error: 'Organization header missing' }, { status: 400 });
+    }
+
     const query = searchParams.get('q') || '';
     const limit = Math.min(parseInt(searchParams.get('limit') || '10'), 50);
     const includeSuggestions = searchParams.get('suggestions') === 'true';
@@ -48,6 +53,7 @@ export async function GET(request: NextRequest) {
         last_purchase,
         created_at
       `)
+      .eq('organization_id', orgId)
       .or(`name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%,customer_code.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%`)
       .limit(limit * 2); // Get more results for relevance scoring
 
@@ -79,7 +85,7 @@ export async function GET(request: NextRequest) {
     // Generate suggestions if requested
     let suggestions: string[] = [];
     if (includeSuggestions && results.length < limit) {
-      suggestions = await generateSearchSuggestions(supabase, searchTerm);
+      suggestions = await generateSearchSuggestions(supabase, searchTerm, orgId);
     }
 
     // Generate search stats if requested
@@ -87,7 +93,7 @@ export async function GET(request: NextRequest) {
     if (includeStats) {
       stats = {
         ...stats,
-        ...await generateSearchStats(supabase, searchTerm, results.length)
+        ...await generateSearchStats(supabase, searchTerm, results.length, orgId)
       };
     }
 
@@ -188,7 +194,7 @@ function transformCustomerData(customer: any) {
   };
 }
 
-async function generateSearchSuggestions(supabase: any, searchTerm: string): Promise<string[]> {
+async function generateSearchSuggestions(supabase: any, searchTerm: string, orgId: string): Promise<string[]> {
   const suggestions: Set<string> = new Set();
   const term = searchTerm.toLowerCase();
 
@@ -197,6 +203,7 @@ async function generateSearchSuggestions(supabase: any, searchTerm: string): Pro
     const { data: nameMatches } = await supabase
       .from('customers')
       .select('name')
+      .eq('organization_id', orgId)
       .ilike('name', `${term}%`)
       .limit(5);
 
@@ -210,6 +217,7 @@ async function generateSearchSuggestions(supabase: any, searchTerm: string): Pro
     const { data: emailMatches } = await supabase
       .from('customers')
       .select('email')
+      .eq('organization_id', orgId)
       .ilike('email', `${term}%`)
       .limit(3);
 
@@ -223,6 +231,7 @@ async function generateSearchSuggestions(supabase: any, searchTerm: string): Pro
     const { data: codeMatches } = await supabase
       .from('customers')
       .select('customer_code')
+      .eq('organization_id', orgId)
       .ilike('customer_code', `${term}%`)
       .limit(3);
 
@@ -239,12 +248,13 @@ async function generateSearchSuggestions(supabase: any, searchTerm: string): Pro
   return Array.from(suggestions).slice(0, 5);
 }
 
-async function generateSearchStats(supabase: any, searchTerm: string, resultCount: number) {
+async function generateSearchStats(supabase: any, searchTerm: string, resultCount: number, orgId: string) {
   try {
     // Get total possible matches (without limit)
     const { count: totalMatches } = await supabase
       .from('customers')
       .select('*', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
       .or(`name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%,customer_code.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%`);
 
     // Get match distribution by field
@@ -254,10 +264,10 @@ async function generateSearchStats(supabase: any, searchTerm: string, resultCoun
       { count: codeMatches },
       { count: phoneMatches }
     ] = await Promise.all([
-      supabase.from('customers').select('*', { count: 'exact', head: true }).ilike('name', `%${searchTerm}%`),
-      supabase.from('customers').select('*', { count: 'exact', head: true }).ilike('email', `%${searchTerm}%`),
-      supabase.from('customers').select('*', { count: 'exact', head: true }).ilike('customer_code', `%${searchTerm}%`),
-      supabase.from('customers').select('*', { count: 'exact', head: true }).ilike('phone', `%${searchTerm}%`)
+      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('organization_id', orgId).ilike('name', `%${searchTerm}%`),
+      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('organization_id', orgId).ilike('email', `%${searchTerm}%`),
+      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('organization_id', orgId).ilike('customer_code', `%${searchTerm}%`),
+      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('organization_id', orgId).ilike('phone', `%${searchTerm}%`)
     ]);
 
     return {
