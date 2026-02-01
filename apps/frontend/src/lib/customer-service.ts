@@ -133,6 +133,25 @@ class CustomerService {
     return { isValid: true, errors: [] };
   }
 
+  // Helper para obtener el ID de la organización seleccionada
+  private getOrganizationId(): string | null {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = window.localStorage.getItem('selected_organization');
+      if (!raw) return null;
+      
+      // Intentar parsear si es JSON
+      if (raw.startsWith('{')) {
+        const parsed = JSON.parse(raw);
+        return parsed?.id || parsed?.organization_id || null;
+      }
+      return raw; // Es un string directo (ID)
+    } catch (e) {
+      console.warn('Error reading selected_organization:', e);
+      return null;
+    }
+  }
+
   // Obtener todos los clientes con paginación y filtros
   async getAll(filters: CustomerFilters = { status: 'all', type: 'all', search: '' }): Promise<{ customers: UICustomer[]; stats: CustomerStats; error?: string }> {
     try {
@@ -141,10 +160,20 @@ class CustomerService {
         return await this.getAllMock(filters);
       }
 
+      const orgId = this.getOrganizationId();
+      if (!orgId) {
+        console.warn('No organization selected, returning empty list');
+        return {
+          customers: [],
+          stats: { total: 0, active: 0, inactive: 0, vip: 0, wholesale: 0, regular: 0 }
+        };
+      }
+
       // Fetch directly from Supabase instead of API
       let query = this.supabase
         .from('customers')
-        .select('*');
+        .select('*')
+        .eq('organization_id', orgId);
 
       // Apply filters
       if (filters.status === 'active') {
@@ -193,12 +222,12 @@ class CustomerService {
         { count: wholesaleCount },
         { count: regularCount }
       ] = await Promise.all([
-        this.supabase.from('customers').select('*', { count: 'exact', head: true }),
-        this.supabase.from('customers').select('*', { count: 'exact', head: true }).eq('is_active', true),
-        this.supabase.from('customers').select('*', { count: 'exact', head: true }).eq('is_active', false),
-        this.supabase.from('customers').select('*', { count: 'exact', head: true }).eq('customer_type', 'VIP'),
-        this.supabase.from('customers').select('*', { count: 'exact', head: true }).eq('customer_type', 'WHOLESALE'),
-        this.supabase.from('customers').select('*', { count: 'exact', head: true }).eq('customer_type', 'REGULAR')
+        this.supabase.from('customers').select('*', { count: 'exact', head: true }).eq('organization_id', orgId),
+        this.supabase.from('customers').select('*', { count: 'exact', head: true }).eq('organization_id', orgId).eq('is_active', true),
+        this.supabase.from('customers').select('*', { count: 'exact', head: true }).eq('organization_id', orgId).eq('is_active', false),
+        this.supabase.from('customers').select('*', { count: 'exact', head: true }).eq('organization_id', orgId).eq('customer_type', 'VIP'),
+        this.supabase.from('customers').select('*', { count: 'exact', head: true }).eq('organization_id', orgId).eq('customer_type', 'WHOLESALE'),
+        this.supabase.from('customers').select('*', { count: 'exact', head: true }).eq('organization_id', orgId).eq('customer_type', 'REGULAR')
       ]);
 
       // Transform Supabase data to UICustomer format
@@ -260,10 +289,14 @@ class CustomerService {
   // Obtener cliente por ID
   async getById(id: string): Promise<{ data?: UICustomer; error?: string }> {
     try {
+      const orgId = this.getOrganizationId();
+      if (!orgId) return { error: 'No organization selected' };
+
       const { data: customer, error } = await this.supabase
         .from('customers')
         .select('*')
         .eq('id', id)
+        .eq('organization_id', orgId)
         .single();
 
       if (error) {
@@ -378,6 +411,9 @@ class CustomerService {
   // Crear nuevo cliente
   async create(customerData: Partial<UICustomer>): Promise<{ data?: UICustomer; error?: string; validationErrors?: string[] }> {
     try {
+      const orgId = this.getOrganizationId();
+      if (!orgId) return { error: 'No organization selected' };
+
       // Get the customer_type value  from either customerType (UI) or customer_type (DB)
       const customerType = (customerData as any).customerType ?? customerData.customer_type ?? 'regular';
 
@@ -394,6 +430,7 @@ class CustomerService {
         birth_date: (customerData as any).birthDate ?? customerData.birth_date,
         notes: customerData.notes,
         is_active: customerData.is_active ?? true,
+        organization_id: orgId
       };
 
       // Validate data before submitting
@@ -443,6 +480,9 @@ class CustomerService {
   // Actualizar cliente
   async update(id: string, customerData: Partial<UICustomer>): Promise<{ data?: UICustomer; error?: string; validationErrors?: string[] }> {
     try {
+      const orgId = this.getOrganizationId();
+      if (!orgId) return { error: 'No organization selected' };
+
       // Transform UI data to database format
       const updateData: any = {};
       if (customerData.name !== undefined) updateData.name = customerData.name;
@@ -483,6 +523,7 @@ class CustomerService {
         .from('customers')
         .update(updateData)
         .eq('id', id)
+        .eq('organization_id', orgId)
         .select()
         .single();
 
@@ -517,11 +558,15 @@ class CustomerService {
   // Eliminar cliente (soft delete)
   async delete(id: string): Promise<{ success: boolean; error?: string }> {
     try {
+      const orgId = this.getOrganizationId();
+      if (!orgId) return { success: false, error: 'No organization selected' };
+
       // Soft delete: just mark as inactive
       const { error } = await this.supabase
         .from('customers')
         .update({ is_active: false })
-        .eq('id', id);
+        .eq('id', id)
+        .eq('organization_id', orgId);
 
       if (error) {
         throw new Error(error.message);

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
@@ -41,6 +41,7 @@ type AdminNavItem = {
   description: string
   category: string
   badge?: string
+  roles?: string[]
 }
 
 export const adminNavItems: AdminNavItem[] = [
@@ -57,7 +58,8 @@ export const adminNavItems: AdminNavItem[] = [
     icon: Shield,
     description: 'Panel de Super Administrador SaaS',
     category: 'Principal',
-    badge: 'SUPER'
+    badge: 'SUPER',
+    roles: ['SUPER_ADMIN']
   },
   {
     title: 'Usuarios',
@@ -136,19 +138,29 @@ const categoryConfig: Record<string, { icon: typeof Shield; color: string; gradi
   'Mantenimiento': { icon: Wrench, color: 'text-slate-500', gradient: 'from-slate-500 to-gray-500' }
 }
 
-const groupedNavItems = Object.entries(
-  adminNavItems.reduce((acc, item) => {
-    if (!acc[item.category]) acc[item.category] = []
-    acc[item.category].push(item)
-    return acc
-  }, {} as Record<string, typeof adminNavItems>)
-)
-
 export function AdminSidebar() {
   const { isCollapsed, toggle } = useAdminSidebar()
   const [openCategories, setOpenCategories] = useState<string[]>(['Principal', 'Gestión', 'Seguridad'])
   const pathname = usePathname()
   const { user, signOut } = useAuth()
+
+  const filteredItems = useMemo(() => {
+    const userRole = user?.role || 'USER';
+    return adminNavItems.filter(item => {
+      if (!item.roles) return true;
+      return item.roles.includes(userRole);
+    })
+  }, [user]);
+
+  const groupedNavItems = useMemo(() => {
+    return Object.entries(
+      filteredItems.reduce((acc, item) => {
+        if (!acc[item.category]) acc[item.category] = []
+        acc[item.category].push(item)
+        return acc
+      }, {} as Record<string, typeof adminNavItems>)
+    )
+  }, [filteredItems]);
 
   const toggleCategory = (category: string) => {
     setOpenCategories(prev =>

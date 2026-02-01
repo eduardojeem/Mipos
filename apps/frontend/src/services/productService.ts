@@ -96,6 +96,25 @@ class ProductService {
     }
   }
 
+  // Helper para obtener el ID de la organización seleccionada
+  private getOrganizationId(): string | null {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = window.localStorage.getItem('selected_organization');
+      if (!raw) return null;
+      
+      // Intentar parsear si es JSON
+      if (raw.startsWith('{')) {
+        const parsed = JSON.parse(raw);
+        return parsed?.id || parsed?.organization_id || null;
+      }
+      return raw; // Es un string directo (ID)
+    } catch (e) {
+      console.warn('Error reading selected_organization:', e);
+      return null;
+    }
+  }
+
   /**
    * Optimized Supabase query with minimal data selection
    */
@@ -104,6 +123,15 @@ class ProductService {
     const limit = options.limit || 20;
     const from = (page - 1) * limit;
     const to = from + limit - 1;
+
+    const orgId = this.getOrganizationId();
+    if (!orgId) {
+      console.warn('No organization selected, returning empty list');
+      return {
+        products: [],
+        pagination: { page, limit, total: 0, pages: 0 }
+      };
+    }
 
     // Optimized select - solo campos necesarios para reducir payload
     let query = this.supabase
@@ -114,7 +142,8 @@ class ProductService {
         barcode, image_url, is_active, created_at, updated_at,
         category:categories!products_category_id_fkey(id, name),
         supplier:suppliers!products_supplier_id_fkey(id, name)
-      `, { count: 'exact' });
+      `, { count: 'exact' })
+      .eq('organization_id', orgId);
 
     // Apply filters
     if (options.filters) {
@@ -215,6 +244,19 @@ class ProductService {
 
   async getProductById(id: string): Promise<Product> {
     try {
+      // Intentar primero con Supabase
+      const orgId = this.getOrganizationId();
+      if (orgId) {
+        const { data, error } = await this.supabase
+          .from('products')
+          .select('*')
+          .eq('id', id)
+          .eq('organization_id', orgId)
+          .single();
+        
+        if (data && !error) return this.normalizeProduct(data);
+      }
+
       const response = await api.get(`/products/${id}`);
       const raw = response.data.product || response.data;
       return this.normalizeProduct(raw);
@@ -258,6 +300,16 @@ class ProductService {
 
   async getCategories(): Promise<Category[]> {
     try {
+      const orgId = this.getOrganizationId();
+      if (orgId) {
+        const { data, error } = await this.supabase
+          .from('categories')
+          .select('*')
+          .eq('organization_id', orgId);
+        
+        if (data && !error) return data as Category[];
+      }
+
       const response = await api.get('/categories/public');
       return response.data.categories || response.data || [];
     } catch (error) {
@@ -268,6 +320,17 @@ class ProductService {
 
   async getLowStockProducts(threshold: number = 10): Promise<Product[]> {
     try {
+      const orgId = this.getOrganizationId();
+      if (orgId) {
+        const { data, error } = await this.supabase
+          .from('products')
+          .select('*')
+          .eq('organization_id', orgId)
+          .lte('stock_quantity', threshold);
+        
+        if (data && !error) return data.map(p => this.normalizeProduct(p));
+      }
+
       const response = await api.get(`/products/low-stock?threshold=${threshold}`);
       return response.data.products || response.data || [];
     } catch (error) {
@@ -278,6 +341,18 @@ class ProductService {
 
   async searchProducts(query: string, limit: number = 10): Promise<Product[]> {
     try {
+      const orgId = this.getOrganizationId();
+      if (orgId) {
+        const { data, error } = await this.supabase
+          .from('products')
+          .select('*')
+          .eq('organization_id', orgId)
+          .ilike('name', `%${query}%`)
+          .limit(limit);
+        
+        if (data && !error) return data.map(p => this.normalizeProduct(p));
+      }
+
       const response = await api.get(`/products?search=${encodeURIComponent(query)}&limit=${limit}`);
       return response.data.products || [];
     } catch (error) {

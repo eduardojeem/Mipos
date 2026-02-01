@@ -76,8 +76,39 @@ export default function CategoriesPage() {
   const loadCategories = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await api.get('/categories/public');
-      setCategories(response.data.categories || []);
+      if (isSupabaseActive()) {
+        const supabase = createClient();
+        const orgId = (() => {
+          try {
+            if (typeof window === 'undefined') return null;
+            const raw = window.localStorage.getItem('selected_organization');
+            if (!raw) return null;
+            try { const p = JSON.parse(raw); return p?.id || p?.organization_id || null; } catch { return raw; }
+          } catch { return null; }
+        })();
+
+        let query = supabase
+          .from('categories')
+          .select('*, products(count)')
+          .order('created_at', { ascending: false });
+
+        if (orgId) {
+          query = query.eq('organization_id', orgId);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+
+        // Transform Supabase data to match interface
+        const transformed = (data || []).map((c: any) => ({
+          ...c,
+          _count: { products: c.products?.[0]?.count || 0 }
+        }));
+        setCategories(transformed);
+      } else {
+        const response = await api.get('/categories/public');
+        setCategories(response.data.categories || []);
+      }
     } catch (error) {
       console.error('Error loading categories:', error);
       toast({
@@ -213,12 +244,42 @@ export default function CategoriesPage() {
     setSubmitting(true);
     
     try {
-      if (editingCategory) {
-        await api.put(`/categories/${editingCategory.id}`, formData);
-        toast({ title: 'Categoría actualizada' });
+      if (isSupabaseActive()) {
+        const supabase = createClient();
+        const orgId = (() => {
+          try {
+            if (typeof window === 'undefined') return null;
+            const raw = window.localStorage.getItem('selected_organization');
+            if (!raw) return null;
+            try { const p = JSON.parse(raw); return p?.id || p?.organization_id || null; } catch { return raw; }
+          } catch { return null; }
+        })();
+
+        if (!orgId) throw new Error('No hay organización seleccionada');
+
+        if (editingCategory) {
+          const { error } = await supabase
+            .from('categories')
+            .update({ ...formData, organization_id: orgId }) // Ensure orgId is kept
+            .eq('id', editingCategory.id)
+            .eq('organization_id', orgId); // Security check
+          if (error) throw error;
+          toast({ title: 'Categoría actualizada' });
+        } else {
+          const { error } = await supabase
+            .from('categories')
+            .insert({ ...formData, organization_id: orgId });
+          if (error) throw error;
+          toast({ title: 'Categoría creada' });
+        }
       } else {
-        await api.post('/categories', formData);
-        toast({ title: 'Categoría creada' });
+        if (editingCategory) {
+          await api.put(`/categories/${editingCategory.id}`, formData);
+          toast({ title: 'Categoría actualizada' });
+        } else {
+          await api.post('/categories', formData);
+          toast({ title: 'Categoría creada' });
+        }
       }
       
       handleCloseModal();
@@ -232,7 +293,29 @@ export default function CategoriesPage() {
   
   const handleToggleStatus = useCallback(async (categoryId: string, currentStatus: boolean) => {
     try {
-      await api.put(`/categories/${categoryId}`, { is_active: !currentStatus });
+      if (isSupabaseActive()) {
+        const supabase = createClient();
+        const orgId = (() => {
+          try {
+            if (typeof window === 'undefined') return null;
+            const raw = window.localStorage.getItem('selected_organization');
+            if (!raw) return null;
+            try { const p = JSON.parse(raw); return p?.id || p?.organization_id || null; } catch { return raw; }
+          } catch { return null; }
+        })();
+        
+        if (!orgId) throw new Error('No organization selected');
+
+        const { error } = await supabase
+          .from('categories')
+          .update({ is_active: !currentStatus })
+          .eq('id', categoryId)
+          .eq('organization_id', orgId);
+        
+        if (error) throw error;
+      } else {
+        await api.put(`/categories/${categoryId}`, { is_active: !currentStatus });
+      }
       setCategories(prev => prev.map(c => c.id === categoryId ? { ...c, is_active: !currentStatus } : c));
       toast({ title: `Categoría ${!currentStatus ? 'activada' : 'desactivada'}` });
     } catch (error) {
@@ -252,7 +335,29 @@ export default function CategoriesPage() {
     if (!confirm('¿Eliminar esta categoría?')) return;
     
     try {
-      await api.delete(`/categories/${categoryId}`);
+      if (isSupabaseActive()) {
+        const supabase = createClient();
+        const orgId = (() => {
+          try {
+            if (typeof window === 'undefined') return null;
+            const raw = window.localStorage.getItem('selected_organization');
+            if (!raw) return null;
+            try { const p = JSON.parse(raw); return p?.id || p?.organization_id || null; } catch { return raw; }
+          } catch { return null; }
+        })();
+        
+        if (!orgId) throw new Error('No organization selected');
+
+        const { error } = await supabase
+          .from('categories')
+          .delete()
+          .eq('id', categoryId)
+          .eq('organization_id', orgId);
+        
+        if (error) throw error;
+      } else {
+        await api.delete(`/categories/${categoryId}`);
+      }
       setCategories(prev => prev.filter(c => c.id !== categoryId));
       toast({ title: 'Categoría eliminada' });
     } catch (error: any) {

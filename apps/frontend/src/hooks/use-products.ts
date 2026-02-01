@@ -5,6 +5,24 @@ import api from '@/lib/api';
 import { db } from '@/lib/db/indexed-db';
 import { syncQueue, createSyncOperation } from '@/lib/db/sync-queue';
 import { useOnlineStatus } from './use-online-status';
+import { createClient } from '@/lib/supabase/client';
+import { isSupabaseActive } from '@/lib/env';
+
+// Helper to get current organization ID
+const getOrganizationId = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem('selected_organization');
+    if (!raw) return null;
+    if (raw.startsWith('{')) {
+      const parsed = JSON.parse(raw);
+      return parsed?.id || parsed?.organization_id || null;
+    }
+    return raw;
+  } catch {
+    return null;
+  }
+};
 
 // ✅ Importar tipos unificados
 import {
@@ -29,6 +47,51 @@ async function fetchProductsWithOffline(filters: ProductFilters = {}, signal?: A
 
   try {
     // Try online first
+    if (isSupabaseActive()) {
+       const supabase = createClient();
+       const orgId = getOrganizationId();
+       
+       let query = supabase.from('products').select(`
+        *,
+        category:categories(*),
+        supplier:suppliers(*)
+       `);
+       
+       if (orgId) {
+         query = query.eq('organization_id', orgId);
+       }
+       
+       if (filters.category_id) query = query.eq('category_id', filters.category_id);
+       if (filters.supplier_id) query = query.eq('supplier_id', filters.supplier_id);
+       if (filters.search) query = query.ilike('name', `%${filters.search}%`);
+       if (filters.is_active !== undefined) query = query.eq('is_active', filters.is_active);
+       if (filters.min_price) query = query.gte('sale_price', filters.min_price);
+       if (filters.max_price) query = query.lte('sale_price', filters.max_price);
+       if (filters.min_stock) query = query.gte('stock_quantity', filters.min_stock);
+       if (filters.max_stock) query = query.lte('stock_quantity', filters.max_stock);
+
+       const { data, error } = await query.order('created_at', { ascending: false }).limit(filters.limit || 50);
+       
+       if (error) throw error;
+
+       // Store in IndexedDB for offline access
+       if (data && data.length > 0) {
+         try {
+           await Promise.all(
+             data.map((product: any) =>
+               db.put('products', {
+                 ...product,
+                 updated_at: product.updated_at || new Date().toISOString()
+               })
+             )
+           );
+         } catch (dbError) {
+           console.warn('⚠️ Error al guardar productos en IndexedDB:', dbError);
+         }
+       }
+       return data;
+    }
+
     const serviceFilters: any = {
       ...filters,
       categoryId: filters.category_id,
