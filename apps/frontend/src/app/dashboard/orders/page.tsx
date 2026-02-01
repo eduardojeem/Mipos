@@ -7,102 +7,38 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Package, 
   Search, 
-  Filter, 
-  Eye, 
-  Edit, 
-  Truck, 
-  CheckCircle, 
   Clock, 
+  CheckCircle, 
+  Truck, 
   XCircle,
   RefreshCw,
   Download,
-  Calendar,
   User,
   Phone,
   Mail,
   MapPin,
   CreditCard,
-  MoreHorizontal,
   ArrowUpDown,
   FileText,
   TrendingUp,
   AlertCircle,
   CheckCheck,
-  Zap,
-  BarChart3,
-  DollarSign,
   ShoppingBag,
-  Star
+  Eye,
+  DollarSign
 } from 'lucide-react';
 import { formatPrice } from '@/utils/formatters';
 import { useBusinessConfig } from '@/contexts/BusinessConfigContext';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { useOptimizedOrders, useOrderStats, useUpdateOrderStatus, Order } from '@/hooks/useOptimizedOrders';
 
-interface OrderItem {
-  id: string;
-  product_id: string;
-  product_name: string;
-  quantity: number;
-  unit_price: number;
-  subtotal: number;
-  products?: {
-    name: string;
-    image_url?: string;
-  };
-}
-
-interface Order {
-  id: string;
-  order_number: string;
-  customer_name: string;
-  customer_email: string;
-  customer_phone: string;
-  customer_address?: string;
-  subtotal: number;
-  shipping_cost: number;
-  total: number;
-  payment_method: string;
-  payment_status: string;
-  status: string;
-  notes?: string;
-  order_source: string;
-  created_at: string;
-  updated_at: string;
-  order_items: OrderItem[];
-}
-
-interface OrdersResponse {
-  success: boolean;
-  data: {
-    orders: Order[];
-    pagination: {
-      page: number;
-      limit: number;
-      total: number;
-      totalPages: number;
-    };
-  };
-}
-
-interface OrderStats {
-  total: number;
-  pending: number;
-  confirmed: number;
-  preparing: number;
-  shipped: number;
-  delivered: number;
-  cancelled: number;
-  todayRevenue: number;
-  avgOrderValue: number;
-}
-
+// Constants
 const ORDER_STATUSES = {
   PENDING: { label: 'Pendiente', color: 'bg-yellow-100 text-yellow-800', icon: Clock },
   CONFIRMED: { label: 'Confirmado', color: 'bg-blue-100 text-blue-800', icon: CheckCircle },
@@ -121,104 +57,45 @@ const PAYMENT_METHODS = {
 };
 
 export default function OrdersAdminPage() {
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
+  // State
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [showOrderDetail, setShowOrderDetail] = useState(false);
   const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
-  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
-  const [sortBy, setSortBy] = useState<'date' | 'total' | 'status'>('date');
+  const [sortBy, setSortBy] = useState<'created_at' | 'total' | 'status'>('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [stats, setStats] = useState<OrderStats | null>(null);
+
   const { config } = useBusinessConfig();
   const { toast } = useToast();
 
-  const fetchStats = useCallback(async () => {
-    try {
-      const response = await fetch('/api/orders/stats');
-      if (response.ok) {
-        const data = await response.json();
-        setStats(data.data);
-      }
-    } catch (error) {
-      console.error('Error fetching stats:', error);
-    }
-  }, []);
+  // Optimized Hooks
+  const { data: ordersData, isLoading: ordersLoading, refetch: refetchOrders } = useOptimizedOrders({
+    page: currentPage,
+    limit: 20,
+    status: statusFilter,
+    search: searchTerm,
+    sortBy,
+    sortOrder
+  });
 
-  const fetchOrders = useCallback(async () => {
-    try {
-      setLoading(true);
-      const params = new URLSearchParams({
-        page: currentPage.toString(),
-        limit: '20',
-      });
+  const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useOrderStats();
+  const updateStatusMutation = useUpdateOrderStatus();
 
-      if (statusFilter && statusFilter !== 'ALL') {
-        params.append('status', statusFilter);
-      }
+  const orders = ordersData?.orders || [];
+  const totalPages = ordersData?.pagination.totalPages || 1;
+  const loading = ordersLoading;
 
-      if (searchTerm) {
-        params.append('customerEmail', searchTerm);
-      }
-
-      const response = await fetch(`/api/orders?${params}`);
-      
-      if (!response.ok) {
-        throw new Error('Error al cargar pedidos');
-      }
-
-      const data: OrdersResponse = await response.json();
-      setOrders(data.data.orders);
-      setTotalPages(data.data.pagination.totalPages);
-    } catch (error) {
-      console.error('Error fetching orders:', error);
-      toast({
-        title: 'Error',
-        description: 'No se pudieron cargar los pedidos',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [currentPage, statusFilter, searchTerm, toast]);
-
-  useEffect(() => {
-    fetchOrders();
-    fetchStats();
-  }, [fetchOrders, fetchStats]);
+  // Handlers
+  const handleRefresh = () => {
+    refetchOrders();
+    refetchStats();
+    toast({ title: 'Actualizado', description: 'Datos actualizados correctamente' });
+  };
 
   const handleStatusChange = async (orderId: string, newStatus: string) => {
-    try {
-      const response = await fetch(`/api/orders/${orderId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ status: newStatus }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Error al actualizar estado');
-      }
-
-      toast({
-        title: 'Estado actualizado',
-        description: 'El estado del pedido se actualizó correctamente',
-      });
-
-      fetchOrders();
-    } catch (error) {
-      console.error('Error updating order status:', error);
-      toast({
-        title: 'Error',
-        description: 'No se pudo actualizar el estado del pedido',
-        variant: 'destructive',
-      });
-    }
+    updateStatusMutation.mutate({ orderId, status: newStatus });
   };
 
   const getStatusBadge = (status: string) => {
@@ -249,15 +126,10 @@ export default function OrdersAdminPage() {
 
   const handleBulkStatusChange = async (newStatus: string) => {
     try {
-      const promises = selectedOrders.map(orderId =>
-        fetch(`/api/orders/${orderId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: newStatus }),
-        })
-      );
-
-      await Promise.all(promises);
+      // Execute sequentially or parallel - parallel is fine here
+      await Promise.all(selectedOrders.map(orderId => 
+        updateStatusMutation.mutateAsync({ orderId, status: newStatus })
+      ));
       
       toast({
         title: 'Estados actualizados',
@@ -265,16 +137,11 @@ export default function OrdersAdminPage() {
       });
 
       setSelectedOrders([]);
-      fetchOrders();
-      fetchStats();
     } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudieron actualizar todos los pedidos',
-        variant: 'destructive',
-      });
+      // Error handled by mutation
     }
   };
+
 
   const sortedOrders = useMemo(() => {
     const sorted = [...orders].sort((a, b) => {

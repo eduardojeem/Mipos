@@ -9,61 +9,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { PermissionProvider } from '@/components/ui/permission-guard';
 import ErrorBoundary from '@/components/ErrorBoundary';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { CurrencyDisplay } from '@/components/ui/currency-display';
 import { formatDate } from '@/lib/utils';
 import Link from 'next/link';
-
-// Types
-interface SalesSummary {
-  todaySales: number;
-  todayCount: number;
-  weekSales: number;
-  weekCount: number;
-  monthSales: number;
-  monthCount: number;
-  avgTicket: number;
-  topPaymentMethod: string;
-  growthPercentage: number;
-}
-
-interface RecentSale {
-  id: string;
-  total_amount: number;
-  payment_method: string;
-  created_at: string;
-  customer_name?: string;
-  status: string;
-}
-
-// Optimized hooks
-function useSalesSummary() {
-  return useQuery({
-    queryKey: ['sales-summary'],
-    queryFn: async (): Promise<SalesSummary> => {
-      const response = await fetch('/api/sales/summary');
-      if (!response.ok) throw new Error('Failed to fetch sales summary');
-      return response.json();
-    },
-    staleTime: 2 * 60 * 1000, // 2 minutes
-    gcTime: 5 * 60 * 1000, // 5 minutes
-    refetchInterval: 5 * 60 * 1000, // Auto-refresh every 5 minutes
-  });
-}
-
-function useRecentSales(limit = 10) {
-  return useQuery({
-    queryKey: ['recent-sales', limit],
-    queryFn: async (): Promise<{ sales: RecentSale[]; total: number }> => {
-      const response = await fetch(`/api/sales/recent?limit=${limit}`);
-      if (!response.ok) throw new Error('Failed to fetch recent sales');
-      return response.json();
-    },
-    staleTime: 1 * 60 * 1000, // 1 minute
-    gcTime: 3 * 60 * 1000, // 3 minutes
-    refetchInterval: 2 * 60 * 1000, // Auto-refresh every 2 minutes
-  });
-}
+import { useSalesSummary, useRecentSales, RecentSale } from '@/hooks/useOptimizedSales';
 
 // Loading skeleton
 function SalesLoadingSkeleton() {

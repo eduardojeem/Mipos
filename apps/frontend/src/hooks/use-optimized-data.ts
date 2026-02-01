@@ -276,13 +276,33 @@ export function usePOSData() {
   const queryClient = useQueryClient();
   const supabase = createClient();
 
+  // Helper to get current organization ID
+  const getOrganizationId = (): string | null => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = window.localStorage.getItem('selected_organization');
+      if (!raw) return null;
+      if (raw.startsWith('{')) {
+        const parsed = JSON.parse(raw);
+        return parsed?.id || parsed?.organization_id || null;
+      }
+      return raw;
+    } catch {
+      return null;
+    }
+  };
+
   const productsQuery = useQuery({
     queryKey: ['pos', 'products'],
     queryFn: async () => {
+      const orgId = getOrganizationId();
+      if (!orgId) return [];
+
       // Primario: consulta directa sin relaciones anidadas
       const { data, error } = await supabase
         .from('products')
         .select('*')
+        .eq('organization_id', orgId)
         .order('name');
 
       if (!error && Array.isArray(data)) {
@@ -293,7 +313,9 @@ export function usePOSData() {
 
       // Fallback: API protegida del POS
       try {
-        const res = await fetch('/api/pos/products?limit=500');
+        const res = await fetch('/api/pos/products?limit=500', {
+          headers: { 'x-organization-id': orgId }
+        });
         if (res.ok) {
           const json = await res.json();
           const items = json?.products || json?.data || [];
@@ -331,9 +353,13 @@ export function usePOSData() {
   const categoriesQuery = useQuery({
     queryKey: ['pos', 'categories'],
     queryFn: async () => {
+      const orgId = getOrganizationId();
+      if (!orgId) return [];
+
       const { data, error } = await supabase
         .from('categories')
         .select('*')
+        .eq('organization_id', orgId)
         .order('name');
 
       if (error) throw error;
@@ -347,10 +373,14 @@ export function usePOSData() {
   const customersQuery = useQuery({
     queryKey: ['pos', 'customers'],
     queryFn: async () => {
+      const orgId = getOrganizationId();
+      if (!orgId) return [];
+
       // Intento 1: Supabase directo
       const { data, error } = await supabase
         .from('customers')
         .select('*')
+        .eq('organization_id', orgId)
         .order('name'); // Cambiado de full_name a name para mayor seguridad
 
       if (!error && Array.isArray(data)) {
@@ -361,7 +391,9 @@ export function usePOSData() {
 
       // Intento 2: Fallback a API
       try {
-        const res = await fetch('/api/customers');
+        const res = await fetch('/api/customers', {
+          headers: { 'x-organization-id': orgId }
+        });
         if (res.ok) {
           const json = await res.json();
           return json?.data || json || [];
@@ -381,15 +413,28 @@ export function usePOSData() {
   const salesStatsQuery = useQuery({
     queryKey: ['pos', 'sales-stats'],
     queryFn: async () => {
-      const res = await fetch('/api/sales-stats');
-      if (!res.ok) {
-        throw new Error(`Sales stats API error: ${res.status}`);
-      }
-      const json = await res.json();
-      const obj = (json && typeof json === 'object' && !Array.isArray(json))
-        ? (json.stats ?? json.data ?? json)
-        : {};
-      return obj;
+      const orgId = getOrganizationId();
+      if (!orgId) return {};
+
+      // Direct query for stats instead of API to ensure consistency
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      
+      const { data: todaySales } = await supabase
+        .from('sales')
+        .select('total')
+        .eq('organization_id', orgId)
+        .gte('created_at', todayStart.toISOString());
+
+      const totalSales = todaySales?.reduce((sum, s) => sum + (s.total || 0), 0) || 0;
+      const count = todaySales?.length || 0;
+      
+      return {
+        total_sales: totalSales,
+        transaction_count: count,
+        average_ticket: count > 0 ? totalSales / count : 0,
+        top_selling_product: '' // Simplified for speed
+      };
     },
     staleTime: 2 * 60 * 1000,
     gcTime: 5 * 60 * 1000,

@@ -8,6 +8,11 @@ export async function GET(request: NextRequest) {
     const productId = searchParams.get('productId');
     const branchId = searchParams.get('branchId');
 
+    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    if (!orgId) {
+      return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
+    }
+
     const supabase = await createClient();
 
     // Build products query with filters
@@ -23,7 +28,8 @@ export async function GET(request: NextRequest) {
         categories (
           name
         )
-      `);
+      `)
+      .eq('organization_id', orgId); // Filter by Organization
 
     // Apply filters
     if (category) productsQuery = productsQuery.eq('category_id', category);

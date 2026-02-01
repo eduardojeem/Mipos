@@ -29,37 +29,15 @@ import {
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { useCurrencyFormatter } from '@/contexts/BusinessConfigContext'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { RealtimeCharts } from './RealtimeCharts'
+import { useOptimizedDashboard, DashboardSummary, DashboardStats, RecentSale } from '@/hooks/useOptimizedDashboard'
 
 // ===================================================================
-// INTERFACES
+// INTERFACES (Replaced by hook imports)
 // ===================================================================
-
-interface DashboardStats {
-    todaySales: number
-    monthSales: number
-    totalCustomers: number
-    totalProducts: number
-    activeOrders: number
-    lowStockCount: number
-    todaySalesCount: number
-    averageTicket: number
-    webOrders?: {
-        pending: number
-        confirmed: number
-        preparing: number
-        shipped: number
-        delivered: number
-        todayTotal: number
-        todayRevenue: number
-    }
-}
-
-interface DashboardSummary extends DashboardStats {
-    recentSales: RecentSale[]
-    lastUpdated: string
-}
+// kept local for now if needed or removed if fully replaced.
+// Since I imported them, I can remove the local definitions to avoid conflicts or just use the imported ones.
 
 interface QuickAction {
     id: string
@@ -69,14 +47,6 @@ interface QuickAction {
     gradient: string
     action: () => void
     notification?: number
-}
-
-interface RecentSale {
-    id: string
-    customer_name: string
-    total: number
-    created_at: string
-    payment_method: string
 }
 
 // ===================================================================
@@ -256,61 +226,14 @@ export default function MainDashboard() {
     const fmtCurrency = useCurrencyFormatter()
     const queryClient = useQueryClient()
 
-    // Ultra-fast dashboard data with optimized API
-    const { data: dashboardData, isLoading, refetch, error } = useQuery<DashboardSummary>({
-        queryKey: ['dashboard-fast-summary'],
-        queryFn: async (): Promise<DashboardSummary> => {
-            try {
-                // Try fast API first (should be under 500ms)
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort('timeout'), 2000); // 2s timeout
-                try {
-                    const response = await fetch('/api/dashboard/fast-summary', {
-                        signal: controller.signal
-                    });
-                    if (!response.ok) throw new Error(`Fast API failed: ${response.status}`);
-                    return response.json();
-                } catch (err) {
-                    // Ignore AbortError noise and fallback silently
-                    const isAbort = err instanceof DOMException && err.name === 'AbortError';
-                    if (!isAbort) {
-                        console.warn('Fast dashboard API failed, using quick stats:', err);
-                    }
-                    const fallbackResponse = await fetch('/api/dashboard/quick-stats');
-                    if (!fallbackResponse.ok) throw new Error('All APIs failed');
-                    return fallbackResponse.json();
-                } finally {
-                    clearTimeout(timeoutId);
-                }
-            } catch (error) {
-                console.warn('Dashboard data load failed:', error);
-                // Fallback to quick stats API
-                const fallbackResponse = await fetch('/api/dashboard/quick-stats');
-                if (!fallbackResponse.ok) throw new Error('All APIs failed');
-                return fallbackResponse.json();
-            }
-        },
-        staleTime: 60000, // 1 minute (longer since it's fast to refetch)
-        gcTime: 300000, // 5 minutes
-        refetchInterval: 120000, // Auto-refresh every 2 minutes
-        retry: 1,
-        retryDelay: 1000,
-    })
+    // Ultra-fast dashboard data with optimized Supabase Hook
+    const { data: dashboardData, isLoading, refetch, error } = useOptimizedDashboard();
 
-    // Quick stats fallback for immediate loading
-    const { data: quickStats } = useQuery({
-        queryKey: ['dashboard-quick-stats'],
-        queryFn: async () => {
-            const response = await fetch('/api/dashboard/quick-stats');
-            if (!response.ok) throw new Error('Quick stats failed');
-            return response.json();
-        },
-        staleTime: 30 * 1000, // 30 seconds
-        enabled: isLoading || !!error, // Only fetch when main data is loading or failed
-    })
+    // Quick stats fallback removed - Hook handles it
+    const quickStats = null;
 
-    // Extract data with fallbacks - use quick stats if main data is not available
-    const currentData = dashboardData || quickStats;
+    // Extract data with fallbacks
+    const currentData = dashboardData;
     const stats: DashboardStats = currentData ? {
         todaySales: currentData.todaySales || 0,
         monthSales: currentData.monthSales || 0,
@@ -320,6 +243,7 @@ export default function MainDashboard() {
         lowStockCount: currentData.lowStockCount || 0,
         todaySalesCount: currentData.todaySalesCount || 0,
         averageTicket: currentData.averageTicket || 0,
+        webOrders: currentData.webOrders
     } : {
         todaySales: 0,
         monthSales: 0,
@@ -332,8 +256,8 @@ export default function MainDashboard() {
     }
 
     const recentSales = currentData?.recentSales || []
-    const statsLoading = isLoading && !quickStats
-    const salesLoading = isLoading && !quickStats
+    const statsLoading = isLoading
+    const salesLoading = isLoading
     const isQuickMode = currentData?.isQuickMode || false
 
     // Reduced auto-refresh for better performance
@@ -341,7 +265,7 @@ export default function MainDashboard() {
         const interval = setInterval(() => {
             // Only invalidate if not currently loading
             if (!isLoading) {
-                queryClient.invalidateQueries({ queryKey: ['dashboard-main-summary'] });
+                queryClient.invalidateQueries({ queryKey: ['dashboard-optimized-summary'] });
             }
         }, 10 * 60 * 1000); // Increased to 10 minutes
 

@@ -13,12 +13,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Start date and end date are required' }, { status: 400 });
     }
 
+    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    if (!orgId) {
+      return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
+    }
+
     const supabase = await createClient();
 
     // Get sales (revenue) for the period
     let salesQuery = supabase
       .from('sales')
       .select('id, total_amount, created_at, status')
+      .eq('organization_id', orgId) // Filter by Organization
       .gte('created_at', startDate)
       .lte('created_at', endDate)
       .eq('status', 'completed');
@@ -37,6 +43,7 @@ export async function GET(request: NextRequest) {
     let expensesQuery = supabase
       .from('expenses')
       .select('amount, category, created_at')
+      .eq('organization_id', orgId) // Filter by Organization
       .gte('created_at', startDate)
       .lte('created_at', endDate);
 
@@ -105,6 +112,7 @@ export async function GET(request: NextRequest) {
     let prevSalesQuery = supabase
       .from('sales')
       .select('total_amount')
+      .eq('organization_id', orgId) // Filter by Organization
       .gte('created_at', prevStart.toISOString().split('T')[0])
       .lte('created_at', prevEnd.toISOString().split('T')[0])
       .eq('status', 'completed');
@@ -118,6 +126,7 @@ export async function GET(request: NextRequest) {
     let prevExpensesQuery = supabase
       .from('expenses')
       .select('amount')
+      .eq('organization_id', orgId) // Filter by Organization
       .gte('created_at', prevStart.toISOString().split('T')[0])
       .lte('created_at', prevEnd.toISOString().split('T')[0]);
 

@@ -16,6 +16,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Start date and end date are required' }, { status: 400 });
     }
 
+    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    if (!orgId) {
+      return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
+    }
+
     const supabase = await createClient();
 
     // Build sales query with filters
@@ -40,6 +45,7 @@ export async function GET(request: NextRequest) {
           )
         )
       `)
+      .eq('organization_id', orgId) // Filter by Organization
       .gte('created_at', startDate)
       .lte('created_at', endDate);
 
@@ -123,6 +129,7 @@ export async function GET(request: NextRequest) {
     let prevQuery = supabase
       .from('sales')
       .select('total_amount')
+      .eq('organization_id', orgId) // Filter by Organization
       .gte('created_at', prevStart.toISOString().split('T')[0])
       .lte('created_at', prevEnd.toISOString().split('T')[0]);
 
