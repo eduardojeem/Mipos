@@ -114,7 +114,8 @@ export async function GET(request: NextRequest) {
     if (totalCount === null) {
       const { count: totalCountQuery } = await supabase
         .from('customers')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact', head: true })
+        .eq('organization_id', orgId); // Fixed: Filter by orgId
       totalCount = totalCountQuery || 0;
     }
 
