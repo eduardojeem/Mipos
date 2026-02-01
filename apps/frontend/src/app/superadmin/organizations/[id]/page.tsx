@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback, memo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { SuperAdminGuard } from '../../components/SuperAdminGuard';
 import { useOrganization } from '../../hooks/useOrganization';
@@ -51,6 +51,51 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+// Memoized user row component to prevent unnecessary re-renders
+const UserRow = memo(function UserRow({ user }: { user: AdminUser }) {
+  return (
+    <TableRow className="group hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors border-slate-50 dark:border-slate-800/50">
+      <TableCell className="px-12 py-6">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-200 to-slate-300 dark:from-slate-800 dark:to-slate-900 flex items-center justify-center font-black text-slate-500 group-hover:bg-slate-300 dark:group-hover:bg-slate-700 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-all">
+            {(user.full_name || user.email)[0].toUpperCase()}
+          </div>
+          <div className="flex flex-col">
+            <span className="font-bold text-slate-900 dark:text-white uppercase tracking-tight">{user.full_name || 'Sin Nombre'}</span>
+            <span className="text-xs text-slate-400 font-mono italic">{user.email}</span>
+          </div>
+        </div>
+      </TableCell>
+      <TableCell>
+        <Badge variant="secondary" className="rounded-lg px-3 py-1 font-bold uppercase text-[9px] tracking-widest border-none bg-slate-100 dark:bg-slate-800 text-slate-500 group-hover:bg-slate-200 dark:group-hover:bg-slate-700 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors">
+          {user.role}
+        </Badge>
+      </TableCell>
+      <TableCell>
+        {user.is_active ? (
+          <div className="flex items-center gap-2 text-emerald-600 font-bold text-xs">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+            ONLINE
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-slate-400 font-bold text-xs italic">
+            <div className="w-1.5 h-1.5 rounded-full bg-slate-300" />
+            OFFLINE
+          </div>
+        )}
+      </TableCell>
+      <TableCell className="text-xs font-bold text-slate-400 font-mono tracking-tighter">
+        {user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'NUNCA'}
+      </TableCell>
+      <TableCell className="px-12 text-right">
+        <Button variant="ghost" className="h-9 w-9 p-0 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800">
+          <MoreVertical className="h-4 w-4 text-slate-400" />
+        </Button>
+      </TableCell>
+    </TableRow>
+  );
+});
+
 export default function OrganizationDetailsPage() {
   const params = useParams();
   const router = useRouter();
@@ -81,6 +126,7 @@ export default function OrganizationDetailsPage() {
     slug: '',
   });
 
+  // Update form data when organization loads
   useEffect(() => {
     if (organization) {
       setFormData({
@@ -90,16 +136,17 @@ export default function OrganizationDetailsPage() {
     }
   }, [organization]);
 
-  const handleUpdateGeneral = async () => {
+  // Memoize callbacks to prevent unnecessary re-renders
+  const handleUpdateGeneral = useCallback(async () => {
     await updateOrganization({
       name: formData.name,
       slug: formData.slug
     });
-  };
+  }, [formData.name, formData.slug, updateOrganization]);
 
-  const handleStatusChange = async (value: string) => {
+  const handleStatusChange = useCallback(async (value: string) => {
     await updateOrganization({ subscription_status: value });
-  };
+  }, [updateOrganization]);
 
   const handlePlanChange = async (value: string) => {
     await updateOrganization({ subscription_plan: value });
@@ -125,7 +172,7 @@ export default function OrganizationDetailsPage() {
     return (
       <SuperAdminGuard>
         <div className="flex items-center justify-center min-h-[600px] flex-col gap-4">
-          <Loader2 className="h-10 w-10 animate-spin text-purple-600" />
+          <Loader2 className="h-10 w-10 animate-spin text-slate-600" />
           <p className="text-slate-500 font-medium animate-pulse">Invocando el núcleo MiPOS...</p>
         </div>
       </SuperAdminGuard>
@@ -213,7 +260,7 @@ export default function OrganizationDetailsPage() {
               </DropdownMenuContent>
             </DropdownMenu>
             <Button 
-              className="bg-purple-600 hover:bg-purple-700 text-white rounded-xl h-11 px-6 font-bold shadow-lg shadow-purple-500/20"
+              className="bg-slate-600 hover:bg-slate-700 text-white rounded-xl h-11 px-6 font-bold shadow-lg"
               onClick={handleUpdateGeneral}
               disabled={orgUpdating}
             >
@@ -224,7 +271,7 @@ export default function OrganizationDetailsPage() {
         </div>
 
         {/* Hero Header */}
-        <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-slate-900 via-purple-900 to-indigo-900 dark:from-slate-950 dark:via-purple-950 dark:to-indigo-950 p-8 md:p-12 text-white shadow-2xl">
+        <div className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-slate-800 to-slate-900 dark:from-slate-900 dark:to-slate-950 p-8 md:p-12 text-white shadow-2xl">
           <div className="absolute top-0 right-0 w-1/3 h-full bg-gradient-to-l from-white/5 to-transparent pointer-events-none" />
           <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
             <div className="flex items-center gap-6">
@@ -251,7 +298,7 @@ export default function OrganizationDetailsPage() {
             
             <div className="flex gap-4">
               <div className="bg-white/10 backdrop-blur-md rounded-3xl p-6 border border-white/10 text-center min-w-[140px]">
-                <Users className="h-5 w-5 text-purple-400 mx-auto mb-2" />
+                <Users className="h-5 w-5 text-slate-400 mx-auto mb-2" />
                 <div className="text-2xl font-black">{usersCount}</div>
                 <div className="text-[10px] uppercase tracking-widest text-white/50 font-bold">Usuarios Unificados</div>
               </div>
@@ -278,7 +325,7 @@ export default function OrganizationDetailsPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <Card className="lg:col-span-2 border-none shadow-sm rounded-3xl overflow-hidden bg-white/50 dark:bg-slate-950/50 backdrop-blur-sm">
                 <CardHeader className="p-8 pb-4">
-                  <div className="flex items-center gap-3 text-purple-600 font-bold uppercase tracking-widest text-xs mb-2">
+                  <div className="flex items-center gap-3 text-slate-600 dark:text-slate-400 font-bold uppercase tracking-widest text-xs mb-2">
                     <Building2 className="h-4 w-4" /> Perfil Corporativo
                   </div>
                   <CardTitle className="text-2xl font-black">Información Esencial</CardTitle>
@@ -309,7 +356,7 @@ export default function OrganizationDetailsPage() {
                     
                     <div className="space-y-6 bg-slate-50/50 dark:bg-slate-900/50 rounded-3xl p-6 border border-slate-100 dark:border-slate-800">
                       <div className="flex items-start gap-4">
-                        <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-900/20 flex items-center justify-center text-purple-600">
+                        <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400">
                           <Calendar className="h-5 w-5" />
                         </div>
                         <div>
@@ -333,7 +380,7 @@ export default function OrganizationDetailsPage() {
                 </CardContent>
               </Card>
 
-              <Card className="border-none shadow-sm rounded-3xl bg-gradient-to-b from-purple-50 via-white to-white dark:from-purple-950/10 dark:via-slate-950 dark:to-slate-950">
+              <Card className="border-none shadow-sm rounded-3xl bg-gradient-to-b from-slate-50 to-white dark:from-slate-900 dark:to-slate-950">
                 <CardHeader className="p-8">
                   <div className="flex items-center gap-3 text-blue-600 font-bold uppercase tracking-widest text-xs mb-2">
                     <ShieldCheck className="h-4 w-4" /> Seguridad y Contacto
@@ -344,7 +391,7 @@ export default function OrganizationDetailsPage() {
                   <div className="space-y-4">
                     <div className="flex items-center gap-4 group">
                       <div className="w-10 h-10 rounded-full bg-white dark:bg-slate-800 shadow-sm flex items-center justify-center group-hover:scale-110 transition-transform">
-                        <Mail className="h-4 w-4 text-purple-600" />
+                        <Mail className="h-4 w-4 text-slate-600 dark:text-slate-400" />
                       </div>
                       <div className="flex flex-col">
                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Email Corporativo</span>
@@ -381,7 +428,7 @@ export default function OrganizationDetailsPage() {
                   <div>
                     <h2 className="text-3xl font-black text-slate-900 dark:text-white flex items-center gap-3">
                       Comunidad Activa
-                      <Badge className="bg-purple-600 text-white rounded-lg px-3 py-1">{usersCount}</Badge>
+                      <Badge className="bg-slate-600 text-white rounded-lg px-3 py-1">{usersCount}</Badge>
                     </h2>
                     <p className="text-slate-500 font-medium mt-1">Gestión de usuarios y talentos asociados a esta organización.</p>
                   </div>
@@ -409,7 +456,7 @@ export default function OrganizationDetailsPage() {
                   </div>
                 ) : usersLoading ? (
                   <div className="flex justify-center p-20 flex-col items-center gap-4">
-                    <Loader2 className="h-10 w-10 animate-spin text-purple-200" />
+                    <Loader2 className="h-10 w-10 animate-spin text-slate-400" />
                     <span className="font-bold text-slate-300 uppercase tracking-widest">Sincronizando Nómina...</span>
                   </div>
                 ) : (
@@ -437,45 +484,7 @@ export default function OrganizationDetailsPage() {
                           </TableRow>
                         ) : (
                           (users as AdminUser[]).map((user) => (
-                            <TableRow key={user.id} className="group hover:bg-purple-50/30 dark:hover:bg-purple-950/10 transition-colors border-slate-50 dark:border-slate-800/50">
-                              <TableCell className="px-12 py-6">
-                                <div className="flex items-center gap-4">
-                                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-200 to-slate-300 dark:from-slate-800 dark:to-slate-900 flex items-center justify-center font-black text-slate-500 group-hover:bg-purple-600 group-hover:text-white transition-all">
-                                    {(user.full_name || user.email)[0].toUpperCase()}
-                                  </div>
-                                  <div className="flex flex-col">
-                                    <span className="font-bold text-slate-900 dark:text-white uppercase tracking-tight">{user.full_name || 'Sin Nombre'}</span>
-                                    <span className="text-xs text-slate-400 font-mono italic">{user.email}</span>
-                                  </div>
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="secondary" className="rounded-lg px-3 py-1 font-bold uppercase text-[9px] tracking-widest border-none bg-slate-100 dark:bg-slate-800 text-slate-500 group-hover:bg-purple-100 group-hover:text-purple-600 transition-colors">
-                                  {user.role}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                {user.is_active ? (
-                                  <div className="flex items-center gap-2 text-emerald-600 font-bold text-xs">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                                    ONLINE
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center gap-2 text-slate-400 font-bold text-xs italic">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-slate-300" />
-                                    OFFLINE
-                                  </div>
-                                )}
-                              </TableCell>
-                              <TableCell className="text-xs font-bold text-slate-400 font-mono tracking-tighter">
-                                {user.last_sign_in_at ? new Date(user.last_sign_in_at).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'NUNCA'}
-                              </TableCell>
-                              <TableCell className="px-12 text-right">
-                                <Button variant="ghost" className="h-9 w-9 p-0 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800">
-                                  <MoreVertical className="h-4 w-4 text-slate-400" />
-                                </Button>
-                              </TableCell>
-                            </TableRow>
+                            <UserRow key={user.id} user={user} />
                           ))
                         )}
                       </TableBody>
@@ -525,7 +534,7 @@ export default function OrganizationDetailsPage() {
                           onValueChange={handlePlanChange}
                           disabled={orgUpdating}
                         >
-                          <SelectTrigger className="h-14 rounded-2xl bg-gradient-to-r from-purple-500/5 to-blue-500/5 dark:from-purple-500/10 dark:to-blue-500/10 border-none px-6 font-bold text-lg">
+                          <SelectTrigger className="h-14 rounded-2xl bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 border-none px-6 font-bold text-lg">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent className="rounded-2xl border-slate-100 dark:border-slate-800 shadow-2xl p-2">
@@ -540,10 +549,10 @@ export default function OrganizationDetailsPage() {
                     </div>
 
                     <div className="bg-slate-900 rounded-[2rem] p-8 text-white relative overflow-hidden group">
-                      <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/20 blur-[60px] rounded-full group-hover:bg-purple-500/40 transition-all duration-700" />
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-slate-500/20 blur-[60px] rounded-full group-hover:bg-slate-500/40 transition-all duration-700" />
                       <div className="relative z-10 space-y-8">
                         <div>
-                          <CreditCard className="h-10 w-10 text-purple-400 mb-4" />
+                          <CreditCard className="h-10 w-10 text-slate-400 mb-4" />
                           <h4 className="text-xl font-black mb-1">Nexo Stripe</h4>
                           <p className="text-slate-400 text-sm font-medium">Sincronización directa con pasarela de pagos.</p>
                         </div>
@@ -571,8 +580,8 @@ export default function OrganizationDetailsPage() {
           <TabsContent value="settings" className="space-y-6">
              <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-slate-950 text-slate-300">
               <CardHeader className="p-8 md:p-12 pb-4">
-                <div className="flex items-center gap-3 text-purple-400 font-bold uppercase tracking-widest text-xs mb-2">
-                  <Zap className="h-4 w-4 text-purple-400" /> Matrix Configuration
+                <div className="flex items-center gap-3 text-slate-400 font-bold uppercase tracking-widest text-xs mb-2">
+                  <Zap className="h-4 w-4 text-slate-400" /> Matrix Configuration
                 </div>
                 <CardTitle className="text-2xl font-black text-white">Arquitectura de Nodo</CardTitle>
                 <CardDescription className="text-slate-500 font-medium">Acceso directo al núcleo de configuración JSONB.</CardDescription>
@@ -590,8 +599,8 @@ export default function OrganizationDetailsPage() {
                   </pre>
                 </div>
                 
-                <div className="mt-8 flex items-center gap-4 bg-purple-500/10 p-6 rounded-2xl border border-purple-500/20">
-                  <div className="w-12 h-12 rounded-xl bg-purple-600 flex items-center justify-center text-white shrink-0 shadow-lg">
+                <div className="mt-8 flex items-center gap-4 bg-slate-500/10 p-6 rounded-2xl border border-slate-500/20">
+                  <div className="w-12 h-12 rounded-xl bg-slate-600 flex items-center justify-center text-white shrink-0 shadow-lg">
                     <ShieldCheck className="h-6 w-6" />
                   </div>
                   <div className="text-sm">

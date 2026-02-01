@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo, memo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { useAdminData } from '../hooks/useAdminData';
 
-export function SystemOverview() {
+export const SystemOverview = memo(function SystemOverview() {
   const { stats, organizations, loading, error } = useAdminData();
   const [planSummary, setPlanSummary] = useState<{ totalAuthUsers: number; plans: { name: string; organizations: number; users: number }[]; organizationsWithoutSubscription?: string[] } | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
@@ -84,11 +84,11 @@ export function SystemOverview() {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {[1, 2, 3, 4].map((i) => (
-          <Card key={i} className="bg-card border-border shadow-sm">
+          <Card key={i} className="bg-white dark:bg-slate-950/50 border-slate-200 dark:border-slate-700 shadow-sm">
             <CardContent className="p-6">
               <div className="animate-pulse space-y-3">
-                <div className="h-4 bg-muted rounded w-3/4"></div>
-                <div className="h-8 bg-muted rounded w-1/2"></div>
+                <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-3/4"></div>
+                <div className="h-8 bg-slate-200 dark:bg-slate-700 rounded w-1/2"></div>
               </div>
             </CardContent>
           </Card>
@@ -99,11 +99,11 @@ export function SystemOverview() {
 
   if (error) {
     return (
-      <Card className="bg-destructive/10 border-destructive/20 shadow-sm">
+      <Card className="bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800 shadow-sm">
         <CardContent className="p-6 text-center">
-          <Activity className="h-12 w-12 mx-auto mb-3 text-destructive opacity-50" />
-          <p className="text-destructive font-medium">Error al cargar las estadísticas</p>
-          <p className="text-sm text-destructive/80 mt-1">{error.message}</p>
+          <Activity className="h-12 w-12 mx-auto mb-3 text-red-500 opacity-50" />
+          <p className="text-red-700 dark:text-red-400 font-medium">Error al cargar las estadísticas</p>
+          <p className="text-sm text-red-600 dark:text-red-500 mt-1">{error}</p>
         </CardContent>
       </Card>
     );
@@ -114,22 +114,22 @@ export function SystemOverview() {
       {/* Main Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Organizations */}
-        <Card className="bg-card border-border shadow-sm hover:shadow-md transition-all duration-300">
+        <Card className="bg-white dark:bg-slate-950/50 border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-all duration-300 border-l-4 border-l-slate-500">
           <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-3 text-sm font-medium text-muted-foreground">
-              <div className="p-2 rounded-xl bg-primary/10">
-                <Building2 className="h-4 w-4 text-primary" />
+            <CardTitle className="flex items-center gap-3 text-sm font-medium text-slate-600 dark:text-slate-400">
+              <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800">
+                <Building2 className="h-4 w-4 text-slate-600 dark:text-slate-400" />
               </div>
               Organizaciones
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              <div className="text-3xl font-bold text-foreground">
+              <div className="text-3xl font-bold text-slate-900 dark:text-slate-100">
                 {stats.totalOrganizations}
               </div>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs border-green-500/30 bg-green-500/10 text-green-700 dark:text-green-400">
+                <Badge className="text-xs bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800">
                   {stats.activeSubscriptions} activas
                 </Badge>
               </div>
@@ -138,10 +138,10 @@ export function SystemOverview() {
         </Card>
 
         {/* Users */}
-        <Card className="bg-card border-border shadow-sm hover:shadow-md transition-all duration-300">
+        <Card className="bg-white dark:bg-slate-950/50 border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-all duration-300 border-l-4 border-l-blue-500">
           <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-3 text-sm font-medium text-muted-foreground">
-              <div className="p-2 rounded-xl bg-blue-500/10">
+            <CardTitle className="flex items-center gap-3 text-sm font-medium text-slate-600 dark:text-slate-400">
+              <div className="p-2 rounded-xl bg-blue-100 dark:bg-blue-900/20">
                 <Users className="h-4 w-4 text-blue-600 dark:text-blue-400" />
               </div>
               Usuarios
@@ -149,11 +149,11 @@ export function SystemOverview() {
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              <div className="text-3xl font-bold text-foreground">
+              <div className="text-3xl font-bold text-slate-900 dark:text-slate-100">
                 {stats.totalUsers.toLocaleString()}
               </div>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-400">
+                <Badge className="text-xs bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-950/30 dark:text-blue-300 dark:border-blue-800">
                   Total en el sistema
                 </Badge>
               </div>
@@ -162,23 +162,23 @@ export function SystemOverview() {
         </Card>
 
         {/* MRR (Monthly Recurring Revenue) */}
-        <Card className="bg-card border-border shadow-sm hover:shadow-md transition-all duration-300">
+        <Card className="bg-white dark:bg-slate-950/50 border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-all duration-300 border-l-4 border-l-emerald-500">
           <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-3 text-sm font-medium text-muted-foreground">
-              <div className="p-2 rounded-xl bg-green-500/10">
-                <DollarSign className="h-4 w-4 text-green-600 dark:text-green-400" />
+            <CardTitle className="flex items-center gap-3 text-sm font-medium text-slate-600 dark:text-slate-400">
+              <div className="p-2 rounded-xl bg-emerald-100 dark:bg-emerald-900/20">
+                <DollarSign className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
               </div>
               MRR Estimado
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              <div className="text-3xl font-bold text-foreground">
+              <div className="text-3xl font-bold text-slate-900 dark:text-slate-100">
                 {formatCurrency(stats.totalRevenue)}
               </div>
               <div className="flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-green-600 dark:text-green-400" />
-                <span className="text-xs text-green-600 dark:text-green-400 font-medium">
+                <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
                   Ingreso recurrente mensual
                 </span>
               </div>
@@ -187,22 +187,22 @@ export function SystemOverview() {
         </Card>
 
         {/* Active Subscriptions */}
-        <Card className="bg-card border-border shadow-sm hover:shadow-md transition-all duration-300">
+        <Card className="bg-white dark:bg-slate-950/50 border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-all duration-300 border-l-4 border-l-amber-500">
           <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-3 text-sm font-medium text-muted-foreground">
-              <div className="p-2 rounded-xl bg-orange-500/10">
-                <Activity className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+            <CardTitle className="flex items-center gap-3 text-sm font-medium text-slate-600 dark:text-slate-400">
+              <div className="p-2 rounded-xl bg-amber-100 dark:bg-amber-900/20">
+                <Activity className="h-4 w-4 text-amber-600 dark:text-amber-400" />
               </div>
               Suscripciones
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              <div className="text-3xl font-bold text-foreground">
+              <div className="text-3xl font-bold text-slate-900 dark:text-slate-100">
                 {stats.activeSubscriptions}
               </div>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-xs border-orange-500/30 bg-orange-500/10 text-orange-700 dark:text-orange-400">
+                <Badge className="text-xs bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800">
                   {stats.totalOrganizations > 0 
                     ? `${Math.round((stats.activeSubscriptions / stats.totalOrganizations) * 100)}% del total` 
                     : '0%'}
@@ -213,162 +213,116 @@ export function SystemOverview() {
         </Card>
       </div>
 
-      {/* Breakdown by Plan */}
-      {stats.totalOrganizations > 0 && (
-        <Card className="bg-card border-border shadow-sm">
+      {/* Plan Distribution */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card className="bg-white dark:bg-slate-950/50 border-slate-200 dark:border-slate-700 shadow-sm">
           <CardHeader>
-            <CardTitle className="flex items-center gap-3 text-foreground">
-              <div className="p-2 rounded-xl bg-primary/10">
-                <Building2 className="h-5 w-5 text-primary" />
-              </div>
-              Distribución por Planes
-            </CardTitle>
+            <CardTitle className="text-slate-900 dark:text-slate-100">Distribución por Plan</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="p-4 rounded-xl bg-muted/30 border border-border">
-                <div className="text-sm text-muted-foreground mb-1">FREE</div>
-                <div className="text-2xl font-bold text-foreground">
-                  {getPlanCount('FREE')}
-                </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  {formatCurrency(0)}/mes
-                </div>
-              </div>
-
-              <div className="p-4 rounded-xl bg-blue-500/5 border border-blue-200/50 dark:border-blue-800/50">
-                <div className="text-sm text-blue-600 dark:text-blue-400 mb-1">PRO</div>
-                <div className="text-2xl font-bold text-foreground">
-                  {getPlanCount('PRO') + getPlanCount('PROFESSIONAL')}
-                </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  $29/mes
-                </div>
-              </div>
-
-              <div className="p-4 rounded-xl bg-purple-500/5 border border-purple-200/50 dark:border-purple-800/50">
-                <div className="text-sm text-purple-600 dark:text-purple-400 mb-1">ENTERPRISE</div>
-                <div className="text-2xl font-bold text-foreground">
-                  {getPlanCount('ENTERPRISE')}
-                </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  $99/mes
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Users by Plan Summary */}
-      {planSummary && (
-        <Card className="bg-card border-border shadow-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-3 text-foreground">
-              <div className="p-2 rounded-xl bg-blue-500/10">
-                <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-              </div>
-              Usuarios por Plan
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="mb-4">
-              <div className="text-sm text-muted-foreground">Total Auth Users</div>
-              <div className="text-2xl font-bold">{planSummary.totalAuthUsers.toLocaleString()}</div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {planSummary.plans.map(p => (
-                <div key={p.name} className="p-4 rounded-xl bg-muted/30 border border-border">
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="text-sm font-medium text-foreground">{p.name}</div>
-                    <div className="flex items-center gap-1">
-                      <Badge variant="outline" className="text-xs">Mensual: {p.monthly || 0}</Badge>
-                      <Badge variant="outline" className="text-xs">Anual: {p.yearly || 0}</Badge>
-                    </div>
-                  </div>
-                  <div className="text-xs text-muted-foreground">Organizaciones</div>
-                  <div className="text-lg font-bold">{p.organizations}</div>
-                  <div className="mt-2 text-xs text-muted-foreground">Usuarios</div>
-                  <div className="text-lg font-bold">{p.users}</div>
-                </div>
-              ))}
-            </div>
-            {summaryLoading && (
-              <div className="text-xs text-muted-foreground mt-3">Actualizando...</div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Organizations Without Subscription */}
-      {planSummary && Array.isArray(planSummary.organizationsWithoutSubscription) && planSummary.organizationsWithoutSubscription.length > 0 && (
-        <Card className="bg-card border-border shadow-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-3 text-foreground">
-              <div className="p-2 rounded-xl bg-orange-500/10">
-                <Activity className="h-5 w-5 text-orange-600 dark:text-orange-400" />
-              </div>
-              Organizaciones sin suscripción
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="mb-4">
-              <div className="text-sm text-muted-foreground">Total</div>
-              <div className="text-2xl font-bold">{planSummary.organizationsWithoutSubscription.length}</div>
-            </div>
-            <div className="space-y-2">
-              {planSummary.organizationsWithoutSubscription.slice(0, 5).map((id) => {
-                const name = organizations.find((o) => o.id === id)?.name || id
+            <div className="space-y-4">
+              {['FREE', 'STARTER', 'PRO', 'ENTERPRISE'].map((plan) => {
+                const count = getPlanCount(plan);
+                const percentage = stats.totalOrganizations > 0 ? (count / stats.totalOrganizations) * 100 : 0;
+                
                 return (
-                  <div key={id} className="flex items-center justify-between p-3 rounded-lg border">
-                    <div className="text-sm font-medium">{name}</div>
-                    <Button size="sm" variant="outline" onClick={() => openAssign(id)}>Asignar plan</Button>
+                  <div key={plan} className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Badge 
+                        variant="outline" 
+                        className={`
+                          ${plan === 'FREE' ? 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300' : ''}
+                          ${plan === 'STARTER' ? 'bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-950/30 dark:text-blue-300' : ''}
+                          ${plan === 'PRO' ? 'bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-950/30 dark:text-emerald-300' : ''}
+                          ${plan === 'ENTERPRISE' ? 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/30 dark:text-amber-300' : ''}
+                        `}
+                      >
+                        {plan}
+                      </Badge>
+                      <span className="text-sm text-slate-600 dark:text-slate-400">{count} organizaciones</span>
+                    </div>
+                    <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                      {percentage.toFixed(1)}%
+                    </span>
                   </div>
-                )
+                );
               })}
             </div>
-            {planSummary.organizationsWithoutSubscription.length > 5 && (
-              <div className="mt-3">
-                <Button asChild variant="ghost" size="sm">
-                  <Link href="/superadmin/organizations?missing=1">Ver todas</Link>
-                </Button>
-              </div>
-            )}
           </CardContent>
         </Card>
-      )}
+
+        <Card className="bg-white dark:bg-slate-950/50 border-slate-200 dark:border-slate-700 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-slate-900 dark:text-slate-100">Acciones Rápidas</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <Button asChild className="w-full justify-start" variant="outline">
+                <Link href="/superadmin/organizations">
+                  <Building2 className="h-4 w-4 mr-2" />
+                  Ver Todas las Organizaciones
+                </Link>
+              </Button>
+              <Button asChild className="w-full justify-start" variant="outline">
+                <Link href="/superadmin/users">
+                  <Users className="h-4 w-4 mr-2" />
+                  Gestionar Usuarios
+                </Link>
+              </Button>
+              <Button asChild className="w-full justify-start" variant="outline">
+                <Link href="/superadmin/billing">
+                  <DollarSign className="h-4 w-4 mr-2" />
+                  Ver Facturación
+                </Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Assignment Dialog */}
       <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Asignar Plan</DialogTitle>
+            <DialogTitle>Asignar Plan de Suscripción</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
-            <div className="text-sm">Organización: {organizations.find((o) => o.id === assignOrg)?.name || assignOrg}</div>
-            <Select value={assignPlan} onValueChange={setAssignPlan}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Selecciona un plan" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="free">Free</SelectItem>
-                <SelectItem value="pro">PRO</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={assignCycle} onValueChange={setAssignCycle}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Ciclo de facturación" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="monthly">Mensual</SelectItem>
-                <SelectItem value="yearly">Anual</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Plan</label>
+              <Select value={assignPlan} onValueChange={setAssignPlan}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="starter">Starter</SelectItem>
+                  <SelectItem value="pro">Pro</SelectItem>
+                  <SelectItem value="enterprise">Enterprise</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Ciclo de Facturación</label>
+              <Select value={assignCycle} onValueChange={setAssignCycle}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="monthly">Mensual</SelectItem>
+                  <SelectItem value="yearly">Anual</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setAssignOpen(false)}>Cancelar</Button>
-            <Button onClick={confirmAssign}>Asignar</Button>
+            <Button variant="outline" onClick={() => setAssignOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={confirmAssign}>
+              Asignar Plan
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
   );
-}
+});

@@ -25,6 +25,7 @@ import {
   Mail,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SuperAdminThemeToggle } from "./components/SuperAdminThemeToggle";
 
 interface SuperAdminLayoutProps {
   children: React.ReactNode;
@@ -171,16 +172,16 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 dark:from-slate-950 dark:via-indigo-950 dark:to-purple-950 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 relative overflow-hidden transition-colors duration-500">
       {/* Animated Background Elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-400/30 dark:bg-purple-600/20 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-slate-400/20 dark:bg-slate-600/10 rounded-full blur-3xl animate-pulse transition-colors duration-500"></div>
         <div
-          className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-400/30 dark:bg-blue-600/20 rounded-full blur-3xl animate-pulse"
+          className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-400/20 dark:bg-blue-600/10 rounded-full blur-3xl animate-pulse transition-colors duration-500"
           style={{ animationDelay: "1s" }}
         ></div>
         <div
-          className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-pink-400/20 dark:bg-pink-600/10 rounded-full blur-3xl animate-pulse"
+          className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-slate-300/15 dark:bg-slate-700/10 rounded-full blur-3xl animate-pulse transition-colors duration-500"
           style={{ animationDelay: "2s" }}
         ></div>
       </div>
@@ -189,20 +190,23 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
         {/* Sidebar with Glassmorphism */}
         <div
           className={cn(
-            "backdrop-blur-xl bg-white/80 dark:bg-slate-900/80 border-r border-white/20 dark:border-slate-700/50 transition-all duration-300 flex flex-col shadow-2xl",
+            "backdrop-blur-xl bg-white/95 dark:bg-slate-900/95 border-r border-slate-200/50 dark:border-slate-700/50 transition-all duration-300 flex flex-col shadow-xl",
             isCollapsed ? "w-20" : "w-80",
           )}
         >
           {/* Header */}
-          <div className="p-6 border-b border-white/20 dark:border-slate-700/50">
+          <div className="p-6 border-b border-slate-200/50 dark:border-slate-700/50">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-600 via-pink-600 to-blue-600 flex items-center justify-center shadow-lg shadow-purple-500/50 animate-pulse">
+                <Button
+                  onClick={() => setIsCollapsed(!isCollapsed)}
+                  className="w-12 h-12 p-0 rounded-2xl bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center shadow-lg shadow-slate-500/25 hover:scale-105 transition-transform border-0"
+                >
                   <Crown className="h-6 w-6 text-white" />
-                </div>
+                </Button>
                 {!isCollapsed && (
                   <div>
-                    <h1 className="text-xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent">
+                    <h1 className="text-xl font-bold bg-gradient-to-r from-slate-700 to-slate-900 dark:from-slate-300 dark:to-slate-100 bg-clip-text text-transparent">
                       Super Admin
                     </h1>
                     <p className="text-xs text-slate-600 dark:text-slate-400 font-medium">
@@ -211,18 +215,6 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
                   </div>
                 )}
               </div>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setIsCollapsed(!isCollapsed)}
-                className="border-purple-300 dark:border-purple-700 hover:bg-purple-100 dark:hover:bg-purple-900/30"
-              >
-                {isCollapsed ? (
-                  <ChevronRight className="h-4 w-4" />
-                ) : (
-                  <ChevronLeft className="h-4 w-4" />
-                )}
-              </Button>
             </div>
           </div>
 
@@ -237,8 +229,8 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
                       "w-full justify-start gap-3 h-auto py-3 px-4 transition-all duration-200",
                       !isCollapsed && "text-left",
                       activeItem === item.href &&
-                        "bg-gradient-to-r from-purple-500/10 via-pink-500/10 to-blue-500/10 dark:from-purple-500/20 dark:via-pink-500/20 dark:to-blue-500/20 border border-purple-300/50 dark:border-purple-500/50 shadow-lg shadow-purple-500/20",
-                      "hover:bg-gradient-to-r hover:from-purple-500/5 hover:via-pink-500/5 hover:to-blue-500/5 hover:scale-[1.02] hover:shadow-md",
+                      "bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-800 dark:to-slate-700 border border-slate-300 dark:border-slate-600 shadow-md",
+                      "hover:bg-gradient-to-r hover:from-slate-50 hover:to-slate-100 dark:hover:from-slate-800 dark:hover:to-slate-700 hover:scale-[1.02] hover:shadow-sm",
                     )}
                     onClick={() => {
                       if (item.children) {
@@ -253,8 +245,8 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
                       className={cn(
                         "p-2 rounded-xl transition-all duration-200",
                         activeItem === item.href
-                          ? "bg-gradient-to-br from-purple-600 via-pink-600 to-blue-600 shadow-lg shadow-purple-500/50"
-                          : "bg-slate-100 dark:bg-slate-800 group-hover:bg-gradient-to-br group-hover:from-purple-600 group-hover:via-pink-600 group-hover:to-blue-600",
+                          ? "bg-gradient-to-br from-slate-600 to-slate-700 shadow-lg shadow-slate-500/25"
+                          : "bg-slate-100 dark:bg-slate-800 group-hover:bg-gradient-to-br group-hover:from-slate-600 group-hover:to-slate-700",
                       )}
                     >
                       <item.icon
@@ -274,7 +266,7 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
                               {item.title}
                             </span>
                             {item.badge && (
-                              <Badge className="text-xs px-2 py-0.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white border-0">
+                              <Badge className="text-xs px-2 py-0.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white border-0">
                                 {item.badge}
                               </Badge>
                             )}
@@ -301,7 +293,7 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
                   {!isCollapsed &&
                     item.children &&
                     expandedItems.has(item.title) && (
-                      <div className="ml-8 mt-1 space-y-1 border-l-2 border-purple-200 dark:border-purple-800/50 pl-4 py-2">
+                      <div className="ml-8 mt-1 space-y-1 border-l-2 border-slate-300 dark:border-slate-700 pl-4 py-2">
                         {item.children.map((child) => (
                           <Button
                             key={child.href}
@@ -309,8 +301,8 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
                             className={cn(
                               "w-full justify-start gap-3 h-10 px-3 text-sm transition-all duration-200",
                               activeItem === child.href &&
-                                "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300",
-                              "hover:bg-purple-50 dark:hover:bg-purple-900/20 hover:translate-x-1",
+                              "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300",
+                              "hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:translate-x-1",
                             )}
                             onClick={() => {
                               setActiveItem(child.href);
@@ -329,11 +321,11 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
           </ScrollArea>
 
           {/* User Info & Actions */}
-          <div className="p-4 border-t border-white/20 dark:border-slate-700/50">
+          <div className="p-4 border-t border-slate-200/50 dark:border-slate-700/50">
             {!isCollapsed && (
-              <div className="mb-4 p-4 rounded-2xl bg-gradient-to-br from-purple-500/10 via-pink-500/10 to-blue-500/10 dark:from-purple-500/20 dark:via-pink-500/20 dark:to-blue-500/20 border border-purple-300/50 dark:border-purple-500/30 backdrop-blur-sm">
+              <div className="mb-4 p-4 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-50 dark:from-slate-800 dark:to-slate-700 border border-slate-300 dark:border-slate-600 backdrop-blur-sm">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-600 via-pink-600 to-blue-600 flex items-center justify-center shadow-lg shadow-purple-500/50">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center shadow-lg shadow-slate-500/25">
                     <UserCheck className="h-6 w-6 text-white" />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -341,8 +333,8 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
                       {user.name || user.email}
                     </p>
                     <div className="flex items-center gap-1.5 mt-1">
-                      <Crown className="h-3 w-3 text-purple-600 dark:text-purple-400" />
-                      <span className="text-xs font-medium text-purple-700 dark:text-purple-400">
+                      <Crown className="h-3 w-3 text-slate-600 dark:text-slate-400" />
+                      <span className="text-xs font-medium text-slate-700 dark:text-slate-400">
                         Super Admin
                       </span>
                     </div>
@@ -357,7 +349,7 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
                 size="sm"
                 onClick={() => setIsCollapsed(!isCollapsed)}
                 className={cn(
-                  "flex-1 border-purple-300 dark:border-purple-700 hover:bg-purple-100 dark:hover:bg-purple-900/30",
+                  "flex-1 border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800",
                   isCollapsed && "w-full",
                 )}
               >
@@ -381,13 +373,13 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
         {/* Main Content */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Top Bar with Glassmorphism */}
-          <div className="backdrop-blur-xl bg-white/80 dark:bg-slate-900/80 border-b border-white/20 dark:border-slate-700/50 px-8 py-6 shadow-lg">
+          <div className="backdrop-blur-xl bg-white/95 dark:bg-slate-900/95 border-b border-slate-200/50 dark:border-slate-700/50 px-8 py-6 shadow-lg transition-colors duration-300">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-3xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 bg-clip-text text-transparent">
+                <h2 className="text-3xl font-bold bg-gradient-to-r from-slate-700 to-slate-900 dark:from-slate-300 dark:to-slate-100 bg-clip-text text-transparent transition-all duration-300">
                   Panel Super Admin
                 </h2>
-                <p className="text-slate-600 dark:text-slate-400 mt-1 font-medium">
+                <p className="text-slate-600 dark:text-slate-400 mt-1 font-medium transition-colors duration-300">
                   Gestión completa del sistema SaaS
                 </p>
               </div>
@@ -401,14 +393,17 @@ export default function SuperAdminLayout({ children }: SuperAdminLayoutProps) {
                   </span>
                 </div>
 
+                {/* Theme Toggle */}
+                <SuperAdminThemeToggle />
+
                 {/* Notifications */}
                 <Button
                   variant="outline"
                   size="sm"
-                  className="gap-2 border-purple-300 dark:border-purple-700 hover:bg-purple-100 dark:hover:bg-purple-900/30 relative"
+                  className="gap-2 border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 relative"
                 >
                   <Bell className="h-4 w-4" />
-                  <Badge className="absolute -top-2 -right-2 text-xs px-1.5 py-0.5 bg-gradient-to-r from-red-600 to-pink-600 text-white border-0 shadow-lg shadow-red-500/50">
+                  <Badge className="absolute -top-2 -right-2 text-xs px-1.5 py-0.5 bg-gradient-to-r from-red-600 to-red-700 text-white border-0 shadow-lg shadow-red-500/25">
                     3
                   </Badge>
                 </Button>

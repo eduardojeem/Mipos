@@ -37,9 +37,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const { id } = await params
     const body = await request.json()
     const name = typeof body.name === 'string' ? body.name : undefined
+    const subscription_status = typeof body.subscription_status === 'string' ? body.subscription_status : undefined
     const settings = typeof body.settings === 'object' && body.settings != null ? body.settings : undefined
     const payload: any = {}
     if (name !== undefined) payload.name = name
+    if (subscription_status !== undefined) payload.subscription_status = subscription_status
     if (settings !== undefined) payload.settings = settings
     if (Object.keys(payload).length === 0) {
       return NextResponse.json({ error: 'Sin cambios' }, { status: 400 })

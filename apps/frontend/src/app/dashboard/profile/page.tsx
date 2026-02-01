@@ -3,9 +3,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useProfile } from '@/hooks/use-profile';
-import { ProfessionalInfo } from '@/components/profile/professional-info';
-import { PerformanceMetrics } from '@/components/profile/performance-metrics';
-import { AdvancedNotifications } from '@/components/profile/advanced-notifications';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -13,11 +10,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
-import { User, RefreshCw, Edit, TrendingUp, Shield, Activity, Lock, Save, X, Clock, Palette, Globe, Eye, Briefcase, BarChart3, Bell } from 'lucide-react';
+import { User, RefreshCw, Shield, Lock, Save, X, Eye, Sparkles, Check, ArrowRight, Activity, Calendar, CreditCard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/lib/toast';
-import { formatDate } from '@/lib/utils';
+import { formatDate, formatCurrency } from '@/lib/utils';
 import api from '@/lib/api';
 import { ProfileSkeleton } from '@/components/profile/profile-skeleton';
 import { ProfilePreview } from '@/components/profile/profile-preview';
@@ -25,44 +21,12 @@ import { ProfileHeader } from '@/components/profile/profile-header';
 import '../../../styles/animations.css';
 import { createClient } from '@/lib/supabase';
 
-interface ActivityItem {
-  id: string;
-  type: 'sale' | 'product' | 'login' | 'update';
-  description: string;
-  timestamp: string;
-  metadata?: Record<string, unknown>;
-}
-
-interface UserPreferences {
-  notifications: {
-    email: boolean;
-    push: boolean;
-    sms: boolean;
-  };
-  theme: 'light' | 'dark' | 'system';
-  language: string;
-  timezone: string;
-  currency: string;
-}
-
 export default function ProfilePage() {
   const router = useRouter();
   const { profile, isLoading, updateProfile, updateAvatar } = useProfile();
   const [localIsLoading, setIsLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [activities, setActivities] = useState<ActivityItem[]>([]);
-  const [preferences, setPreferences] = useState<UserPreferences>({
-    notifications: {
-      email: true,
-      push: true,
-      sms: false
-    },
-    theme: 'system',
-    language: 'es',
-    timezone: 'America/Mexico_City',
-    currency: 'MXN'
-  });
-  
+
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -85,10 +49,25 @@ export default function ProfilePage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const supabaseRef = useRef(createClient());
 
+  // Organization info state
+  const [organizationInfo, setOrganizationInfo] = useState<{
+    name: string;
+    role: string;
+    roleDescription: string;
+    permissions: string[];
+  } | null>(null);
+
+  // Check if user is admin or owner of the organization
+  const isAdmin = useMemo(() => {
+    if (!organizationInfo?.role) return false;
+    const role = organizationInfo.role.toLowerCase();
+    return role === 'admin' || role === 'owner' || role === 'superadmin';
+  }, [organizationInfo]);
+
   // Validación en tiempo real
   const validateField = useCallback((field: string, value: string) => {
     let error = '';
-    
+
     switch (field) {
       case 'name':
         if (!value.trim()) {
@@ -115,7 +94,7 @@ export default function ProfilePage() {
         }
         break;
     }
-    
+
     setFormErrors(prev => ({ ...prev, [field]: error }));
     return error === '';
   }, []);
@@ -126,8 +105,8 @@ export default function ProfilePage() {
   }, [validateField]);
 
   const isFormValid = useMemo(() => {
-    return Object.values(formErrors).every(error => error === '') && 
-           editForm.name.trim() !== '';
+    return Object.values(formErrors).every(error => error === '') &&
+      editForm.name.trim() !== '';
   }, [formErrors, editForm.name]);
 
   const loadUserProfile = useCallback(async () => {
@@ -135,7 +114,7 @@ export default function ProfilePage() {
       setError(null);
       setIsLoading(true);
 
-      // Detectar modo mock para evitar llamadas a la API cuando Supabase no está configurado
+      // Detectar modo mock
       let isMockAuth = false;
       try {
         const { data: { session }, error: sessionError } = await supabaseRef.current.auth.getSession();
@@ -146,7 +125,6 @@ export default function ProfilePage() {
       }
 
       if (isMockAuth) {
-        // Usar el estado del hook como fuente y evitar la llamada a la API
         if (profile) {
           setEditForm({
             name: profile.name || '',
@@ -161,7 +139,6 @@ export default function ProfilePage() {
 
       const response = await api.get('/auth/profile');
       const profileData = response.data.data;
-      // setProfile(profileData); // Removed to fix unused variable
       setEditForm({
         name: profileData.name || '',
         phone: profileData.phone || '',
@@ -172,20 +149,15 @@ export default function ProfilePage() {
     } catch (error: unknown) {
       console.error('Error loading profile:', error);
       const err = error as { response?: { data?: { message?: string }; status?: number }; message?: string; code?: string };
-      const errorMessage = err?.response?.data?.message || 
-                          err?.message || 
-                          "No se pudo cargar el perfil del usuario";
+      const errorMessage = err?.response?.data?.message ||
+        err?.message ||
+        "No se pudo cargar el perfil del usuario";
       setError(errorMessage);
-      
-      // Auto-retry logic for network errors
+
       if (retryCount < 3 && (err?.code === 'NETWORK_ERROR' || (err?.response?.status && err.response.status >= 500))) {
         setTimeout(() => {
           setRetryCount(prev => prev + 1);
-          // We can't call loadUserProfile recursively directly if it's a dependency of itself
-          // Instead, we just trigger a retry by state if needed, or rely on the user to retry
-          // For now, let's just log that we would retry
-          console.log('Would retry loading profile...');
-        }, Math.pow(2, retryCount) * 1000); // Exponential backoff
+        }, Math.pow(2, retryCount) * 1000);
       } else {
         toast.error(errorMessage);
       }
@@ -194,77 +166,54 @@ export default function ProfilePage() {
     }
   }, [retryCount, profile]);
 
-  const loadUserActivities = useCallback(async () => {
-    try {
-      // Simulando datos de actividad - en producción esto vendría de la API
-      const mockActivities: ActivityItem[] = [
-        {
-          id: '1',
-          type: 'sale',
-          description: 'Procesó una venta por $1,250.00',
-          timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
-        },
-        {
-          id: '2',
-          type: 'product',
-          description: 'Agregó nuevo producto: "Laptop Dell Inspiron"',
-          timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString()
-        },
-        {
-          id: '3',
-          type: 'login',
-          description: 'Inició sesión en el sistema',
-          timestamp: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString()
-        },
-        {
-          id: '4',
-          type: 'update',
-          description: 'Actualizó información del perfil',
-          timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-        }
-      ];
-      setActivities(mockActivities);
-    } catch (error) {
-      console.error('Error loading activities:', error);
-      // Don't show error toast for activities as it's not critical
-    }
-  }, []);
-
   useEffect(() => {
     if (retryCount > 0) {
       loadUserProfile();
     }
   }, [retryCount, loadUserProfile]);
+
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     setError(null);
     try {
-      await Promise.all([
-        loadUserProfile(),
-        loadUserActivities()
-      ]);
+      await loadUserProfile();
       toast.success('Perfil actualizado correctamente');
     } catch (error) {
-      // Error is handled in loadUserProfile but we catch here to stop spinner
       console.error('Refresh error:', error);
       toast.error('Error al actualizar el perfil');
     } finally {
       setIsRefreshing(false);
     }
-  }, [loadUserProfile, loadUserActivities]);
+  }, [loadUserProfile]);
 
   useEffect(() => {
     loadUserProfile();
-    loadUserActivities();
-    // Este efecto solo debe correr al montar la página
-  }, [loadUserProfile, loadUserActivities]);
+  }, [loadUserProfile]);
+
+  // Load organization info
+  useEffect(() => {
+    loadOrganizationInfo();
+  }, [profile?.id]);
+
+  const loadOrganizationInfo = async () => {
+    if (!profile?.id) return;
+
+    try {
+      const response = await api.get('/auth/organization/info');
+      if (response.data.success && response.data.data) {
+        setOrganizationInfo(response.data.data);
+      }
+    } catch (error) {
+      console.log('No organization info available:', error);
+      setOrganizationInfo(null);
+    }
+  };
 
   const handleSaveProfile = useCallback(async () => {
     if (!isFormValid) {
       toast.error('Por favor, corrige los errores en el formulario');
       return;
     }
-    // Mostrar vista previa antes de guardar
     setShowPreview(true);
   }, [isFormValid]);
 
@@ -272,19 +221,15 @@ export default function ProfilePage() {
     setIsSaving(true);
     setShowPreview(false);
     try {
-      // Validate form data before sending
       if (!editForm.name?.trim()) {
         throw new Error('El nombre es requerido');
       }
 
-      // Use the useProfile hook's updateProfile method instead of API call
       const success = await updateProfile(editForm);
       if (success) {
         setIsEditing(false);
         toast.success("Perfil actualizado correctamente");
-        // Refresh the local profile data
         await loadUserProfile();
-        // Clear any previous errors
         setError(null);
         setRetryCount(0);
       } else {
@@ -293,10 +238,9 @@ export default function ProfilePage() {
     } catch (error: unknown) {
       console.error('Error saving profile:', error);
       const err = error as { response?: { data?: { message?: string } }; message?: string; code?: string };
-      
-      // More detailed error handling
+
       let errorMessage = "No se pudo actualizar el perfil";
-      
+
       if (err?.message) {
         errorMessage = err.message;
       } else if (err?.response?.data?.message) {
@@ -308,7 +252,7 @@ export default function ProfilePage() {
         router.push('/auth/signin');
         return;
       }
-      
+
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {
@@ -324,10 +268,8 @@ export default function ProfilePage() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // Clear previous errors
     setError(null);
 
-    // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
       const errorMsg = 'El archivo es demasiado grande. Máximo 5MB permitido.';
       setError(errorMsg);
@@ -335,7 +277,6 @@ export default function ProfilePage() {
       return;
     }
 
-    // Validate file type
     if (!file.type.startsWith('image/')) {
       const errorMsg = 'Solo se permiten archivos de imagen (JPG, PNG, GIF, WebP).';
       setError(errorMsg);
@@ -343,7 +284,6 @@ export default function ProfilePage() {
       return;
     }
 
-    // Additional file type validation
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
     if (!allowedTypes.includes(file.type.toLowerCase())) {
       const errorMsg = 'Formato de imagen no soportado. Use JPG, PNG, GIF o WebP.';
@@ -355,13 +295,11 @@ export default function ProfilePage() {
     try {
       setIsUploading(true);
       setError(null);
-      
-      // Use the updateAvatar function from the hook
+
       const success = await updateAvatar(file);
-      
+
       if (success) {
         toast.success("Foto de perfil actualizada correctamente");
-        // Reload the profile to get the updated avatar
         await loadUserProfile();
       } else {
         throw new Error('La actualización del avatar falló');
@@ -369,9 +307,9 @@ export default function ProfilePage() {
     } catch (error: unknown) {
       console.error('Error uploading avatar:', error);
       const err = error as { response?: { data?: { message?: string } }; message?: string; code?: string };
-      
+
       let errorMessage = "No se pudo actualizar la foto de perfil";
-      
+
       if (err?.message) {
         errorMessage = err.message;
       } else if (err?.response?.data?.message) {
@@ -387,34 +325,16 @@ export default function ProfilePage() {
       } else if (err?.code === 'UNSUPPORTED_MEDIA_TYPE') {
         errorMessage = "Formato de archivo no soportado.";
       }
-      
+
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {
       setIsUploading(false);
-      // Reset the file input
       if (event.target) {
         event.target.value = '';
       }
     }
   }, [updateAvatar, loadUserProfile, router]);
-
-  const handlePreferenceChange = useCallback((key: string, value: unknown) => {
-    setPreferences(prev => ({
-      ...prev,
-      [key]: value
-    }));
-  }, []);
-
-  const getActivityIcon = useCallback((type: string) => {
-    switch (type) {
-      case 'sale': return <TrendingUp className="h-4 w-4 text-green-500" />;
-      case 'product': return <User className="h-4 w-4 text-blue-500" />;
-      case 'login': return <Shield className="h-4 w-4 text-purple-500" />;
-      case 'update': return <Edit className="h-4 w-4 text-orange-500" />;
-      default: return <Activity className="h-4 w-4 text-gray-500" />;
-    }
-  }, []);
 
   if (isLoading || localIsLoading) {
     return <ProfileSkeleton />;
@@ -536,101 +456,57 @@ export default function ProfilePage() {
         onAvatarUpload={handleAvatarUpload}
       />
 
-      {/* Contenido principal con tabs mejoradas */}
+      {/* Contenido principal con tabs simplificadas */}
       <Tabs defaultValue="overview" className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <TabsList 
-            className="grid w-full sm:w-auto grid-cols-3 sm:grid-cols-7 h-auto p-1 bg-muted/50 rounded-lg animate-slide-in-left"
+          <TabsList
+            className="grid w-full sm:w-auto grid-cols-3 h-auto p-1 bg-muted/50 rounded-lg animate-slide-in-left"
             role="tablist"
             aria-label="Secciones del perfil"
           >
-            <TabsTrigger 
-              value="overview" 
+            <TabsTrigger
+              value="overview"
               className="flex items-center gap-2 px-4 py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all smooth-transition"
               role="tab"
-              aria-controls="overview-panel"
-              aria-selected="true"
             >
-              <User className="h-4 w-4" aria-hidden="true" />
-              <span className="hidden sm:inline">Resumen</span>
+              <User className="h-4 w-4" />
+              <span>Información Personal</span>
             </TabsTrigger>
-            <TabsTrigger 
-              value="professional" 
+            <TabsTrigger
+              value="security"
               className="flex items-center gap-2 px-4 py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all smooth-transition"
               role="tab"
-              aria-controls="professional-panel"
             >
-              <Briefcase className="h-4 w-4" aria-hidden="true" />
-              <span className="hidden sm:inline">Profesional</span>
+              <Shield className="h-4 w-4" />
+              <span>Seguridad</span>
             </TabsTrigger>
-            <TabsTrigger 
-              value="metrics" 
-              className="flex items-center gap-2 px-4 py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all smooth-transition"
-              role="tab"
-              aria-controls="metrics-panel"
-            >
-              <BarChart3 className="h-4 w-4" aria-hidden="true" />
-              <span className="hidden sm:inline">Métricas</span>
-            </TabsTrigger>
-            <TabsTrigger 
-              value="activity" 
-              className="flex items-center gap-2 px-4 py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all smooth-transition"
-              role="tab"
-              aria-controls="activity-panel"
-            >
-              <Activity className="h-4 w-4" aria-hidden="true" />
-              <span className="hidden sm:inline">Actividad</span>
-            </TabsTrigger>
-            <TabsTrigger 
-              value="notifications" 
-              className="flex items-center gap-2 px-4 py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all smooth-transition"
-              role="tab"
-              aria-controls="notifications-panel"
-            >
-              <Bell className="h-4 w-4" aria-hidden="true" />
-              <span className="hidden sm:inline">Notificaciones</span>
-            </TabsTrigger>
-            <TabsTrigger 
-              value="preferences" 
-              className="flex items-center gap-2 px-4 py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all smooth-transition"
-              role="tab"
-              aria-controls="preferences-panel"
-            >
-              <Palette className="h-4 w-4" aria-hidden="true" />
-              <span className="hidden sm:inline">Preferencias</span>
-            </TabsTrigger>
-            <TabsTrigger 
-              value="security" 
-              className="flex items-center gap-2 px-4 py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all smooth-transition"
-              role="tab"
-              aria-controls="security-panel"
-            >
-              <Shield className="h-4 w-4" aria-hidden="true" />
-              <span className="hidden sm:inline">Seguridad</span>
-            </TabsTrigger>
+            {isAdmin && (
+              <TabsTrigger
+                value="plan"
+                className="flex items-center gap-2 px-4 py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all smooth-transition"
+                role="tab"
+              >
+                <Sparkles className="h-4 w-4" />
+                <span>Plan</span>
+              </TabsTrigger>
+            )}
           </TabsList>
-          
+
           {/* Indicador de estado de edición */}
           {isEditing && (
-            <div 
+            <div
               className="flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm"
               role="status"
               aria-live="polite"
             >
-              <Edit className="h-3 w-3" aria-hidden="true" />
+              <User className="h-3 w-3" />
               Modo edición activo
             </div>
           )}
         </div>
 
-        {/* Tab: Resumen */}
-        <TabsContent 
-          value="overview" 
-          className="space-y-6 tab-content-enter"
-          role="tabpanel"
-          id="overview-panel"
-          aria-labelledby="overview-tab"
-        >
+        {/* Tab: Información Personal */}
+        <TabsContent value="overview" className="space-y-6 tab-content-enter">
           <div className="grid gap-6 md:grid-cols-2">
             {/* Información personal */}
             <Card className="hover-lift smooth-transition">
@@ -642,20 +518,17 @@ export default function ProfilePage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {isEditing ? (
-                  <form onSubmit={(e) => { e.preventDefault(); handleSaveProfile(); }} aria-label="Formulario de edición de perfil">
+                  <form onSubmit={(e) => { e.preventDefault(); handleSaveProfile(); }}>
                     <div className="space-y-2">
                       <Label htmlFor="name">Nombre completo *</Label>
                       <Input
                         id="name"
                         value={editForm.name}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFormChange('name', e.target.value)}
-                        className={`form-field-focus ${formErrors.name ? 'border-red-500 form-field-error' : ''}`}
-                        aria-required="true"
-                        aria-invalid={!!formErrors.name}
-                        aria-describedby={formErrors.name ? 'name-error' : undefined}
+                        onChange={(e) => handleFormChange('name', e.target.value)}
+                        className={formErrors.name ? 'border-red-500' : ''}
                       />
                       {formErrors.name && (
-                        <p id="name-error" className="text-sm text-red-500 animate-slide-in-left" role="alert">{formErrors.name}</p>
+                        <p className="text-sm text-red-500">{formErrors.name}</p>
                       )}
                     </div>
                     <div className="space-y-2">
@@ -663,14 +536,12 @@ export default function ProfilePage() {
                       <Input
                         id="phone"
                         value={editForm.phone}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFormChange('phone', e.target.value)}
-                        className={`form-field-focus ${formErrors.phone ? 'border-red-500 form-field-error' : ''}`}
+                        onChange={(e) => handleFormChange('phone', e.target.value)}
+                        className={formErrors.phone ? 'border-red-500' : ''}
                         placeholder="+595 21 1234567"
-                        aria-invalid={!!formErrors.phone}
-                        aria-describedby={formErrors.phone ? 'phone-error' : undefined}
                       />
                       {formErrors.phone && (
-                        <p id="phone-error" className="text-sm text-red-500 animate-slide-in-left" role="alert">{formErrors.phone}</p>
+                        <p className="text-sm text-red-500">{formErrors.phone}</p>
                       )}
                     </div>
                     <div className="space-y-2">
@@ -678,14 +549,12 @@ export default function ProfilePage() {
                       <Input
                         id="location"
                         value={editForm.location}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFormChange('location', e.target.value)}
-                        className={`form-field-focus ${formErrors.location ? 'border-red-500 form-field-error' : ''}`}
+                        onChange={(e) => handleFormChange('location', e.target.value)}
+                        className={formErrors.location ? 'border-red-500' : ''}
                         placeholder="Ciudad, País"
-                        aria-invalid={!!formErrors.location}
-                        aria-describedby={formErrors.location ? 'location-error' : undefined}
                       />
                       {formErrors.location && (
-                        <p id="location-error" className="text-sm text-red-500 animate-slide-in-left" role="alert">{formErrors.location}</p>
+                        <p className="text-sm text-red-500">{formErrors.location}</p>
                       )}
                     </div>
                     <div className="space-y-2">
@@ -693,50 +562,75 @@ export default function ProfilePage() {
                       <Textarea
                         id="bio"
                         value={editForm.bio}
-                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleFormChange('bio', e.target.value)}
+                        onChange={(e) => handleFormChange('bio', e.target.value)}
                         placeholder="Cuéntanos sobre ti..."
                         rows={3}
-                        className={`form-field-focus ${formErrors.bio ? 'border-red-500 form-field-error' : ''}`}
-                        aria-invalid={!!formErrors.bio}
-                        aria-describedby={formErrors.bio ? 'bio-error bio-count' : 'bio-count'}
+                        className={formErrors.bio ? 'border-red-500' : ''}
                       />
                       <div className="flex justify-between items-center">
                         {formErrors.bio && (
-                          <p id="bio-error" className="text-sm text-red-500 animate-slide-in-left" role="alert">{formErrors.bio}</p>
+                          <p className="text-sm text-red-500">{formErrors.bio}</p>
                         )}
-                        <p id="bio-count" className="text-xs text-muted-foreground ml-auto" aria-live="polite">
+                        <p className="text-xs text-muted-foreground ml-auto">
                           {editForm.bio.length}/500 caracteres
                         </p>
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      <Button 
-                        type="submit" 
+                      <Button
+                        type="submit"
                         disabled={isSaving || !isFormValid}
-                        aria-describedby={!isFormValid ? 'form-validation-message' : undefined}
                         className="button-press"
                       >
-                        <Save className="h-4 w-4 mr-2" aria-hidden="true" />
+                        <Save className="h-4 w-4 mr-2" />
                         {isSaving ? 'Guardando...' : 'Guardar'}
                       </Button>
-                      <Button 
-                        type="button" 
-                        variant="outline" 
+                      <Button
+                        type="button"
+                        variant="outline"
                         onClick={() => setIsEditing(false)}
                         className="button-press"
                       >
-                        <X className="h-4 w-4 mr-2" aria-hidden="true" />
+                        <X className="h-4 w-4 mr-2" />
                         Cancelar
                       </Button>
                     </div>
                     {!isFormValid && (
-                      <p id="form-validation-message" className="text-sm text-muted-foreground mt-2 animate-fade-in">
+                      <p className="text-sm text-muted-foreground mt-2">
                         Por favor, completa todos los campos requeridos correctamente.
                       </p>
                     )}
                   </form>
                 ) : (
                   <>
+                    <div>
+                      <Label className="text-sm font-medium">Nombre</Label>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {profile.name || 'No especificado'}
+                      </p>
+                    </div>
+                    <Separator />
+                    <div>
+                      <Label className="text-sm font-medium">Email</Label>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {profile.email || 'No especificado'}
+                      </p>
+                    </div>
+                    <Separator />
+                    <div>
+                      <Label className="text-sm font-medium">Teléfono</Label>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {profile.phone || 'No especificado'}
+                      </p>
+                    </div>
+                    <Separator />
+                    <div>
+                      <Label className="text-sm font-medium">Ubicación</Label>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {profile.location || 'No especificado'}
+                      </p>
+                    </div>
+                    <Separator />
                     <div>
                       <Label className="text-sm font-medium">Biografía</Label>
                       <p className="text-sm text-muted-foreground mt-1">
@@ -761,192 +655,90 @@ export default function ProfilePage() {
               </CardContent>
             </Card>
 
-            {/* Estadísticas rápidas */}
+            {/* Información de cuenta */}
             <Card className="hover-lift smooth-transition">
               <CardHeader>
-                <CardTitle>Estadísticas</CardTitle>
+                <CardTitle>Información de Cuenta</CardTitle>
                 <CardDescription>
-                  Tu actividad en el sistema
+                  Detalles de tu cuenta en el sistema
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="text-center p-4 bg-muted rounded-lg hover-lift smooth-transition stats-counter">
-                    <div className="text-2xl font-bold text-primary">127</div>
-                    <div className="text-sm text-muted-foreground">Ventas procesadas</div>
+                <div className="space-y-4">
+                  <div>
+                    <Label className="text-sm font-medium">Rol del Sistema</Label>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {profile.role || 'Usuario'}
+                    </p>
                   </div>
-                  <div className="text-center p-4 bg-muted rounded-lg hover-lift smooth-transition stats-counter">
-                    <div className="text-2xl font-bold text-green-600">45</div>
-                    <div className="text-sm text-muted-foreground">Productos agregados</div>
-                  </div>
-                  <div className="text-center p-4 bg-muted rounded-lg hover-lift smooth-transition stats-counter">
-                    <div className="text-2xl font-bold text-blue-600">89%</div>
-                    <div className="text-sm text-muted-foreground">Eficiencia</div>
-                  </div>
-                  <div className="text-center p-4 bg-muted rounded-lg hover-lift smooth-transition stats-counter">
-                    <div className="text-2xl font-bold text-purple-600">23</div>
-                    <div className="text-sm text-muted-foreground">Días activo</div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
+                  <Separator />
 
-        {/* Tab: Actividad */}
-        <TabsContent 
-          value="activity" 
-          className="space-y-6 tab-content-enter"
-          role="tabpanel"
-          id="activity-panel"
-          aria-labelledby="activity-tab"
-        >
-          <Card className="hover-lift smooth-transition">
-            <CardHeader>
-              <CardTitle>Actividad Reciente</CardTitle>
-              <CardDescription>
-                Historial de tus acciones en el sistema
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4" role="list" aria-label="Lista de actividades recientes">
-                {activities.map((activity, index) => (
-                  <div 
-                    key={activity.id} 
-                    className="flex items-start gap-3 p-3 rounded-lg border hover-lift smooth-transition animate-slide-in-left"
-                    role="listitem"
-                    style={{ animationDelay: `${index * 0.1}s` }}
-                  >
-                    <div className="mt-1 p-2 rounded-full bg-muted" aria-hidden="true">
-                      {getActivityIcon(activity.type)}
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">{activity.description}</p>
-                      <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                        <Clock className="h-3 w-3" aria-hidden="true" />
-                        <time dateTime={activity.timestamp}>
-                          {formatDate(activity.timestamp)}
-                        </time>
+                  {/* Organization Info */}
+                  {organizationInfo ? (
+                    <>
+                      <div>
+                        <Label className="text-sm font-medium">Organización</Label>
+                        <p className="text-sm font-semibold text-foreground mt-1">
+                          {organizationInfo.name}
+                        </p>
                       </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                      <Separator />
+                      <div>
+                        <Label className="text-sm font-medium">Rol en la Organización</Label>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge variant="default" className="bg-blue-600">
+                            {organizationInfo.role}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {organizationInfo.roleDescription}
+                          </span>
+                        </div>
+                      </div>
+                      {organizationInfo.permissions && organizationInfo.permissions.length > 0 && (
+                        <>
+                          <Separator />
+                          <div>
+                            <Label className="text-sm font-medium mb-2 block">Permisos Principales</Label>
+                            <div className="flex flex-wrap gap-2">
+                              {organizationInfo.permissions.slice(0, 6).map((permission, idx) => (
+                                <Badge key={idx} variant="outline" className="text-xs">
+                                  {permission}
+                                </Badge>
+                              ))}
+                              {organizationInfo.permissions.length > 6 && (
+                                <Badge variant="outline" className="text-xs">
+                                  +{organizationInfo.permissions.length - 6} más
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </>
+                      )}
+                      <Separator />
+                    </>
+                  ) : (
+                    <>
+                      <div className="p-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                        <p className="text-sm text-amber-800 dark:text-amber-200">
+                          No perteneces a ninguna organización actualmente
+                        </p>
+                      </div>
+                      <Separator />
+                    </>
+                  )}
 
-        {/* Tab: Preferencias */}
-        <TabsContent value="preferences" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Notificaciones</CardTitle>
-                <CardDescription>
-                  Configura cómo quieres recibir notificaciones
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="email-notifications">Notificaciones por email</Label>
-                    <p className="text-sm text-muted-foreground" id="email-notifications-desc">
-                      Recibe actualizaciones por correo electrónico
+                  <div>
+                    <Label className="text-sm font-medium">Fecha de registro</Label>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {profile.createdAt ? formatDate(profile.createdAt) : 'No disponible'}
                     </p>
                   </div>
-                  <Switch
-                    id="email-notifications"
-                    checked={preferences.notifications.email}
-                    onCheckedChange={(checked: boolean) => 
-                      handlePreferenceChange('notifications', {
-                        ...preferences.notifications,
-                        email: checked
-                      })
-                    }
-                    aria-describedby="email-notifications-desc"
-                    className="switch-transition"
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="push-notifications">Notificaciones push</Label>
-                    <p className="text-sm text-muted-foreground" id="push-notifications-desc">
-                      Recibe notificaciones en el navegador
+                  <Separator />
+                  <div>
+                    <Label className="text-sm font-medium">ID de usuario</Label>
+                    <p className="text-xs text-muted-foreground mt-1 font-mono">
+                      {profile.id || 'No disponible'}
                     </p>
-                  </div>
-                  <Switch
-                    id="push-notifications"
-                    checked={preferences.notifications.push}
-                    onCheckedChange={(checked: boolean) => 
-                      handlePreferenceChange('notifications', {
-                        ...preferences.notifications,
-                        push: checked
-                      })
-                    }
-                    aria-describedby="push-notifications-desc"
-                    className="switch-transition"
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="sms-notifications">Notificaciones SMS</Label>
-                    <p className="text-sm text-muted-foreground" id="sms-notifications-desc">
-                      Recibe alertas importantes por SMS
-                    </p>
-                  </div>
-                  <Switch
-                    id="sms-notifications"
-                    checked={preferences.notifications.sms}
-                    onCheckedChange={(checked: boolean) => 
-                      handlePreferenceChange('notifications', {
-                        ...preferences.notifications,
-                        sms: checked
-                      })
-                    }
-                    aria-describedby="sms-notifications-desc"
-                    className="switch-transition"
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="hover-lift smooth-transition">
-              <CardHeader>
-                <CardTitle>Apariencia y Región</CardTitle>
-                <CardDescription>
-                  Personaliza la apariencia y configuración regional
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Tema</Label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {['light', 'dark', 'system'].map((theme) => (
-                      <Button
-                        key={theme}
-                        variant={preferences.theme === theme ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => handlePreferenceChange('theme', theme)}
-                        className="button-press smooth-transition"
-                      >
-                        <Palette className="h-4 w-4" />
-                        {theme === 'light' ? 'Claro' : theme === 'dark' ? 'Oscuro' : 'Sistema'}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-                <div className="space-y-2 animate-slide-in-left">
-                  <Label>Idioma</Label>
-                  <div className="flex items-center gap-2">
-                    <Globe className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">Español (México)</span>
-                  </div>
-                </div>
-                <div className="space-y-2 animate-slide-in-left" style={{ animationDelay: '0.1s' }}>
-                  <Label>Zona horaria</Label>
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">América/Ciudad_de_México (GMT-6)</span>
                   </div>
                 </div>
               </CardContent>
@@ -964,7 +756,7 @@ export default function ProfilePage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between p-4 border rounded-lg hover-lift smooth-transition animate-slide-in-left">
+              <div className="flex items-center justify-between p-4 border rounded-lg hover-lift smooth-transition">
                 <div className="space-y-1">
                   <Label className="font-medium">Cambiar contraseña</Label>
                   <p className="text-sm text-muted-foreground">
@@ -980,8 +772,8 @@ export default function ProfilePage() {
                   Cambiar
                 </Button>
               </div>
-              
-              <div className="flex items-center justify-between p-4 border rounded-lg hover-lift smooth-transition animate-slide-in-left" style={{ animationDelay: '0.1s' }}>
+
+              <div className="flex items-center justify-between p-4 border rounded-lg hover-lift smooth-transition">
                 <div className="space-y-1">
                   <Label className="font-medium">Autenticación de dos factores</Label>
                   <p className="text-sm text-muted-foreground">
@@ -998,7 +790,7 @@ export default function ProfilePage() {
                 </Button>
               </div>
 
-              <div className="flex items-center justify-between p-4 border rounded-lg hover-lift smooth-transition animate-slide-in-left" style={{ animationDelay: '0.2s' }}>
+              <div className="flex items-center justify-between p-4 border rounded-lg hover-lift smooth-transition">
                 <div className="space-y-1">
                   <Label className="font-medium">Sesiones activas</Label>
                   <p className="text-sm text-muted-foreground">
@@ -1018,75 +810,16 @@ export default function ProfilePage() {
           </Card>
         </TabsContent>
 
-        {/* Tab: Información Profesional */}
-        <TabsContent 
-          value="professional" 
-          className="space-y-6 tab-content-enter"
-          role="tabpanel"
-          id="professional-panel"
-          aria-labelledby="professional-tab"
-        >
-          <ProfessionalInfo 
-            onUpdate={async (data) => {
-              try {
-                // Mock implementation - replace with actual API call
-                console.log('Updating professional info:', data);
-                toast.success('Información profesional actualizada');
-                return true;
-              } catch (error) {
-                toast.error('Error al actualizar información profesional');
-                return false;
-              }
-            }}
-          />
-        </TabsContent>
-
-        {/* Tab: Métricas de Rendimiento */}
-        <TabsContent 
-          value="metrics" 
-          className="space-y-6 tab-content-enter"
-          role="tabpanel"
-          id="metrics-panel"
-          aria-labelledby="metrics-tab"
-        >
-          <PerformanceMetrics 
-            onUpdate={async (data) => {
-              try {
-                // Mock implementation - replace with actual API call
-                console.log('Updating performance metrics:', data);
-                toast.success('Métricas de rendimiento actualizadas');
-                return true;
-              } catch (error) {
-                toast.error('Error al actualizar métricas de rendimiento');
-                return false;
-              }
-            }}
-          />
-        </TabsContent>
-
-        {/* Tab: Notificaciones Avanzadas */}
-        <TabsContent 
-          value="notifications" 
-          className="space-y-6 tab-content-enter"
-          role="tabpanel"
-          id="notifications-panel"
-          aria-labelledby="notifications-tab"
-        >
-          <AdvancedNotifications 
-            onUpdate={async (data) => {
-              try {
-                // Mock implementation - replace with actual API call
-                console.log('Updating notification settings:', data);
-                toast.success('Configuración de notificaciones actualizada');
-                return true;
-              } catch (error) {
-                toast.error('Error al actualizar configuración de notificaciones');
-                return false;
-              }
-            }}
-          />
-        </TabsContent>
+        {/* Tab: Plan */}
+        {isAdmin && (
+          <TabsContent value="plan" className="space-y-6 tab-content-enter">
+            <PlanSection profile={profile} />
+          </TabsContent>
+        )}
       </Tabs>
+
+      {/* Recent Activity Section (Visible for all roles) */}
+      <RecentActivitySection userId={profile.id} />
 
       {/* Profile Preview Modal */}
       <ProfilePreview
@@ -1105,6 +838,335 @@ export default function ProfilePage() {
         onCancel={handleCancelPreview}
         isVisible={showPreview}
       />
+    </div>
+  );
+}
+
+// Recent Activity Section Component
+function RecentActivitySection({ userId }: { userId: string }) {
+  const [activities, setActivities] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchActivities = async () => {
+      try {
+        setLoading(true);
+        const response = await api.get(`/sales/recent?limit=5&user_id=${userId}`);
+        if (response.data?.sales) {
+          setActivities(response.data.sales);
+        }
+      } catch (error) {
+        console.error('Error fetching recent activity:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (userId) {
+      fetchActivities();
+    }
+  }, [userId]);
+
+  if (loading) {
+    return (
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="h-5 w-5" />
+            Actividad Reciente
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="flex items-center justify-between p-4 border rounded-lg animate-pulse">
+                <div className="h-4 bg-gray-200 rounded w-1/3"></div>
+                <div className="h-4 bg-gray-200 rounded w-1/4"></div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (activities.length === 0) {
+    return null;
+  }
+
+  return (
+    <Card className="mt-6 hover-lift smooth-transition">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Activity className="h-5 w-5 text-blue-600" />
+          Actividad Reciente
+        </CardTitle>
+        <CardDescription>
+          Tus últimas ventas y movimientos
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          {activities.map((activity) => (
+            <div 
+              key={activity.id} 
+              className="flex items-center justify-between p-4 border rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors"
+            >
+              <div className="flex items-start gap-4">
+                <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-full">
+                  <CreditCard className="h-5 w-5 text-green-600 dark:text-green-400" />
+                </div>
+                <div>
+                  <p className="font-medium">Venta #{activity.id.slice(0, 8)}</p>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Calendar className="h-3 w-3" />
+                    <span>{formatDate(activity.created_at)}</span>
+                    <span>•</span>
+                    <span>{activity.customer_name || 'Cliente Casual'}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="font-bold text-lg">{formatCurrency(activity.total_amount)}</p>
+                <Badge variant={activity.status === 'completed' ? 'default' : 'secondary'} className="capitalize">
+                  {activity.status === 'completed' ? 'Completada' : activity.status}
+                </Badge>
+              </div>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Plan Section Component
+interface PlanSectionProps {
+  profile: {
+    id: string;
+    organizationId?: string;
+  };
+}
+
+function PlanSection({ profile }: PlanSectionProps) {
+  const [currentPlan, setCurrentPlan] = useState<any>(null);
+  const [availablePlans, setAvailablePlans] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [requesting, setRequesting] = useState(false);
+
+  useEffect(() => {
+    loadPlanData();
+  }, []);
+
+  const loadPlanData = async () => {
+    try {
+      setLoading(true);
+
+      // Fetch current plan
+      try {
+        const currentResponse = await api.get('/api/auth/organization/plan');
+        setCurrentPlan(currentResponse.data.data);
+      } catch (planError: any) {
+        console.log('No plan found for user:', planError?.response?.status);
+        // User might not have an organization or plan assigned
+        setCurrentPlan(null);
+      }
+
+      // Fetch available plans
+      const plansResponse = await api.get('/plans');
+      setAvailablePlans(plansResponse.data.plans || []);
+    } catch (error) {
+      console.error('Error loading plan data:', error);
+      // Don't show error toast, just log it
+      setAvailablePlans([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRequestPlanChange = async (planSlug: string) => {
+    try {
+      setRequesting(true);
+      await api.post('/api/auth/organization/request-plan-change', { planSlug });
+      toast.success('Solicitud de cambio de plan enviada correctamente');
+    } catch (error) {
+      console.error('Error requesting plan change:', error);
+      toast.error('Error al solicitar cambio de plan');
+    } finally {
+      setRequesting(false);
+    }
+  };
+
+  const getPlanColor = (slug: string) => {
+    const s = String(slug || '').toLowerCase();
+    if (s === 'free') return 'from-slate-500 to-slate-700';
+    if (s === 'starter') return 'from-blue-500 to-cyan-600';
+    if (s === 'pro' || s === 'professional') return 'from-purple-600 to-indigo-600';
+    if (s === 'premium') return 'from-fuchsia-600 to-pink-700';
+    if (s === 'enterprise') return 'from-amber-600 to-orange-700';
+    return 'from-slate-500 to-slate-600';
+  };
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="py-12">
+          <div className="flex items-center justify-center">
+            <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Current Plan */}
+      <Card className="hover-lift smooth-transition border-2">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-purple-600" />
+                Plan Actual
+              </CardTitle>
+              <CardDescription>
+                Tu plan de suscripción activo
+              </CardDescription>
+            </div>
+            {currentPlan && (
+              <Badge className={`bg-gradient-to-r ${getPlanColor(currentPlan.slug)} text-white border-0 py-1 px-3 text-xs font-bold tracking-widest uppercase`}>
+                {currentPlan.slug}
+              </Badge>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {currentPlan ? (
+            <div className="space-y-4">
+              <div className="p-6 rounded-xl bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 border">
+                <h3 className="text-2xl font-bold mb-2">{currentPlan.name}</h3>
+                <p className="text-muted-foreground mb-4">{currentPlan.description}</p>
+
+                <div className="flex items-baseline gap-2 mb-4">
+                  <span className="text-4xl font-black">${currentPlan.price_monthly}</span>
+                  <span className="text-muted-foreground">/mes</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div className="p-3 rounded-lg bg-background/50">
+                    <div className="text-xs text-muted-foreground mb-1">Usuarios</div>
+                    <div className="font-bold">
+                      {currentPlan.limits?.maxUsers === -1 ? 'Ilimitados' : currentPlan.limits?.maxUsers}
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-background/50">
+                    <div className="text-xs text-muted-foreground mb-1">Productos</div>
+                    <div className="font-bold">
+                      {currentPlan.limits?.maxProducts === -1 ? 'Ilimitados' : currentPlan.limits?.maxProducts}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="text-sm font-semibold mb-2">Características incluidas:</div>
+                  {Array.isArray(currentPlan.features) && currentPlan.features.map((feature: any, idx: number) => {
+                    const name = typeof feature === 'string' ? feature : feature.name;
+                    const included = typeof feature === 'string' ? true : feature.included;
+                    return included ? (
+                      <div key={idx} className="flex items-center gap-2 text-sm">
+                        <Check className="h-4 w-4 text-green-600" />
+                        <span>{name}</span>
+                      </div>
+                    ) : null;
+                  })}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Sparkles className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>No tienes un plan asignado actualmente</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Available Plans */}
+      <Card className="hover-lift smooth-transition">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ArrowRight className="h-5 w-5 text-blue-600" />
+            Planes Disponibles
+          </CardTitle>
+          <CardDescription>
+            Mejora tu plan para acceder a más funcionalidades
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {availablePlans.map((plan) => {
+              const isCurrentPlan = currentPlan?.slug === plan.slug;
+
+              return (
+                <div
+                  key={plan.id}
+                  className={`p-6 rounded-xl border-2 transition-all ${isCurrentPlan
+                    ? 'border-purple-500 bg-purple-50 dark:bg-purple-950/20'
+                    : 'border-slate-200 dark:border-slate-800 hover:border-purple-300 dark:hover:border-purple-700'
+                    }`}
+                >
+                  <div className={`h-1 w-12 rounded-full mb-4 bg-gradient-to-r ${getPlanColor(plan.slug)}`} />
+
+                  <h4 className="text-xl font-bold mb-2">{plan.name}</h4>
+                  <p className="text-sm text-muted-foreground mb-4 line-clamp-2">
+                    {plan.description}
+                  </p>
+
+                  <div className="flex items-baseline gap-1 mb-4">
+                    <span className="text-3xl font-black">${plan.price_monthly}</span>
+                    <span className="text-sm text-muted-foreground">/mes</span>
+                  </div>
+
+                  <div className="space-y-2 mb-4">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Check className="h-4 w-4 text-green-600" />
+                      <span>{plan.limits?.maxUsers === -1 ? 'Usuarios ilimitados' : `${plan.limits?.maxUsers} usuarios`}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                      <Check className="h-4 w-4 text-green-600" />
+                      <span>{plan.limits?.maxProducts === -1 ? 'Productos ilimitados' : `${plan.limits?.maxProducts} productos`}</span>
+                    </div>
+                  </div>
+
+                  {isCurrentPlan ? (
+                    <Button disabled className="w-full" variant="outline">
+                      <Check className="h-4 w-4 mr-2" />
+                      Plan Actual
+                    </Button>
+                  ) : (
+                    <Button
+                      className="w-full"
+                      onClick={() => handleRequestPlanChange(plan.slug)}
+                      disabled={requesting}
+                    >
+                      <ArrowRight className="h-4 w-4 mr-2" />
+                      {requesting ? 'Solicitando...' : 'Solicitar Cambio'}
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {availablePlans.length === 0 && (
+            <div className="text-center py-12 text-muted-foreground">
+              <Sparkles className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>No hay planes disponibles en este momento</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

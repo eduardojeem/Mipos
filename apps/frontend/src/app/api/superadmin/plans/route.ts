@@ -41,7 +41,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ plans: data ?? [], total: count || 0, page, pageSize })
+    const DEFAULT_LIMITS: Record<string, any> = {
+      free: { maxUsers: 2, maxProducts: 50, maxTransactionsPerMonth: 200, maxLocations: 1 },
+      starter: { maxUsers: 5, maxProducts: 500, maxTransactionsPerMonth: 1000, maxLocations: 1 },
+      pro: { maxUsers: 10, maxProducts: 2000, maxTransactionsPerMonth: 5000, maxLocations: 3 },
+      professional: { maxUsers: 10, maxProducts: 2000, maxTransactionsPerMonth: 5000, maxLocations: 3 },
+      premium: { maxUsers: -1, maxProducts: -1, maxTransactionsPerMonth: -1, maxLocations: -1 },
+    };
+
+    const plans = (data || []).map((plan: any) => {
+      if (!plan.limits) {
+        const slug = String(plan.slug || '').toLowerCase();
+        plan.limits = DEFAULT_LIMITS[slug] || { maxUsers: 2, maxProducts: 50, maxTransactionsPerMonth: 200, maxLocations: 1 };
+      }
+      return plan;
+    });
+
+    return NextResponse.json({ plans: plans, total: count || 0, page, pageSize })
   } catch (err) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }

@@ -41,7 +41,7 @@ export default function SuperAdminPage() {
     clearError
   } = useAdminData({
     autoRefresh,
-    refreshInterval: 30000,
+    refreshInterval: 5 * 60 * 1000, // 5 minutos en lugar de 30 segundos
     onError: (error) => {
       toast({
         title: 'Error al cargar datos',
@@ -49,15 +49,8 @@ export default function SuperAdminPage() {
         variant: 'destructive',
       });
     },
-    onSuccess: () => {
-      if (autoRefresh) {
-        toast({
-          title: 'Datos actualizados',
-          description: 'Los datos se actualizaron automáticamente.',
-          duration: 2000,
-        });
-      }
-    },
+    // Eliminar toast en auto-refresh para no molestar al usuario
+    onSuccess: undefined,
   });
 
   const handleRefresh = async () => {
@@ -79,7 +72,7 @@ export default function SuperAdminPage() {
     toast({
       title: checked ? 'Auto-actualización activada' : 'Auto-actualización desactivada',
       description: checked
-        ? 'Los datos se actualizarán cada 30 segundos.'
+        ? 'Los datos se actualizarán cada 5 minutos.'
         : 'La actualización automática está desactivada.',
     });
   };
@@ -102,7 +95,7 @@ export default function SuperAdminPage() {
       <UnifiedPermissionGuard role="SUPER_ADMIN" allowSuperAdmin={true}>
         <div className="p-8 space-y-6">
           <div className="space-y-1">
-            <h2 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
+            <h2 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-slate-700 to-slate-900 dark:from-slate-300 dark:to-slate-100 bg-clip-text text-transparent">
               Panel de Administración SaaS
             </h2>
             <p className="text-sm text-muted-foreground">
@@ -164,7 +157,7 @@ export default function SuperAdminPage() {
         {/* Header */}
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
-            <h2 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
+            <h2 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-slate-700 to-slate-900 dark:from-slate-300 dark:to-slate-100 bg-clip-text text-transparent">
               Panel de Administración SaaS
             </h2>
             <p className="text-sm text-muted-foreground">
@@ -196,7 +189,7 @@ export default function SuperAdminPage() {
               Actualización Automática
             </Label>
             <p className="text-sm text-muted-foreground">
-              Actualiza los datos cada 30 segundos automáticamente
+              Actualiza los datos cada 5 minutos automáticamente
             </p>
           </div>
           <Switch

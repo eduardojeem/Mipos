@@ -28,6 +28,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
+import { usePlanPermissions } from '@/hooks/use-plan-permissions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -282,13 +283,19 @@ export function Sidebar() {
   const [searchQuery, setSearchQuery] = useState('');
   const pathname = usePathname();
   const { user, signOut } = useAuth();
+  const { permissions } = usePlanPermissions();
 
   const filteredNavigation = useMemo(() => {
     const userRole = user?.role || 'CASHIER';
     
     return navigation.filter(item => {
+      // Check role access
       const hasRole = !item.roles || item.roles.includes(userRole) || (userRole === 'SUPER_ADMIN' && item.roles.includes('ADMIN'));
       if (!hasRole) return false;
+
+      // Check plan permissions
+      if (item.href === '/dashboard/analytics' && !permissions.can_access_analytics) return false;
+      if (item.category === 'admin' && !permissions.can_access_admin_panel && userRole !== 'SUPER_ADMIN') return false;
       
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();

@@ -150,11 +150,11 @@ export default function OrganizationsPage() {
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-2 border-b border-slate-100 dark:border-slate-800">
           <div className="relative">
-            <div className="flex items-center gap-3 mb-2 text-purple-600 dark:text-purple-400 font-semibold tracking-wider uppercase text-xs">
+            <div className="flex items-center gap-3 mb-2 text-slate-600 dark:text-slate-400 font-semibold tracking-wider uppercase text-xs">
               <Building2 className="h-4 w-4" />
               SaaS Administration
             </div>
-            <h1 className="text-5xl font-black bg-gradient-to-r from-slate-900 via-purple-900 to-slate-900 dark:from-white dark:via-purple-200 dark:to-white bg-clip-text text-transparent">
+            <h1 className="text-5xl font-black bg-gradient-to-r from-slate-700 to-slate-900 dark:from-slate-300 dark:to-slate-100 bg-clip-text text-transparent">
               Organizaciones
             </h1>
             <p className="text-slate-500 dark:text-slate-400 mt-3 text-lg font-medium max-w-2xl leading-relaxed">
@@ -162,13 +162,13 @@ export default function OrganizationsPage() {
             </p>
             {isLoading && (
               <div className="absolute top-0 right-0 -mr-8 mt-6">
-                <Loader2 className="h-5 w-5 animate-spin text-purple-500 opacity-50" />
+                <Loader2 className="h-5 w-5 animate-spin text-slate-500 opacity-50" />
               </div>
             )}
           </div>
           
           <Button 
-            className="gap-2 bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 text-white shadow-xl shadow-purple-500/20 hover:shadow-purple-500/40 transition-all duration-300 h-12 px-6 rounded-xl font-bold"
+            className="gap-2 bg-gradient-to-r from-slate-600 to-slate-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 h-12 px-6 rounded-xl font-bold"
             onClick={() => router.push('/superadmin/organizations/create')}
           >
             <Plus className="h-5 w-5" />
@@ -181,7 +181,7 @@ export default function OrganizationsPage() {
           <Card className="backdrop-blur-xl bg-white/50 dark:bg-slate-950/50 border-slate-200/50 dark:border-slate-800/50 shadow-sm overflow-hidden group">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-2">
-                <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-slate-600 dark:text-slate-400 group-hover:bg-purple-100 dark:group-hover:bg-purple-900/30 group-hover:text-purple-600 transition-colors">
+                <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-slate-600 dark:text-slate-400 group-hover:bg-slate-200 dark:group-hover:bg-slate-800 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors">
                   <Building2 className="h-5 w-5" />
                 </div>
                 <Badge variant="outline" className="border-slate-200 dark:border-slate-800">Total</Badge>
@@ -247,10 +247,10 @@ export default function OrganizationsPage() {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex items-center gap-4 flex-1 max-w-xl">
                 <div className="relative flex-1 group">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-purple-600 transition-colors" />
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-slate-600 transition-colors" />
                   <Input 
                     placeholder="Buscar por nombre, slug o email..." 
-                    className="pl-12 h-12 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-2xl focus-visible:ring-purple-500"
+                    className="pl-12 h-12 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-2xl focus-visible:ring-slate-500"
                     value={searchQuery}
                     onChange={(e) => {
                       setSearchQuery(e.target.value);
@@ -324,11 +324,11 @@ export default function OrganizationsPage() {
                       >
                         <TableCell className="py-5">
                           <div className="flex items-center gap-4">
-                            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900 flex items-center justify-center text-slate-500 group-hover:scale-110 group-hover:bg-purple-500 group-hover:text-white transition-all duration-300">
+                            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900 flex items-center justify-center text-slate-500 group-hover:scale-110 group-hover:bg-slate-300 dark:group-hover:bg-slate-700 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-all duration-300">
                               <Building2 className="h-5 w-5" />
                             </div>
                             <div className="flex flex-col">
-                              <span className="font-bold text-slate-900 dark:text-white group-hover:text-purple-600 transition-colors">
+                              <span className="font-bold text-slate-900 dark:text-white group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors">
                                 {org.name}
                               </span>
                               <span className="text-xs font-medium text-slate-400 tracking-tight">
@@ -399,7 +399,7 @@ export default function OrganizationsPage() {
                 </div>
                 <h3 className="text-2xl font-black text-slate-900 dark:text-white mb-2">No se encontraron resultados</h3>
                 <p className="text-slate-500 font-medium max-w-xs mx-auto">Prueba ajustando los filtros o el comando de búsqueda para encontrar lo que necesitas.</p>
-                <Button variant="link" className="mt-4 text-purple-600 font-bold" onClick={() => { setSearchQuery(''); setStatusFilter('ALL'); }}>
+                <Button variant="link" className="mt-4 text-slate-600 dark:text-slate-400 font-bold" onClick={() => { setSearchQuery(''); setStatusFilter('ALL'); }}>
                   Limpiar todos los filtros
                 </Button>
               </div>

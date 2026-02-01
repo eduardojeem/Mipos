@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Mail, Phone, MapPin, Calendar, Camera, RefreshCw, Edit, Lock, Copy, Check, X } from 'lucide-react';
-import DataExport from '@/components/profile/data-export';
 import { formatDate } from '@/lib/utils';
 
 interface ProfileHeaderProps {
@@ -193,7 +192,6 @@ export function ProfileHeader({
               <Edit className="h-4 w-4 mr-2" />
               {isEditing ? 'Salir de edición' : 'Editar Perfil'}
             </Button>
-            <DataExport />
             <Button variant="outline" onClick={onChangePassword} className="button-press">
               <Lock className="h-4 w-4 mr-2" />
               Cambiar Contraseña

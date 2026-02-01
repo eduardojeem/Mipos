@@ -72,10 +72,10 @@ export default function SuperAdminUsersPage() {
     if (!role) return null;
     
     const roleConfig: Record<string, { color: string; label: string }> = {
-      'SUPER_ADMIN': { color: 'bg-purple-100 text-purple-700 border-purple-300 dark:bg-purple-950/30 dark:text-purple-300', label: 'Super Admin' },
+      'SUPER_ADMIN': { color: 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300', label: 'Super Admin' },
       'ADMIN': { color: 'bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-950/30 dark:text-blue-300', label: 'Admin' },
-      'MANAGER': { color: 'bg-green-100 text-green-700 border-green-300 dark:bg-green-950/30 dark:text-green-300', label: 'Manager' },
-      'CASHIER': { color: 'bg-orange-100 text-orange-700 border-orange-300 dark:bg-orange-950/30 dark:text-orange-300', label: 'Cajero' },
+      'MANAGER': { color: 'bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-950/30 dark:text-emerald-300', label: 'Manager' },
+      'CASHIER': { color: 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/30 dark:text-amber-300', label: 'Cajero' },
     };
 
     const config = roleConfig[role] || { color: 'bg-slate-100 text-slate-700 border-slate-300', label: role };
@@ -104,8 +104,8 @@ export default function SuperAdminUsersPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent flex items-center gap-3">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 flex items-center justify-center shadow-2xl shadow-blue-500/50">
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-slate-700 to-slate-900 dark:from-slate-300 dark:to-slate-100 bg-clip-text text-transparent flex items-center gap-3">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center shadow-lg">
                 <Users className="h-7 w-7 text-white" />
               </div>
               Gestión de Usuarios
@@ -116,7 +116,7 @@ export default function SuperAdminUsersPage() {
           </div>
           
           <div className="flex items-center gap-3">
-            <Badge variant="outline" className="px-4 py-2 text-sm bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950/30 dark:border-blue-800 dark:text-blue-300">
+            <Badge variant="outline" className="px-4 py-2 text-sm bg-slate-50 border-slate-200 text-slate-700 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300">
               <Users className="h-4 w-4 mr-2" />
               {stats.total} usuarios
             </Badge>
@@ -125,10 +125,10 @@ export default function SuperAdminUsersPage() {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="backdrop-blur-xl bg-white/80 dark:bg-slate-900/80 border-blue-300/50 dark:border-blue-700/50 shadow-xl hover:shadow-2xl transition-all duration-300">
+          <Card className="backdrop-blur-xl bg-white/95 dark:bg-slate-900/95 border-slate-200 dark:border-slate-700 shadow-lg hover:shadow-xl transition-all duration-300">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-3 text-sm font-medium text-slate-600 dark:text-slate-400">
-                <div className="p-2 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 shadow-lg shadow-blue-500/50">
+                <div className="p-2 rounded-xl bg-gradient-to-br from-slate-500 to-slate-600 shadow-lg">
                   <Users className="h-4 w-4 text-white" />
                 </div>
                 Total de Usuarios
@@ -141,10 +141,10 @@ export default function SuperAdminUsersPage() {
             </CardContent>
           </Card>
 
-          <Card className="backdrop-blur-xl bg-white/80 dark:bg-slate-900/80 border-green-300/50 dark:border-green-700/50 shadow-xl hover:shadow-2xl transition-all duration-300">
+          <Card className="backdrop-blur-xl bg-white/95 dark:bg-slate-900/95 border-slate-200 dark:border-slate-700 shadow-lg hover:shadow-xl transition-all duration-300">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-3 text-sm font-medium text-slate-600 dark:text-slate-400">
-                <div className="p-2 rounded-xl bg-gradient-to-br from-green-500 to-emerald-500 shadow-lg shadow-green-500/50">
+                <div className="p-2 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg">
                   <CheckCircle className="h-4 w-4 text-white" />
                 </div>
                 Con Organizaciones
@@ -157,10 +157,10 @@ export default function SuperAdminUsersPage() {
             </CardContent>
           </Card>
 
-          <Card className="backdrop-blur-xl bg-white/80 dark:bg-slate-900/80 border-orange-300/50 dark:border-orange-700/50 shadow-xl hover:shadow-2xl transition-all duration-300">
+          <Card className="backdrop-blur-xl bg-white/95 dark:bg-slate-900/95 border-slate-200 dark:border-slate-700 shadow-lg hover:shadow-xl transition-all duration-300">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-3 text-sm font-medium text-slate-600 dark:text-slate-400">
-                <div className="p-2 rounded-xl bg-gradient-to-br from-orange-500 to-red-500 shadow-lg shadow-orange-500/50">
+                <div className="p-2 rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 shadow-lg">
                   <XCircle className="h-4 w-4 text-white" />
                 </div>
                 Sin Organizaciones
@@ -175,15 +175,15 @@ export default function SuperAdminUsersPage() {
         </div>
 
         {/* Main Table Card */}
-        <Card className="backdrop-blur-xl bg-white/80 dark:bg-slate-900/80 border-slate-200 dark:border-slate-800 shadow-xl">
+        <Card className="backdrop-blur-xl bg-white/95 dark:bg-slate-900/95 border-slate-200 dark:border-slate-800 shadow-lg">
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="flex items-center gap-3 text-xl">
-                  <div className="p-2 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 shadow-lg shadow-purple-500/50">
+                  <div className="p-2 rounded-xl bg-gradient-to-br from-slate-500 to-slate-600 shadow-lg">
                     <Users className="h-5 w-5 text-white" />
                   </div>
-                  <span className="bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent font-bold">
+                  <span className="bg-gradient-to-r from-slate-700 to-slate-900 dark:from-slate-300 dark:to-slate-100 bg-clip-text text-transparent font-bold">
                     Lista de Usuarios
                   </span>
                 </CardTitle>
@@ -225,7 +225,7 @@ export default function SuperAdminUsersPage() {
           <CardContent>
             {loading && users.length === 0 ? (
               <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
-                <Loader2 className="h-12 w-12 animate-spin text-purple-600" />
+                <Loader2 className="h-12 w-12 animate-spin text-slate-600" />
                 <div className="text-center">
                   <p className="text-lg font-semibold text-slate-700 dark:text-slate-300">
                     Cargando usuarios...
@@ -284,7 +284,7 @@ export default function SuperAdminUsersPage() {
                         <TableCell>
                           <div className="flex items-center gap-2">
                             {user.role === 'SUPER_ADMIN' && (
-                              <Crown className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                              <Crown className="h-4 w-4 text-slate-600 dark:text-slate-400" />
                             )}
                             {getRoleBadge(user.role)}
                           </div>

@@ -36,6 +36,8 @@ import { enqueueExport, useExportJob, useExportJobs, type ExportFormat } from '@
 import { getConnectionType } from '@/lib/performance';
 import { isSupabaseActive } from '@/lib/env';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
+import { usePlanPermissions } from '@/hooks/use-plan-permissions';
+import { Lock } from 'lucide-react';
 
 export const ReportsDashboard: React.FC = () => {
   const fmtCurrency = useCurrencyFormatter();
@@ -48,6 +50,7 @@ export const ReportsDashboard: React.FC = () => {
   const { sales, inventory, customer, financial, isLoading, error, refetchAll } = useReports(filters);
   const { exportReport, isExporting } = useReportExport();
   const { toast } = useToast();
+  const { canExportReports } = usePlanPermissions();
 
   // Fuente de datos y estado de conexión
   const REPORTS_SOURCE: 'supabase' | 'backend' = ((process.env.NEXT_PUBLIC_REPORTS_SOURCE || process.env.REPORTS_SOURCE || 'backend') as any);
@@ -131,6 +134,14 @@ export const ReportsDashboard: React.FC = () => {
   const currentType = tabToReportType[activeTab] || null;
 
   const handleExportReport = async (format: 'pdf' | 'excel' | 'csv') => {
+    if (!canExportReports) {
+      toast({
+        title: "Acceso Restringido",
+        description: "Tu plan actual no incluye exportación de reportes. Actualiza a Pro o Enterprise.",
+        variant: "destructive"
+      });
+      return;
+    }
     if (!currentType) return;
     try {
       await exportReport(currentType, format, filters);
@@ -143,6 +154,14 @@ export const ReportsDashboard: React.FC = () => {
   };
 
   const handleEnqueueExport = async (format: ExportFormat) => {
+    if (!canExportReports) {
+      toast({
+        title: "Acceso Restringido",
+        description: "Tu plan actual no incluye exportación de reportes. Actualiza a Pro o Enterprise.",
+        variant: "destructive"
+      });
+      return;
+    }
     if (!currentType) return;
     try {
       const id = await enqueueExport(currentType, format, filters);
@@ -305,8 +324,8 @@ export const ReportsDashboard: React.FC = () => {
                     className="flex items-center gap-2"
                     title={isExporting ? 'Exportación en curso' : 'Exportar a PDF'}
                   >
-                    <DollarSignIcon className="h-4 w-4" />
-                    {isExporting ? 'Exportando...' : 'Exportar a PDF'}
+                    {canExportReports ? <DollarSignIcon className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                    {isExporting ? 'Exportando...' : canExportReports ? 'Exportar a PDF' : 'PDF (Pro)'}
                   </Button>
                   <Button
                     onClick={() => handleExportReport('excel')}
@@ -314,8 +333,8 @@ export const ReportsDashboard: React.FC = () => {
                     className="flex items-center gap-2"
                     title={isExporting ? 'Exportación en curso' : 'Exportar a Excel'}
                   >
-                    <FileText className="h-4 w-4" />
-                    {isExporting ? 'Exportando...' : 'Exportar a Excel'}
+                    {canExportReports ? <FileText className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                    {isExporting ? 'Exportando...' : canExportReports ? 'Exportar a Excel' : 'Excel (Pro)'}
                   </Button>
                   <Button
                     onClick={() => handleExportReport('csv')}
@@ -323,8 +342,8 @@ export const ReportsDashboard: React.FC = () => {
                     className="flex items-center gap-2"
                     title={isExporting ? 'Exportación en curso' : 'Exportar a CSV'}
                   >
-                    <FileText className="h-4 w-4" />
-                    {isExporting ? 'Exportando...' : 'Exportar a CSV'}
+                    {canExportReports ? <FileText className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                    {isExporting ? 'Exportando...' : canExportReports ? 'Exportar a CSV' : 'CSV (Pro)'}
                   </Button>
                   <Button
                     variant="outline"

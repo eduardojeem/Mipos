@@ -130,8 +130,8 @@ export default function SuperAdminsPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-orange-600 bg-clip-text text-transparent flex items-center gap-3">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-600 via-pink-600 to-orange-600 flex items-center justify-center shadow-2xl shadow-purple-500/50 animate-pulse">
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-slate-700 to-slate-900 dark:from-slate-300 dark:to-slate-100 bg-clip-text text-transparent flex items-center gap-3">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center shadow-lg">
                 <Crown className="h-7 w-7 text-white" />
               </div>
               Super Administradores
@@ -142,7 +142,7 @@ export default function SuperAdminsPage() {
           </div>
           
           <div className="flex items-center gap-3">
-            <Badge className="px-4 py-2 text-sm bg-gradient-to-r from-purple-600 via-pink-600 to-orange-600 text-white border-0 shadow-lg">
+            <Badge className="px-4 py-2 text-sm bg-gradient-to-r from-slate-600 to-slate-700 text-white border-0 shadow-lg">
               <Crown className="h-4 w-4 mr-2" />
               {users.length} Super Admins
             </Badge>
@@ -150,17 +150,17 @@ export default function SuperAdminsPage() {
         </div>
 
         {/* Alert Info */}
-        <Card className="backdrop-blur-xl bg-gradient-to-r from-purple-50/80 to-pink-50/80 dark:from-purple-950/30 dark:to-pink-950/30 border-purple-200/50 dark:border-purple-800/50 shadow-xl">
+        <Card className="backdrop-blur-xl bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 border-slate-200 dark:border-slate-700 shadow-lg">
           <CardContent className="p-6">
             <div className="flex items-start gap-4">
-              <div className="p-3 rounded-xl bg-purple-500/20 backdrop-blur-sm">
-                <AlertCircle className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+              <div className="p-3 rounded-xl bg-slate-500/20 backdrop-blur-sm">
+                <AlertCircle className="h-6 w-6 text-slate-600 dark:text-slate-400" />
               </div>
               <div>
-                <h3 className="font-semibold text-purple-900 dark:text-purple-300 text-lg mb-1">
+                <h3 className="font-semibold text-slate-900 dark:text-slate-300 text-lg mb-1">
                   ¿Qué es un Super Admin?
                 </h3>
-                <p className="text-sm text-purple-700 dark:text-purple-400">
+                <p className="text-sm text-slate-700 dark:text-slate-400">
                   Los Super Administradores tienen acceso completo al sistema, incluyendo la gestión de organizaciones, 
                   usuarios globales, configuraciones del sistema y pueden acceder a cualquier organización sin restricciones.
                 </p>
@@ -175,10 +175,10 @@ export default function SuperAdminsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="flex items-center gap-3 text-xl">
-                  <div className="p-2 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 shadow-lg shadow-purple-500/50">
+                  <div className="p-2 rounded-xl bg-gradient-to-br from-slate-500 to-slate-600 shadow-lg">
                     <Shield className="h-5 w-5 text-white" />
                   </div>
-                  <span className="bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent font-bold">
+                  <span className="bg-gradient-to-r from-slate-700 to-slate-900 dark:from-slate-300 dark:to-slate-100 bg-clip-text text-transparent font-bold">
                     Lista de Super Admins
                   </span>
                 </CardTitle>
@@ -220,7 +220,7 @@ export default function SuperAdminsPage() {
           <CardContent>
             {loading ? (
               <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
-                <Loader2 className="h-12 w-12 animate-spin text-purple-600" />
+                <Loader2 className="h-12 w-12 animate-spin text-slate-600" />
                 <div className="text-center">
                   <p className="text-lg font-semibold text-slate-700 dark:text-slate-300">
                     Cargando super admins...
@@ -234,7 +234,7 @@ export default function SuperAdminsPage() {
               <div className="rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden">
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-950/30 dark:to-pink-950/30">
+                    <TableRow className="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900">
                       <TableHead className="font-semibold">
                         <div className="flex items-center gap-2">
                           <Mail className="h-4 w-4" />
@@ -271,11 +271,11 @@ export default function SuperAdminsPage() {
                       return (
                         <TableRow 
                           key={user.id}
-                          className="hover:bg-purple-50/50 dark:hover:bg-purple-950/20 transition-colors"
+                          className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
                         >
                           <TableCell className="font-medium">
                             <div className="flex items-center gap-2">
-                              <Crown className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                              <Crown className="h-4 w-4 text-slate-600 dark:text-slate-400" />
                               {user.email}
                             </div>
                           </TableCell>
@@ -292,7 +292,7 @@ export default function SuperAdminsPage() {
                             )}
                           </TableCell>
                           <TableCell>
-                            <Badge className="bg-gradient-to-r from-purple-600 to-pink-600 text-white border-0 shadow-md">
+                            <Badge className="bg-gradient-to-r from-slate-600 to-slate-700 text-white border-0 shadow-md">
                               <Crown className="h-3 w-3 mr-1" />
                               Super Admin
                             </Badge>

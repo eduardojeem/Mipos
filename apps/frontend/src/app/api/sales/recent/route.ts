@@ -5,11 +5,11 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const limit = Math.min(parseInt(searchParams.get('limit') || '10'), 50); // Max 50 for performance
+    const userId = searchParams.get('user_id');
 
     const supabase = await createClient();
 
-    // Fetch recent sales with customer info
-    const { data: sales, error, count } = await supabase
+    let query = supabase
       .from('sales')
       .select(`
         id,
@@ -24,6 +24,13 @@ export async function GET(request: NextRequest) {
       .eq('status', 'completed')
       .order('created_at', { ascending: false })
       .limit(limit);
+
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+
+    // Fetch recent sales with customer info
+    const { data: sales, error, count } = await query;
 
     if (error) {
       throw error;

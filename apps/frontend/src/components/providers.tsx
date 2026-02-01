@@ -242,12 +242,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
               }
 
               // Detect and log timeout errors
-              if (err instanceof Error && err.name === 'AbortError') {
+              if (err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError')) {
                 const duration = Date.now() - startTime;
                 
                 // Check if this was a timeout (duration >= TIMEOUT_MS) vs user abort
                 if (duration >= TIMEOUT_MS - 100) { // 100ms tolerance
-                  structuredLogger.error('Request aborted due to timeout', err, {
+                  structuredLogger.warn('Request aborted due to timeout', {
                     component: 'FetchWrapper',
                     action: 'timeoutAbort',
                     metadata: {
@@ -255,6 +255,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
                       method,
                       duration,
                       timeoutMs: TIMEOUT_MS,
+                      errorName: err.name,
+                      errorMessage: err.message
                     },
                   });
                 } else {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { SuperAdminGuard } from '../components/SuperAdminGuard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -74,7 +74,7 @@ export default function PlansPage() {
     },
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   });
 
   useEffect(() => {
@@ -86,6 +86,7 @@ export default function PlansPage() {
   }, [isLoading, data]);
 
   
+
 
   const loadPlans = async () => {
     await refetch();
@@ -189,13 +190,6 @@ export default function PlansPage() {
         {/* Plans Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-8">
           {plans
-            .filter((plan) => {
-              const name = String(plan.name || '').toLowerCase();
-              const slug = String(plan.slug || '').toLowerCase();
-              const blockedNames = ['básico','basico','premium','enterprise'];
-              const blockedSlugs = ['basic','premium','enterprise'];
-              return !blockedNames.includes(name) && !blockedSlugs.includes(slug);
-            })
             .map((plan) => (
             <Card
               key={plan.id}

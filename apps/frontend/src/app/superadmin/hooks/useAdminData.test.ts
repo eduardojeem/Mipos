@@ -16,12 +16,10 @@ vi.mock('@/lib/supabase/client', () => ({
   createClient: vi.fn(() => ({
     from: vi.fn(() => ({
       select: vi.fn(() => ({
-        order: vi.fn(() => ({
-          limit: vi.fn(() => Promise.resolve({
+        order: vi.fn(() => Promise.resolve({
             data: [],
             error: null,
           })),
-        })),
       })),
     })),
   })),
@@ -35,7 +33,7 @@ vi.mock('@/lib/admin-data-cache', () => ({
 }));
 
 describe('useAdminData', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     // Clear all mocks before each test
     vi.clearAllMocks();
     // Mock fetch globally
@@ -43,6 +41,19 @@ describe('useAdminData', () => {
     // Reset cache mocks
     vi.mocked(adminDataCache.loadAdminDataCache).mockReturnValue(null);
     vi.mocked(adminDataCache.saveAdminDataCache).mockReturnValue(true);
+
+    // Reset Supabase mock to success state
+    const { createClient } = await import('@/lib/supabase/client');
+    vi.mocked(createClient).mockReturnValue({
+      from: vi.fn(() => ({
+        select: vi.fn(() => ({
+          order: vi.fn(() => Promise.resolve({
+              data: [],
+              error: null,
+            })),
+        })),
+      })),
+    } as any);
   });
 
   afterEach(() => {
@@ -59,12 +70,10 @@ describe('useAdminData', () => {
       vi.mocked(createClient).mockReturnValue({
         from: vi.fn(() => ({
           select: vi.fn(() => ({
-            order: vi.fn(() => ({
-              limit: vi.fn(() => Promise.resolve({
+            order: vi.fn(() => Promise.resolve({
                 data: null,
                 error: { code: 'PGRST116', message: 'Connection error', details: '', hint: '' },
               })),
-            })),
           })),
         })),
       } as any);
@@ -99,12 +108,10 @@ describe('useAdminData', () => {
       vi.mocked(createClient).mockReturnValue({
         from: vi.fn(() => ({
           select: vi.fn(() => ({
-            order: vi.fn(() => ({
-              limit: vi.fn(() => Promise.resolve({
+            order: vi.fn(() => Promise.resolve({
                 data: null,
                 error: { code: 'PGRST116', message: 'Unauthorized', details: '', hint: '' },
               })),
-            })),
           })),
         })),
       } as any);
@@ -134,12 +141,10 @@ describe('useAdminData', () => {
       vi.mocked(createClient).mockReturnValue({
         from: vi.fn(() => ({
           select: vi.fn(() => ({
-            order: vi.fn(() => ({
-              limit: vi.fn(() => Promise.resolve({
+            order: vi.fn(() => Promise.resolve({
                 data: null,
                 error: { code: 'PGRST116', message: 'Forbidden', details: '', hint: '' },
               })),
-            })),
           })),
         })),
       } as any);
@@ -169,12 +174,10 @@ describe('useAdminData', () => {
       vi.mocked(createClient).mockReturnValue({
         from: vi.fn(() => ({
           select: vi.fn(() => ({
-            order: vi.fn(() => ({
-              limit: vi.fn(() => Promise.resolve({
+            order: vi.fn(() => Promise.resolve({
                 data: null,
                 error: { code: 'PGRST116', message: 'Server error', details: '', hint: '' },
               })),
-            })),
           })),
         })),
       } as any);
@@ -200,12 +203,10 @@ describe('useAdminData', () => {
       vi.mocked(createClient).mockReturnValue({
         from: vi.fn(() => ({
           select: vi.fn(() => ({
-            order: vi.fn(() => ({
-              limit: vi.fn(() => Promise.resolve({
+            order: vi.fn(() => Promise.resolve({
                 data: null,
                 error: { code: 'PGRST116', message: 'Connection error', details: '', hint: '' },
               })),
-            })),
           })),
         })),
       } as any);
@@ -237,12 +238,10 @@ describe('useAdminData', () => {
       vi.mocked(createClient).mockReturnValue({
         from: vi.fn(() => ({
           select: vi.fn(() => ({
-            order: vi.fn(() => ({
-              limit: vi.fn(() => Promise.resolve({
+            order: vi.fn(() => Promise.resolve({
                 data: null,
                 error: { code: 'PGRST116', message: 'Connection error', details: '', hint: '' },
               })),
-            })),
           })),
         })),
       } as any);
@@ -430,12 +429,10 @@ describe('useAdminData', () => {
       vi.mocked(createClient).mockReturnValue({
         from: vi.fn(() => ({
           select: vi.fn(() => ({
-            order: vi.fn(() => ({
-              limit: vi.fn(() => Promise.resolve({
+            order: vi.fn(() => Promise.resolve({
                 data: null,
                 error: { code: 'PGRST116', message: 'Connection error', details: '', hint: '' },
               })),
-            })),
           })),
         })),
       } as any);
@@ -480,12 +477,10 @@ describe('useAdminData', () => {
       vi.mocked(createClient).mockReturnValue({
         from: vi.fn(() => ({
           select: vi.fn(() => ({
-            order: vi.fn(() => ({
-              limit: vi.fn(() => Promise.resolve({
+            order: vi.fn(() => Promise.resolve({
                 data: null,
                 error: { code: 'PGRST116', message: 'Connection error', details: '', hint: '' },
               })),
-            })),
           })),
         })),
       } as any);
@@ -537,12 +532,10 @@ describe('useAdminData', () => {
       vi.mocked(createClient).mockReturnValue({
         from: vi.fn(() => ({
           select: vi.fn(() => ({
-            order: vi.fn(() => ({
-              limit: vi.fn(() => Promise.resolve({
+            order: vi.fn(() => Promise.resolve({
                 data: mockOrganizations,
                 error: null,
               })),
-            })),
           })),
         })),
       } as any);
@@ -586,12 +579,10 @@ describe('useAdminData', () => {
       vi.mocked(createClient).mockReturnValue({
         from: vi.fn(() => ({
           select: vi.fn(() => ({
-            order: vi.fn(() => ({
-              limit: vi.fn(() => Promise.resolve({
+            order: vi.fn(() => Promise.resolve({
                 data: null,
                 error: { code: 'PGRST116', message: 'No rows found', details: '', hint: '' },
               })),
-            })),
           })),
         })),
       } as any);
@@ -625,12 +616,10 @@ describe('useAdminData', () => {
       vi.mocked(createClient).mockReturnValue({
         from: vi.fn(() => ({
           select: vi.fn(() => ({
-            order: vi.fn(() => ({
-              limit: vi.fn(() => Promise.resolve({
+            order: vi.fn(() => Promise.resolve({
                 data: null,
                 error: { code: 'PGRST116', message: 'No rows found', details: '', hint: '' },
               })),
-            })),
           })),
         })),
       } as any);
@@ -686,12 +675,10 @@ describe('useAdminData', () => {
       vi.mocked(createClient).mockReturnValue({
         from: vi.fn(() => ({
           select: vi.fn(() => ({
-            order: vi.fn(() => ({
-              limit: vi.fn(() => Promise.resolve({
+            order: vi.fn(() => Promise.resolve({
                 data: null,
                 error: { code: 'PGRST116', message: 'No rows found', details: '', hint: '' },
               })),
-            })),
           })),
         })),
       } as any);
