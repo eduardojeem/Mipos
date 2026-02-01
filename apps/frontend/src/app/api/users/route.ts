@@ -235,12 +235,12 @@ export async function POST(request: NextRequest) {
     // Verificar que el usuario sea admin (fallback a metadata)
     const { data: profile } = await (supabase as any)
       .from('users')
-      .select('role')
+      .select('role, organization_id')
       .eq('id', user.id)
       .single();
 
     const postAdminRole = (((profile as any)?.role || (user as any)?.user_metadata?.role || '') as string).toUpperCase();
-    if (postAdminRole !== 'ADMIN' && postAdminRole !== 'SUPER_ADMIN') {
+    if (postAdminRole !== 'ADMIN' && postAdminRole !== 'SUPER_ADMIN' && postAdminRole !== 'OWNER') {
       return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
     }
 
@@ -250,6 +250,71 @@ export async function POST(request: NextRequest) {
     if (!email || !password || !name || !role) {
       return NextResponse.json({ error: 'Todos los campos son requeridos' }, { status: 400 });
     }
+
+    // --- PLAN & PERMISSIONS CHECK ---
+    const orgId = profile?.organization_id;
+    if (orgId) {
+      // 1. Get Organization and Plan
+      const { data: org, error: orgError } = await (supabase as any)
+        .from('organizations')
+        .select(`
+          subscription_plan,
+          saas_plans!inner (
+            limits,
+            features
+          )
+        `)
+        .eq('id', orgId)
+        .single();
+
+      if (!orgError && org && org.saas_plans) {
+        const limits = org.saas_plans.limits || {};
+        const features = org.saas_plans.features || [];
+        const maxUsers = limits.maxUsers ?? 1; // Default to 1 if not set
+
+        // 2. Check Role Restrictions
+         const requestedRole = role.toUpperCase();
+         
+         // Define required feature for each role
+         const roleFeatures: Record<string, string> = {
+            'CASHIER': 'create_cashier',
+            'SELLER': 'create_cashier', // Alias
+            'EMPLOYEE': 'create_employee',
+            'VIEWER': 'create_employee', // Grouped with employee
+            'MANAGER': 'create_manager',
+            'ADMIN': 'create_admin',
+            'SUPER_ADMIN': 'forbidden' // Never allow creating super admin via this endpoint
+         };
+
+         const requiredFeature = roleFeatures[requestedRole];
+
+         if (requiredFeature) {
+             if (requiredFeature === 'forbidden') {
+                 return NextResponse.json({ error: 'No tienes permisos para crear este rol.' }, { status: 403 });
+             }
+             if (!features.includes(requiredFeature)) {
+                 return NextResponse.json({ 
+                    error: `Tu plan actual no permite crear usuarios con rol ${requestedRole}. Actualiza tu plan para habilitar esta función.` 
+                 }, { status: 403 });
+             }
+         }
+         
+         // 3. Check User Limit
+        if (maxUsers !== -1) {
+            const { count: currentUsers, error: countError } = await (supabase as any)
+                .from('organization_members')
+                .select('*', { count: 'exact', head: true })
+                .eq('organization_id', orgId);
+
+            if (!countError && (currentUsers || 0) >= maxUsers) {
+                return NextResponse.json({ 
+                    error: `Has alcanzado el límite de usuarios de tu plan (${maxUsers}). Actualiza tu plan para agregar más usuarios.` 
+                }, { status: 403 });
+            }
+        }
+      }
+    }
+    // --------------------------------
 
     // Crear cliente admin (service role)
     let admin: any;
