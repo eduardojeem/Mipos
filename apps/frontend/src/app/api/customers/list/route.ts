@@ -14,7 +14,9 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
 
     const orgId = (request.headers.get('x-organization-id') || '').trim();
+    console.log('[Customers List API] Organization ID:', orgId);
     if (!orgId) {
+      console.error('[Customers List API] ❌ Organization ID header missing');
       return NextResponse.json({ success: false, error: 'Organization header missing' }, { status: 400 });
     }
 
@@ -26,6 +28,7 @@ export async function GET(request: NextRequest) {
     const type = searchParams.get('type') || 'all'; // all, regular, vip, wholesale
     const sortBy = searchParams.get('sortBy') || 'created_at';
     const sortOrder = searchParams.get('sortOrder') || 'desc';
+    console.log('[Customers List API] Query params:', { page, limit, search, status, type, sortBy, sortOrder });
 
     // Build base query with optimized field selection
     let query = supabase
@@ -67,7 +70,7 @@ export async function GET(request: NextRequest) {
     const validSortFields = ['name', 'email', 'created_at', 'updated_at', 'total_purchases', 'total_orders'];
     const sortField = validSortFields.includes(sortBy) ? sortBy : 'created_at';
     const ascending = sortOrder === 'asc';
-    
+
     query = query.order(sortField, { ascending });
 
     // Apply pagination
@@ -76,8 +79,10 @@ export async function GET(request: NextRequest) {
     query = query.range(from, to);
 
     const { data: customers, error, count } = await query;
+    console.log('[Customers List API] Query results:', { count, customerCount: customers?.length, error: error?.message });
 
     if (error) {
+      console.error('[Customers List API] ❌ Supabase error:', error);
       throw new Error(error.message);
     }
 
@@ -140,8 +145,8 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Error fetching customer list:', error);
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         error: 'Failed to fetch customer list',
         details: error instanceof Error ? error.message : 'Unknown error'
       },

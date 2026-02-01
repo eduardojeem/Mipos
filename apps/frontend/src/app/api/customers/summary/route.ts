@@ -11,9 +11,11 @@ import { createClient } from '@/lib/supabase';
 export async function GET(request: NextRequest) {
   try {
     const supabase = createClient();
-    
+
     const orgId = (request.headers.get('x-organization-id') || '').trim();
+    console.log('[Customers Summary API] Organization ID:', orgId);
     if (!orgId) {
+      console.error('[Customers Summary API] ❌ Organization ID header missing');
       return NextResponse.json({ success: false, error: 'Organization header missing' }, { status: 400 });
     }
 
@@ -59,36 +61,37 @@ export async function GET(request: NextRequest) {
     // Customer segmentation based on purchase behavior
     const highValueCustomers = valueMetrics?.filter((c: any) => (c.total_purchases || 0) > 10000).length || 0;
     const frequentCustomers = valueMetrics?.filter((c: any) => (c.total_orders || 0) > 10).length || 0;
+    console.log('[Customers Summary API] Stats calculated:', { totalCount, activeCount, newCustomersCount, totalRevenue, totalOrders });
 
     const summary = {
       // Basic counts
       total: totalCount || 0,
       active: activeCount || 0,
       inactive: inactiveCount || 0,
-      
+
       // Customer types
       vip: vipCount || 0,
       wholesale: wholesaleCount || 0,
       regular: regularCount || 0,
-      
+
       // Activity metrics
       newThisMonth: newCustomersCount || 0,
-      
+
       // Value metrics
       totalRevenue: Math.round(totalRevenue * 100) / 100,
       totalOrders: totalOrders,
       avgOrderValue: Math.round(avgOrderValue * 100) / 100,
-      
+
       // Segmentation
       highValue: highValueCustomers,
       frequent: frequentCustomers,
-      
+
       // Growth metrics
       growthRate: totalCount ? Math.round(((newCustomersCount || 0) / totalCount) * 100 * 100) / 100 : 0,
-      
+
       // Engagement metrics
       activeRate: totalCount ? Math.round(((activeCount || 0) / totalCount) * 100 * 100) / 100 : 0,
-      
+
       // Generated timestamp
       generatedAt: new Date().toISOString()
     };
@@ -101,8 +104,8 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Error fetching customer summary:', error);
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         error: 'Failed to fetch customer summary',
         details: error instanceof Error ? error.message : 'Unknown error'
       },

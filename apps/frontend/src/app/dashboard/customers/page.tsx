@@ -37,6 +37,9 @@ import {
     CustomerDetailsModal
 } from './components';
 
+// Temporary diagnostic component
+import { CustomerDiagnostic } from './diagnostic-debug';
+
 import type { Customer } from '@/types';
 import type { UICustomer } from '@/types/customer-page';
 
@@ -278,6 +281,9 @@ const CustomersPageContent = memo(function CustomersPageContent() {
                     </Button>
                 </PermissionGuard>
             </div>
+
+            {/* Diagnostic Component - TEMPORARY */}
+            <CustomerDiagnostic />
 
             {/* Enhanced Stats Cards - Phase 5 */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

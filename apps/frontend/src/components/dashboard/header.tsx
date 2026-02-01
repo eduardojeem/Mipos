@@ -176,7 +176,8 @@ export function Header({ onMenuClick, isMobileMenuOpen, compact = false }: Heade
         </a>
         
         <div className={cn("flex h-16 items-center justify-between", compact ? 'px-4' : 'px-6')}>
-          {/* Mobile menu button */}
+          {/* Mobile menu button removed as per user request */}
+          {/* 
           <Button
             variant="ghost"
             size="icon"
@@ -191,7 +192,8 @@ export function Header({ onMenuClick, isMobileMenuOpen, compact = false }: Heade
             ) : (
               <Menu className="h-5 w-5" />
             )}
-          </Button>
+          </Button> 
+          */}
 
           {/* Branding pill (desktop) */}
           <div className="hidden lg:flex">

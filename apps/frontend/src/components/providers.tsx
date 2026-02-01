@@ -88,7 +88,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
       const isApiCall = typeof urlStr === 'string' && (
         (urlStr.startsWith('/api') || (apiUrl ? urlStr.startsWith(apiUrl) : false)) && !isHealth && !isAuth && !isPermissions
       );
-      const didStartLoading = isApiCall;
+      
+      // OPTIMIZATION: Only trigger global loading overlay for mutations (POST, PUT, DELETE, PATCH)
+      // GET requests should use local loading states (skeletons, spinners) to avoid blocking the UI
+      const method = (init?.method || 'GET').toUpperCase();
+      const isMutation = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method);
+      const didStartLoading = isApiCall && isMutation;
 
       // Timeout handling: 60-second timeout for all requests to accommodate slow networks/cold starts
       // Requirements: 7.1, 7.2, 7.3
@@ -97,7 +102,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
       // Log request start
       // Requirements: 1.1, 9.1
-      const method = init?.method || 'GET';
       const headers = init?.headers ? 
         (init.headers instanceof Headers ? Object.fromEntries(init.headers.entries()) : init.headers) 
         : {};

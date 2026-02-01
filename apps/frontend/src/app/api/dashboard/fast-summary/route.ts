@@ -140,7 +140,7 @@ export async function POST() {
     // Create optimized RPC functions for dashboard
     const createRPCFunctions = `
       -- Function for today's sales summary
-      CREATE OR REPLACE FUNCTION get_today_sales_summary(date_start timestamp)
+      CREATE OR REPLACE FUNCTION get_today_sales_summary(date_start timestamp, org_id uuid)
       RETURNS TABLE(total_sales numeric, sales_count bigint)
       LANGUAGE sql
       STABLE
@@ -149,23 +149,23 @@ export async function POST() {
           COALESCE(SUM(total), 0) as total_sales,
           COUNT(*) as sales_count
         FROM sales 
-        WHERE created_at >= date_start;
+        WHERE created_at >= date_start AND organization_id = org_id;
       $$;
 
       -- Function for basic dashboard counts
-      CREATE OR REPLACE FUNCTION get_dashboard_counts()
+      CREATE OR REPLACE FUNCTION get_dashboard_counts(org_id uuid)
       RETURNS TABLE(customers_count bigint, products_count bigint, low_stock_count bigint)
       LANGUAGE sql
       STABLE
       AS $$
         SELECT 
-          (SELECT COUNT(*) FROM customers) as customers_count,
-          (SELECT COUNT(*) FROM products) as products_count,
-          (SELECT COUNT(*) FROM products WHERE stock <= 10) as low_stock_count;
+          (SELECT COUNT(*) FROM customers WHERE organization_id = org_id) as customers_count,
+          (SELECT COUNT(*) FROM products WHERE organization_id = org_id) as products_count,
+          (SELECT COUNT(*) FROM products WHERE stock_quantity <= min_stock AND organization_id = org_id) as low_stock_count;
       $$;
 
       -- Function for web orders dashboard statistics
-      CREATE OR REPLACE FUNCTION get_orders_dashboard_stats()
+      CREATE OR REPLACE FUNCTION get_orders_dashboard_stats(org_id uuid)
       RETURNS TABLE(
         pending_orders bigint,
         confirmed_orders bigint,
@@ -179,13 +179,13 @@ export async function POST() {
       STABLE
       AS $$
         SELECT 
-          (SELECT COUNT(*) FROM orders WHERE status = 'PENDING') as pending_orders,
-          (SELECT COUNT(*) FROM orders WHERE status = 'CONFIRMED') as confirmed_orders,
-          (SELECT COUNT(*) FROM orders WHERE status = 'PREPARING') as preparing_orders,
-          (SELECT COUNT(*) FROM orders WHERE status = 'SHIPPED') as shipped_orders,
-          (SELECT COUNT(*) FROM orders WHERE status = 'DELIVERED') as delivered_orders,
-          (SELECT COUNT(*) FROM orders WHERE DATE(created_at) = CURRENT_DATE) as total_orders_today,
-          (SELECT COALESCE(SUM(total), 0) FROM orders WHERE DATE(created_at) = CURRENT_DATE AND status != 'CANCELLED') as orders_revenue_today;
+          (SELECT COUNT(*) FROM orders WHERE status = 'PENDING' AND organization_id = org_id) as pending_orders,
+          (SELECT COUNT(*) FROM orders WHERE status = 'CONFIRMED' AND organization_id = org_id) as confirmed_orders,
+          (SELECT COUNT(*) FROM orders WHERE status = 'PREPARING' AND organization_id = org_id) as preparing_orders,
+          (SELECT COUNT(*) FROM orders WHERE status = 'SHIPPED' AND organization_id = org_id) as shipped_orders,
+          (SELECT COUNT(*) FROM orders WHERE status = 'DELIVERED' AND organization_id = org_id) as delivered_orders,
+          (SELECT COUNT(*) FROM orders WHERE DATE(created_at) = CURRENT_DATE AND organization_id = org_id) as total_orders_today,
+          (SELECT COALESCE(SUM(total), 0) FROM orders WHERE DATE(created_at) = CURRENT_DATE AND status != 'CANCELLED' AND organization_id = org_id) as orders_revenue_today;
       $$;
     `;
 
