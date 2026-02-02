@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
     Building2,
@@ -14,8 +15,19 @@ import { AssociatedBusinesses } from './AssociatedBusinesses';
 export function LandingHeader() {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [showBusinesses, setShowBusinesses] = useState(false);
+    const pathname = usePathname();
+    const router = useRouter();
+    const isLandingPage = pathname === '/inicio' || pathname === '/';
 
     const scrollToSection = (sectionId: string) => {
+        // Si no estamos en la landing page, navegar primero
+        if (!isLandingPage) {
+            router.push(`/inicio#${sectionId}`);
+            setMobileMenuOpen(false);
+            return;
+        }
+
+        // Si estamos en la landing page, hacer scroll
         const section = document.getElementById(sectionId);
         if (section) {
             section.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -29,14 +41,14 @@ export function LandingHeader() {
                 <div className="container mx-auto px-4">
                     <div className="flex items-center justify-between h-16 lg:h-20">
                         {/* Logo */}
-                        <div className="flex items-center gap-2">
+                        <Link href="/inicio" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
                             <div className="gradient-primary p-2 rounded-lg">
                                 <Building2 className="h-6 w-6 text-white" />
                             </div>
                             <span className="text-xl font-bold gradient-text">
                                 MiPOS
                             </span>
-                        </div>
+                        </Link>
 
                         {/* Desktop Navigation */}
                         <nav className="hidden lg:flex items-center gap-6">
@@ -71,12 +83,20 @@ export function LandingHeader() {
                                     Iniciar Sesión
                                 </Button>
                             </Link>
-                            <Button
-                                onClick={() => scrollToSection('planes')}
-                                className="gradient-primary"
-                            >
-                                Comenzar Gratis
-                            </Button>
+                            {isLandingPage ? (
+                                <Button
+                                    onClick={() => scrollToSection('planes')}
+                                    className="gradient-primary"
+                                >
+                                    Comenzar Gratis
+                                </Button>
+                            ) : (
+                                <Link href="/inicio#planes">
+                                    <Button className="gradient-primary">
+                                        Ver Planes
+                                    </Button>
+                                </Link>
+                            )}
                         </div>
 
                         {/* Mobile Menu Button */}
@@ -124,12 +144,20 @@ export function LandingHeader() {
                                         Iniciar Sesión
                                     </Button>
                                 </Link>
-                                <Button
-                                    onClick={() => scrollToSection('planes')}
-                                    className="w-full gradient-primary"
-                                >
-                                    Comenzar Gratis
-                                </Button>
+                                {isLandingPage ? (
+                                    <Button
+                                        onClick={() => scrollToSection('planes')}
+                                        className="w-full gradient-primary"
+                                    >
+                                        Comenzar Gratis
+                                    </Button>
+                                ) : (
+                                    <Link href="/inicio#planes" className="block w-full">
+                                        <Button className="w-full gradient-primary">
+                                            Ver Planes
+                                        </Button>
+                                    </Link>
+                                )}
                             </div>
                         </div>
                     )}
