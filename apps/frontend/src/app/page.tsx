@@ -7,10 +7,11 @@ export default function RootPage() {
   const router = useRouter();
 
   useEffect(() => {
-    // Red dirigir a la página pública por defecto
+    // Redirigir a la página de inicio (landing page)
     // El usuario puede ir a /dashboard directamente si necesita el admin
-    router.push('/home');
+    router.push('/inicio');
   }, [router]);
+
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-50 to-purple-50">

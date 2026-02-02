@@ -126,14 +126,14 @@ const CustomersPageContent = memo(function CustomersPageContent() {
     const bulkOperation = useBulkCustomerOperation();
 
     // Extract data from optimized responses
-    const customers: UICustomer[] = customerList?.customers || [];
-    const stats = summary || {
+    const customers: UICustomer[] = useMemo(() => (customerList as any)?.customers || [], [customerList]);
+    const stats = useMemo(() => summary || {
         total: 0, active: 0, inactive: 0, vip: 0, wholesale: 0, regular: 0,
         newThisMonth: 0, totalRevenue: 0, totalOrders: 0, avgOrderValue: 0,
         highValue: 0, frequent: 0, growthRate: 0, activeRate: 0
-    };
+    }, [summary]);
     const loading = summaryLoading || listLoading;
-    const pagination = customerList?.pagination;
+    const pagination = (customerList as any)?.pagination;
 
     // Handlers - wrapped in useCallback for stable references
     const handleOpenForm = useCallback((customer?: UICustomer) => {

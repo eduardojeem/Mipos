@@ -45,8 +45,9 @@ export async function updateSession(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  const publicPaths = ['/home', '/offers', '/'];
+  const publicPaths = ['/home', '/inicio', '/onboarding', '/offers', '/'];
   const isPublic = publicPaths.some((p) => path === p || path.startsWith(p + '/'));
+
   if (!user && path.startsWith('/dashboard')) {
     const url = request.nextUrl.clone();
     url.pathname = '/auth/signin';
@@ -122,7 +123,7 @@ export async function updateSession(request: NextRequest) {
               method: request.method,
             },
           });
-      } catch {}
+      } catch { }
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
     // Verificar rol ADMIN/SUPER_ADMIN usando BD con fallback a metadata
@@ -154,7 +155,7 @@ export async function updateSession(request: NextRequest) {
               method: request.method,
             },
           });
-      } catch {}
+      } catch { }
       return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
     }
   }
@@ -194,7 +195,7 @@ export async function updateSession(request: NextRequest) {
         .single();
       const dbRole = String((profile as any)?.role || '').toUpperCase();
       role = dbRole || role;
-    } catch {}
+    } catch { }
     const allowedRoles = ['ADMIN', 'MANAGER', 'CASHIER', 'SUPER_ADMIN'];
     const canViewDashboard = allowedRoles.includes(role);
     if (!canViewDashboard && !isMockAuth) {
@@ -219,7 +220,7 @@ export async function updateSession(request: NextRequest) {
           .single();
         const dbRole = String((profile as any)?.role || '').toUpperCase();
         role = dbRole || role;
-      } catch {}
+      } catch { }
       const allowedRoles = ['ADMIN', 'MANAGER'];
       if (!allowedRoles.includes(role)) {
         return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
