@@ -64,12 +64,12 @@ export function LandingHeader() {
                             >
                                 Negocios
                             </Link>
-                            <button
-                                onClick={() => scrollToSection('planes')}
+                            <Link
+                                href="/inicio/planes"
                                 className="text-gray-300 hover:text-white transition-colors font-medium"
                             >
                                 Planes
-                            </button>
+                            </Link>
                         </nav>
 
                         {/* Desktop Actions */}
@@ -83,20 +83,11 @@ export function LandingHeader() {
                                     Iniciar Sesión
                                 </Button>
                             </Link>
-                            {isLandingPage ? (
-                                <Button
-                                    onClick={() => scrollToSection('planes')}
-                                    className="gradient-primary"
-                                >
-                                    Comenzar Gratis
+                            <Link href="/inicio/planes">
+                                <Button className="gradient-primary">
+                                    Ver Planes
                                 </Button>
-                            ) : (
-                                <Link href="/inicio#planes">
-                                    <Button className="gradient-primary">
-                                        Ver Planes
-                                    </Button>
-                                </Link>
-                            )}
+                            </Link>
                         </div>
 
                         {/* Mobile Menu Button */}
@@ -124,40 +115,37 @@ export function LandingHeader() {
                             <Link
                                 href="/empresas"
                                 className="block w-full text-left px-4 py-2 text-gray-300 hover:bg-white/5 rounded-lg"
+                                onClick={() => setMobileMenuOpen(false)}
                             >
                                 Negocios
                             </Link>
-                            <button
-                                onClick={() => scrollToSection('planes')}
+                            <Link
+                                href="/inicio/planes"
                                 className="block w-full text-left px-4 py-2 text-gray-300 hover:bg-white/5 rounded-lg"
+                                onClick={() => setMobileMenuOpen(false)}
                             >
                                 Planes
-                            </button>
+                            </Link>
 
                             <div className="pt-4 border-t border-white/5 space-y-2 px-4">
                                 <Link href="/auth/signin" className="block w-full">
                                     <Button
                                         variant="outline"
                                         className="w-full glass-card border-white/10 text-white"
+                                        onClick={() => setMobileMenuOpen(false)}
                                     >
                                         <LogIn className="h-4 w-4 mr-2" />
                                         Iniciar Sesión
                                     </Button>
                                 </Link>
-                                {isLandingPage ? (
-                                    <Button
-                                        onClick={() => scrollToSection('planes')}
+                                <Link href="/inicio/planes" className="block w-full">
+                                    <Button 
                                         className="w-full gradient-primary"
+                                        onClick={() => setMobileMenuOpen(false)}
                                     >
-                                        Comenzar Gratis
+                                        Ver Planes
                                     </Button>
-                                ) : (
-                                    <Link href="/inicio#planes" className="block w-full">
-                                        <Button className="w-full gradient-primary">
-                                            Ver Planes
-                                        </Button>
-                                    </Link>
-                                )}
+                                </Link>
                             </div>
                         </div>
                     )}
