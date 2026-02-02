@@ -2,15 +2,9 @@
 
 import { Button } from '@/components/ui/button';
 import { ArrowRight, Sparkles, Play } from 'lucide-react';
+import Link from 'next/link';
 
 export function HeroSection() {
-    const scrollToPlans = () => {
-        const planesSection = document.getElementById('planes');
-        if (planesSection) {
-            planesSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-    };
-
     return (
         <section className="relative overflow-hidden bg-[#0a0a0a] py-32 lg:py-40">
             {/* Radial gradients background */}
@@ -48,14 +42,15 @@ export function HeroSection() {
 
                     {/* CTA Buttons */}
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-                        <Button
-                            onClick={scrollToPlans}
-                            size="lg"
-                            className="gradient-primary text-white px-8 py-6 text-base rounded-xl hover:scale-105 transition-transform shadow-dark-lg glow-purple"
-                        >
-                            Comenzar Ahora
-                            <ArrowRight className="ml-2 h-5 w-5" />
-                        </Button>
+                        <Link href="/inicio/planes">
+                            <Button
+                                size="lg"
+                                className="gradient-primary text-white px-8 py-6 text-base rounded-xl hover:scale-105 transition-transform shadow-dark-lg glow-purple"
+                            >
+                                Comenzar Ahora
+                                <ArrowRight className="ml-2 h-5 w-5" />
+                            </Button>
+                        </Link>
                         <Button
                             variant="outline"
                             size="lg"
@@ -63,7 +58,7 @@ export function HeroSection() {
                             onClick={() => document.getElementById('como-funciona')?.scrollIntoView({ behavior: 'smooth' })}
                         >
                             <Play className="mr-2 h-5 w-5" />
-                            Ver Demo
+                            Ver Cómo Funciona
                         </Button>
                     </div>
 
