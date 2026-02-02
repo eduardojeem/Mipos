@@ -68,7 +68,8 @@ tsconfig.tsbuildinfo
 # Agent and testing artifacts
 .agent/
 .trae/
-.kiro/
+.docs-temp/
+scripts/.archive/
 
 # Scripts output
 setup-report.txt
@@ -76,21 +77,68 @@ typecheck.txt
 api_out.json
 performance-audit-data.json
 tmp_programs.json
+apps/frontend/typecheck_frontend.txt
 
-# Test files
+# Test files (temporary scripts)
+test-*.ts
 test-*.js
+debug-*.ts
 debug-*.js
+apply-*.ts
 apply-*.js
+assign-*.ts
 assign-*.js
+check-*.ts
 check-*.js
+disable-*.ts
 disable-*.js
+fix-*.ts
 fix-*.js
+inspect-*.ts
+inspect-*.js
+validate-*.ts
+validate-*.js
+verify-*.ts
+verify-*.js
+diagnose-*.ts
+diagnose-*.js
+sync-*.ts
+sync-*.js
+create-test-*.ts
+create-test-*.js
+simple-*.ts
+simple-*.js
+quick-*.ts
+quick-*.js
+manual-*.ts
+manual-*.js
 
 # Postman collections
 *.postman_collection.json
 
-# SQL migration files (keep only in database/migrations)
+# SQL migration files (keep only in database/migrations and supabase/migrations)
 /*.sql
+
+# Temporary documentation files
+CAMBIOS_*.md
+EJEMPLOS_*.md
+INSTRUCCIONES_*.md
+MEJORAS_*.md
+OPTIMIZACION_*.md
+OPTIMIZACIONES_*.md
+ORGANIZACION_*.md
+PERFIL_*.md
+REINICIAR_*.md
+RESUMEN_*.md
+SIMPLIFICACION_*.md
+SOLUCION_*.md
+VERIFICACION_*.md
+FIX_*.md
+LANDING_*.md
+
+# Batch and PowerShell scripts (temporary)
+reiniciar-*.bat
+reiniciar-*.ps1
 
 # SWC
 .swc/
