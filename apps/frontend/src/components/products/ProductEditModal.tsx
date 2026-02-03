@@ -620,7 +620,7 @@ export const ProductEditModal = memo(function ProductEditModal({
       };
       const { data, error } = await supabase
         .from('categories')
-        .insert(payload)
+        .insert(payload as unknown as never)
         .select('id, name')
         .single();
 
@@ -690,7 +690,7 @@ export const ProductEditModal = memo(function ProductEditModal({
       };
       const { data, error } = await supabase
         .from('suppliers')
-        .insert(payload)
+        .insert(payload as unknown as never)
         .select('id, name')
         .single();
 

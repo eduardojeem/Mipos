@@ -24,7 +24,7 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 
 export default function InicioPage() {
-    const [selectedPlan, setSelectedPlan] = useState<{
+    const [selectedPlan, _setSelectedPlan] = useState<{
         id: string;
         name: string;
         slug: string;
@@ -32,14 +32,7 @@ export default function InicioPage() {
         priceYearly: number;
     } | null>(null);
 
-    const handlePlanSelect = (plan: any) => {
-        setSelectedPlan(plan);
-        // Scroll suave a la sección de registro
-        const registrationSection = document.getElementById('registro');
-        if (registrationSection) {
-            registrationSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-    };
+    
 
     const handleRegistrationSuccess = () => {
         // Redirigir a la página de onboarding

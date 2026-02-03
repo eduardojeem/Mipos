@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent } from '@/components/ui/card';
@@ -15,6 +15,8 @@ interface SuperAdminGuardProps {
 export function SuperAdminGuard({ children, fallback }: SuperAdminGuardProps) {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const [permLoading, setPermLoading] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -22,8 +24,25 @@ export function SuperAdminGuard({ children, fallback }: SuperAdminGuardProps) {
     }
   }, [user, loading, router]);
 
+  useEffect(() => {
+    if (!loading && user) {
+      setPermLoading(true);
+      fetch('/api/superadmin/me')
+        .then(async (r) => {
+          const j = await r.json();
+          if (r.ok && j && typeof j.isSuperAdmin === 'boolean') {
+            setIsSuperAdmin(j.isSuperAdmin);
+          } else {
+            setIsSuperAdmin(false);
+          }
+        })
+        .catch(() => setIsSuperAdmin(false))
+        .finally(() => setPermLoading(false));
+    }
+  }, [loading, user]);
+
   // Mostrar loading mientras se verifica la autenticación
-  if (loading) {
+  if (loading || permLoading || isSuperAdmin === null) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800">
         <Card className="w-96">
@@ -51,7 +70,6 @@ export function SuperAdminGuard({ children, fallback }: SuperAdminGuardProps) {
 
   // Verificar si es super admin
   const userRole = user.role;
-  const isSuperAdmin = userRole === 'SUPER_ADMIN';
 
   if (!isSuperAdmin) {
     if (fallback) {

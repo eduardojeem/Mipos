@@ -625,8 +625,18 @@ export type Database = {
       };
       categories: {
         Row: Category;
-        Insert: Omit<Category, 'id' | 'created_at' | 'updated_at'>;
-        Update: Partial<Omit<Category, 'id' | 'created_at' | 'updated_at'>>;
+        Insert: {
+          name: string;
+          description?: string;
+          is_active: boolean;
+          organization_id?: string;
+        };
+        Update: {
+          name?: string;
+          description?: string;
+          is_active?: boolean;
+          organization_id?: string;
+        };
       };
       cash_sessions: {
         Row: CashSession;
@@ -655,8 +665,26 @@ export type Database = {
       };
       suppliers: {
         Row: Supplier;
-        Insert: Omit<Supplier, 'id' | 'created_at' | 'updated_at'>;
-        Update: Partial<Omit<Supplier, 'id' | 'created_at' | 'updated_at'>>;
+        Insert: {
+          name: string;
+          contact_name?: string;
+          email?: string;
+          phone?: string;
+          address?: string;
+          tax_id?: string;
+          is_active: boolean;
+          organization_id?: string;
+        };
+        Update: {
+          name?: string;
+          contact_name?: string;
+          email?: string;
+          phone?: string;
+          address?: string;
+          tax_id?: string;
+          is_active?: boolean;
+          organization_id?: string;
+        };
       };
       customers: {
         Row: Customer;

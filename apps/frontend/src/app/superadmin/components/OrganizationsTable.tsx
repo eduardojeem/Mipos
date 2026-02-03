@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Table,
   TableBody,
@@ -66,7 +66,9 @@ export function OrganizationsTable({
     }
   };
 
-  const sortedOrganizations = [...organizations].sort((a, b) => {
+  const sortedOrganizations = useMemo(() => {
+    const arr = [...organizations];
+    return arr.sort((a, b) => {
     const key = sortBy as keyof Organization;
     const aVal = a[key];
     const bVal = b[key];
@@ -74,18 +76,19 @@ export function OrganizationsTable({
     if (sortBy === 'created_at') {
       const aTime = new Date(aVal as string).getTime();
       const bTime = new Date(bVal as string).getTime();
-      return sortOrder === 'asc' ? aTime - bTime : bTime - aTime;
+        return sortOrder === 'asc' ? aTime - bTime : bTime - aTime;
     }
 
     const aString = String(aVal).toLowerCase();
     const bString = String(bVal).toLowerCase();
 
-    if (sortOrder === 'asc') {
-      return aString > bString ? 1 : -1;
-    } else {
-      return aString < bString ? 1 : -1;
-    }
-  });
+      if (sortOrder === 'asc') {
+        return aString > bString ? 1 : -1;
+      } else {
+        return aString < bString ? 1 : -1;
+      }
+    });
+  }, [organizations, sortBy, sortOrder]);
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; className: string; label: string }> = {
@@ -329,4 +332,3 @@ export function OrganizationsTable({
     </div>
   );
 }
-

@@ -1,10 +1,8 @@
 import { useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { createClient } from '@/lib/supabase/client';
 import { UserFilters } from './useAdminFilters';
 import { useToast } from '@/components/ui/use-toast';
 import type { Database } from '@/types/supabase';
-import { SupabaseClient } from '@supabase/supabase-js';
 
 export interface AdminUser {
     id: string;
@@ -39,7 +37,7 @@ export function useUsers(options: UseUsersOptions = {}) {
 
     const queryClient = useQueryClient();
     const { toast } = useToast();
-    const supabase = useMemo(() => createClient(), []) as SupabaseClient<Database>;
+    
 
     // Query key for caching
     const queryKey = useMemo(() => 
@@ -56,47 +54,19 @@ export function useUsers(options: UseUsersOptions = {}) {
     } = useQuery({
         queryKey,
         queryFn: async () => {
-            let query = supabase
-                .from('users')
-                .select('*, organization:organizations(name)', { count: 'exact' });
-
-            // Apply filters
-            if (filters) {
-                if (filters.search) {
-                    query = query.or(`email.ilike.%${filters.search}%,full_name.ilike.%${filters.search}%`);
-                }
-                if (filters.role && filters.role.length > 0) {
-                    query = query.in('role', filters.role);
-                }
-                if (filters.organization && filters.organization.length > 0) {
-                    query = query.in('organization_id', filters.organization);
-                }
-                if (filters.dateFrom) {
-                    query = query.gte('created_at', filters.dateFrom);
-                }
-                if (filters.dateTo) {
-                    query = query.lte('created_at', filters.dateTo);
-                }
-            }
-
-            // Apply sorting
-            query = query.order(sortBy, { ascending: sortOrder === 'asc' });
-
-            // Apply pagination
-            const from = (page - 1) * pageSize;
-            const to = from + pageSize - 1;
-            query = query.range(from, to);
-
-            const { data: userData, error: fetchError, count } = await query;
-
-            if (fetchError) throw fetchError;
-
+            const params = new URLSearchParams();
+            params.set('page', String(page));
+            params.set('limit', String(pageSize));
+            if (filters?.search) params.set('search', String(filters.search));
+            const res = await fetch(`/api/superadmin/users?${params.toString()}`);
+            const json = await res.json();
+            if (!res.ok) throw new Error(json?.error || 'Error al obtener usuarios');
             return {
-                users: userData || [],
-                total: count || 0,
+                users: json.users || [],
+                total: json.total || 0,
             };
         },
-        staleTime: 2 * 60 * 1000, // 2 minutes
+        staleTime: 2 * 60 * 1000,
     });
 
     const users = data?.users || [];
@@ -106,16 +76,16 @@ export function useUsers(options: UseUsersOptions = {}) {
     // Mutation for updating a user
     const updateMutation = useMutation({
         mutationFn: async ({ id, updates }: { id: string; updates: Partial<AdminUser> }) => {
-            // Filtrar campos que no pertenecen a la tabla users (como 'organization')
             const writableUpdates = { ...updates } as Record<string, unknown>;
             delete writableUpdates.organization;
             const dbUpdates = writableUpdates as unknown as Database['public']['Tables']['users']['Update'];
-            
-            const { error: updateError } = await (supabase.from('users') as any)
-                .update(dbUpdates)
-                .eq('id', id);
-
-            if (updateError) throw updateError;
+            const res = await fetch(`/api/superadmin/users/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(dbUpdates),
+            });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json?.error || 'Error al actualizar usuario');
             return { id, updates };
         },
         onMutate: async ({ id, updates }) => {
@@ -157,12 +127,9 @@ export function useUsers(options: UseUsersOptions = {}) {
     // Mutation for deleting a user
     const deleteMutation = useMutation({
         mutationFn: async (id: string) => {
-            const { error: deleteError } = await supabase
-                .from('users')
-                .delete()
-                .eq('id', id);
-
-            if (deleteError) throw deleteError;
+            const res = await fetch(`/api/superadmin/users/${id}`, { method: 'DELETE' });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json?.error || 'Error al eliminar usuario');
             return id;
         },
         onMutate: async (id) => {
@@ -205,12 +172,13 @@ export function useUsers(options: UseUsersOptions = {}) {
             const writableUpdates = { ...updates } as Record<string, unknown>;
             delete writableUpdates.organization;
             const dbUpdates = writableUpdates as unknown as Database['public']['Tables']['users']['Update'];
-
-            const { error: updateError } = await (supabase.from('users') as any)
-                .update(dbUpdates)
-                .in('id', ids);
-
-            if (updateError) throw updateError;
+            const res = await fetch('/api/superadmin/users/bulk', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ operation: 'update', ids, updates: dbUpdates }),
+            });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json?.error || 'Error en actualización masiva');
             return { ids, updates };
         },
         onSuccess: (_, { ids }) => {
@@ -232,12 +200,13 @@ export function useUsers(options: UseUsersOptions = {}) {
     // Mutation for bulk deleting users
     const bulkDeleteMutation = useMutation({
         mutationFn: async (ids: string[]) => {
-            const { error: deleteError } = await supabase
-                .from('users')
-                .delete()
-                .in('id', ids);
-
-            if (deleteError) throw deleteError;
+            const res = await fetch('/api/superadmin/users/bulk', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ operation: 'delete', ids }),
+            });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json?.error || 'Error en eliminación masiva');
             return ids;
         },
         onSuccess: (_, ids) => {

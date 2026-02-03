@@ -17,8 +17,6 @@ import {
   Activity,
   UserCheck,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   LogOut,
   Crown,
   Sparkles,
@@ -134,18 +132,22 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  // Verificar permisos de super admin
+  // Verificar permisos de super admin con endpoint unificado
+  const [permLoading, setPermLoading] = useState(false);
   useEffect(() => {
     if (!user) {
       router.push("/auth/signin");
       return;
     }
-
-    // Verificar si es super admin usando el rol del usuario
-    if (user.role !== "SUPER_ADMIN") {
-      router.push("/dashboard");
-      return;
-    }
+    setPermLoading(true);
+    fetch('/api/superadmin/me')
+      .then(async (r) => {
+        const j = await r.json();
+        if (!r.ok || !j?.isSuperAdmin) {
+          router.push('/dashboard');
+        }
+      })
+      .finally(() => setPermLoading(false));
   }, [user, router]);
 
   const toggleExpanded = (title: string) => {
@@ -163,7 +165,7 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
     router.push("/auth/signin");
   };
 
-  if (!user) {
+  if (!user || permLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>

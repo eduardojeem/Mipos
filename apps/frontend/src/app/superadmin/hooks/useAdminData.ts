@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { ErrorState, classifyError } from '@/types/error-state';
 import { 
@@ -123,55 +123,39 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
       let statsData: AdminStats | null = null;
       let orgsData: Organization[] | null = null;
 
-      // Fetch stats from API
-      try {
-        console.log('📊 [useAdminData] Fetching stats...');
-        const statsResponse = await fetch('/api/superadmin/stats', {
-          headers: { 'Content-Type': 'application/json' },
-          cache: 'no-store',
-        });
+      const controller = new AbortController();
+      const signal = controller.signal;
 
-        if (!statsResponse.ok) {
-          throw new Error(`Error ${statsResponse.status}: ${statsResponse.statusText}`);
+      const [statsRes, orgsRes] = await Promise.allSettled([
+        fetch('/api/superadmin/stats', { headers: { 'Content-Type': 'application/json' }, cache: 'no-store', signal }),
+        fetch('/api/superadmin/organizations?pageSize=100', { headers: { 'Content-Type': 'application/json' }, cache: 'no-store', signal }),
+      ]);
+
+      if (statsRes.status === 'fulfilled') {
+        const r = statsRes.value;
+        if (r.ok) {
+          statsData = await r.json();
+        } else {
+          statsError = classifyError(new Error(`Error ${r.status}`), { url: '/api/superadmin/stats', method: 'GET' });
         }
-
-        statsData = await statsResponse.json();
-        console.log('✅ [useAdminData] Stats fetched:', statsData);
-      } catch (err: unknown) {
-        console.error('❌ [useAdminData] Stats error:', err);
-        statsError = classifyError(err, {
-          url: '/api/superadmin/stats',
-          method: 'GET',
-        });
+      } else {
+        statsError = classifyError(statsRes.reason, { url: '/api/superadmin/stats', method: 'GET' });
       }
 
-      // Fetch organizations from API (bypassing RLS)
-      try {
-        console.log('🏢 [useAdminData] Fetching organizations...');
-        const orgsResponse = await fetch('/api/superadmin/organizations?pageSize=100', {
-          headers: { 'Content-Type': 'application/json' },
-          cache: 'no-store',
-        });
-
-        if (!orgsResponse.ok) {
-          const errorText = await orgsResponse.text();
-          console.error(`❌ [useAdminData] API Error ${orgsResponse.status}:`, errorText);
-          throw new Error(`Error ${orgsResponse.status}: ${orgsResponse.statusText}`);
+      if (orgsRes.status === 'fulfilled') {
+        const r = orgsRes.value;
+        if (r.ok) {
+          const json = await r.json();
+          if (json.error) {
+            orgsError = classifyError(new Error(json.error), { url: '/api/superadmin/organizations', method: 'GET' });
+          } else {
+            orgsData = json.organizations || [];
+          }
+        } else {
+          orgsError = classifyError(new Error(`Error ${r.status}`), { url: '/api/superadmin/organizations', method: 'GET' });
         }
-
-        const orgsResult = await orgsResponse.json();
-        console.log('📦 [useAdminData] Organizations API Result:', orgsResult);
-        
-        if (orgsResult.error) throw new Error(orgsResult.error);
-        
-        orgsData = orgsResult.organizations || [];
-        console.log('✅ [useAdminData] Organizations fetched:', orgsData ? orgsData.length : 0);
-      } catch (err: unknown) {
-        console.error('❌ [useAdminData] Organizations error:', err);
-        orgsError = classifyError(err, {
-          url: '/api/superadmin/organizations',
-          method: 'GET',
-        });
+      } else {
+        orgsError = classifyError(orgsRes.reason, { url: '/api/superadmin/organizations', method: 'GET' });
       }
 
       // Check if both fetches failed

@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useAdminData, Organization, AdminStats as IAdminStats } from '@/app/superadmin/hooks/useAdminData';
 import { AdminStats } from '@/app/superadmin/components/AdminStats';
 import { OrganizationsTable } from '@/app/superadmin/components/OrganizationsTable';
-import { SystemOverview } from '@/app/superadmin/components/SystemOverview';
+const SystemOverview = dynamic(() => import('@/app/superadmin/components/SystemOverview').then(m => m.SystemOverview), { ssr: false });
 import { ErrorDisplay } from '@/app/superadmin/components/ErrorDisplay';
 import { PartialFailureWarning } from '@/app/superadmin/components/PartialFailureWarning';
-import { AnalyticsDashboard } from '@/app/superadmin/components/AnalyticsDashboard';
+const AnalyticsDashboard = dynamic(() => import('@/app/superadmin/components/AnalyticsDashboard').then(m => m.AnalyticsDashboard), { ssr: false });
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';

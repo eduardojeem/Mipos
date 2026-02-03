@@ -1,6 +1,4 @@
-import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { createClient } from '@/lib/supabase/client';
 
 export interface UserStats {
   total: number;
@@ -15,41 +13,22 @@ export interface UserStats {
  * Hook para obtener estadísticas de usuarios
  */
 export function useUserStats() {
-  const supabase = useMemo(() => createClient(), []);
+  
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['admin', 'user-stats'],
     queryFn: async (): Promise<UserStats> => {
-      // Obtener todos los usuarios para calcular stats
-      const { data: allUsers, error: usersError } = await supabase
-        .from('users')
-        .select('id, organization_id, role, is_active');
-
-      if (usersError) throw usersError;
-
-      const users = allUsers || [];
-
-      // Calcular estadísticas
-      const total = users.length;
-      const withOrgs = users.filter(u => u.organization_id !== null).length;
-      const withoutOrgs = users.filter(u => u.organization_id === null).length;
-      const activeUsers = users.filter(u => u.is_active).length;
-      const inactiveUsers = users.filter(u => !u.is_active).length;
-
-      // Contar por rol
-      const byRole: Record<string, number> = {};
-      users.forEach(u => {
-        const role = u.role || 'UNKNOWN';
-        byRole[role] = (byRole[role] || 0) + 1;
-      });
-
+      const res = await fetch('/api/superadmin/user-stats');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || 'Error obteniendo estadísticas');
+      const s = json.stats || {};
       return {
-        total,
-        withOrgs,
-        withoutOrgs,
-        byRole,
-        activeUsers,
-        inactiveUsers,
+        total: s.total || 0,
+        withOrgs: s.withOrgs || 0,
+        withoutOrgs: s.withoutOrgs || 0,
+        byRole: s.byRole || {},
+        activeUsers: s.activeUsers || 0,
+        inactiveUsers: s.inactiveUsers || 0,
       };
     },
     staleTime: 5 * 60 * 1000, // 5 minutos

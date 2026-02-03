@@ -55,51 +55,5 @@ export default async function SuperAdminLayout({
     redirect('/auth/signin');
   }
 
-  // Verificar rol de super admin
-  let isSuperAdmin = false;
-
-  // Intentar obtener rol desde la tabla user_roles (con JOIN a roles)
-  try {
-    const { data: userRole } = await supabase
-      .from('user_roles')
-      .select(`
-        *,
-        roles:role_id (
-          name
-        )
-      `)
-      .eq('user_id', session.user.id)
-      .eq('is_active', true)
-      .single();
-
-    if (userRole?.roles?.name === 'SUPER_ADMIN') {
-      isSuperAdmin = true;
-    }
-  } catch (e) {
-    // Si falla, intentar desde la tabla users
-    try {
-      const { data: user } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', session.user.id)
-        .single();
-
-      if (user?.role === 'SUPER_ADMIN') {
-        isSuperAdmin = true;
-      }
-    } catch (e2) {
-      // Si ambas fallan, usar metadata como último recurso
-      const userMetadata = session.user.user_metadata;
-      if (userMetadata?.role === 'SUPER_ADMIN') {
-        isSuperAdmin = true;
-      }
-    }
-  }
-
-  // Si no es super admin, redirigir al dashboard
-  if (!isSuperAdmin) {
-    redirect('/dashboard');
-  }
-
   return <SuperAdminClientLayout>{children}</SuperAdminClientLayout>;
 }
