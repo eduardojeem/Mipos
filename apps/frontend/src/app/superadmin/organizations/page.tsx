@@ -14,15 +14,21 @@ import {
   Activity,
   Loader2,
   Filter,
-  ArrowUpDown,
   CheckCircle2,
   XCircle,
   AlertCircle,
   Clock,
   ChevronLeft,
   ChevronRight,
-  RefreshCcw
+  RefreshCcw,
+  Download,
+  FileSpreadsheet,
+  FileText,
+  Trash2
 } from 'lucide-react';
+import { toast } from '@/lib/toast';
+import { exportCSV, exportExcel } from '@/lib/export-utils';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useOrganizations } from '../hooks/useOrganizations';
@@ -51,6 +57,7 @@ export default function OrganizationsPage() {
   const [debouncedSearch] = useDebounce(searchQuery, 500);
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedOrgs, setSelectedOrgs] = useState<string[]>([]);
   const pageSize = 10;
   
   const { 
@@ -62,7 +69,9 @@ export default function OrganizationsPage() {
     updating,
     suspendOrganization,
     activateOrganization,
-    deleteOrganization
+    deleteOrganization,
+    bulkUpdateOrganizations,
+    bulkDeleteOrganizations
   } = useOrganizations({
     filters: { 
       search: debouncedSearch,
@@ -79,9 +88,9 @@ export default function OrganizationsPage() {
   const metrics = useMemo(() => {
     return {
       total: totalCount,
-      active: organizations.filter(o => o.subscription_status === 'ACTIVE').length,
-      trial: organizations.filter(o => o.subscription_status === 'TRIAL').length,
-      suspended: organizations.filter(o => o.subscription_status === 'SUSPENDED').length,
+      active: organizations.filter((o: Organization) => o.subscription_status === 'ACTIVE').length,
+      trial: organizations.filter((o: Organization) => o.subscription_status === 'TRIAL').length,
+      suspended: organizations.filter((o: Organization) => o.subscription_status === 'SUSPENDED').length,
     };
   }, [organizations, totalCount]);
 
@@ -125,6 +134,89 @@ export default function OrganizationsPage() {
         return <Badge variant="outline">{status}</Badge>;
     }
   };
+
+  const handleExportCSV = async () => {
+    try {
+      if (!organizations || organizations.length === 0) {
+        toast.error('No hay datos para exportar');
+        return;
+      }
+
+      const dataToExport = organizations.map((org: Organization) => ({
+        ID: org.id,
+        Nombre: org.name,
+        Slug: org.slug,
+        Plan: org.subscription_plan,
+        Estado: org.subscription_status,
+        Usuarios: org.organization_members?.[0]?.count || 0,
+        'Fecha de creación': new Date(org.created_at).toLocaleDateString('es-ES')
+      }));
+      await exportCSV(dataToExport as Record<string, unknown>[], 'organizaciones_pos');
+      toast.success('CSV exportado correctamente');
+    } catch (error) {
+      toast.error('Error al exportar CSV');
+    }
+  };
+
+  const handleExportExcel = async () => {
+    try {
+      if (!organizations || organizations.length === 0) {
+        toast.error('No hay datos para exportar');
+        return;
+      }
+
+      const dataToExport = organizations.map((org: Organization) => ({
+        ID: org.id,
+        Nombre: org.name,
+        Slug: org.slug,
+        Plan: org.subscription_plan,
+        Estado: org.subscription_status,
+        Usuarios: org.organization_members?.[0]?.count || 0,
+        'Fecha de creación': new Date(org.created_at).toLocaleDateString('es-ES')
+      }));
+      await exportExcel(dataToExport as Record<string, unknown>[], 'organizaciones_pos', 'Organizaciones');
+      toast.success('Excel exportado correctamente');
+    } catch (error) {
+      toast.error('Error al exportar Excel');
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedOrgs.length === organizations.length) {
+      setSelectedOrgs([]);
+    } else {
+      setSelectedOrgs(organizations.map((o: Organization) => o.id));
+    }
+  };
+
+  const toggleSelectOrg = (id: string) => {
+    setSelectedOrgs(prev => 
+      prev.includes(id) ? prev.filter(oid => oid !== id) : [...prev, id]
+    );
+  };
+
+  const handleBulkDelete = async () => {
+    if (!selectedOrgs.length) return;
+    if (window.confirm(`¿Estás seguro de eliminar ${selectedOrgs.length} organizaciones?`)) {
+      try {
+        await bulkDeleteOrganizations(selectedOrgs);
+        setSelectedOrgs([]);
+      } catch (error) {
+        // Error handled in hook
+      }
+    }
+  };
+
+  const handleBulkStatusChange = async (status: string) => {
+    if (!selectedOrgs.length) return;
+    try {
+      await bulkUpdateOrganizations(selectedOrgs, { subscription_status: status });
+      setSelectedOrgs([]);
+    } catch (error) {
+      // Error handled in hook
+    }
+  };
+
 
   if (error) {
     return (
@@ -286,6 +378,23 @@ export default function OrganizationsPage() {
                    <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9" onClick={() => refresh()}>
                     <RefreshCcw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
                    </Button>
+                   <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="rounded-lg h-9 w-9">
+                        <Download className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      <DropdownMenuItem onClick={handleExportCSV} className="cursor-pointer">
+                        <FileText className="h-4 w-4 mr-2 text-blue-500" />
+                        Exportar a CSV
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={handleExportExcel} className="cursor-pointer">
+                        <FileSpreadsheet className="h-4 w-4 mr-2 text-emerald-500" />
+                        Exportar a Excel
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
             </div>
@@ -295,6 +404,12 @@ export default function OrganizationsPage() {
               <Table>
                 <TableHeader className="bg-slate-50/50 dark:bg-slate-900/50">
                   <TableRow className="border-slate-100 dark:border-slate-800">
+                    <TableHead className="w-[50px]">
+                      <Checkbox 
+                        checked={selectedOrgs.length === organizations.length && organizations.length > 0}
+                        onCheckedChange={toggleSelectAll}
+                      />
+                    </TableHead>
                     <TableHead className="w-[300px] font-bold text-slate-500">Organización</TableHead>
                     <TableHead className="font-bold text-slate-500">Estado</TableHead>
                     <TableHead className="font-bold text-slate-500">Plan</TableHead>
@@ -307,6 +422,7 @@ export default function OrganizationsPage() {
                   {isLoading && organizations.length === 0 ? (
                     Array.from({ length: 5 }).map((_, i) => (
                       <TableRow key={i} className="animate-pulse">
+                        <TableCell><div className="h-5 w-5 bg-slate-100 dark:bg-slate-800 rounded" /></TableCell>
                         <TableCell><div className="h-10 bg-slate-100 dark:bg-slate-800 rounded-lg w-full" /></TableCell>
                         <TableCell><div className="h-6 bg-slate-100 dark:bg-slate-800 rounded-full w-20" /></TableCell>
                         <TableCell><div className="h-6 bg-slate-100 dark:bg-slate-800 rounded-full w-24" /></TableCell>
@@ -319,9 +435,15 @@ export default function OrganizationsPage() {
                     organizations.map((org: Organization) => (
                       <TableRow 
                         key={org.id} 
-                        className={`group border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-900/50 transition-colors cursor-pointer ${updating === org.id ? 'opacity-50 pointer-events-none' : ''}`}
+                        className={`group border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-900/50 transition-colors cursor-pointer ${updating === 'loading' || updating === org.id ? 'opacity-50 pointer-events-none' : ''} ${selectedOrgs.includes(org.id) ? 'bg-slate-50/80 dark:bg-slate-900/80' : ''}`}
                         onClick={() => router.push(`/superadmin/organizations/${org.id}`)}
                       >
+                        <TableCell onClick={(e) => e.stopPropagation()}>
+                          <Checkbox 
+                            checked={selectedOrgs.includes(org.id)}
+                            onCheckedChange={() => toggleSelectOrg(org.id)}
+                          />
+                        </TableCell>
                         <TableCell className="py-5">
                           <div className="flex items-center gap-4">
                             <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900 flex items-center justify-center text-slate-500 group-hover:scale-110 group-hover:bg-slate-300 dark:group-hover:bg-slate-700 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-all duration-300">
@@ -454,7 +576,63 @@ export default function OrganizationsPage() {
             )}
           </CardContent>
         </Card>
+        {/* Bulk Actions Floating Bar */}
+        {selectedOrgs.length > 0 && (
+          <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <Card className="bg-slate-900 dark:bg-slate-800 text-white shadow-2xl border-slate-700 h-16 flex items-center px-6 gap-6 rounded-2xl min-w-[500px]">
+              <div className="flex items-center gap-3 pr-6 border-r border-slate-700">
+                <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center font-bold text-sm">
+                  {selectedOrgs.length}
+                </div>
+                <span className="font-medium text-slate-300">seleccionados</span>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="text-emerald-400 hover:text-emerald-300 hover:bg-emerald-900/20 gap-2 h-10 px-4"
+                  onClick={() => handleBulkStatusChange('ACTIVE')}
+                  disabled={updating === 'loading'}
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  Activar
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="text-amber-400 hover:text-amber-300 hover:bg-amber-900/20 gap-2 h-10 px-4"
+                  onClick={() => handleBulkStatusChange('SUSPENDED')}
+                  disabled={updating === 'loading'}
+                >
+                  <XCircle className="h-4 w-4" />
+                  Suspender
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="text-rose-400 hover:text-rose-300 hover:bg-rose-900/20 gap-2 h-10 px-4"
+                  onClick={handleBulkDelete}
+                  disabled={updating === 'loading'}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Eliminar
+                </Button>
+              </div>
+              
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="ml-auto text-slate-400 hover:text-white"
+                onClick={() => setSelectedOrgs([])}
+              >
+                Cancelar
+              </Button>
+            </Card>
+          </div>
+        )}
       </div>
     </SuperAdminGuard>
   );
 }
+

@@ -96,6 +96,412 @@ const UserRow = memo(function UserRow({ user }: { user: AdminUser }) {
   );
 });
 
+// Settings Tab Component with Editable Interface
+const SettingsTab = memo(function SettingsTab({ 
+  organization, 
+  onSave 
+}: { 
+  organization: { id: string; settings: Record<string, unknown> }; 
+  onSave: () => void;
+}) {
+  const [settings, setSettings] = useState(organization.settings || {});
+  const [isSaving, setIsSaving] = useState(false);
+  const [showRaw, setShowRaw] = useState(false);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      const response = await fetch(`/api/superadmin/organizations/${organization.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settings }),
+      });
+
+      if (!response.ok) throw new Error('Error al guardar configuración');
+
+      alert('✅ Configuración actualizada correctamente');
+      onSave();
+    } catch (error) {
+      alert('❌ Error al guardar: ' + (error as Error).message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const updateSetting = (key: string, value: string | number | boolean) => {
+    setSettings((prev: Record<string, unknown>) => ({ ...prev, [key]: value }));
+  };
+
+  const updateNestedSetting = (parent: string, key: string, value: string | number | boolean) => {
+    setSettings((prev: Record<string, unknown>) => ({
+      ...prev,
+      [parent]: {
+        ...((prev[parent] as Record<string, unknown>) || {}),
+        [key]: value,
+      },
+    }));
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header con botón de guardado */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Configuración Avanzada</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Gestiona features, límites y configuraciones técnicas
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            onClick={() => setShowRaw(!showRaw)}
+            className="gap-2"
+          >
+            <Settings className="h-4 w-4" />
+            {showRaw ? 'Vista Visual' : 'Vista JSON'}
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={isSaving}
+            className="gap-2 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700"
+          >
+            {isSaving ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Guardando...
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4" />
+                Guardar Cambios
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+
+      {showRaw ? (
+        // Vista JSON raw (como antes)
+        <Card className="border-slate-200 dark:border-slate-800">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Zap className="h-5 w-5 text-purple-600" />
+              Configuración JSON
+            </CardTitle>
+            <CardDescription>Vista técnica del objeto de configuración</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="bg-slate-950 rounded-xl p-6">
+              <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-800">
+                <span className="text-emerald-500 text-xs font-bold uppercase tracking-wider">
+                  Configuration Object
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(JSON.stringify(settings, null, 2));
+                    alert('✅ JSON copiado al portapapeles');
+                  }}
+                  className="text-xs text-slate-400 hover:text-white"
+                >
+                  Copiar JSON
+                </Button>
+              </div>
+              <pre className="text-slate-300 font-mono text-xs leading-relaxed max-h-[500px] overflow-auto">
+                {JSON.stringify(settings, null, 2)}
+              </pre>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        // Vista Visual Editable
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Features Habilitadas */}
+          <Card className="border-slate-200 dark:border-slate-800 hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Zap className="h-5 w-5 text-blue-600" />
+                Features Habilitadas
+              </CardTitle>
+              <CardDescription>Activa o desactiva funcionalidades</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between p-4 rounded-lg border border-slate-200 dark:border-slate-700">
+                <div>
+                  <p className="font-medium text-slate-900 dark:text-white">Multi-sucursal</p>
+                  <p className="text-xs text-slate-500">Permite múltiples ubicaciones</p>
+                </div>
+                <Label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settings.features?.multi_branch || false}
+                    onChange={(e) => updateNestedSetting('features', 'multi_branch', e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
+                </Label>
+              </div>
+
+              <div className="flex items-center justify-between p-4 rounded-lg border border-slate-200 dark:border-slate-700">
+                <div>
+                  <p className="font-medium text-slate-900 dark:text-white">Inventario Avanzado</p>
+                  <p className="text-xs text-slate-500">Control de stock y alertas</p>
+                </div>
+                <Label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settings.features?.advanced_inventory || false}
+                    onChange={(e) => updateNestedSetting('features', 'advanced_inventory', e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
+                </Label>
+              </div>
+
+              <div className="flex items-center justify-between p-4 rounded-lg border border-slate-200 dark:border-slate-700">
+                <div>
+                  <p className="font-medium text-slate-900 dark:text-white">Reportes Personalizados</p>
+                  <p className="text-xs text-slate-500">Exportar y personalizar reportes</p>
+                </div>
+                <Label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settings.features?.custom_reports || false}
+                    onChange={(e) => updateNestedSetting('features', 'custom_reports', e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
+                </Label>
+              </div>
+
+              <div className="flex items-center justify-between p-4 rounded-lg border border-slate-200 dark:border-slate-700">
+                <div>
+                  <p className="font-medium text-slate-900 dark:text-white">API Access</p>
+                  <p className="text-xs text-slate-500">Integración con APIs externas</p>
+                </div>
+                <Label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settings.features?.api_access || false}
+                    onChange={(e) => updateNestedSetting('features', 'api_access', e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
+                </Label>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Límites y Cuotas */}
+          <Card className="border-slate-200 dark:border-slate-800 hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Users className="h-5 w-5 text-emerald-600" />
+                Límites y Cuotas
+              </CardTitle>
+              <CardDescription>Configura los límites del plan</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                  Usuarios Máximos
+                </Label>
+                <Input
+                  type="number"
+                  value={settings.limits?.max_users || 0}
+                  onChange={(e) => updateNestedSetting('limits', 'max_users', parseInt(e.target.value))}
+                  className="font-semibold"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                  Sucursales Máximas
+                </Label>
+                <Input
+                  type="number"
+                  value={settings.limits?.max_branches || 0}
+                  onChange={(e) => updateNestedSetting('limits', 'max_branches', parseInt(e.target.value))}
+                  className="font-semibold"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                  Productos Máximos
+                </Label>
+                <Input
+                  type="number"
+                  value={settings.limits?.max_products || 0}
+                  onChange={(e) => updateNestedSetting('limits', 'max_products', parseInt(e.target.value))}
+                  className="font-semibold"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                  Almacenamiento (GB)
+                </Label>
+                <Input
+                  type="number"
+                  value={settings.limits?.storage_gb || 0}
+                  onChange={(e) => updateNestedSetting('limits', 'storage_gb', parseInt(e.target.value))}
+                  className="font-semibold"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Configuración Regional */}
+          <Card className="border-slate-200 dark:border-slate-800 hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Globe className="h-5 w-5 text-purple-600" />
+                Configuración Regional
+              </CardTitle>
+              <CardDescription>Idioma, moneda y zona horaria</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label>Idioma</Label>
+                <Select
+                  value={settings.regional?.language || 'es'}
+                  onValueChange={(value) => updateNestedSetting('regional', 'language', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="es">Español</SelectItem>
+                    <SelectItem value="en">English</SelectItem>
+                    <SelectItem value="pt">Português</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Moneda</Label>
+                <Select
+                  value={settings.regional?.currency || 'CLP'}
+                  onValueChange={(value) => updateNestedSetting('regional', 'currency', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="CLP">CLP - Peso Chileno</SelectItem>
+                    <SelectItem value="USD">USD - Dólar</SelectItem>
+                    <SelectItem value="EUR">EUR - Euro</SelectItem>
+                    <SelectItem value="ARS">ARS - Peso Argentino</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Zona Horaria</Label>
+                <Select
+                  value={settings.regional?.timezone || 'America/Santiago'}
+                  onValueChange={(value) => updateNestedSetting('regional', 'timezone', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="America/Santiago">Santiago (GMT-3)</SelectItem>
+                    <SelectItem value="America/Buenos_Aires">Buenos Aires (GMT-3)</SelectItem>
+                    <SelectItem value="America/Sao_Paulo">São Paulo (GMT-3)</SelectItem>
+                    <SelectItem value="America/New_York">New York (GMT-5)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Configuración Técnica */}
+          <Card className="border-slate-200 dark:border-slate-800 hover:shadow-lg transition-shadow">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <ShieldCheck className="h-5 w-5 text-orange-600" />
+                Configuración Técnica
+              </CardTitle>
+              <CardDescription>Parámetros técnicos y notificaciones</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between p-4 rounded-lg border border-slate-200 dark:border-slate-700">
+                <div>
+                  <p className="font-medium text-slate-900 dark:text-white">Notificaciones Email</p>
+                  <p className="text-xs text-slate-500">Enviar notificaciones por correo</p>
+                </div>
+                <Label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settings.notifications?.email || false}
+                    onChange={(e) => updateNestedSetting('notifications', 'email', e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-orange-600"></div>
+                </Label>
+              </div>
+
+              <div className="flex items-center justify-between p-4 rounded-lg border border-slate-200 dark:border-slate-700">
+                <div>
+                  <p className="font-medium text-slate-900 dark:text-white">Notificaciones SMS</p>
+                  <p className="text-xs text-slate-500">Alertas por mensaje de texto</p>
+                </div>
+                <Label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={settings.notifications?.sms || false}
+                    onChange={(e) => updateNestedSetting('notifications', 'sms', e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-orange-300 dark:peer-focus:ring-orange-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-orange-600"></div>
+                </Label>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Email de Soporte</Label>
+                <Input
+                  type="email"
+                  value={settings.support_email || ''}
+                  onChange={(e) => updateSetting('support_email', e.target.value)}
+                  placeholder="soporte@organizacion.com"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>API Rate Limit (requests/min)</Label>
+                <Input
+                  type="number"
+                  value={settings.api_rate_limit || 60}
+                  onChange={(e) => updateSetting('api_rate_limit', parseInt(e.target.value))}
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Warning Footer */}
+      <div className="flex items-start gap-4 p-6 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl">
+        <AlertTriangle className="h-6 w-6 text-amber-600 shrink-0 mt-0.5" />
+        <div className="text-sm">
+          <p className="font-bold text-amber-900 dark:text-amber-100">
+            ⚠️ Cambios Críticos
+          </p>
+          <p className="text-amber-700 dark:text-amber-300 mt-1">
+            Los cambios en esta sección afectan directamente las capacidades de la organización.
+            Asegúrate de que los límites sean coherentes con el plan contratado.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+
 export default function OrganizationDetailsPage() {
   const params = useParams();
   const router = useRouter();
@@ -576,40 +982,12 @@ export default function OrganizationDetailsPage() {
             </Card>
           </TabsContent>
 
-          {/* Tab: Architecture & Raw Settings */}
+          {/* Tab: Settings - Rediseñado */}
           <TabsContent value="settings" className="space-y-6">
-             <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-slate-950 text-slate-300">
-              <CardHeader className="p-8 md:p-12 pb-4">
-                <div className="flex items-center gap-3 text-slate-400 font-bold uppercase tracking-widest text-xs mb-2">
-                  <Zap className="h-4 w-4 text-slate-400" /> Matrix Configuration
-                </div>
-                <CardTitle className="text-2xl font-black text-white">Arquitectura de Nodo</CardTitle>
-                <CardDescription className="text-slate-500 font-medium">Acceso directo al núcleo de configuración JSONB.</CardDescription>
-              </CardHeader>
-              <CardContent className="p-8 md:p-12 pt-0">
-                <div className="bg-slate-900/50 rounded-3xl p-8 border border-white/5 font-mono text-[13px] leading-relaxed group">
-                  <div className="mb-4 flex items-center justify-between border-b border-white/10 pb-4">
-                    <span className="text-emerald-500 uppercase font-black tracking-widest text-[10px]">Main Config Object</span>
-                    <Button variant="ghost" size="sm" className="h-8 text-[10px] font-bold text-slate-500 hover:text-white" onClick={() => {
-                        navigator.clipboard.writeText(JSON.stringify(organization.settings, null, 2));
-                    }}>COPIAR ESQUEMA</Button>
-                  </div>
-                  <pre className="max-h-[600px] overflow-auto scrollbar-hide group-hover:text-slate-100 transition-colors">
-                    {JSON.stringify(organization.settings || {}, null, 2)}
-                  </pre>
-                </div>
-                
-                <div className="mt-8 flex items-center gap-4 bg-slate-500/10 p-6 rounded-2xl border border-slate-500/20">
-                  <div className="w-12 h-12 rounded-xl bg-slate-600 flex items-center justify-center text-white shrink-0 shadow-lg">
-                    <ShieldCheck className="h-6 w-6" />
-                  </div>
-                  <div className="text-sm">
-                    <p className="font-bold text-white mb-0.5">Modo de Edición Técnica</p>
-                    <p className="text-slate-400 font-medium">Los cambios aquí impactan directamente en las cuotas de usuarios y capacidades habilitadas de la organización.</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <SettingsTab organization={organization} onSave={() => {
+              // Trigger refresh
+              window.location.reload();
+            }} />
           </TabsContent>
         </Tabs>
       </div>

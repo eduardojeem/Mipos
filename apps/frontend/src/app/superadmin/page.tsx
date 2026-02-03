@@ -7,6 +7,7 @@ import { OrganizationsTable } from '@/app/superadmin/components/OrganizationsTab
 import { SystemOverview } from '@/app/superadmin/components/SystemOverview';
 import { ErrorDisplay } from '@/app/superadmin/components/ErrorDisplay';
 import { PartialFailureWarning } from '@/app/superadmin/components/PartialFailureWarning';
+import { AnalyticsDashboard } from '@/app/superadmin/components/AnalyticsDashboard';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -17,7 +18,6 @@ import {
   RefreshCw,
   Building2,
   BarChart3,
-  Activity,
   TrendingUp
 } from 'lucide-react';
 import { UnifiedPermissionGuard } from '@/components/auth/UnifiedPermissionGuard';
@@ -282,23 +282,7 @@ export default function SuperAdminPage() {
 
               {/* Analytics Tab */}
               <TabsContent value="analytics" className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Analíticas Avanzadas</CardTitle>
-                    <CardDescription>
-                      Métricas detalladas y tendencias de la plataforma
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center justify-center h-64 text-muted-foreground">
-                      <div className="text-center space-y-2">
-                        <Activity className="h-12 w-12 mx-auto opacity-50" />
-                        <p>Analíticas avanzadas próximamente</p>
-                        <p className="text-sm">Esta función estará disponible en una próxima actualización</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                <AnalyticsDashboard />
               </TabsContent>
             </Tabs>
           </div>

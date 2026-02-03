@@ -1,81 +1,206 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { SuperAdminGuard } from '../components/SuperAdminGuard';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Mail,
   Search,
   Plus,
-  Eye,
-  Send,
+  Edit,
+  Trash2,
   Loader2,
   Code,
-  FileText,
   Save,
-  Undo
+  X,
+  Eye,
+  RefreshCw,
+  AlertTriangle,
 } from 'lucide-react';
+import { useEmailTemplates, EmailTemplate } from '../hooks/useEmailTemplates';
+import { useDebounce } from 'use-debounce';
 
-interface EmailTemplate {
-  id: string;
-  name: string;
-  subject: string;
-  category: 'auth' | 'billing' | 'system' | 'marketing';
-  last_updated: string;
-  is_active: boolean;
-}
-
-const mockTemplates: EmailTemplate[] = [
-  { id: '1', name: 'Bienvenida a Nueva Organización', subject: 'Bienvenido a MiPOS - Comencemos', category: 'auth', last_updated: '2026-01-20T10:00:00Z', is_active: true },
-  { id: '2', name: 'Recuperación de Contraseña', subject: 'Restablece tu contraseña', category: 'auth', last_updated: '2026-01-15T14:30:00Z', is_active: true },
-  { id: '3', name: 'Factura Generada', subject: 'Tu factura de MiPOS está lista', category: 'billing', last_updated: '2026-01-25T09:15:00Z', is_active: true },
-  { id: '4', name: 'Suscripción Cancelada', subject: 'Lamentamos que te vayas', category: 'billing', last_updated: '2026-01-28T16:45:00Z', is_active: true },
-  { id: '5', name: 'Alerta de Límite de Usuarios', subject: 'Has alcanzado el límite de usuarios de tu plan', category: 'system', last_updated: '2026-01-29T11:00:00Z', is_active: true },
+const CATEGORIES = [
+  { value: 'all', label: 'Todas las categorías' },
+  { value: 'auth', label: 'Autenticación' },
+  { value: 'billing', label: 'Facturación' },
+  { value: 'system', label: 'Sistema' },
+  { value: 'marketing', label: 'Marketing' },
 ];
 
 export default function EmailTemplatesPage() {
-  const [templates, setTemplates] = useState<EmailTemplate[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [search, setSearch] = useState('');
+  const [debouncedSearch] = useDebounce(search, 500);
+  const [category, setCategory] = useState('all');
   const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isCreateMode, setIsCreateMode] = useState(false);
 
-  useEffect(() => {
-    // Simular carga de datos
-    const loadTemplates = async () => {
-      setLoading(true);
-      await new Promise(resolve => setTimeout(resolve, 800));
-      setTemplates(mockTemplates);
-      setLoading(false);
-    };
-    loadTemplates();
-  }, []);
+  // Form state
+  const [formData, setFormData] = useState<{
+    name: string;
+    slug: string;
+    subject: string;
+    html_content: string;
+    text_content: string;
+    category: 'auth' | 'billing' | 'system' | 'marketing';
+    description: string;
+    is_active: boolean;
+  }>({
+    name: '',
+    slug: '',
+    subject: '',
+    html_content: '',
+    text_content: '',
+    category: 'auth',
+    description: '',
+    is_active: true,
+  });
 
-  const getCategoryBadge = (category: string) => {
-    switch (category) {
-      case 'auth': return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Autenticación</Badge>;
-      case 'billing': return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Facturación</Badge>;
-      case 'system': return <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">Sistema</Badge>;
-      case 'marketing': return <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">Marketing</Badge>;
-      default: return <Badge variant="outline">{category}</Badge>;
+  const {
+    templates,
+    total,
+    loading,
+    error,
+    refresh,
+    createTemplate,
+    updateTemplate,
+    deleteTemplate,
+    isCreating,
+    isUpdating,
+    isDeleting,
+  } = useEmailTemplates({
+    category: category !== 'all' ? category : undefined,
+    search: debouncedSearch,
+  });
+
+  const handleEdit = (template: EmailTemplate) => {
+    setSelectedTemplate(template);
+    setFormData({
+      name: template.name,
+      slug: template.slug,
+      subject: template.subject,
+      html_content: template.html_content,
+      text_content: template.text_content || '',
+      category: template.category,
+      description: template.description || '',
+      is_active: template.is_active,
+    });
+    setIsCreateMode(false);
+    setIsEditorOpen(true);
+  };
+
+  const handleCreate = () => {
+    setSelectedTemplate(null);
+    setFormData({
+      name: '',
+      slug: '',
+      subject: '',
+      html_content: '',
+      text_content: '',
+      category: 'auth',
+      description: '',
+      is_active: true,
+    });
+    setIsCreateMode(true);
+    setIsEditorOpen(true);
+  };
+
+  const handlePreview = (template: EmailTemplate) => {
+    setSelectedTemplate(template);
+    setIsPreviewOpen(true);
+  };
+
+  const handleSave = async () => {
+    try {
+      if (isCreateMode) {
+        await createTemplate(formData);
+      } else if (selectedTemplate) {
+        await updateTemplate({
+          id: selectedTemplate.id,
+          updates: formData,
+        });
+      }
+      setIsEditorOpen(false);
+    } catch (error) {
+      console.error('Error saving template:', error);
     }
   };
 
-  const filteredTemplates = templates.filter(t => 
-    t.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    t.subject.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const handleDelete = async (template: EmailTemplate) => {
+    if (!confirm(`¿Estás seguro de eliminar la plantilla "${template.name}"?`)) {
+      return;
+    }
+    
+    try {
+      await deleteTemplate(template.id);
+    } catch (error) {
+      console.error('Error deleting template:', error);
+    }
+  };
 
-  if (loading) {
+  const getCategoryBadge = (cat: string) => {
+    switch (cat) {
+      case 'auth':
+        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300">Autenticación</Badge>;
+      case 'billing':
+        return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-300">Facturación</Badge>;
+      case 'system':
+        return <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-300">Sistema</Badge>;
+      case 'marketing':
+        return <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300">Marketing</Badge>;
+      default:
+        return <Badge variant="outline">{cat}</Badge>;
+    }
+  };
+
+  if (loading && templates.length === 0) {
     return (
       <SuperAdminGuard>
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="text-center">
-            <Loader2 className="h-12 w-12 animate-spin text-purple-600 mx-auto mb-4" />
-            <p className="text-slate-600 dark:text-slate-400">Cargando plantillas de email...</p>
+        <div className="flex items-center justify-center min-h-[400px] flex-col gap-4">
+          <Loader2 className="h-10 w-10 animate-spin text-purple-600" />
+          <p className="text-slate-500 font-medium">Cargando plantillas de email...</p>
+        </div>
+      </SuperAdminGuard>
+    );
+  }
+
+  if (error) {
+    return (
+      <SuperAdminGuard>
+        <div className="flex flex-col items-center justify-center min-h-[400px] gap-6 text-center max-w-md mx-auto">
+          <div className="w-20 h-20 bg-rose-50 dark:bg-rose-950/20 rounded-full flex items-center justify-center">
+            <AlertTriangle className="h-10 w-10 text-rose-500" />
           </div>
+          <div>
+            <h2 className="text-3xl font-black text-slate-900 dark:text-white">Error al cargar</h2>
+            <p className="text-slate-500 mt-2">{error}</p>
+          </div>
+          <Button onClick={() => refresh()} className="gap-2">
+            <RefreshCw className="h-4 w-4" />
+            Reintentar
+          </Button>
         </div>
       </SuperAdminGuard>
     );
@@ -97,160 +222,292 @@ export default function EmailTemplatesPage() {
               Gestiona los correos transaccionales y notificaciones del sistema
             </p>
           </div>
-          
-          <Button className="gap-2 bg-gradient-to-r from-pink-600 to-purple-600 text-white shadow-lg hover:scale-105 transition-transform">
+
+          <Button onClick={handleCreate} className="gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700">
             <Plus className="h-4 w-4" />
             Nueva Plantilla
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* List Section */}
-          <div className="lg:col-span-1 space-y-4">
-            <Card className="backdrop-blur-xl bg-white/80 dark:bg-slate-900/80 border-slate-200 dark:border-slate-800 shadow-xl overflow-hidden">
-              <CardHeader className="pb-3 bg-slate-50/50 dark:bg-slate-800/50 border-b">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input 
-                    placeholder="Buscar plantillas..." 
-                    className="pl-10" 
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
+        {/* Filters */}
+        <Card className="backdrop-blur-xl bg-white/95 dark:bg-slate-900/95 border-slate-200 dark:border-slate-800">
+          <CardContent className="pt-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <Input
+                  placeholder="Buscar plantillas..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              <Select value={category} onValueChange={setCategory}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar categoría" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CATEGORIES.map((cat) => (
+                    <SelectItem key={cat.value} value={cat.value}>
+                      {cat.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="mt-4 flex items-center justify-between">
+              <p className="text-sm text-slate-500">
+                Mostrando {templates.length} de {total} plantillas
+              </p>
+              <Button variant="outline" size="sm" onClick={() => refresh()} disabled={loading} className="gap-2">
+                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                Actualizar
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Templates Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {templates.map((template) => (
+            <Card key={template.id} className="backdrop-blur-xl bg-white/95 dark:bg-slate-900/95 border-slate-200 dark:border-slate-800 hover:shadow-lg transition-all duration-300">
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <CardTitle className="text-lg line-clamp-1">{template.name}</CardTitle>
+                    <CardDescription className="mt-2 line-clamp-2">{template.subject}</CardDescription>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {template.is_active ? (
+                      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30">Activo</Badge>
+                    ) : (
+                      <Badge variant="outline" className="bg-slate-50 text-slate-700 border-slate-200">Inactivo</Badge>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-3">
+                  {getCategoryBadge(template.category)}
                 </div>
               </CardHeader>
-              <CardContent className="p-0">
-                <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {filteredTemplates.map((t) => (
-                    <div 
-                      key={t.id} 
-                      className={`p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors ${selectedTemplate?.id === t.id ? 'bg-pink-50/50 dark:bg-pink-900/10 border-l-4 border-pink-500' : ''}`}
-                      onClick={() => setSelectedTemplate(t)}
-                    >
-                      <div className="flex justify-between items-start mb-1">
-                        <h3 className="font-semibold text-slate-900 dark:text-slate-100 truncate">{t.name}</h3>
-                        {getCategoryBadge(t.category)}
-                      </div>
-                      <p className="text-sm text-slate-500 dark:text-slate-400 truncate mb-2">{t.subject}</p>
-                      <div className="flex items-center justify-between text-[11px] text-slate-400">
-                        <span>Actualizado: {new Date(t.last_updated).toLocaleDateString()}</span>
-                        <Badge variant="outline" className={`h-4 text-[9px] ${t.is_active ? 'text-green-600 border-green-200' : 'text-slate-400'}`}>
-                          {t.is_active ? 'Activo' : 'Inactivo'}
-                        </Badge>
-                      </div>
-                    </div>
-                  ))}
+              <CardContent>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => handlePreview(template)} className="flex-1 gap-2">
+                    <Eye className="h-4 w-4" />
+                    Vista Previa
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => handleEdit(template)} className="gap-2">
+                    <Edit className="h-4 w-4" />
+                    Editar
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => handleDelete(template)} 
+                    disabled={isDeleting}
+                    className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/20"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
               </CardContent>
             </Card>
-          </div>
-
-          {/* Editor/Detail Section */}
-          <div className="lg:col-span-2 space-y-4">
-            {selectedTemplate ? (
-              <Card className="backdrop-blur-xl bg-white/80 dark:bg-slate-900/80 border-slate-200 dark:border-slate-800 shadow-xl min-h-[600px] flex flex-col">
-                <CardHeader className="border-b bg-slate-50/30 dark:bg-slate-800/30">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-xl">{selectedTemplate.name}</CardTitle>
-                      <CardDescription>Editando plantilla transaccional</CardDescription>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" className="gap-1">
-                        <Eye className="h-4 w-4" />
-                        Preview
-                      </Button>
-                      <Button variant="outline" size="sm" className="gap-1">
-                        <Send className="h-4 w-4" />
-                        Test
-                      </Button>
-                      <Button className="gap-1 bg-pink-600 text-white">
-                        <Save className="h-4 w-4" />
-                        Guardar
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="flex-1 p-6 space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Asunto del Email</label>
-                      <Input defaultValue={selectedTemplate.subject} />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Categoría</label>
-                      <select className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 dark:border-slate-800 dark:bg-slate-950">
-                        <option value="auth">Autenticación</option>
-                        <option value="billing">Facturación</option>
-                        <option value="system">Sistema</option>
-                        <option value="marketing">Marketing</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2 flex-1 flex flex-col">
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium">Contenido HTML</label>
-                      <div className="flex gap-2">
-                        <Button variant="ghost" size="sm" className="h-7 gap-1 text-[10px]">
-                          <Undo className="h-3 w-3" /> Deshacer
-                        </Button>
-                        <Button variant="ghost" size="sm" className="h-7 gap-1 text-[10px]">
-                          <Code className="h-3 w-3" /> Ver Código
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="flex-1 min-h-[350px] rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-950 p-4 font-mono text-sm text-pink-400 overflow-auto">
-                      <pre>
-                        {`<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body { font-family: sans-serif; line-height: 1.6; color: #333; }
-    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-    .header { background: linear-gradient(to right, #db2777, #7c3aed); padding: 2px; border-radius: 8px; }
-    .content { background: #fff; padding: 30px; border-radius: 6px; }
-    .btn { display: inline-block; padding: 12px 24px; background: #7c3aed; color: #fff; text-decoration: none; border-radius: 6px; }
-  </style>
-</head>
-<body>
-  <div className="container">
-    <div className="header">
-      <div className="content">
-        <h1>Hola {{user_name}}!</h1>
-        <p>Tu organización <strong>{{org_name}}</strong> ha sido creada con éxito.</p>
-        <p>Haz clic en el botón de abajo para empezar a configurar tu punto de venta.</p>
-        <a href="{{login_url}}" className="btn">Entrar a MiPOS</a>
-      </div>
-    </div>
-  </div>
-</body>
-</html>`}
-                      </pre>
-                    </div>
-                    <p className="text-[11px] text-slate-500 italic">
-                      Variables disponibles: user_name, org_name, login_url, support_email
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            ) : (
-              <Card className="backdrop-blur-xl bg-white/80 dark:bg-slate-900/80 border-slate-200 dark:border-slate-800 shadow-xl min-h-[600px] flex items-center justify-center text-center p-12">
-                <div className="space-y-4">
-                  <div className="w-20 h-20 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto">
-                    <FileText className="h-10 w-10 text-slate-300" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-semibold">Seleccionar una plantilla</h3>
-                    <p className="text-slate-500 max-w-xs mx-auto">
-                      Elige una plantilla de la lista de la izquierda para ver su contenido y poder editarla.
-                    </p>
-                  </div>
-                </div>
-              </Card>
-            )}
-          </div>
+          ))}
         </div>
+
+        {templates.length === 0 && (
+          <Card className="backdrop-blur-xl bg-white/95 dark:bg-slate-900/95">
+            <CardContent className="py-12">
+              <div className="flex flex-col items-center gap-4 text-center">
+                <Mail className="h-16 w-16 text-slate-300 dark:text-slate-700" />
+                <div>
+                  <h3 className="text-xl font-semibold text-slate-900 dark:text-white">
+                    {search || category !== 'all' ? 'No se encontraron plantillas' : 'No hay plantillas'}
+                  </h3>
+                  <p className="text-slate-500 mt-2">
+                    {search || category !== 'all' 
+                      ? 'Intenta con otros términos de búsqueda' 
+                      : 'Crea tu primera plantilla de email'}
+                  </p>
+                </div>
+                {!search && category === 'all' && (
+                  <Button onClick={handleCreate} className="gap-2 mt-2">
+                    <Plus className="h-4 w-4" />
+                    Crear Plantilla
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Editor Dialog */}
+        <Dialog open={isEditorOpen} onOpenChange={setIsEditorOpen}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Code className="h-5 w-5 text-purple-600" />
+                {isCreateMode ? 'Crear Nueva Plantilla' : `Editar: ${selectedTemplate?.name}`}
+              </DialogTitle>
+              <DialogDescription>
+                Configura el contenido HTML y texto plano de la plantilla
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Nombre de la Plantilla *</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="Ej: Bienvenida a Nueva Organización"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="slug">Slug (Identificador) *</Label>
+                  <Input
+                    id="slug"
+                    value={formData.slug}
+                    onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+                    placeholder="Ej: welcome-organization"
+                    disabled={!isCreateMode}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="subject">Asunto del Email *</Label>
+                <Input
+                  id="subject"
+                  value={formData.subject}
+                  onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
+                  placeholder="Ej: Bienvenido a MiPOS"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="category">Categoría *</Label>
+                  <Select
+                    value={formData.category}
+                    onValueChange={(value: 'auth' | 'billing' | 'system' | 'marketing') => setFormData({ ...formData, category: value })}
+                  >
+                    <SelectTrigger id="category">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CATEGORIES.filter(c => c.value !== 'all').map((cat) => (
+                        <SelectItem key={cat.value} value={cat.value}>
+                          {cat.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="is_active">Estado</Label>
+                  <Select
+                    value={formData.is_active ? 'active' : 'inactive'}
+                    onValueChange={(value) => setFormData({ ...formData, is_active: value === 'active' })}
+                  >
+                    <SelectTrigger id="is_active">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Activo</SelectItem>
+                      <SelectItem value="inactive">Inactivo</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="description">Descripción</Label>
+                <Input
+                  id="description"
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="Descripción breve de la plantilla"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="html_content">Contenido HTML *</Label>
+                <Textarea
+                  id="html_content"
+                  value={formData.html_content}
+                  onChange={(e) => setFormData({ ...formData, html_content: e.target.value })}
+                  placeholder="<html>...</html>"
+                  rows={10}
+                  className="font-mono text-sm"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="text_content">Contenido de Texto Plano</Label>
+                <Textarea
+                  id="text_content"
+                  value={formData.text_content}
+                  onChange={(e) => setFormData({ ...formData, text_content: e.target.value })}
+                  placeholder="Versión en texto plano del email..."
+                  rows={5}
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="mt-6">
+              <Button variant="outline" onClick={() => setIsEditorOpen(false)}>
+                <X className="h-4 w-4 mr-2" />
+                Cancelar
+              </Button>
+              <Button 
+                onClick={handleSave} 
+                disabled={isCreating || isUpdating || !formData.name || !formData.slug || !formData.subject || !formData.html_content}
+                className="gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700"
+              >
+                {(isCreating || isUpdating) ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4" />
+                    {isCreateMode ? 'Crear Plantilla' : 'Guardar Cambios'}
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Preview Dialog */}
+        <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+          <DialogContent className="max-w-4xl max-h-[90vh]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Eye className="h-5 w-5 text-purple-600" />
+                Vista Previa: {selectedTemplate?.name}
+              </DialogTitle>
+              <DialogDescription>
+                Asunto: {selectedTemplate?.subject}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden">
+              <iframe
+                srcDoc={selectedTemplate?.html_content}
+                className="w-full h-[500px] bg-white"
+                title="Email Preview"
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsPreviewOpen(false)}>
+                Cerrar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </SuperAdminGuard>
   );

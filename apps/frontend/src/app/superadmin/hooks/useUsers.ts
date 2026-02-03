@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { createClient } from '@/lib/supabase/client';
 import { UserFilters } from './useAdminFilters';
 import { useToast } from '@/components/ui/use-toast';
+import type { Database } from '@/types/supabase';
+import { SupabaseClient } from '@supabase/supabase-js';
 
 export interface AdminUser {
     id: string;
@@ -10,7 +12,9 @@ export interface AdminUser {
     full_name: string | null;
     role: string;
     organization_id: string | null;
-    organization_name?: string;
+    organization?: {
+        name: string;
+    } | null;
     created_at: string;
     last_sign_in_at: string | null;
     is_active: boolean;
@@ -35,7 +39,7 @@ export function useUsers(options: UseUsersOptions = {}) {
 
     const queryClient = useQueryClient();
     const { toast } = useToast();
-    const supabase = useMemo(() => createClient(), []);
+    const supabase = useMemo(() => createClient(), []) as SupabaseClient<Database>;
 
     // Query key for caching
     const queryKey = useMemo(() => 
@@ -54,7 +58,7 @@ export function useUsers(options: UseUsersOptions = {}) {
         queryFn: async () => {
             let query = supabase
                 .from('users')
-                .select('*', { count: 'exact' });
+                .select('*, organization:organizations(name)', { count: 'exact' });
 
             // Apply filters
             if (filters) {
@@ -102,9 +106,13 @@ export function useUsers(options: UseUsersOptions = {}) {
     // Mutation for updating a user
     const updateMutation = useMutation({
         mutationFn: async ({ id, updates }: { id: string; updates: Partial<AdminUser> }) => {
-            const { error: updateError } = await supabase
-                .from('users')
-                .update(updates)
+            // Filtrar campos que no pertenecen a la tabla users (como 'organization')
+            const writableUpdates = { ...updates } as Record<string, unknown>;
+            delete writableUpdates.organization;
+            const dbUpdates = writableUpdates as unknown as Database['public']['Tables']['users']['Update'];
+            
+            const { error: updateError } = await (supabase.from('users') as any)
+                .update(dbUpdates)
                 .eq('id', id);
 
             if (updateError) throw updateError;
@@ -191,6 +199,63 @@ export function useUsers(options: UseUsersOptions = {}) {
         },
     });
 
+    // Mutation for bulk updating users
+    const bulkUpdateMutation = useMutation({
+        mutationFn: async ({ ids, updates }: { ids: string[]; updates: Partial<AdminUser> }) => {
+            const writableUpdates = { ...updates } as Record<string, unknown>;
+            delete writableUpdates.organization;
+            const dbUpdates = writableUpdates as unknown as Database['public']['Tables']['users']['Update'];
+
+            const { error: updateError } = await (supabase.from('users') as any)
+                .update(dbUpdates)
+                .in('id', ids);
+
+            if (updateError) throw updateError;
+            return { ids, updates };
+        },
+        onSuccess: (_, { ids }) => {
+            toast({
+                title: 'Usuarios actualizados',
+                description: `${ids.length} usuarios han sido actualizados.`,
+            });
+            queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+        },
+        onError: (err) => {
+            toast({
+                title: 'Error en actualización masiva',
+                description: err instanceof Error ? err.message : 'Error desconocido',
+                variant: 'destructive',
+            });
+        }
+    });
+
+    // Mutation for bulk deleting users
+    const bulkDeleteMutation = useMutation({
+        mutationFn: async (ids: string[]) => {
+            const { error: deleteError } = await supabase
+                .from('users')
+                .delete()
+                .in('id', ids);
+
+            if (deleteError) throw deleteError;
+            return ids;
+        },
+        onSuccess: (_, ids) => {
+            toast({
+                title: 'Usuarios eliminados',
+                description: `${ids.length} usuarios han sido eliminados.`,
+            });
+            queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+        },
+        onError: (err) => {
+            toast({
+                title: 'Error en eliminación masiva',
+                description: err instanceof Error ? err.message : 'Error desconocido',
+                variant: 'destructive',
+            });
+        }
+    });
+
     const updateUser = useCallback(async (id: string, updates: Partial<AdminUser>) => {
         return updateMutation.mutateAsync({ id, updates });
     }, [updateMutation]);
@@ -198,6 +263,15 @@ export function useUsers(options: UseUsersOptions = {}) {
     const deleteUser = useCallback(async (id: string) => {
         return deleteMutation.mutateAsync(id);
     }, [deleteMutation]);
+
+    const bulkUpdateUsers = useCallback(async (ids: string[], updates: Partial<AdminUser>) => {
+        return bulkUpdateMutation.mutateAsync({ ids, updates });
+    }, [bulkUpdateMutation]);
+
+    const bulkDeleteUsers = useCallback(async (ids: string[]) => {
+        return bulkDeleteMutation.mutateAsync(ids);
+    }, [bulkDeleteMutation]);
+
 
     const changeUserRole = useCallback(async (id: string, role: string) => {
         return updateUser(id, { role });
@@ -217,9 +291,11 @@ export function useUsers(options: UseUsersOptions = {}) {
         error,
         totalCount,
         refresh: refetch,
-        updating: updateMutation.isPending || deleteMutation.isPending,
+        updating: updateMutation.isPending || deleteMutation.isPending || bulkUpdateMutation.isPending || bulkDeleteMutation.isPending,
         updateUser,
         deleteUser,
+        bulkUpdateUsers,
+        bulkDeleteUsers,
         changeUserRole,
         deactivateUser,
         activateUser,

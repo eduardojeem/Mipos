@@ -169,6 +169,68 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
         },
     });
 
+    // Mutation for bulk updating organizations
+    const bulkUpdateMutation = useMutation({
+        mutationFn: async ({ ids, updates }: { ids: string[]; updates: Partial<Organization> }) => {
+            const response = await fetch('/api/superadmin/organizations', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids, ...updates }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Error en actualización masiva');
+            }
+
+            return await response.json();
+        },
+        onSuccess: (_, { ids }) => {
+            toast({
+                title: 'Organizaciones actualizadas',
+                description: `${ids.length} organizaciones han sido actualizadas.`,
+            });
+            queryClient.invalidateQueries({ queryKey: ['admin', 'organizations'] });
+        },
+        onError: (err) => {
+            toast({
+                title: 'Error masivo',
+                description: err instanceof Error ? err.message : 'Error desconocido',
+                variant: 'destructive',
+            });
+        }
+    });
+
+    // Mutation for bulk deleting organizations
+    const bulkDeleteMutation = useMutation({
+        mutationFn: async (ids: string[]) => {
+            const response = await fetch(`/api/superadmin/organizations?ids=${ids.join(',')}`, {
+                method: 'DELETE',
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Error en eliminación masiva');
+            }
+
+            return await response.json();
+        },
+        onSuccess: (_, ids) => {
+            toast({
+                title: 'Organizaciones eliminadas',
+                description: `${ids.length} organizaciones han sido eliminadas.`,
+            });
+            queryClient.invalidateQueries({ queryKey: ['admin', 'organizations'] });
+        },
+        onError: (err) => {
+            toast({
+                title: 'Error masivo',
+                description: err instanceof Error ? err.message : 'Error desconocido',
+                variant: 'destructive',
+            });
+        }
+    });
+
     const updateOrganization = useCallback(async (id: string, updates: Partial<Organization>) => {
         return updateMutation.mutateAsync({ id, updates });
     }, [updateMutation]);
@@ -176,6 +238,15 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
     const deleteOrganization = useCallback(async (id: string) => {
         return deleteMutation.mutateAsync(id);
     }, [deleteMutation]);
+
+    const bulkUpdateOrganizations = useCallback(async (ids: string[], updates: Partial<Organization>) => {
+        return bulkUpdateMutation.mutateAsync({ ids, updates });
+    }, [bulkUpdateMutation]);
+
+    const bulkDeleteOrganizations = useCallback(async (ids: string[]) => {
+        return bulkDeleteMutation.mutateAsync(ids);
+    }, [bulkDeleteMutation]);
+
 
     const suspendOrganization = useCallback(async (id: string) => {
         return updateOrganization(id, { subscription_status: 'SUSPENDED' });
@@ -195,9 +266,11 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
         error,
         totalCount,
         refresh: refetch,
-        updating: updateMutation.isPending || deleteMutation.isPending ? 'loading' : null,
+        updating: updateMutation.isPending || deleteMutation.isPending || bulkUpdateMutation.isPending || bulkDeleteMutation.isPending ? 'loading' : null,
         updateOrganization,
         deleteOrganization,
+        bulkUpdateOrganizations,
+        bulkDeleteOrganizations,
         suspendOrganization,
         activateOrganization,
         changeSubscriptionPlan,

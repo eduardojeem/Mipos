@@ -1,260 +1,147 @@
-# Fix: Errores en Panel SuperAdmin
+# Solución: No se ven datos en el Panel de SuperAdmin
 
-## Problema Identificado
+## 📊 Diagnóstico Realizado
 
-El panel de SuperAdmin estaba intentando hacer consultas a tablas que no existen en la base de datos actual:
-- `organization_members` 
-- Relaciones con `organizations` a través de JOINs
+### ✅ Estado de la Base de Datos
+El diagnóstico confirmó que **los datos existen** en la base de datos:
+- **6 organizaciones** registradas
+- **5 organizaciones activas**
+- **13 usuarios** en el sistema
+- **1 suscripción activa** ($49/mes MRR)
+- **Usuario super admin** existe: `super@admin.com`
 
-Esto causaba errores al cargar:
-- `/superadmin/users` - Error al cargar usuarios
-- `/superadmin/organizations` - Error al cargar organizaciones
+### 🔍 Problema Identificado
+Los datos existen en la base de datos, pero no se muestran en el panel. Esto indica un problema de:
+1. **Autenticación del usuario** en el navegador
+2. **Permisos de acceso** al API
+3. **Errores en el frontend** (consola del navegador)
 
-## Solución Aplicada
+## 🛠️ Pasos para Solucionar
 
-### 1. Archivo: `apps/frontend/src/app/superadmin/users/page.tsx`
+### Paso 1: Verificar Autenticación
+1. Abre el navegador
+2. Ve a: `http://localhost:3000/superadmin`
+3. Verifica que estés autenticado con: `jeem101595@gmail.com`
+4. Si no estás autenticado, inicia sesión primero
 
-#### Cambios Realizados:
+### Paso 2: Revisar Consola del Navegador
+1. Abre las herramientas de desarrollo (F12)
+2. Ve a la pestaña "Console"
+3. Busca errores en rojo
+4. **Copia y pega** cualquier error que veas
 
-**Tipo simplificado:**
-```typescript
-// ANTES
-type UserWithOrganizations = {
-  id: string;
-  email: string;
-  full_name: string | null;
-  role: string | null;
-  created_at: string;
-  last_sign_in_at: string | null;
-  organization_members?: Array<{
-    organization_id: string;
-    role_id: string;
-    is_owner: boolean;
-    organizations: {
-      name: string;
-      slug: string;
-    } | null;
-  }>;
-};
+### Paso 3: Probar el API Manualmente
+En la consola del navegador, ejecuta:
 
-// DESPUÉS
-type UserWithOrganizations = {
-  id: string;
-  email: string;
-  full_name: string | null;
-  role: string | null;
-  created_at: string;
-  last_sign_in_at: string | null;
-};
+```javascript
+fetch('/api/superadmin/stats')
+  .then(r => r.json())
+  .then(data => {
+    console.log('✅ API Response:', data);
+  })
+  .catch(error => {
+    console.error('❌ API Error:', error);
+  });
 ```
 
-**Consulta simplificada:**
-```typescript
-// ANTES
-const { data, error } = await supabase
-  .from('users')
-  .select(`
-    id,
-    email,
-    full_name,
-    role,
-    created_at,
-    last_sign_in_at,
-    organization_members(
-      organization_id,
-      role_id,
-      is_owner,
-      organizations(name, slug)
-    )
-  `)
-  .order('created_at', { ascending: false })
-  .limit(500);
+### Paso 4: Verificar Permisos del Usuario
+Ejecuta este script para verificar los permisos:
 
-// DESPUÉS
-const { data, error } = await supabase
-  .from('users')
-  .select(`
-    id,
-    email,
-    full_name,
-    role,
-    created_at,
-    last_sign_in_at
-  `)
-  .order('created_at', { ascending: false })
-  .limit(500);
+```bash
+npx tsx scripts/test-superadmin-access.ts
 ```
 
-**Cálculo de estadísticas:**
-```typescript
-// ANTES
-const withOrgs = data?.filter(u => u.organization_members && u.organization_members.length > 0).length || 0;
-const withoutOrgs = total - withOrgs;
+## 🔧 Soluciones Comunes
 
-// DESPUÉS
-// Since we don't have organization_members table, set these to 0
-const withOrgs = 0;
-const withoutOrgs = total;
+### Solución 1: Usuario no tiene rol SUPER_ADMIN
+Si el script muestra que no tienes el rol, asígnalo con:
+
+```bash
+npx tsx scripts/set-superadmin-role.ts jeem101595@gmail.com
 ```
 
-**Columna de organizaciones en tabla:**
-```typescript
-// ANTES
-<TableCell>
-  {user.organization_members && user.organization_members.length > 0 ? (
-    <div className="space-y-1">
-      {user.organization_members.map((membership, idx) => (
-        <div key={idx} className="flex items-center gap-2">
-          <Badge variant="outline">
-            {membership.organizations?.name || 'Sin nombre'}
-          </Badge>
-          {membership.is_owner && (
-            <Crown className="h-3 w-3 text-yellow-600" />
-          )}
-        </div>
-      ))}
-    </div>
-  ) : (
-    <span className="text-slate-400 text-sm">-</span>
-  )}
-</TableCell>
+### Solución 2: Sesión expirada
+1. Cierra sesión
+2. Vuelve a iniciar sesión
+3. Intenta acceder nuevamente a `/superadmin`
 
-// DESPUÉS
-<TableCell>
-  <span className="text-slate-400 text-sm">N/A</span>
-</TableCell>
+### Solución 3: Caché del navegador
+1. Abre las herramientas de desarrollo (F12)
+2. Ve a la pestaña "Network"
+3. Marca "Disable cache"
+4. Recarga la página (Ctrl+R o Cmd+R)
+
+### Solución 4: Variables de entorno
+Verifica que existan en `apps/frontend/.env.local`:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=tu_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_key
+SUPABASE_SERVICE_ROLE_KEY=tu_service_key
 ```
 
-### 2. Archivo: `apps/frontend/src/app/superadmin/organizations/page.tsx`
-
-#### Cambios Realizados:
-
-**Tipo simplificado:**
-```typescript
-// ANTES
-type Organization = {
-  // ... otros campos
-  organization_members?: Array<{ count: number }>;
-}
-
-// DESPUÉS
-type Organization = {
-  // ... otros campos
-  // Removido organization_members
-}
+### Solución 5: Reiniciar el servidor
+```bash
+# Detener el servidor (Ctrl+C)
+# Luego reiniciar:
+npm run dev
 ```
 
-**Consulta simplificada:**
-```typescript
-// ANTES
-const { data, error } = await supabase
-  .from('organizations')
-  .select(`
-    *,
-    organization_members(count)
-  `)
-  .order('created_at', { ascending: false });
+## 📝 Información para Reportar
 
-// DESPUÉS
-const { data, error } = await supabase
-  .from('organizations')
-  .select('*')
-  .order('created_at', { ascending: false });
-```
+Si el problema persiste, proporciona:
 
-**Función getMemberCount:**
-```typescript
-// ANTES
-const getMemberCount = (org: Organization) => {
-  return org.organization_members?.[0]?.count || 0;
-};
+1. **Errores de la consola del navegador** (captura de pantalla)
+2. **Resultado del comando**:
+   ```bash
+   npx tsx scripts/diagnose-superadmin-data.ts
+   ```
+3. **Resultado del comando**:
+   ```bash
+   npx tsx scripts/test-superadmin-access.ts
+   ```
+4. **Respuesta del API** (desde la consola del navegador)
 
-// DESPUÉS
-const getMemberCount = (org: Organization) => {
-  // Return 0 since we don't have organization_members table
-  return 0;
-};
-```
+## 🎯 Próximos Pasos
 
-## Resultado
+Una vez que identifiques el error específico:
 
-✅ **Errores corregidos:**
-- Panel de usuarios carga correctamente
-- Panel de organizaciones carga correctamente
-- No hay errores de TypeScript
-- No hay errores en consola
+1. **Error 401 (No autorizado)**: Problema de autenticación
+   - Solución: Cerrar sesión y volver a iniciar sesión
 
-## Limitaciones Actuales
+2. **Error 403 (Acceso denegado)**: Problema de permisos
+   - Solución: Asignar rol SUPER_ADMIN con el script
 
-Debido a que no existen las tablas `organization_members` y `organizations`, las siguientes funcionalidades muestran valores por defecto:
+3. **Error 500 (Error del servidor)**: Problema en el backend
+   - Solución: Revisar logs del servidor y variables de entorno
 
-1. **Panel de Usuarios:**
-   - Columna "Organizaciones": Muestra "N/A"
-   - Estadística "Con organizaciones": Muestra 0
-   - Estadística "Sin organizaciones": Muestra total de usuarios
+4. **No hay errores pero no se ven datos**: Problema en el frontend
+   - Solución: Revisar el hook `useAdminData` y componentes
 
-2. **Panel de Organizaciones:**
-   - Contador de miembros: Muestra 0
+## 📚 Archivos Relevantes
 
-## Próximos Pasos (Opcional)
+- **API**: `apps/frontend/src/app/api/superadmin/stats/route.ts`
+- **Hook de datos**: `apps/frontend/src/app/superadmin/hooks/useAdminData.ts`
+- **Página principal**: `apps/frontend/src/app/superadmin/page.tsx`
+- **Layout**: `apps/frontend/src/app/superadmin/layout.tsx`
+- **Script de diagnóstico**: `scripts/diagnose-superadmin-data.ts`
+- **Script de acceso**: `scripts/test-superadmin-access.ts`
 
-Si deseas implementar la funcionalidad completa de organizaciones multi-tenant:
+## ✅ Verificación Final
 
-### 1. Crear Tablas en Supabase
+Cuando el problema esté resuelto, deberías ver:
 
-```sql
--- Tabla de organizaciones (ya existe)
--- Solo verificar que tenga los campos necesarios
+1. **Dashboard con estadísticas**:
+   - Total de organizaciones: 6
+   - Organizaciones activas: 5
+   - Total de usuarios: 13
+   - MRR: $49.00
 
--- Tabla de membresías
-CREATE TABLE IF NOT EXISTS organization_members (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
-  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-  role_id TEXT NOT NULL DEFAULT 'member',
-  is_owner BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(organization_id, user_id)
-);
+2. **Tabla de organizaciones** con 6 entradas
 
--- Índices para performance
-CREATE INDEX idx_org_members_org ON organization_members(organization_id);
-CREATE INDEX idx_org_members_user ON organization_members(user_id);
-
--- RLS Policies
-ALTER TABLE organization_members ENABLE ROW LEVEL SECURITY;
-
--- Super admins pueden ver todo
-CREATE POLICY "Super admins can view all memberships"
-  ON organization_members FOR SELECT
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM users
-      WHERE users.id = auth.uid()
-      AND users.role = 'SUPER_ADMIN'
-    )
-  );
-```
-
-### 2. Revertir los Cambios
-
-Una vez creadas las tablas, puedes revertir los cambios en los archivos para usar las consultas originales con JOINs.
-
-## Archivos Modificados
-
-1. ✅ `apps/frontend/src/app/superadmin/users/page.tsx`
-2. ✅ `apps/frontend/src/app/superadmin/organizations/page.tsx`
-
-## Testing
-
-- [ ] Verificar que `/superadmin/users` carga sin errores
-- [ ] Verificar que `/superadmin/organizations` carga sin errores
-- [ ] Verificar que las estadísticas se muestran correctamente
-- [ ] Verificar que no hay errores en consola del navegador
+3. **Sin errores** en la consola del navegador
 
 ---
 
-**Estado:** ✅ CORREGIDO
-**Fecha:** 2026-01-28
+**Fecha**: 3 de febrero de 2026
+**Estado**: Diagnóstico completado - Esperando información del usuario

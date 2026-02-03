@@ -182,9 +182,11 @@ export async function PATCH(request: NextRequest) {
   try {
     const supabase = await createClient();
     const body = await request.json();
-    const { id, ...updates } = body;
+    const { id, ids, ...updates } = body;
 
-    if (!id) return NextResponse.json({ error: 'ID requerido' }, { status: 400 });
+    if (!id && (!ids || !Array.isArray(ids))) {
+      return NextResponse.json({ error: 'ID o IDs requeridos' }, { status: 400 });
+    }
 
     // Auth check
     const { data: { user } } = await supabase.auth.getUser();
@@ -193,19 +195,22 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
     }
 
-    const { data, error } = await supabase
-      .from('organizations')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
+    let query = supabase.from('organizations').update(updates);
+    
+    if (id) {
+      query = query.eq('id', id);
+    } else {
+      query = query.in('id', ids);
+    }
+
+    const { data, error } = await query.select();
 
     if (error) {
-      structuredLogger.error('Error updating organization', error, { component: COMPONENT, action: 'PATCH', metadata: { id } });
+      structuredLogger.error('Error updating organization(s)', error, { component: COMPONENT, action: 'PATCH', metadata: { id, ids } });
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true, organization: data });
+    return NextResponse.json({ success: true, organization: id ? data[0] : data });
   } catch (error) {
     structuredLogger.error('Unexpected error in PATCH organization', error as Error, { component: COMPONENT, action: 'PATCH' });
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
@@ -217,8 +222,9 @@ export async function DELETE(request: NextRequest) {
     const supabase = await createClient();
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
+    const ids = searchParams.get('ids')?.split(',');
 
-    if (!id) return NextResponse.json({ error: 'ID requerido' }, { status: 400 });
+    if (!id && !ids) return NextResponse.json({ error: 'ID o IDs requeridos' }, { status: 400 });
 
     // Auth check
     const { data: { user } } = await supabase.auth.getUser();
@@ -227,10 +233,18 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
     }
 
-    const { error } = await supabase.from('organizations').delete().eq('id', id);
+    let query = supabase.from('organizations').delete();
+    
+    if (id) {
+      query = query.eq('id', id);
+    } else {
+      query = query.in('id', ids!);
+    }
+
+    const { error } = await query;
 
     if (error) {
-      structuredLogger.error('Error deleting organization', error, { component: COMPONENT, action: 'DELETE', metadata: { id } });
+      structuredLogger.error('Error deleting organization(s)', error, { component: COMPONENT, action: 'DELETE', metadata: { id, ids } });
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 

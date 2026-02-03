@@ -25,34 +25,64 @@ import {
   Building2,
   CheckCircle,
   XCircle,
-  Loader2
+  Loader2,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  FileSpreadsheet,
+  FileText,
+  Trash2,
+  UserCheck,
+  UserX,
+  AlertTriangle
 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger 
+} from '@/components/ui/dropdown-menu';
+import { exportCSV, exportExcel } from '@/lib/export-utils';
 import { SuperAdminGuard } from '../components/SuperAdminGuard';
-import { useUsers } from '../hooks/useUsers';
+import { useUsers, AdminUser } from '../hooks/useUsers';
+import { useUserStats } from '../hooks/useUserStats';
 import { toast } from '@/lib/toast';
+import { useDebounce } from 'use-debounce';
 
 export default function SuperAdminUsersPage() {
   const [search, setSearch] = useState('');
+  const [debouncedSearch] = useDebounce(search, 500);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const pageSize = 20; // Paginación real
   
-  // Use the custom hook for data fetching
+  // Use the custom hook for data fetching with pagination
   const { 
     users, 
     loading, 
     refresh, 
-    totalCount 
+    totalCount,
+    bulkUpdateUsers,
+    bulkDeleteUsers,
+    updating
   } = useUsers({
-    filters: { search: search },
+    filters: { search: debouncedSearch },
     sortBy: 'created_at',
     sortOrder: 'desc',
-    pageSize: 100 // Load more users for better visibility
+    pageSize,
+    page: currentPage,
   });
+
+  // Hook para estadísticas REALES
+  const { stats, refresh: refreshStats } = useUserStats();
 
   const [refreshing, setRefreshing] = useState(false);
 
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      await refresh();
+      await Promise.all([refresh(), refreshStats()]);
       toast.success('Usuarios actualizados');
     } catch (error) {
       toast.error('Error al actualizar usuarios');
@@ -61,11 +91,15 @@ export default function SuperAdminUsersPage() {
     }
   };
 
-  // Stats calculation (simplified as per original code)
-  const stats = {
-    total: totalCount,
-    withOrgs: 0,
-    withoutOrgs: totalCount,
+  // Paginación
+  const totalPages = Math.ceil(totalCount / pageSize);
+  const hasNextPage = currentPage < totalPages;
+  const hasPrevPage = currentPage > 1;
+
+  // Reset a página 1 cuando cambia la búsqueda
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    setCurrentPage(1);
   };
 
   const getRoleBadge = (role: string | null) => {
@@ -96,6 +130,93 @@ export default function SuperAdminUsersPage() {
       hour: '2-digit',
       minute: '2-digit'
     });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedUsers.length === users.length) {
+      setSelectedUsers([]);
+    } else {
+      setSelectedUsers(users.map(u => (u as AdminUser).id));
+    }
+  };
+
+  const toggleSelectUser = (id: string) => {
+    setSelectedUsers(prev => 
+      prev.includes(id) ? prev.filter(uid => uid !== id) : [...prev, id]
+    );
+  };
+
+  const handleBulkDelete = async () => {
+    if (!selectedUsers.length) return;
+    if (window.confirm(`¿Estás seguro de eliminar ${selectedUsers.length} usuarios?`)) {
+      try {
+        await bulkDeleteUsers(selectedUsers);
+        setSelectedUsers([]);
+      } catch (error) {
+        // Error handled in hook
+      }
+    }
+  };
+
+  const handleBulkStatusChange = async (active: boolean) => {
+    if (!selectedUsers.length) return;
+    try {
+      await bulkUpdateUsers(selectedUsers, { is_active: active });
+      setSelectedUsers([]);
+    } catch (error) {
+      // Error handled in hook
+    }
+  };
+
+
+  const handleExportCSV = async () => {
+    try {
+      if (!users || users.length === 0) {
+        toast.error('No hay datos para exportar');
+        return;
+      }
+
+      const dataToExport = (users as AdminUser[]).map((user: AdminUser) => ({
+        ID: user.id,
+        Nombre: user.full_name || 'Sin nombre',
+        Email: user.email,
+        Rol: user.role,
+        Organización: user.organization?.name || 'N/A',
+        'Fecha de registro': formatDate(user.created_at),
+        'Último acceso': formatDate(user.last_sign_in_at),
+        Estado: user.is_active ? 'Activo' : 'Inactivo'
+      }));
+      await exportCSV(dataToExport as Record<string, unknown>[], 'usuarios_pos');
+      toast.success('CSV exportado correctamente');
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Error al exportar CSV');
+    }
+  };
+
+  const handleExportExcel = async () => {
+    try {
+      if (!users || users.length === 0) {
+        toast.error('No hay datos para exportar');
+        return;
+      }
+
+      const dataToExport = (users as AdminUser[]).map((user: AdminUser) => ({
+        ID: user.id,
+        Nombre: user.full_name || 'Sin nombre',
+        Email: user.email,
+        Rol: user.role,
+        Organización: user.organization?.name || 'N/A',
+        'Fecha de registro': formatDate(user.created_at),
+        'Último acceso': formatDate(user.last_sign_in_at),
+        Estado: user.is_active ? 'Activo' : 'Inactivo'
+      }));
+      await exportExcel(dataToExport as Record<string, unknown>[], 'usuarios_pos', 'Usuarios');
+      toast.success('Excel exportado correctamente');
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Error al exportar Excel');
+    }
   };
 
   return (
@@ -197,7 +318,7 @@ export default function SuperAdminUsersPage() {
                   <Input
                     placeholder="Buscar usuarios..."
                     value={search}
-                    onChange={(e) => setSearch(e.target.value)}
+                    onChange={(e) => handleSearchChange(e.target.value)}
                     className="pl-10 w-64 border-slate-300 dark:border-slate-700"
                   />
                 </div>
@@ -219,6 +340,28 @@ export default function SuperAdminUsersPage() {
                     </>
                   )}
                 </Button>
+                
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 group"
+                    >
+                      <Download className="h-4 w-4 mr-2 group-hover:translate-y-0.5 transition-transform" />
+                      Exportar
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuItem onClick={handleExportCSV} className="cursor-pointer">
+                      <FileText className="h-4 w-4 mr-2 text-blue-500" />
+                      Exportar a CSV
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleExportExcel} className="cursor-pointer">
+                      <FileSpreadsheet className="h-4 w-4 mr-2 text-emerald-500" />
+                      Exportar a Excel
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
           </CardHeader>
@@ -240,6 +383,12 @@ export default function SuperAdminUsersPage() {
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-slate-50 dark:bg-slate-900/50">
+                      <TableHead className="w-[50px]">
+                        <Checkbox 
+                          checked={selectedUsers.length === users.length && users.length > 0}
+                          onCheckedChange={toggleSelectAll}
+                        />
+                      </TableHead>
                       <TableHead className="font-semibold">
                         <div className="flex items-center gap-2">
                           <Mail className="h-4 w-4" />
@@ -274,11 +423,17 @@ export default function SuperAdminUsersPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {users.map((user) => (
+                    {(users as AdminUser[]).map((user) => (
                       <TableRow 
                         key={user.id}
-                        className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors"
+                        className={`hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors ${selectedUsers.includes(user.id) ? 'bg-slate-50/80 dark:bg-slate-900/80' : ''}`}
                       >
+                        <TableCell>
+                          <Checkbox 
+                            checked={selectedUsers.includes(user.id)}
+                            onCheckedChange={() => toggleSelectUser(user.id)}
+                          />
+                        </TableCell>
                         <TableCell className="font-medium">{user.email}</TableCell>
                         <TableCell>{user.full_name || '-'}</TableCell>
                         <TableCell>
@@ -290,7 +445,13 @@ export default function SuperAdminUsersPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <span className="text-slate-400 text-sm">N/A</span>
+                          {user.organization?.name ? (
+                            <Badge variant="outline" className="bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-900/50 dark:border-slate-800 dark:text-slate-400 font-medium">
+                              {user.organization.name}
+                            </Badge>
+                          ) : (
+                            <span className="text-slate-400 text-xs italic">Individual / Sin Org</span>
+                          )}
                         </TableCell>
                         <TableCell className="text-sm text-slate-600 dark:text-slate-400">
                           {formatDate(user.created_at)}
@@ -321,9 +482,96 @@ export default function SuperAdminUsersPage() {
                 </Table>
               </div>
             )}
+
+            {/* Paginación */}
+            {totalPages > 1 && !loading && (
+              <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 dark:border-slate-800">
+                <div className="text-sm text-slate-600 dark:text-slate-400">
+                  Página {currentPage} de {totalPages} · Mostrando {users.length} de {totalCount} usuarios
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(p => p - 1)}
+                    disabled={!hasPrevPage || loading}
+                    className="gap-2"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Anterior
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(p => p + 1)}
+                    disabled={!hasNextPage || loading}
+                    className="gap-2"
+                  >
+                    Siguiente
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
+        {/* Bulk Actions Floating Bar */}
+        {selectedUsers.length > 0 && (
+          <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <Card className="bg-slate-900 dark:bg-slate-800 text-white shadow-2xl border-slate-700 h-16 flex items-center px-6 gap-6 rounded-2xl min-w-[500px]">
+              <div className="flex items-center gap-3 pr-6 border-r border-slate-700">
+                <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center font-bold text-sm">
+                  {selectedUsers.length}
+                </div>
+                <span className="font-medium text-slate-300">seleccionados</span>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="text-emerald-400 hover:text-emerald-300 hover:bg-emerald-900/20 gap-2 h-10 px-4"
+                  onClick={() => handleBulkStatusChange(true)}
+                  disabled={updating}
+                >
+                  <UserCheck className="h-4 w-4" />
+                  Activar
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="text-amber-400 hover:text-amber-300 hover:bg-amber-900/20 gap-2 h-10 px-4"
+                  onClick={() => handleBulkStatusChange(false)}
+                  disabled={updating}
+                >
+                  <UserX className="h-4 w-4" />
+                  Desactivar
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="text-rose-400 hover:text-rose-300 hover:bg-rose-900/20 gap-2 h-10 px-4"
+                  onClick={handleBulkDelete}
+                  disabled={updating}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Eliminar
+                </Button>
+              </div>
+              
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="ml-auto text-slate-400 hover:text-white"
+                onClick={() => setSelectedUsers([])}
+              >
+                Cancelar
+              </Button>
+            </Card>
+          </div>
+        )}
       </div>
     </SuperAdminGuard>
   );
 }
+

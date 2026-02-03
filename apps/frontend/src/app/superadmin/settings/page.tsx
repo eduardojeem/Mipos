@@ -16,32 +16,142 @@ import {
   Mail,
   Shield,
   CheckCircle,
-  AlertTriangle
+  AlertTriangle,
+  Loader2,
+  Save,
+  RefreshCw
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from '@/lib/toast';
+
+interface SystemSettings {
+  system_name: string;
+  system_email: string;
+  maintenance_mode: boolean;
+  allow_registrations: boolean;
+  require_email_verification: boolean;
+  enable_two_factor: boolean;
+  session_timeout: number;
+  max_login_attempts: number;
+  enable_notifications: boolean;
+  enable_email_notifications: boolean;
+  enable_sms_notifications: boolean;
+  backup_enabled: boolean;
+  backup_frequency: string;
+  data_retention_days: number;
+}
 
 export default function SettingsPage() {
-  const [settings, setSettings] = useState({
-    systemName: 'MiPOS SaaS',
-    systemEmail: 'admin@mipos.com',
-    maintenanceMode: false,
-    allowRegistrations: true,
-    requireEmailVerification: true,
-    enableTwoFactor: true,
-    sessionTimeout: 30,
-    maxLoginAttempts: 5,
-    enableNotifications: true,
-    enableEmailNotifications: true,
-    enableSMSNotifications: false,
-    backupEnabled: true,
-    backupFrequency: 'daily',
-    dataRetentionDays: 90
+  const queryClient = useQueryClient();
+  const [settings, setSettings] = useState<SystemSettings>({
+    system_name: 'MiPOS SaaS',
+    system_email: 'admin@mipos.com',
+    maintenance_mode: false,
+    allow_registrations: true,
+    require_email_verification: true,
+    enable_two_factor: true,
+    session_timeout: 30,
+    max_login_attempts: 5,
+    enable_notifications: true,
+    enable_email_notifications: true,
+    enable_sms_notifications: false,
+    backup_enabled: true,
+    backup_frequency: 'daily',
+    data_retention_days: 90
+  });
+
+  // Fetch settings
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['system-settings'],
+    queryFn: async () => {
+      const response = await fetch('/api/superadmin/settings');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Error al cargar configuraciones');
+      }
+      return response.json();
+    },
+    staleTime: 1000 * 60 * 5, // 5 minutos
+  });
+
+  // Update local state when data is loaded
+  useEffect(() => {
+    if (data?.settings) {
+      setSettings(data.settings);
+    }
+  }, [data]);
+
+  // Save mutation
+  const saveMutation = useMutation({
+    mutationFn: async (newSettings: SystemSettings) => {
+      const response = await fetch('/api/superadmin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settings: newSettings }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Error al guardar configuraciones');
+      }
+
+      return response.json();
+    },
+    onSuccess: (responseData) => {
+      toast.success('Configuraciones guardadas', {
+        description: `${responseData.updated?.length || 0} ajustes actualizados correctamente`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['system-settings'] });
+    },
+    onError: (error: Error) => {
+      toast.error('Error al guardar', {
+        description: error.message,
+      });
+    },
   });
 
   const handleSave = () => {
-    // Aquí iría la lógica para guardar la configuración
-    console.log('Guardando configuración:', settings);
+    if (settings.maintenance_mode) {
+      const confirmed = confirm(
+        '⚠️ Estás activando el modo de mantenimiento. Esto desactivará el acceso al sistema para todos los usuarios. ¿Continuar?'
+      );
+      if (!confirmed) return;
+    }
+
+    saveMutation.mutate(settings);
   };
+
+  if (isLoading) {
+    return (
+      <SuperAdminGuard>
+        <div className="flex items-center justify-center min-h-[400px] flex-col gap-4">
+          <Loader2 className="h-10 w-10 animate-spin text-slate-600" />
+          <p className="text-slate-500 font-medium">Cargando configuraciones del sistema...</p>
+        </div>
+      </SuperAdminGuard>
+    );
+  }
+
+  if (error) {
+    return (
+      <SuperAdminGuard>
+        <div className="flex flex-col items-center justify-center min-h-[400px] gap-6 text-center max-w-md mx-auto">
+          <div className="w-20 h-20 bg-rose-50 dark:bg-rose-950/20 rounded-full flex items-center justify-center">
+            <AlertTriangle className="h-10 w-10 text-rose-500" />
+          </div>
+          <div>
+            <h2 className="text-3xl font-black text-slate-900 dark:text-white">Error al cargar</h2>
+            <p className="text-slate-500 mt-2">{error instanceof Error ? error.message : 'Error desconocido'}</p>
+          </div>
+          <Button onClick={() => refetch()} className="gap-2">
+            <RefreshCw className="h-4 w-4" />
+            Reintentar
+          </Button>
+        </div>
+      </SuperAdminGuard>
+    );
+  }
 
   return (
     <SuperAdminGuard>
@@ -58,10 +168,34 @@ export default function SettingsPage() {
             </p>
           </div>
           
-          <Button onClick={handleSave} className="gap-2">
-            <CheckCircle className="h-4 w-4" />
-            Guardar Cambios
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              onClick={() => refetch()}
+              disabled={isLoading}
+              className="gap-2"
+            >
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+              Recargar
+            </Button>
+            <Button 
+              onClick={handleSave} 
+              disabled={saveMutation.isPending}
+              className="gap-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+            >
+              {saveMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4" />
+                  Guardar Cambios
+                </>
+              )}
+            </Button>
+          </div>
         </div>
 
         {/* System Status */}
@@ -105,8 +239,8 @@ export default function SettingsPage() {
                 <Label htmlFor="systemName">Nombre del Sistema</Label>
                 <Input
                   id="systemName"
-                  value={settings.systemName}
-                  onChange={(e) => setSettings({ ...settings, systemName: e.target.value })}
+                  value={settings.system_name}
+                  onChange={(e) => setSettings({ ...settings, system_name: e.target.value })}
                 />
               </div>
               
@@ -115,8 +249,8 @@ export default function SettingsPage() {
                 <Input
                   id="systemEmail"
                   type="email"
-                  value={settings.systemEmail}
-                  onChange={(e) => setSettings({ ...settings, systemEmail: e.target.value })}
+                  value={settings.system_email}
+                  onChange={(e) => setSettings({ ...settings, system_email: e.target.value })}
                 />
               </div>
             </div>
@@ -132,8 +266,8 @@ export default function SettingsPage() {
                 </div>
               </div>
               <Switch
-                checked={settings.maintenanceMode}
-                onCheckedChange={(checked) => setSettings({ ...settings, maintenanceMode: checked })}
+                checked={settings.maintenance_mode}
+                onCheckedChange={(checked) => setSettings({ ...settings, maintenance_mode: checked })}
               />
             </div>
 
@@ -148,8 +282,8 @@ export default function SettingsPage() {
                 </div>
               </div>
               <Switch
-                checked={settings.allowRegistrations}
-                onCheckedChange={(checked) => setSettings({ ...settings, allowRegistrations: checked })}
+                checked={settings.allow_registrations}
+                onCheckedChange={(checked) => setSettings({ ...settings, allow_registrations: checked })}
               />
             </div>
           </CardContent>
@@ -178,8 +312,8 @@ export default function SettingsPage() {
                 </div>
               </div>
               <Switch
-                checked={settings.requireEmailVerification}
-                onCheckedChange={(checked) => setSettings({ ...settings, requireEmailVerification: checked })}
+                checked={settings.require_email_verification}
+                onCheckedChange={(checked) => setSettings({ ...settings, require_email_verification: checked })}
               />
             </div>
 
@@ -194,8 +328,8 @@ export default function SettingsPage() {
                 </div>
               </div>
               <Switch
-                checked={settings.enableTwoFactor}
-                onCheckedChange={(checked) => setSettings({ ...settings, enableTwoFactor: checked })}
+                checked={settings.enable_two_factor}
+                onCheckedChange={(checked) => setSettings({ ...settings, enable_two_factor: checked })}
               />
             </div>
 
@@ -205,8 +339,8 @@ export default function SettingsPage() {
                 <Input
                   id="sessionTimeout"
                   type="number"
-                  value={settings.sessionTimeout}
-                  onChange={(e) => setSettings({ ...settings, sessionTimeout: parseInt(e.target.value) })}
+                  value={settings.session_timeout}
+                  onChange={(e) => setSettings({ ...settings, session_timeout: parseInt(e.target.value) })}
                 />
               </div>
               
@@ -215,8 +349,8 @@ export default function SettingsPage() {
                 <Input
                   id="maxLoginAttempts"
                   type="number"
-                  value={settings.maxLoginAttempts}
-                  onChange={(e) => setSettings({ ...settings, maxLoginAttempts: parseInt(e.target.value) })}
+                  value={settings.max_login_attempts}
+                  onChange={(e) => setSettings({ ...settings, max_login_attempts: parseInt(e.target.value) })}
                 />
               </div>
             </div>
@@ -246,8 +380,8 @@ export default function SettingsPage() {
                 </div>
               </div>
               <Switch
-                checked={settings.enableNotifications}
-                onCheckedChange={(checked) => setSettings({ ...settings, enableNotifications: checked })}
+                checked={settings.enable_notifications}
+                onCheckedChange={(checked) => setSettings({ ...settings, enable_notifications: checked })}
               />
             </div>
 
@@ -262,8 +396,8 @@ export default function SettingsPage() {
                 </div>
               </div>
               <Switch
-                checked={settings.enableEmailNotifications}
-                onCheckedChange={(checked) => setSettings({ ...settings, enableEmailNotifications: checked })}
+                checked={settings.enable_email_notifications}
+                onCheckedChange={(checked) => setSettings({ ...settings, enable_email_notifications: checked })}
               />
             </div>
           </CardContent>
@@ -292,8 +426,8 @@ export default function SettingsPage() {
                 </div>
               </div>
               <Switch
-                checked={settings.backupEnabled}
-                onCheckedChange={(checked) => setSettings({ ...settings, backupEnabled: checked })}
+                checked={settings.backup_enabled}
+                onCheckedChange={(checked) => setSettings({ ...settings, backup_enabled: checked })}
               />
             </div>
 
@@ -302,8 +436,8 @@ export default function SettingsPage() {
               <Input
                 id="dataRetention"
                 type="number"
-                value={settings.dataRetentionDays}
-                onChange={(e) => setSettings({ ...settings, dataRetentionDays: parseInt(e.target.value) })}
+                value={settings.data_retention_days}
+                onChange={(e) => setSettings({ ...settings, data_retention_days: parseInt(e.target.value) })}
               />
               <p className="text-sm text-slate-500">
                 Los datos se eliminarán automáticamente después de este período
