@@ -298,7 +298,7 @@ export function WebsiteConfigProvider({ children }: WebsiteConfigProviderProps) 
         try {
           const response = await fetch('/api/website-config', { 
             cache: 'no-store',
-            signal: AbortSignal.timeout(5000)
+            signal: AbortSignal.timeout(15000)
           });
           
           if (response.ok) {

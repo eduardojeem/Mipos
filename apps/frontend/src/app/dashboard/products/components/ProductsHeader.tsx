@@ -16,6 +16,7 @@ import { useState } from 'react';
 import { Activity } from 'lucide-react';
 import { ProductsThemeToggle } from './ProductsThemeToggle';
 import { OrganizationSelector } from '@/components/organizations/OrganizationSelector';
+import type { ImportResult } from '../services/ImportService';
 
 // Dynamic imports for heavy components
 const NotificationCenter = dynamic(() => import('./NotificationCenter'), { ssr: false });
@@ -27,22 +28,17 @@ export function ProductsHeader() {
   const { config } = useBusinessConfig();
   const { hasPermission: canExportProduct } = useHasPermission('products', 'export');
   const { hasPermission: canImportProduct } = useHasPermission('products', 'write');
-  const { products, categories, actions, computed } = useProducts();
+  const { actions } = useProducts();
   
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [showPerformancePanel, setShowPerformancePanel] = useState(false);
 
-  const handleImportComplete = (result: any) => {
+  const handleImportComplete = (result: ImportResult) => {
     // Refresh products after import
     actions.refetch();
     toast.success(`Importación completada: ${result.imported} productos procesados`);
     setShowImportDialog(false);
-  };
-
-  const handleExportComplete = (result: any) => {
-    toast.success(`Exportación completada: ${result.exported} productos exportados`);
-    setShowExportDialog(false);
   };
 
   return (

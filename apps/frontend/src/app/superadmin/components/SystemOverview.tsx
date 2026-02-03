@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, memo } from 'react';
+import { useEffect, useState, memo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -18,10 +18,9 @@ import { useAdminData } from '../hooks/useAdminData';
 
 export const SystemOverview = memo(function SystemOverview() {
   const { stats, organizations, loading, error } = useAdminData();
-  const [planSummary, setPlanSummary] = useState<{ totalAuthUsers: number; plans: { name: string; organizations: number; users: number }[]; organizationsWithoutSubscription?: string[] } | null>(null);
-  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [, setPlanSummary] = useState<{ totalAuthUsers: number; plans: { name: string; organizations: number; users: number }[]; organizationsWithoutSubscription?: string[] } | null>(null);
   const [assignOpen, setAssignOpen] = useState(false);
-  const [assignOrg, setAssignOrg] = useState<string | null>(null);
+  const [assignOrg] = useState<string | null>(null);
   const [assignPlan, setAssignPlan] = useState<string>('pro');
   const [assignCycle, setAssignCycle] = useState<string>('monthly');
 
@@ -40,23 +39,15 @@ export const SystemOverview = memo(function SystemOverview() {
   useEffect(() => {
     const loadSummary = async () => {
       try {
-        setSummaryLoading(true);
         const resp = await fetch('/api/superadmin/users/plan-summary', { cache: 'no-store' });
         const data = await resp.json();
         if (resp.ok && data?.success) {
           setPlanSummary({ totalAuthUsers: data.totalAuthUsers || 0, plans: Array.isArray(data.plans) ? data.plans : [], organizationsWithoutSubscription: Array.isArray(data.organizationsWithoutSubscription) ? data.organizationsWithoutSubscription : [] });
         }
       } catch {}
-      finally { setSummaryLoading(false); }
     };
     loadSummary();
   }, []);
-
-  const openAssign = (id: string) => {
-    setAssignOrg(id);
-    setAssignPlan('pro');
-    setAssignOpen(true);
-  };
 
   const confirmAssign = async () => {
     if (!assignOrg) return;
@@ -98,12 +89,15 @@ export const SystemOverview = memo(function SystemOverview() {
   }
 
   if (error) {
+    const errorMessage = error instanceof Error ? error.message : 
+      (typeof error === 'object' && error !== null && 'message' in error) ? String((error as { message?: unknown }).message) : String(error);
+
     return (
       <Card className="bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800 shadow-sm">
         <CardContent className="p-6 text-center">
           <Activity className="h-12 w-12 mx-auto mb-3 text-red-500 opacity-50" />
           <p className="text-red-700 dark:text-red-400 font-medium">Error al cargar las estadísticas</p>
-          <p className="text-sm text-red-600 dark:text-red-500 mt-1">{error}</p>
+          <p className="text-sm text-red-600 dark:text-red-500 mt-1">{errorMessage}</p>
         </CardContent>
       </Card>
     );
@@ -221,7 +215,7 @@ export const SystemOverview = memo(function SystemOverview() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {['FREE', 'STARTER', 'PRO', 'ENTERPRISE'].map((plan) => {
+              {['FREE', 'PRO'].map((plan) => {
                 const count = getPlanCount(plan);
                 const percentage = stats.totalOrganizations > 0 ? (count / stats.totalOrganizations) * 100 : 0;
                 
@@ -232,9 +226,7 @@ export const SystemOverview = memo(function SystemOverview() {
                         variant="outline" 
                         className={`
                           ${plan === 'FREE' ? 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300' : ''}
-                          ${plan === 'STARTER' ? 'bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-950/30 dark:text-blue-300' : ''}
                           ${plan === 'PRO' ? 'bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-950/30 dark:text-emerald-300' : ''}
-                          ${plan === 'ENTERPRISE' ? 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/30 dark:text-amber-300' : ''}
                         `}
                       >
                         {plan}
@@ -294,9 +286,8 @@ export const SystemOverview = memo(function SystemOverview() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="starter">Starter</SelectItem>
+                  <SelectItem value="free">Free</SelectItem>
                   <SelectItem value="pro">Pro</SelectItem>
-                  <SelectItem value="enterprise">Enterprise</SelectItem>
                 </SelectContent>
               </Select>
             </div>

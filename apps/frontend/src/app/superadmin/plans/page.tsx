@@ -56,7 +56,7 @@ export default function PlansPage() {
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [pageSize] = useState(20);
   const [total, setTotal] = useState(0);
 
   const { data, isLoading, refetch } = useQuery({
@@ -88,9 +88,7 @@ export default function PlansPage() {
   
 
 
-  const loadPlans = async () => {
-    await refetch();
-  };
+  
 
   const deletePlan = async (id: string) => {
     if (!confirm('¿Estás seguro de que deseas eliminar este plan?')) return;

@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+interface PlanLimits {
+  maxUsers: number
+  maxProducts: number
+  maxTransactionsPerMonth: number
+  maxLocations: number
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -41,7 +48,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    const DEFAULT_LIMITS: Record<string, any> = {
+    const DEFAULT_LIMITS: Record<string, PlanLimits> = {
       free: { maxUsers: 2, maxProducts: 50, maxTransactionsPerMonth: 200, maxLocations: 1 },
       starter: { maxUsers: 5, maxProducts: 500, maxTransactionsPerMonth: 1000, maxLocations: 1 },
       pro: { maxUsers: 10, maxProducts: 2000, maxTransactionsPerMonth: 5000, maxLocations: 3 },
@@ -49,7 +56,7 @@ export async function GET(request: NextRequest) {
       premium: { maxUsers: -1, maxProducts: -1, maxTransactionsPerMonth: -1, maxLocations: -1 },
     };
 
-    const plans = (data || []).map((plan: any) => {
+    const plans = (data || []).map((plan: { slug: string; limits?: PlanLimits; [key: string]: unknown }) => {
       if (!plan.limits) {
         const slug = String(plan.slug || '').toLowerCase();
         plan.limits = DEFAULT_LIMITS[slug] || { maxUsers: 2, maxProducts: 50, maxTransactionsPerMonth: 200, maxLocations: 1 };
@@ -115,7 +122,7 @@ export async function PATCH() {
       const r = await supabase
         .from('saas_plans')
         .upsert(minimal, { onConflict: 'slug' })
-      error = r.error as any
+      error = r.error
     }
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -199,7 +206,7 @@ export async function PUT(request: NextRequest) {
     const id = String(body.id || '')
     if (!id) return NextResponse.json({ error: 'ID requerido' }, { status: 400 })
 
-    const updates: any = {
+    const updates: Record<string, unknown> = {
       name: body.name,
       description: body.description,
       price_monthly: body.price_monthly,

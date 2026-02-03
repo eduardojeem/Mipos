@@ -4,13 +4,32 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { useSupabase } from '@/hooks/use-supabase';
 import type { Product, Category } from '@/types';
-import { supabase } from '@/lib/supabase/client';
-import { Database } from '@/lib/supabase/types';
+import type { ProductFilters as UnifiedProductFilters } from '@/hooks/use-products';
+import type { CreateProductData, UpdateProductData } from '@/types/supabase';
 import { createLogger } from '@/lib/logger';
 import { toast } from '@/lib/toast';
 
+type StockStatus = 'out_of_stock' | 'low_stock' | 'in_stock' | 'critical';
+interface CompatibleFilters extends Partial<UnifiedProductFilters> {
+  categoryId?: string;
+  supplierId?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  minStock?: number;
+  maxStock?: number;
+  isActive?: boolean;
+  stockStatus?: StockStatus;
+  dateFrom?: string;
+  dateTo?: string;
+  sortBy?: 'name' | 'sku' | 'sale_price' | 'stock_quantity' | 'created_at' | 'updated_at';
+  sortOrder?: 'asc' | 'desc';
+  createdAfter?: string;
+  createdBefore?: string;
+  sort_direction?: 'asc' | 'desc';
+}
+
 interface UseSupabaseProductsOptions {
-  filters?: any;
+  filters?: Partial<UnifiedProductFilters>;
   enableRealtime?: boolean;
   pageSize?: number;
   page?: number;
@@ -67,7 +86,6 @@ export function useSupabaseProducts(options: UseSupabaseProductsOptions = {}) {
   });
 
   const {
-    getProducts,
     getCategories,
     createProduct: supabaseCreateProduct,
     updateProduct: supabaseUpdateProduct,
@@ -145,7 +163,7 @@ export function useSupabaseProducts(options: UseSupabaseProductsOptions = {}) {
 
   // Build query with filters
   const buildQuery = useCallback(() => {
-    const currentFilters = filtersRef.current;
+    const cf = filtersRef.current as CompatibleFilters;
     const currentPage = pageRef.current;
     const currentPageSize = pageSizeRef.current;
 
@@ -163,40 +181,47 @@ export function useSupabaseProducts(options: UseSupabaseProductsOptions = {}) {
     }
 
     // Apply filters
-    if (currentFilters.search) {
-      query = query.or(`name.ilike.%${currentFilters.search}%,sku.ilike.%${currentFilters.search}%,description.ilike.%${currentFilters.search}%`);
+    if (cf.search) {
+      query = query.or(`name.ilike.%${cf.search}%,sku.ilike.%${cf.search}%,description.ilike.%${cf.search}%`);
     }
 
-    if (currentFilters.categoryId) {
-      query = query.eq('category_id', currentFilters.categoryId);
+    const categoryId = cf.categoryId ?? cf.category_id;
+    if (categoryId) {
+      query = query.eq('category_id', categoryId);
     }
 
-    if (currentFilters.supplierId) {
-      query = query.eq('supplier_id', currentFilters.supplierId);
+    const supplierId = cf.supplierId ?? cf.supplier_id;
+    if (supplierId) {
+      query = query.eq('supplier_id', supplierId);
     }
 
-    if (currentFilters.minPrice !== undefined) {
-      query = query.gte('sale_price', currentFilters.minPrice);
+    const minPrice = cf.minPrice ?? cf.min_price;
+    if (minPrice !== undefined) {
+      query = query.gte('sale_price', minPrice);
     }
 
-    if (currentFilters.maxPrice !== undefined) {
-      query = query.lte('sale_price', currentFilters.maxPrice);
+    const maxPrice = cf.maxPrice ?? cf.max_price;
+    if (maxPrice !== undefined) {
+      query = query.lte('sale_price', maxPrice);
     }
 
-    if (currentFilters.minStock !== undefined) {
-      query = query.gte('stock_quantity', currentFilters.minStock);
+    const minStock = cf.minStock ?? cf.min_stock;
+    if (minStock !== undefined) {
+      query = query.gte('stock_quantity', minStock);
     }
 
-    if (currentFilters.maxStock !== undefined) {
-      query = query.lte('stock_quantity', currentFilters.maxStock);
+    const maxStock = cf.maxStock ?? cf.max_stock;
+    if (maxStock !== undefined) {
+      query = query.lte('stock_quantity', maxStock);
     }
 
-    if (currentFilters.isActive !== undefined) {
-      query = query.eq('is_active', currentFilters.isActive);
+    const isActive = cf.isActive ?? cf.is_active;
+    if (isActive !== undefined) {
+      query = query.eq('is_active', isActive);
     }
 
-    if (currentFilters.stockStatus) {
-      switch (currentFilters.stockStatus) {
+    if (cf.stockStatus) {
+      switch (cf.stockStatus) {
         case 'out_of_stock':
           query = query.eq('stock_quantity', 0);
           break;
@@ -212,17 +237,19 @@ export function useSupabaseProducts(options: UseSupabaseProductsOptions = {}) {
       }
     }
 
-    if (currentFilters.dateFrom) {
-      query = query.gte('created_at', currentFilters.dateFrom);
+    const dateFrom = cf.dateFrom ?? cf.created_after ?? cf.createdAfter;
+    if (dateFrom) {
+      query = query.gte('created_at', dateFrom);
     }
 
-    if (currentFilters.dateTo) {
-      query = query.lte('created_at', currentFilters.dateTo);
+    const dateTo = cf.dateTo ?? cf.created_before ?? cf.createdBefore;
+    if (dateTo) {
+      query = query.lte('created_at', dateTo);
     }
 
     // Sorting
-    const sortBy = currentFilters.sortBy || 'created_at';
-    const sortOrder = currentFilters.sortOrder || 'desc';
+    const sortBy = cf.sortBy ?? cf.sort_by ?? 'created_at';
+    const sortOrder = cf.sortOrder ?? cf.sort_direction ?? 'desc';
     query = query.order(sortBy, { ascending: sortOrder === 'asc' });
 
     // Pagination
@@ -247,7 +274,11 @@ export function useSupabaseProducts(options: UseSupabaseProductsOptions = {}) {
           if (error && typeof error === 'object' && Object.keys(error).length === 0) {
             return 'Unknown Supabase error (empty object)';
           }
-          return (error as any)?.message || (error as any)?.details || String(error);
+          if (typeof error === 'object' && error !== null) {
+            const e = error as { message?: unknown; details?: unknown };
+            return String(e.message ?? e.details ?? '');
+          }
+          return String(error);
         })();
         logger.error('Error loading products:', { error, message: msg });
         setError(msg);
@@ -263,7 +294,7 @@ export function useSupabaseProducts(options: UseSupabaseProductsOptions = {}) {
       setHasMore((count || 0) > currentPage * currentPageSize);
 
       // Load categories and stats
-      const categoriesData = await loadCategories();
+      await loadCategories();
 
       // Fetch stats (independent of pagination)
       fetchGlobalStats();
@@ -296,7 +327,7 @@ export function useSupabaseProducts(options: UseSupabaseProductsOptions = {}) {
   }, [hasMore, isLoading, loadProducts]);
 
   // CRUD operations
-  const createProduct = useCallback(async (productData: any) => {
+  const createProduct = useCallback(async (productData: CreateProductData) => {
     try {
       const result = await supabaseCreateProduct(productData);
       if (result) {
@@ -312,7 +343,7 @@ export function useSupabaseProducts(options: UseSupabaseProductsOptions = {}) {
     }
   }, [supabaseCreateProduct, refetch]);
 
-  const updateProduct = useCallback(async (id: string, productData: any) => {
+  const updateProduct = useCallback(async (id: string, productData: UpdateProductData) => {
     try {
       const result = await supabaseUpdateProduct(id, productData);
       if (result) {
@@ -358,7 +389,7 @@ export function useSupabaseProducts(options: UseSupabaseProductsOptions = {}) {
       .channel('products-changes')
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'products' },
-        (payload: RealtimePostgresChangesPayload<Database['public']['Tables']['products']['Row']>) => {
+        (payload: RealtimePostgresChangesPayload<Product>) => {
           logger.log('Real-time update:', payload);
           // Refresh data on changes
           loadProducts(false);
@@ -373,18 +404,11 @@ export function useSupabaseProducts(options: UseSupabaseProductsOptions = {}) {
 
   // Initial load
   useEffect(() => {
-    let mounted = true;
-
     const initialLoad = async () => {
       await loadProducts();
     };
-
     initialLoad();
-
-    return () => {
-      mounted = false;
-    };
-  }, []); // Only run on mount
+  }, [loadProducts]);
 
   // Pagination object
   const pagination = {

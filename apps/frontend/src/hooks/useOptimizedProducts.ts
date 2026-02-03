@@ -1,9 +1,11 @@
 'use client';
 
 import { useMemo, useCallback } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { createClient } from '@/lib/supabase';
 import type { Product } from '@/types';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@/types/supabase';
 
 interface ProductFilters {
   search?: string;
@@ -45,7 +47,14 @@ function getSelectedOrganizationId(): string | null {
   }
 }
 
-function buildProductQuery(supabase: any, filters: any) {
+function buildProductQuery(supabase: SupabaseClient<Database>, filters: {
+  search: string;
+  categoryId: string;
+  page: number;
+  limit: number;
+  sortBy: string;
+  sortOrder: 'asc' | 'desc';
+}) {
   let query = supabase
     .from('products')
     .select(`
@@ -78,7 +87,6 @@ function buildProductQuery(supabase: any, filters: any) {
 }
 
 export function useOptimizedProducts(filters: ProductFilters = {}): UseOptimizedProductsResult {
-  const queryClient = useQueryClient();
   const supabase = createClient();
 
   // Memoizar filtros para evitar re-renders innecesarios
@@ -163,6 +171,12 @@ export function useOptimizedProducts(filters: ProductFilters = {}): UseOptimized
 // Hook optimizado para estadísticas con caché más agresivo
 export function useProductStats() {
   const supabase = createClient();
+  type StatsProduct = {
+    stock_quantity: number;
+    min_stock: number | null;
+    sale_price: number;
+    cost_price: number | null;
+  };
 
   const { data, isLoading } = useQuery({
     queryKey: ['product-stats'],
@@ -182,14 +196,14 @@ export function useProductStats() {
 
       if (error) throw error;
 
-      const products = data || [];
+      const products = (data || []) as StatsProduct[];
       const total = products.length;
-      const lowStock = products.filter((p: any) =>
-        p.stock_quantity > 0 && p.stock_quantity <= (p.min_stock || 5)
+      const lowStock = products.filter((p: StatsProduct) =>
+        p.stock_quantity > 0 && p.stock_quantity <= ((p.min_stock ?? 5))
       ).length;
-      const outOfStock = products.filter((p: any) => p.stock_quantity === 0).length;
-      const totalValue = products.reduce((sum: number, p: any) =>
-        sum + (p.stock_quantity * (p.cost_price || p.sale_price || 0)), 0
+      const outOfStock = products.filter((p: StatsProduct) => p.stock_quantity === 0).length;
+      const totalValue = products.reduce((sum: number, p: StatsProduct) =>
+        sum + (p.stock_quantity * (p.cost_price ?? p.sale_price ?? 0)), 0
       );
 
       return { total, lowStock, outOfStock, totalValue };

@@ -23,6 +23,7 @@ export interface Organization {
   updated_at?: string;
   settings?: Record<string, unknown>;
   organization_members?: { count: number }[];
+  members?: { count: number }[];
 }
 
 export interface AdminStats {
@@ -45,6 +46,8 @@ interface UseAdminDataOptions {
   refreshInterval?: number;
   onError?: (error: string) => void;
   onSuccess?: () => void;
+  initialOrganizations?: Organization[];
+  initialStats?: AdminStats;
 }
 
 export function useAdminData(options: UseAdminDataOptions = {}) {
@@ -53,6 +56,8 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
     refreshInterval = 5 * 60 * 1000, // 5 minutos por defecto
     onError,
     onSuccess,
+    initialOrganizations,
+    initialStats,
   } = options;
 
   const [organizations, setOrganizations] = useState<Organization[]>([]);
@@ -71,9 +76,6 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
   });
   const [lastFetch, setLastFetch] = useState<Date | null>(null);
   const [cachedData, setCachedData] = useState<CachedData | null>(null);
-
-  // Memoize the Supabase client
-  const supabase = useMemo(() => createClient(), []);
   
   // Refs for stable access in callbacks
   const onErrorRef = useRef(onError);
@@ -118,7 +120,7 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
 
       let statsError: ErrorState | null = null;
       let orgsError: ErrorState | null = null;
-      let statsData: any = null;
+      let statsData: AdminStats | null = null;
       let orgsData: Organization[] | null = null;
 
       // Fetch stats from API
@@ -143,23 +145,32 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
         });
       }
 
-      // Fetch organizations from Supabase
+      // Fetch organizations from API (bypassing RLS)
       try {
         console.log('🏢 [useAdminData] Fetching organizations...');
-        const { data, error: supabaseError } = await supabase
-          .from('organizations')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(100);
+        const orgsResponse = await fetch('/api/superadmin/organizations?pageSize=100', {
+          headers: { 'Content-Type': 'application/json' },
+          cache: 'no-store',
+        });
 
-        if (supabaseError) throw supabaseError;
-        orgsData = data || [];
-        console.log('✅ [useAdminData] Organizations fetched:', orgsData.length);
+        if (!orgsResponse.ok) {
+          const errorText = await orgsResponse.text();
+          console.error(`❌ [useAdminData] API Error ${orgsResponse.status}:`, errorText);
+          throw new Error(`Error ${orgsResponse.status}: ${orgsResponse.statusText}`);
+        }
+
+        const orgsResult = await orgsResponse.json();
+        console.log('📦 [useAdminData] Organizations API Result:', orgsResult);
+        
+        if (orgsResult.error) throw new Error(orgsResult.error);
+        
+        orgsData = orgsResult.organizations || [];
+        console.log('✅ [useAdminData] Organizations fetched:', orgsData ? orgsData.length : 0);
       } catch (err: unknown) {
         console.error('❌ [useAdminData] Organizations error:', err);
         orgsError = classifyError(err, {
-          url: 'supabase:organizations',
-          method: 'SELECT',
+          url: '/api/superadmin/organizations',
+          method: 'GET',
         });
       }
 
@@ -252,7 +263,7 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
       isFetchingRef.current = false;
       console.log('🏁 [useAdminData] Fetch process completed');
     }
-  }, [supabase, organizations, stats, cachedData]);
+  }, [organizations, stats, cachedData]);
 
   const refresh = useCallback(() => {
     return fetchData(true);
@@ -264,8 +275,11 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
 
   // Initial fetch
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    // Only fetch if no initial data was provided
+    if (!initialOrganizations) {
+      fetchData();
+    }
+  }, [fetchData, initialOrganizations]);
 
   // Auto-refresh interval
   useEffect(() => {

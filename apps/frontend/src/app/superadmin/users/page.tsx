@@ -33,8 +33,7 @@ import {
   FileText,
   Trash2,
   UserCheck,
-  UserX,
-  AlertTriangle
+  UserX
 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { 

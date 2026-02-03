@@ -73,6 +73,7 @@ export interface Category {
   name: string;
   description?: string;
   is_active: boolean;
+  organization_id?: string;
   created_at: string;
   updated_at: string;
   _count?: {
@@ -102,7 +103,7 @@ export interface Product {
   regular_price?: number;
   discount_percentage?: number;
   rating?: number;
-  images?: any[] | string[];
+  images?: Array<{ url: string }> | string[];
   iva_rate?: number;
   iva_included?: boolean;
   // Cosmetic-specific attributes
@@ -137,6 +138,7 @@ export interface Supplier {
   address?: string;
   tax_id?: string;
   is_active: boolean;
+  organization_id?: string;
   created_at: string;
   updated_at: string;
 }
@@ -707,10 +709,10 @@ export type Database = {
         Update: Partial<Omit<CashAlert, 'id' | 'created_at'>>;
       };
     };
-    Views: { [key: string]: never };
-    Functions: { [key: string]: never };
-    Enums: { [key: string]: never };
-    CompositeTypes: { [key: string]: never };
+    Views: { [key: string]: unknown };
+    Functions: { [key: string]: unknown };
+    Enums: { [key: string]: unknown };
+    CompositeTypes: { [key: string]: unknown };
   };
 };
 

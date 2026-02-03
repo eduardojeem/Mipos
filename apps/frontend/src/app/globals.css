@@ -31,72 +31,63 @@
     --chart-5: 27 87% 67%;
   }
 
-  /* 🌙 Improved Dark Mode Colors (Enhanced for Better Contrast) */
-  /* 🌙 Premium Slate Dark Mode - Optimized for POS Dashboard */
+  /* 🌙 Trae AI Dark Mode - Deep Black & Vibrant Violet */
   .dark {
-    /* Backgrounds - Deeper Slate for better visual hierarchy */
-    --background: 222 47% 11%;
-    /* #0f172a - Slate 900, more blue-tinted */
-    --foreground: 0 0% 98%;
-    /* #fafafa - High contrast white */
+    /* Backgrounds - Pure Black / Deepest Gray */
+    --background: 0 0% 4%; 
+    /* #0a0a0a - Trae's deep background */
+    --foreground: 0 0% 100%;
+    /* #ffffff - Pure white text */
 
-    /* Cards - Elevated surfaces with better distinction */
-    --card: 217 33% 17%;
-    /* #1e293b - Slate 800, clear elevation */
-    --card-foreground: 0 0% 98%;
+    /* Cards - Subtle elevation, nearly black */
+    --card: 0 0% 7%;
+    /* #111111 - Very dark card */
+    --card-foreground: 0 0% 100%;
 
-    /* Popovers - Slightly lighter for depth */
-    --popover: 217 33% 17%;
-    /* #1e293b - Slate 800 */
-    --popover-foreground: 0 0% 98%;
+    /* Popovers */
+    --popover: 0 0% 7%;
+    /* #111111 */
+    --popover-foreground: 0 0% 100%;
 
-    /* Primary - Vibrant Blue for high impact */
-    --primary: 217 91% 60%;
-    /* #3b82f6 - Blue 500, more vibrant */
+    /* Primary - Trae's Electric Violet */
+    --primary: 245 100% 66%;
+    /* #6153ff - Trae AI Brand Color */
     --primary-foreground: 0 0% 100%;
 
-    /* Secondary - Balanced slate */
-    --secondary: 215 25% 27%;
-    /* Slate 700, better visibility */
-    --secondary-foreground: 0 0% 98%;
+    /* Secondary - Dark Gray */
+    --secondary: 0 0% 11%;
+    /* #1c1c1c */
+    --secondary-foreground: 0 0% 100%;
 
-    /* Muted - Improved readability */
-    --muted: 215 25% 27%;
-    /* Slate 700 */
-    --muted-foreground: 215 16% 47%;
-    /* Slate 500, better contrast */
+    /* Muted */
+    --muted: 240 4% 16%;
+    /* #27272a */
+    --muted-foreground: 240 5% 65%;
+    /* #a1a1aa */
 
-    /* Accent - Enhanced for interactions */
-    --accent: 215 25% 27%;
-    /* Slate 700 */
-    --accent-foreground: 0 0% 98%;
+    /* Accent - Darker gray for hovers */
+    --accent: 0 0% 15%; 
+    --accent-foreground: 0 0% 100%;
 
-    /* Destructive - More visible */
+    /* Destructive */
     --destructive: 0 84% 60%;
-    /* Red 500, brighter */
-    --destructive-foreground: 0 0% 98%;
+    --destructive-foreground: 0 0% 100%;
 
-    /* Borders - More visible separation */
-    --border: 215 20% 25%;
-    /* Lighter borders for clarity */
-    --input: 215 20% 25%;
-    /* Match border color */
+    /* Borders */
+    --border: 240 4% 16%;
+    /* #27272a */
+    --input: 240 4% 16%;
+    
+    /* Ring */
+    --ring: 245 100% 66%;
+    /* Match primary */
 
-    /* Ring - Bright for focus states */
-    --ring: 217 91% 60%;
-    /* Match primary for consistency */
-
-    /* Charts - Optimized for dark backgrounds */
-    --chart-1: 217 91% 60%;
-    /* Blue */
-    --chart-2: 142 71% 45%;
-    /* Green */
-    --chart-3: 38 92% 50%;
-    /* Orange */
-    --chart-4: 271 91% 65%;
-    /* Purple */
-    --chart-5: 339 90% 51%;
-    /* Pink */
+    /* Charts - Updated to fit the new palette */
+    --chart-1: 245 100% 66%; /* Trae Violet */
+    --chart-2: 190 100% 50%; /* Cyan/Blue (Trae gradient) */
+    --chart-3: 300 100% 50%; /* Magenta/Pink (Trae gradient) */
+    --chart-4: 280 65% 60%; /* Purple */
+    --chart-5: 340 75% 55%; /* Pinkish */
   }
 }
 

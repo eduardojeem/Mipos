@@ -1,10 +1,10 @@
 'use server'
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase-admin'
 
-export async function GET(_request: NextRequest) {
+export async function GET() {
   try {
     const supabase = await createClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -25,7 +25,7 @@ export async function GET(_request: NextRequest) {
     // Count Auth users via Admin API (iterate pages)
     let totalAuthUsers = 0
     try {
-      const admin = createAdminClient() as any
+      const admin = createAdminClient()
       let page = 1
       const perPage = 200
       while (true) {
@@ -35,7 +35,7 @@ export async function GET(_request: NextRequest) {
         if (batch.length < perPage) break
         page += 1
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       // If admin client not configured, fallback to users table count
       const { count } = await supabase.from('users').select('id', { count: 'exact', head: true })
       totalAuthUsers = count || 0
@@ -52,7 +52,7 @@ export async function GET(_request: NextRequest) {
 
     const subs = Array.isArray(subscriptions) ? subscriptions : []
     const orgPlanMap = new Map<string, { name: string; slug: string; status: string | null; billing_cycle: string | null }>()
-    subs.forEach((s: any) => {
+    subs.forEach((s: { organization_id: unknown; saas_plans: { name: string; slug: string } | null; status: string | null; billing_cycle: string | null }) => {
       const orgId = String(s.organization_id)
       const planName = s?.saas_plans?.name || 'UNKNOWN'
       const planSlug = s?.saas_plans?.slug || 'unknown'
@@ -89,7 +89,13 @@ export async function GET(_request: NextRequest) {
       .from('organization_members')
       .select('organization_id')
 
-    const allOrgIds = Array.from(new Set((allMembers || []).map((m: any) => String(m.organization_id))))
+    const allOrgIds: string[] = Array.from(
+      new Set(
+        (allMembers || []).map(
+          (m: { organization_id: string | number | null }) => String(m.organization_id ?? '')
+        )
+      )
+    )
     const withoutSub = allOrgIds.filter((id) => !orgPlanMap.has(id))
 
     return NextResponse.json({
@@ -98,7 +104,8 @@ export async function GET(_request: NextRequest) {
       plans: Array.from(planAgg.values()),
       organizationsWithoutSubscription: withoutSub,
     })
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'Internal Server Error' }, { status: 500 })
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Internal Server Error'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

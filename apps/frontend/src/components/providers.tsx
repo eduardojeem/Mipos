@@ -88,6 +88,16 @@ export function Providers({ children }: { children: React.ReactNode }) {
       const isApiCall = typeof urlStr === 'string' && (
         (urlStr.startsWith('/api') || (apiUrl ? urlStr.startsWith(apiUrl) : false)) && !isHealth && !isAuth && !isPermissions
       );
+
+      // Bypass Next.js internal requests to avoid interference with navigation/prefetching
+      const isNextInternal = typeof urlStr === 'string' && (
+        urlStr.includes('_rsc=') || 
+        urlStr.startsWith('/_next')
+      );
+
+      if (isNextInternal) {
+        return originalFetch(input, init);
+      }
       
       // OPTIMIZATION: Only trigger global loading overlay for mutations (POST, PUT, DELETE, PATCH)
       // GET requests should use local loading states (skeletons, spinners) to avoid blocking the UI

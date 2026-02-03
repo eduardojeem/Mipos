@@ -3,6 +3,18 @@ import { NextResponse, type NextRequest } from 'next/server';
 import type { Database } from '../../types/supabase';
 import { isSupabaseActive, isMockAuthEnabled } from '../env';
 
+type UserMetadata = { role?: string };
+type ProfileRole = { role?: string | null };
+async function insertAuditLog(
+  client: unknown,
+  payload: { user_id: string | null; action: string; resource: string; details: Record<string, unknown> }
+) {
+  try {
+    const c = client as { from: (t: string) => { insert: (v: unknown) => Promise<unknown> } };
+    await c.from('audit_logs').insert(payload);
+  } catch {}
+}
+
 // Verificación de configuración y modo mock centralizada en '@/lib/env'
 
 export async function updateSession(request: NextRequest) {
@@ -67,14 +79,16 @@ export async function updateSession(request: NextRequest) {
   // Protección adicional: bloquear acceso a /admin si el rol no es ADMIN/SUPER_ADMIN
   if (user && request.nextUrl.pathname.startsWith('/admin')) {
     // Consultar rol desde BD con fallback a metadata
-    let role = String((user as any)?.user_metadata?.role || '').toUpperCase();
+    const meta = (user?.user_metadata ?? {}) as UserMetadata;
+    let role = String(meta.role || '').toUpperCase();
     try {
-      const { data: profile } = await (supabase as any)
+      const { data: profile } = await supabase
         .from('users')
         .select('role')
         .eq('id', user.id)
         .single();
-      const dbRole = String((profile as any)?.role || '').toUpperCase();
+      const profileRole = (profile ?? {}) as ProfileRole | null;
+      const dbRole = String(profileRole?.role || '').toUpperCase();
       role = dbRole || role;
     } catch {
       // Ignore DB errors, keep metadata fallback
@@ -83,22 +97,16 @@ export async function updateSession(request: NextRequest) {
     // En modo mock, permitir paso para desarrollo; fuera de mock, redirigir si no tiene rol
     if (!isAdmin && !isMockAuth) {
       // Log de auditoría para acceso denegado a página de admin
-      try {
-        await (supabase as any)
-          .from('audit_logs')
-          .insert({
-            user_id: user?.id,
-            action: 'access_denied',
-            resource: 'admin_page',
-            details: {
-              path: request.nextUrl.pathname,
-              role,
-              method: request.method,
-            },
-          });
-      } catch {
-        // Ignorar errores de auditoría (tabla ausente, RLS, etc.)
-      }
+      await insertAuditLog(supabase, {
+        user_id: user?.id ?? null,
+        action: 'access_denied',
+        resource: 'admin_page',
+        details: {
+          path: request.nextUrl.pathname,
+          role,
+          method: request.method,
+        },
+      });
       const url = request.nextUrl.clone();
       url.pathname = '/403';
       return NextResponse.redirect(url);
@@ -110,31 +118,29 @@ export async function updateSession(request: NextRequest) {
     // Requerir autenticación incluso si normalmente se permitirían rutas /api
     if (!user && !isMockAuth) {
       // Log de auditoría para API admin no autorizada
-      try {
-        await (supabase as any)
-          .from('audit_logs')
-          .insert({
-            user_id: null,
-            action: 'access_denied',
-            resource: 'admin_api',
-            details: {
-              path: request.nextUrl.pathname,
-              role: null,
-              method: request.method,
-            },
-          });
-      } catch { }
+      await insertAuditLog(supabase, {
+        user_id: null,
+        action: 'access_denied',
+        resource: 'admin_api',
+        details: {
+          path: request.nextUrl.pathname,
+          role: null,
+          method: request.method,
+        },
+      });
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
     // Verificar rol ADMIN/SUPER_ADMIN usando BD con fallback a metadata
-    let role = String((user as any)?.user_metadata?.role || '').toUpperCase();
+    const meta = (user?.user_metadata ?? {}) as UserMetadata;
+    let role = String(meta.role || '').toUpperCase();
     try {
-      const { data: profile } = await (supabase as any)
+      const { data: profile } = await supabase
         .from('users')
         .select('role')
-        .eq('id', user?.id)
+        .eq('id', user?.id ?? '')
         .single();
-      const dbRole = String((profile as any)?.role || '').toUpperCase();
+      const profileRole = (profile ?? {}) as ProfileRole | null;
+      const dbRole = String(profileRole?.role || '').toUpperCase();
       role = dbRole || role;
     } catch {
       // Ignore DB errors, keep metadata fallback
@@ -142,20 +148,16 @@ export async function updateSession(request: NextRequest) {
     const isAdmin = role === 'ADMIN' || role === 'SUPER_ADMIN';
     if (!isAdmin && !isMockAuth) {
       // Log de auditoría para API admin con rol insuficiente
-      try {
-        await (supabase as any)
-          .from('audit_logs')
-          .insert({
-            user_id: user?.id,
-            action: 'access_denied',
-            resource: 'admin_api',
-            details: {
-              path: request.nextUrl.pathname,
-              role,
-              method: request.method,
-            },
-          });
-      } catch { }
+      await insertAuditLog(supabase, {
+        user_id: user?.id ?? null,
+        action: 'access_denied',
+        resource: 'admin_api',
+        details: {
+          path: request.nextUrl.pathname,
+          role,
+          method: request.method,
+        },
+      });
       return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
     }
   }
@@ -163,14 +165,16 @@ export async function updateSession(request: NextRequest) {
   // Proteger acceso a reportes por rol (ADMIN/MANAGER). Evitar Prisma en runtime Edge.
   if (user && request.nextUrl.pathname.startsWith('/dashboard/reports')) {
     // Obtener rol desde metadata con fallback a BD (tabla users)
-    let role = String((user as any)?.user_metadata?.role || '').toUpperCase();
+    const meta = (user?.user_metadata ?? {}) as UserMetadata;
+    let role = String(meta.role || '').toUpperCase();
     try {
-      const { data: profile } = await (supabase as any)
+      const { data: profile } = await supabase
         .from('users')
         .select('role')
         .eq('id', user.id)
         .single();
-      const dbRole = String((profile as any)?.role || '').toUpperCase();
+      const profileRole = (profile ?? {}) as ProfileRole | null;
+      const dbRole = String(profileRole?.role || '').toUpperCase();
       role = dbRole || role;
     } catch {
       // Ignorar errores de BD; mantener metadata
@@ -186,14 +190,16 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (user && request.nextUrl.pathname.startsWith('/dashboard') && !request.nextUrl.pathname.startsWith('/dashboard/reports')) {
-    let role = String((user as any)?.user_metadata?.role || '').toUpperCase();
+    const meta = (user?.user_metadata ?? {}) as UserMetadata;
+    let role = String(meta.role || '').toUpperCase();
     try {
-      const { data: profile } = await (supabase as any)
+      const { data: profile } = await supabase
         .from('users')
         .select('role')
         .eq('id', user.id)
         .single();
-      const dbRole = String((profile as any)?.role || '').toUpperCase();
+      const profileRole = (profile ?? {}) as ProfileRole | null;
+      const dbRole = String(profileRole?.role || '').toUpperCase();
       role = dbRole || role;
     } catch { }
     const allowedRoles = ['ADMIN', 'MANAGER', 'CASHIER', 'SUPER_ADMIN'];
@@ -211,14 +217,16 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
     if (user && !isMockAuth) {
-      let role = String((user as any)?.user_metadata?.role || '').toUpperCase();
+      const meta = (user?.user_metadata ?? {}) as UserMetadata;
+      let role = String(meta.role || '').toUpperCase();
       try {
-        const { data: profile } = await (supabase as any)
+        const { data: profile } = await supabase
           .from('users')
           .select('role')
-          .eq('id', user?.id)
+          .eq('id', user?.id ?? '')
           .single();
-        const dbRole = String((profile as any)?.role || '').toUpperCase();
+        const profileRole = (profile ?? {}) as ProfileRole | null;
+        const dbRole = String(profileRole?.role || '').toUpperCase();
         role = dbRole || role;
       } catch { }
       const allowedRoles = ['ADMIN', 'MANAGER'];

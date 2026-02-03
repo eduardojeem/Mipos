@@ -215,7 +215,7 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
         if (isSupabaseActive()) {
           const response = await fetch('/api/business-config', { 
             cache: 'no-store',
-            signal: AbortSignal.timeout(5000) // 5 second timeout
+            signal: AbortSignal.timeout(15000) // 15 second timeout
           });
           
           if (response.ok) {

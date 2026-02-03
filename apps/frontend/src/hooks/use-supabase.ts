@@ -2,18 +2,23 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase';
-import type { User, AuthChangeEvent, Session } from '@supabase/supabase-js';
+import type { User, AuthChangeEvent, Session, PostgrestError } from '@supabase/supabase-js';
 import type { 
   Product, 
   Category, 
   Customer, 
   Supplier, 
-  Sale,
   Role,
   Permission,
   CreateProductData,
   UpdateProductData 
 } from '@/types/supabase';
+
+interface ProductFilters {
+  category_id?: string;
+  search?: string;
+  is_active?: boolean;
+}
 
 export function useSupabase() {
   const [user, setUser] = useState<User | null>(null);
@@ -55,7 +60,7 @@ export function useSupabase() {
     return { error };
   };
 
-  const signUp = async (email: string, password: string, metadata?: any) => {
+  const signUp = async (email: string, password: string, metadata?: Record<string, unknown>) => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -67,7 +72,7 @@ export function useSupabase() {
   };
 
   // Funciones de datos
-  const getProducts = async (filters?: any) => {
+  const getProducts = async (filters?: ProductFilters) => {
     let query = supabase
       .from('products')
       .select(`
@@ -104,8 +109,6 @@ export function useSupabase() {
         return { data: data as Category[], error: null };
       }
 
-      const msg = String((error as any)?.message || (error as any)?.details || '').toLowerCase();
-      const offlineLikely = (typeof navigator !== 'undefined' && !navigator.onLine) || /offline|failed to fetch|network/.test(msg);
 
       const resp = await fetch('/api/categories', { cache: 'no-store' });
       if (resp.ok) {
@@ -118,8 +121,8 @@ export function useSupabase() {
       if (normalized) {
         console.error('Error fetching categories:', normalized);
       }
-      return { data: [] as Category[], error: normalized as any };
-    } catch (e: any) {
+      return { data: [] as Category[], error: normalized as PostgrestError };
+    } catch (e: unknown) {
       try {
         const resp = await fetch('/api/categories', { cache: 'no-store' });
         if (resp.ok) {
@@ -128,7 +131,7 @@ export function useSupabase() {
           return { data: (arr || []) as Category[], error: null };
         }
       } catch {}
-      return { data: [] as Category[], error: e };
+      return { data: [] as Category[], error: e as PostgrestError };
     }
   };
 
@@ -159,10 +162,10 @@ export function useSupabase() {
 
     if (error) {
       console.error('Error fetching customers (hook):', {
-        message: (error as any)?.message,
-        code: (error as any)?.code,
-        details: (error as any)?.details,
-        hint: (error as any)?.hint
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint
       });
     }
     
@@ -196,10 +199,10 @@ export function useSupabase() {
 
     if (error) {
       console.error('Error fetching suppliers (hook):', {
-        message: (error as any)?.message,
-        code: (error as any)?.code,
-        details: (error as any)?.details,
-        hint: (error as any)?.hint
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint
       });
     }
     
@@ -215,10 +218,10 @@ export function useSupabase() {
 
     if (error) {
       console.error('Error fetching roles:', {
-        message: (error as any)?.message,
-        code: (error as any)?.code,
-        details: (error as any)?.details,
-        hint: (error as any)?.hint
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint
       });
     }
     

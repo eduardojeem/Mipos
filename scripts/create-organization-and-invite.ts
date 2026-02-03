@@ -1,4 +1,76 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+
+type OrganizationsRow = {
+  id: string
+  name: string
+  slug: string
+  subscription_plan: string
+  subscription_status: string
+  settings: Record<string, unknown> | null
+}
+
+type OrganizationsInsert = Omit<OrganizationsRow, 'id'>
+type OrganizationsUpdate = Partial<OrganizationsRow>
+
+type RolesRow = { id: string; name: string }
+type RolesInsert = Omit<RolesRow, 'id'>
+type RolesUpdate = Partial<RolesRow>
+
+type OrganizationMembersRow = {
+  id: string
+  organization_id: string
+  user_id: string
+  role_id: string
+  is_owner: boolean
+}
+type OrganizationMembersInsert = Omit<OrganizationMembersRow, 'id'>
+type OrganizationMembersUpdate = Partial<OrganizationMembersRow>
+
+type ScriptDatabase = {
+  public: {
+    Tables: {
+      organizations: {
+        Row: OrganizationsRow
+        Insert: OrganizationsInsert
+        Update: OrganizationsUpdate
+      }
+      roles: {
+        Row: RolesRow
+        Insert: RolesInsert
+        Update: RolesUpdate
+      }
+      organization_members: {
+        Row: OrganizationMembersRow
+        Insert: OrganizationMembersInsert
+        Update: OrganizationMembersUpdate
+      }
+    }
+    Views: unknown
+    Functions: unknown
+    Enums: unknown
+    CompositeTypes: unknown
+  }
+}
+
+async function insertOrganization(
+  client: SupabaseClient<ScriptDatabase>,
+  values: OrganizationsInsert
+) {
+  return (client as unknown as { from: (t: string) => { insert: (v: unknown) => { select: (cols?: string) => { single: () => Promise<{ data: OrganizationsRow | null; error: { code?: string; message: string; details?: string } | null }> } } } })
+    .from('organizations')
+    .insert(values)
+    .select('id, name, slug, subscription_plan, subscription_status, settings')
+    .single();
+}
+
+async function insertOrganizationMember(
+  client: SupabaseClient<ScriptDatabase>,
+  values: OrganizationMembersInsert
+) {
+  return (client as unknown as { from: (t: string) => { insert: (v: unknown) => Promise<{ error: { code?: string; message: string; details?: string } | null }> } })
+    .from('organization_members')
+    .insert(values);
+}
 
 function getEnv(name: string): string {
   const val = process.env[name];
@@ -26,7 +98,7 @@ function toSlug(s: string): string {
     .slice(0, 40);
 }
 
-async function ensureUniqueSlug(supabase: ReturnType<typeof createClient>, base: string): Promise<string> {
+async function ensureUniqueSlug(supabase: SupabaseClient<ScriptDatabase>, base: string): Promise<string> {
   let slug = base;
   let counter = 1;
   while (true) {
@@ -36,7 +108,7 @@ async function ensureUniqueSlug(supabase: ReturnType<typeof createClient>, base:
   }
 }
 
-async function findUserByEmail(admin: ReturnType<typeof createClient>, email: string) {
+async function findUserByEmail(admin: SupabaseClient<ScriptDatabase>, email: string) {
   try {
     const { data } = await (admin as any).auth.admin.listUsers();
     const user = (data?.users || []).find((u: any) => String(u.email).toLowerCase() === email.toLowerCase());
@@ -59,7 +131,7 @@ async function main() {
 
   const url = getEnv('NEXT_PUBLIC_SUPABASE_URL');
   const serviceKey = getEnv('SUPABASE_SERVICE_ROLE_KEY');
-  const supabase = createClient(url, serviceKey, {
+  const supabase: SupabaseClient<ScriptDatabase> = createClient<ScriptDatabase>(url, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
@@ -77,20 +149,20 @@ async function main() {
     trial: null,
   };
 
-  const { data: organization, error: orgError } = await supabase
-    .from('organizations')
-    .insert({
-      name: orgName,
-      slug,
-      subscription_plan: 'FREE',
-      subscription_status: 'ACTIVE',
-      settings: organizationSettings,
-    })
-    .select()
-    .single();
+  const { data: organization, error: orgError } = await insertOrganization(supabase, {
+    name: orgName,
+    slug,
+    subscription_plan: 'FREE',
+    subscription_status: 'ACTIVE',
+    settings: organizationSettings,
+  });
 
   if (orgError) {
     console.error('Failed to create organization:', { code: orgError.code, message: orgError.message, details: orgError.details });
+    process.exit(1);
+  }
+  if (!organization) {
+    console.error('Failed to create organization: no data returned');
     process.exit(1);
   }
 
@@ -113,11 +185,12 @@ async function main() {
 
   if (invitedUserId) {
     const { data: adminRole } = await supabase.from('roles').select('id').eq('name', 'ADMIN').single();
-    if (adminRole?.id) {
-      await supabase.from('organization_members').insert({
+    const adminRoleId = (adminRole as { id?: string } | null)?.id;
+    if (adminRoleId) {
+      await insertOrganizationMember(supabase, {
         organization_id: organization.id,
         user_id: invitedUserId,
-        role_id: adminRole.id,
+        role_id: adminRoleId,
         is_owner: true,
       });
     }
@@ -130,4 +203,3 @@ main().catch((e) => {
   console.error('Unexpected error:', { message: e?.message });
   process.exit(1);
 });
-

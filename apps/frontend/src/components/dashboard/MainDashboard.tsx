@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -26,12 +26,12 @@ import {
     ShoppingBag,
     Truck
 } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 import { useCurrencyFormatter } from '@/contexts/BusinessConfigContext'
 import { useQueryClient } from '@tanstack/react-query'
 import { RealtimeCharts } from './RealtimeCharts'
-import { useOptimizedDashboard, DashboardSummary, DashboardStats, RecentSale } from '@/hooks/useOptimizedDashboard'
+import { useOptimizedDashboard, DashboardStats, RecentSale } from '@/hooks/useOptimizedDashboard'
 
 // ===================================================================
 // INTERFACES (Replaced by hook imports)
@@ -227,10 +227,7 @@ export default function MainDashboard() {
     const queryClient = useQueryClient()
 
     // Ultra-fast dashboard data with optimized Supabase Hook
-    const { data: dashboardData, isLoading, refetch, error } = useOptimizedDashboard();
-
-    // Quick stats fallback removed - Hook handles it
-    const quickStats = null;
+    const { data: dashboardData, isLoading, refetch } = useOptimizedDashboard();
 
     // Extract data with fallbacks
     const currentData = dashboardData;
@@ -315,7 +312,7 @@ export default function MainDashboard() {
             gradient: 'from-orange-500 to-orange-600',
             action: () => router.push('/dashboard/reports')
         }
-    ]), [router])
+    ]), [router, stats?.activeOrders])
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-zinc-50 via-white to-zinc-50/80 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950/90">
@@ -720,7 +717,7 @@ export default function MainDashboard() {
                                 </div>
                             ) : recentSales && recentSales.length > 0 ? (
                                 <div className="divide-y divide-border/40 dark:divide-white/5">
-                                    {recentSales.map((sale: any) => (
+                                    {recentSales.map((sale: RecentSale) => (
                                         <div key={sale.id} className="p-4 hover:bg-zinc-50 dark:hover:bg-zinc-900/50 transition-colors">
                                             <div className="flex items-center justify-between">
                                                 <div>

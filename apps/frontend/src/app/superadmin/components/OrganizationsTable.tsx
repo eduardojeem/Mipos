@@ -284,7 +284,7 @@ export function OrganizationsTable({
                             </div>
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Miembros:</span>
-                              <span>—</span>
+                               <span>{org.members?.[0]?.count ?? org.organization_members?.[0]?.count ?? 0}</span>
                             </div>
                           </div>
                         </div>

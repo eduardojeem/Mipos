@@ -48,8 +48,9 @@ export default function BillingPage() {
         const json = await resp.json()
         if (!resp.ok) throw new Error(json?.error || 'Error al cargar suscripciones')
         setList(Array.isArray(json.subscriptions) ? json.subscriptions : [])
-      } catch (e: any) {
-        setError(e?.message || 'Error al cargar suscripciones')
+      } catch (e: unknown) {
+        const errorMessage = e instanceof Error ? e.message : 'Error al cargar suscripciones';
+        setError(errorMessage)
       } finally {
         setLoading(false)
       }
@@ -152,7 +153,7 @@ export default function BillingPage() {
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar..." className="pl-9 w-64" />
             </div>
-            <Select value={plan} onValueChange={(v: any) => setPlan(v)}>
+            <Select value={plan} onValueChange={(v: 'all' | 'free' | 'pro') => setPlan(v)}>
               <SelectTrigger className="w-40"><SelectValue placeholder="Plan" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos</SelectItem>
@@ -160,7 +161,7 @@ export default function BillingPage() {
                 <SelectItem value="pro">PRO</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={cycle} onValueChange={(v: any) => setCycle(v)}>
+            <Select value={cycle} onValueChange={(v: 'all' | 'monthly' | 'yearly') => setCycle(v)}>
               <SelectTrigger className="w-40"><SelectValue placeholder="Ciclo" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos</SelectItem>
@@ -168,7 +169,7 @@ export default function BillingPage() {
                 <SelectItem value="yearly">Anual</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={status} onValueChange={(v: any) => setStatus(v)}>
+            <Select value={status} onValueChange={(v: 'all' | 'ACTIVE' | 'PAST_DUE' | 'CANCELED') => setStatus(v)}>
               <SelectTrigger className="w-40"><SelectValue placeholder="Estado" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos</SelectItem>
@@ -234,14 +235,14 @@ export default function BillingPage() {
           </DialogHeader>
           <div className="space-y-3">
             <div className="text-sm">Organización: {assignOrgName || assignOrgId}</div>
-            <Select value={assignPlan} onValueChange={(v: any) => setAssignPlan(v)}>
+            <Select value={assignPlan} onValueChange={(v: string) => setAssignPlan(v)}>
               <SelectTrigger className="w-full"><SelectValue placeholder="Plan" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="free">Free</SelectItem>
                 <SelectItem value="pro">PRO</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={assignCycle} onValueChange={(v: any) => setAssignCycle(v)}>
+            <Select value={assignCycle} onValueChange={(v: string) => setAssignCycle(v)}>
               <SelectTrigger className="w-full"><SelectValue placeholder="Ciclo" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="monthly">Mensual</SelectItem>

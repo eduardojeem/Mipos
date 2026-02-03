@@ -39,6 +39,9 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from '@/lib/toast';
 import { createClient } from '@/lib/supabase/client';
 import type { Product } from '@/types';
+import type { Database } from '@/types/supabase';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import NextImage from 'next/image';
 
 interface ProductEditModalProps {
   product: Product | null;
@@ -90,7 +93,7 @@ export const ProductEditModal = memo(function ProductEditModal({
   const [creatingSupplier, setCreatingSupplier] = useState(false);
   const [generatingSku, setGeneratingSku] = useState(false);
   const [autoGenerateSku, setAutoGenerateSku] = useState(true);
-  const supabase = createClient();
+  const supabase = createClient() as SupabaseClient<Database>;
 
   const {
     register,
@@ -143,7 +146,7 @@ export const ProductEditModal = memo(function ProductEditModal({
             .from('organization_members')
             .select('organization_id')
             .eq('user_id', user.id);
-          orgIds = (mem || []).map((m: any) => String(m.organization_id)).filter(Boolean);
+          orgIds = ((mem ?? []) as Array<{ organization_id: string }>).map((m) => m.organization_id).filter(Boolean);
           if (orgIds.length === 1) orgId = orgIds[0];
         }
       } catch {}
@@ -329,8 +332,9 @@ export const ProductEditModal = memo(function ProductEditModal({
           .eq('sku', data.sku);
         if (orgId) skuQuery = skuQuery.eq('organization_id', orgId);
         const { data: existingProduct } = await skuQuery.single();
+        const existingProductId = (existingProduct as { id: string } | null)?.id;
           
-        if (existingProduct && existingProduct.id !== product?.id) {
+        if (existingProductId && existingProductId !== product?.id) {
           toast.error('Ya existe un producto con este SKU');
           return;
         }
@@ -361,9 +365,6 @@ export const ProductEditModal = memo(function ProductEditModal({
         image_url: data.image_url?.trim() || undefined
       };
 
-      // Remover el campo has_offer ya que no existe en la base de datos
-      delete (productData as any).has_offer;
-      
       console.log('Prepared product data:', productData);
 
       await onSave(productData);
@@ -384,16 +385,7 @@ export const ProductEditModal = memo(function ProductEditModal({
     }
   };
 
-  const handleImageUrlChange = (url: string) => {
-    setValue('image_url', url);
-    setImagePreview(url || null);
-  };
-
-  // Función para obtener el nombre de la categoría
-  const getCategoryName = useCallback((categoryId: string) => {
-    const category = categories.find(c => c.id === categoryId);
-    return category?.name?.toLowerCase().replace(/\s+/g, '-') || 'sin-categoria';
-  }, [categories]);
+ 
 
   // Función para optimizar imagen
   const optimizeImage = useCallback(async (file: File): Promise<File> => {
@@ -502,7 +494,7 @@ export const ProductEditModal = memo(function ProductEditModal({
 
       // Generar número secuencial único
       let counter = 1;
-      let baseSku = `${categoryPrefix}-${cleanName}`;
+      const baseSku = `${categoryPrefix}-${cleanName}`;
       let finalSku = `${baseSku}-${counter.toString().padStart(3, '0')}`;
 
       // Verificar si el SKU ya existe en la base de datos
@@ -516,13 +508,16 @@ export const ProductEditModal = memo(function ProductEditModal({
         if (error && error.code === 'PGRST116') {
           // No existe, podemos usar este SKU
           break;
-        } else if (existingProduct && existingProduct.id !== product?.id) {
+        } else {
+          const existingProductId = (existingProduct as { id: string } | null)?.id;
+          if (existingProductId && existingProductId !== product?.id) {
           // Existe y no es el producto actual, incrementar contador
           counter++;
           finalSku = `${baseSku}-${counter.toString().padStart(3, '0')}`;
-        } else {
+          } else {
           // Es el producto actual o no hay error, podemos usar este SKU
           break;
+          }
         }
 
         // Prevenir bucle infinito
@@ -616,16 +611,16 @@ export const ProductEditModal = memo(function ProductEditModal({
         setCreatingCategory(false);
         return;
       }
+      const finalOrgId = orgId as string;
+      const payload: Database['public']['Tables']['categories']['Insert'] = {
+        name: newCategoryName.trim(),
+        description: `Categoría creada desde productos: ${newCategoryName.trim()}`,
+        is_active: true,
+        organization_id: finalOrgId
+      };
       const { data, error } = await supabase
         .from('categories')
-        .insert([
-          {
-            name: newCategoryName.trim(),
-            description: `Categoría creada desde productos: ${newCategoryName.trim()}`,
-            is_active: true,
-            organization_id: orgId
-          }
-        ])
+        .insert(payload)
         .select('id, name')
         .single();
 
@@ -644,10 +639,11 @@ export const ProductEditModal = memo(function ProductEditModal({
       }
 
       // Agregar la nueva categoría a la lista
-      setCategories(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
+      const newCat = data as { id: string; name: string };
+      setCategories(prev => [...prev, newCat].sort((a, b) => a.name.localeCompare(b.name)));
       
       // Seleccionar la nueva categoría
-      setValue('category_id', data.id);
+      setValue('category_id', newCat.id);
       
       // Limpiar y cerrar el formulario
       setNewCategoryName('');
@@ -686,16 +682,15 @@ export const ProductEditModal = memo(function ProductEditModal({
         setCreatingSupplier(false);
         return;
       }
+      const finalOrgId = orgId as string;
+      const payload: Database['public']['Tables']['suppliers']['Insert'] = {
+        name: newSupplierName.trim(),
+        is_active: true,
+        organization_id: finalOrgId
+      };
       const { data, error } = await supabase
         .from('suppliers')
-        .insert([
-          {
-            name: newSupplierName.trim(),
-            contact_info: `Proveedor creado desde productos: ${newSupplierName.trim()}`,
-            is_active: true,
-            organization_id: orgId
-          }
-        ])
+        .insert(payload)
         .select('id, name')
         .single();
 
@@ -714,10 +709,11 @@ export const ProductEditModal = memo(function ProductEditModal({
       }
 
       // Agregar el nuevo proveedor a la lista
-      setSuppliers(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
+      const newSupplier = data as { id: string; name: string };
+      setSuppliers(prev => [...prev, newSupplier].sort((a, b) => a.name.localeCompare(b.name)));
       
       // Seleccionar el nuevo proveedor
-      setValue('supplier_id', data.id);
+      setValue('supplier_id', newSupplier.id);
       
       // Limpiar y cerrar el formulario
       setNewSupplierName('');
@@ -764,11 +760,12 @@ export const ProductEditModal = memo(function ProductEditModal({
                   <div className="relative aspect-square bg-muted rounded-lg overflow-hidden">
                     {imagePreview ? (
                       <>
-                        <img
+                        <NextImage
                           src={imagePreview}
                           alt="Preview"
-                          className="w-full h-full object-cover"
-                          loading="lazy"
+                          fill
+                          className="object-cover"
+                          sizes="(max-width: 768px) 100vw, 33vw"
                         />
                         <div className="absolute top-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
                           Optimizada
@@ -904,7 +901,7 @@ export const ProductEditModal = memo(function ProductEditModal({
                             value: /^[A-Z0-9\-]+$/,
                             message: 'Solo letras mayúsculas, números y guiones'
                           },
-                          validate: (value) => {
+                          validate: () => {
                             if (autoGenerateSku && !categoryId) {
                               return 'Selecciona una categoría para generar el SKU automáticamente';
                             }
