@@ -62,7 +62,10 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
 
             return await response.json();
         },
-        staleTime: 5 * 60 * 1000, // 5 minutes
+        staleTime: 10 * 60 * 1000, // 10 minutes - datos que no cambian frecuentemente
+        gcTime: 15 * 60 * 1000, // 15 minutes (antes cacheTime)
+        refetchOnWindowFocus: false, // No refetch al cambiar de tab
+        refetchOnMount: false, // No refetch si hay cache válido
     });
 
     const organizations = data?.organizations || [];

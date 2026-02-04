@@ -2,10 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { structuredLogger } from '@/lib/logger';
 import { getSupabaseConfig, getSupabaseAdminConfig } from '@/lib/env';
+import { assertSuperAdmin } from '@/app/api/_utils/auth';
 
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
   
+  const auth = await assertSuperAdmin(request);
+  if (!('ok' in auth) || auth.ok === false) {
+      return NextResponse.json(auth.body, { status: auth.status });
+  }
+
   structuredLogger.info('Starting stats request', {
     component: 'SuperAdminStatsAPI',
     action: 'GET',
@@ -80,228 +86,9 @@ export async function GET(request: NextRequest) {
   });
   
   try {
-    // 1. Verify user authentication
     const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
     
-    structuredLogger.info('Authentication check completed', {
-      component: 'SuperAdminStatsAPI',
-      action: 'authCheck',
-      metadata: {
-        userId: user?.id,
-        email: user?.email,
-        hasAuthError: !!authError,
-        authErrorMessage: authError?.message,
-      },
-    });
-    
-    if (authError || !user) {
-      structuredLogger.warn('Authentication failed - no user or auth error', {
-        component: 'SuperAdminStatsAPI',
-        action: 'authCheck',
-        metadata: {
-          authError: authError?.message,
-          hasUser: !!user,
-        },
-      });
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-    }
-
-    // 2. Verify superadmin permissions
-    // Checks occur in order: user_roles → users → metadata
-    let isSuperAdmin = false;
-    let permissionCheckMethod = 'none';
-    const attemptedMethods: string[] = [];
-    
-    // Check 1: user_roles table (first in sequence)
-    attemptedMethods.push('user_roles');
-    structuredLogger.info('Checking permissions via user_roles table (check 1/3)', {
-      component: 'SuperAdminStatsAPI',
-      action: 'permissionCheck',
-      metadata: {
-        userId: user.id,
-        email: user.email,
-        method: 'user_roles',
-        checkSequence: 1,
-      },
-    });
-    
-    try {
-      const adminClient = await createAdminClient();
-      const { data: userRoles, error: rolesError } = await adminClient
-        .from('user_roles')
-        .select('role:roles(name)')
-        .eq('user_id', user.id)
-        .eq('is_active', true);
-      
-      if (rolesError) {
-        structuredLogger.warn('Error querying user_roles table', {
-          component: 'SuperAdminStatsAPI',
-          action: 'permissionCheck',
-          metadata: {
-            method: 'user_roles',
-            errorCode: rolesError.code,
-            errorMessage: rolesError.message,
-            errorDetails: rolesError.details,
-            errorHint: rolesError.hint,
-          },
-        });
-      } else {
-        structuredLogger.info('User roles query completed', {
-          component: 'SuperAdminStatsAPI',
-          action: 'permissionCheck',
-          metadata: {
-            method: 'user_roles',
-            rowCount: userRoles?.length || 0,
-            roles: userRoles,
-          },
-        });
-        
-        isSuperAdmin = Array.isArray(userRoles) && userRoles.some((ur: { role: { name: string } | null }) => String(ur.role?.name || '').toUpperCase() === 'SUPER_ADMIN');
-        if (isSuperAdmin) {
-          permissionCheckMethod = 'user_roles';
-        }
-      }
-    } catch (e: unknown) {
-      const error = e as Error;
-      structuredLogger.warn('Exception checking user_roles table', {
-        component: 'SuperAdminStatsAPI',
-        action: 'permissionCheck',
-        metadata: {
-          method: 'user_roles',
-          error: error?.message,
-          stack: error?.stack,
-        },
-      });
-    }
-
-    // Check 2: users table (second in sequence)
-    if (!isSuperAdmin) {
-      attemptedMethods.push('users');
-      structuredLogger.info('Checking permissions via users table (check 2/3)', {
-        component: 'SuperAdminStatsAPI',
-        action: 'permissionCheck',
-        metadata: {
-          userId: user.id,
-          email: user.email,
-          method: 'users',
-          checkSequence: 2,
-        },
-      });
-      
-      try {
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('role')
-          .eq('id', user.id)
-          .single();
-        
-        if (userError) {
-          structuredLogger.warn('Error querying users table', {
-            component: 'SuperAdminStatsAPI',
-            action: 'permissionCheck',
-            metadata: {
-              method: 'users',
-              errorCode: userError.code,
-              errorMessage: userError.message,
-              errorDetails: userError.details,
-              errorHint: userError.hint,
-            },
-          });
-        } else {
-          structuredLogger.info('Users table query completed', {
-            component: 'SuperAdminStatsAPI',
-            action: 'permissionCheck',
-            metadata: {
-              method: 'users',
-              role: userData?.role,
-            },
-          });
-          
-          isSuperAdmin = String(userData?.role || '').toUpperCase() === 'SUPER_ADMIN';
-          if (isSuperAdmin) {
-            permissionCheckMethod = 'users';
-          }
-        }
-      } catch (e: unknown) {
-        const error = e as Error;
-        structuredLogger.warn('Exception checking users table', {
-          component: 'SuperAdminStatsAPI',
-          action: 'permissionCheck',
-          metadata: {
-            method: 'users',
-            error: error?.message,
-            stack: error?.stack,
-          },
-        });
-      }
-    }
-
-    // Check 3: user metadata (third in sequence)
-    if (!isSuperAdmin) {
-      attemptedMethods.push('metadata');
-      structuredLogger.info('Checking permissions via user metadata (check 3/3)', {
-        component: 'SuperAdminStatsAPI',
-        action: 'permissionCheck',
-        metadata: {
-          userId: user.id,
-          email: user.email,
-          method: 'metadata',
-          checkSequence: 3,
-        },
-      });
-      
-      const metaRole = String((user as { user_metadata?: { role?: string } })?.user_metadata?.role || '').toUpperCase();
-      structuredLogger.info('User metadata check completed', {
-        component: 'SuperAdminStatsAPI',
-        action: 'permissionCheck',
-        metadata: {
-          method: 'metadata',
-          role: metaRole,
-        },
-      });
-      
-      isSuperAdmin = metaRole === 'SUPER_ADMIN';
-      if (isSuperAdmin) {
-        permissionCheckMethod = 'metadata';
-      }
-    }
-
-    structuredLogger.success('Permission verification completed', {
-      component: 'SuperAdminStatsAPI',
-      action: 'permissionCheck',
-      metadata: {
-        userId: user.id,
-        email: user.email,
-        role: isSuperAdmin ? 'SUPER_ADMIN' : 'USER',
-        isSuperAdmin,
-        permissionCheckMethod,
-        attemptedMethods,
-        checkSequence: 'user_roles → users → metadata',
-      },
-    });
-
-    if (!isSuperAdmin) {
-      structuredLogger.warn('Access denied - user is not a super admin', {
-        component: 'SuperAdminStatsAPI',
-        action: 'permissionCheck',
-        metadata: {
-          userId: user.id,
-          email: user.email,
-          attemptedMethods,
-          checkSequence: 'user_roles → users → metadata',
-        },
-      });
-      return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
-    }
-
-    // 3. Use admin client to bypass RLS for data queries
-    structuredLogger.info('Fetching data with admin client (bypassing RLS)', {
-      component: 'SuperAdminStatsAPI',
-      action: 'fetchData',
-      metadata: { userId: user.id },
-    });
-    
+    // 2. Fetch stats
     const adminClient = await createAdminClient();
 
     // Perform data queries in parallel

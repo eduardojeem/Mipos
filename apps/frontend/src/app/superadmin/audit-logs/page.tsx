@@ -33,7 +33,7 @@ import {
   Loader2,
   Filter
 } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
+// import { createClient } from '@/lib/supabase/client'; // Removed
 import { toast } from '@/lib/toast';
 
 interface AuditLog {
@@ -100,8 +100,6 @@ export default function AuditLogsPage() {
   };
 
   const loadLogs = useCallback(async (isRefresh = false) => {
-    const supabase = createClient();
-
     if (isRefresh) {
       setRefreshing(true);
     } else {
@@ -109,13 +107,11 @@ export default function AuditLogsPage() {
     }
 
     try {
-      const { data, error } = await supabase
-        .from('audit_logs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(100);
-
-      if (error) throw error;
+      const response = await fetch('/api/superadmin/audit-logs?limit=100');
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
 
       setLogs(data || []);
 

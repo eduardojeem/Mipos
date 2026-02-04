@@ -2,58 +2,21 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { structuredLogger } from '@/lib/logger';
 import { getSupabaseAdminConfig } from '@/lib/env';
+import { assertSuperAdmin } from '@/app/api/_utils/auth';
 
 const COMPONENT = 'SuperAdminOrganizationsAPI';
 
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
+  
+  const auth = await assertSuperAdmin(request);
+  if (!('ok' in auth) || auth.ok === false) {
+      return NextResponse.json(auth.body, { status: auth.status });
+  }
+
   try {
-    const supabase = await createClient();
     const { searchParams } = new URL(request.url);
-    
-    // 1. Auth check
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-    }
-
-    // 2. Robust Role check (matching stats API)
-    let isSuperAdmin = false;
     const adminClient = await createAdminClient();
-    
-    // Check 1: roles table via user_roles
-    const { data: userRoles } = await adminClient
-      .from('user_roles')
-      .select('role:roles(name)')
-      .eq('user_id', user.id)
-      .eq('is_active', true);
-    
-    interface UserRoleResponse {
-      role: { name: string } | null;
-    }
-    
-    isSuperAdmin = Array.isArray(userRoles) && (userRoles as unknown as UserRoleResponse[]).some((ur) => ur.role?.name === 'SUPER_ADMIN');
-
-    // Check 2: users table
-    if (!isSuperAdmin) {
-      const { data: userData } = await supabase.from('users').select('role').eq('id', user.id).single();
-      isSuperAdmin = userData?.role === 'SUPER_ADMIN';
-    }
-
-    // Check 3: metadata
-    if (!isSuperAdmin) {
-      const userMetadata = user.user_metadata as { role?: string } | undefined;
-      isSuperAdmin = userMetadata?.role === 'SUPER_ADMIN';
-    }
-
-    if (!isSuperAdmin) {
-      structuredLogger.warn('Access denied to Organizations API', {
-        component: COMPONENT,
-        action: 'GET',
-        metadata: { userId: user.id }
-      });
-      return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
-    }
 
     // 3. Admin config check
     const adminConfig = getSupabaseAdminConfig();
@@ -114,43 +77,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/**
- * Helper robusto para verificar si el usuario es Super Admin
- */
-async function checkSuperAdmin(supabase: Awaited<ReturnType<typeof createClient>>) {
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) return { error: 'No autorizado', status: 401 };
-
-  const adminClient = await createAdminClient();
-  
-  // 1. Roles table
-  const { data: userRoles } = await adminClient
-    .from('user_roles')
-    .select('role:roles(name)')
-    .eq('user_id', user.id)
-    .eq('is_active', true);
-    interface UserRoleResponse {
-      role: { name: string } | null;
-    }
-
-    if (Array.isArray(userRoles) && (userRoles as unknown as UserRoleResponse[]).some((ur) => ur.role?.name === 'SUPER_ADMIN')) {
-      return { user, isSuperAdmin: true };
-    }
-
-  // 2. Users table
-  const { data: userData } = await supabase.from('users').select('role').eq('id', user.id).single();
-  if (userData?.role === 'SUPER_ADMIN') {
-    return { user, isSuperAdmin: true };
-  }
-
-  // 3. Metadata
-    const userMetadata = user.user_metadata as { role?: string } | undefined;
-    if (userMetadata?.role === 'SUPER_ADMIN') {
-      return { user, isSuperAdmin: true };
-    }
-
-  return { error: 'Acceso denegado', status: 403 };
-}
+// Helper removed - replaced by assertSuperAdmin
 
 export async function POST(request: NextRequest) {
   try {
@@ -252,11 +179,13 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  const auth = await assertSuperAdmin(request);
+  if (!('ok' in auth) || auth.ok === false) {
+      return NextResponse.json(auth.body, { status: auth.status });
+  }
+
   try {
     const supabase = await createClient();
-    const auth = await checkSuperAdmin(supabase);
-    if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status });
-
     const body = await request.json();
     const { id, ids, ...updates } = body;
 
@@ -288,11 +217,13 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const auth = await assertSuperAdmin(request);
+  if (!('ok' in auth) || auth.ok === false) {
+      return NextResponse.json(auth.body, { status: auth.status });
+  }
+
   try {
     const supabase = await createClient();
-    const auth = await checkSuperAdmin(supabase);
-    if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status });
-
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
     const ids = searchParams.get('ids')?.split(',');

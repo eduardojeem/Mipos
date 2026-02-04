@@ -1,39 +1,22 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
+import { assertSuperAdmin } from '@/app/api/_utils/auth';
 
 /**
  * GET /api/superadmin/email-templates
  * Obtiene todas las plantillas de email
  */
 export async function GET(request: NextRequest) {
+  const auth = await assertSuperAdmin(request);
+  if (!('ok' in auth) || auth.ok === false) {
+      return NextResponse.json(auth.body, { status: auth.status });
+  }
+
   try {
     const supabase = await createClient();
     const { searchParams } = new URL(request.url);
     const category = searchParams.get('category');
     const search = searchParams.get('search');
-
-    // Verificar autenticación
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
-    }
-
-    // Verificar que es SUPER_ADMIN
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-
-    if (userError || userData?.role !== 'SUPER_ADMIN') {
-      return NextResponse.json(
-        { error: 'No tienes permisos de SuperAdmin' },
-        { status: 403 }
-      );
-    }
 
     // Construir query
     let query = supabase
@@ -80,31 +63,15 @@ export async function GET(request: NextRequest) {
  * Crea una nueva plantilla de email
  */
 export async function POST(request: NextRequest) {
+  const auth = await assertSuperAdmin(request);
+  if (!('ok' in auth) || auth.ok === false) {
+      return NextResponse.json(auth.body, { status: auth.status });
+  }
+
   try {
     const supabase = await createClient();
-
-    // Verificar autenticación
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
-    }
-
-    // Verificar que es SUPER_ADMIN
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-
-    if (userError || userData?.role !== 'SUPER_ADMIN') {
-      return NextResponse.json(
-        { error: 'No tienes permisos de SuperAdmin' },
-        { status: 403 }
-      );
-    }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('User not found'); // Should have been caught by assertSuperAdmin
 
     // Obtener datos del body
     const body = await request.json();

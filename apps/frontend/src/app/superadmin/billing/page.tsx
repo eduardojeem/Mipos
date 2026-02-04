@@ -16,6 +16,8 @@ interface SubscriptionItem {
   id: string
   organizationId?: string | null
   organization: string
+  email?: string
+  admins?: string[]
   plan: string
   status: string
   amount?: number | null
@@ -38,6 +40,7 @@ export default function BillingPage() {
   const [assignOrgName, setAssignOrgName] = useState<string | null>(null)
   const [assignPlan, setAssignPlan] = useState<string>('pro')
   const [assignCycle, setAssignCycle] = useState<string>('monthly')
+  const [plans, setPlans] = useState<Array<{ slug: string; name: string }>>([])
 
   useEffect(() => {
     const load = async () => {
@@ -55,12 +58,25 @@ export default function BillingPage() {
         setLoading(false)
       }
     }
+    const loadPlans = async () => {
+      try {
+        const resp = await fetch('/api/superadmin/plans', { cache: 'no-store' })
+        const json = await resp.json()
+        if (resp.ok && Array.isArray(json.plans)) {
+          const items = json.plans.map((p: any) => ({ slug: String(p.slug || ''), name: String(p.name || p.slug || '') }))
+          setPlans(items)
+          if (items.length > 0) setAssignPlan(items[0].slug)
+        }
+      } catch {}
+    }
     load()
+    loadPlans()
   }, [])
 
   const filtered = useMemo(() => {
     return list.filter((s) => {
-      const txt = `${s.organization} ${s.plan} ${s.status}`.toLowerCase()
+      const adminsTxt = (s.admins || []).join(' ');
+      const txt = `${s.organization} ${s.email || ''} ${adminsTxt} ${s.plan} ${s.status}`.toLowerCase()
       const okSearch = !search || txt.includes(search.toLowerCase())
       const okCycle = cycle === 'all' || (String(s.billingCycle || '').toLowerCase() === cycle)
       const okStatus = status === 'all' || (String(s.status || '').toUpperCase() === status)
@@ -190,6 +206,7 @@ export default function BillingPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Organización</TableHead>
+                  <TableHead>Email</TableHead>
                   <TableHead>Plan</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead>Ciclo</TableHead>
@@ -203,6 +220,14 @@ export default function BillingPage() {
                 {filtered.map((s) => (
                   <TableRow key={s.id}>
                     <TableCell className="font-medium">{s.organization}</TableCell>
+                    <TableCell className="text-muted-foreground text-sm">
+                      <div className="flex flex-col">
+                        <span>{s.email || '-'}</span>
+                        {s.admins && s.admins.length > 0 && s.admins.filter(e => e !== s.email).map(adminEmail => (
+                          <span key={adminEmail} className="text-xs opacity-70" title="Admin/Member">{adminEmail}</span>
+                        ))}
+                      </div>
+                    </TableCell>
                     <TableCell className="uppercase">{s.plan}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className="text-xs">{s.status || 'N/A'}</Badge>
@@ -220,7 +245,7 @@ export default function BillingPage() {
                 ))}
                 {filtered.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground">Sin resultados</TableCell>
+                    <TableCell colSpan={9} className="text-center text-muted-foreground">Sin resultados</TableCell>
                   </TableRow>
                 )}
               </TableBody>
@@ -228,6 +253,7 @@ export default function BillingPage() {
           </CardContent>
         </Card>
       </div>
+
       <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
         <DialogContent>
           <DialogHeader>
@@ -238,8 +264,9 @@ export default function BillingPage() {
             <Select value={assignPlan} onValueChange={(v: string) => setAssignPlan(v)}>
               <SelectTrigger className="w-full"><SelectValue placeholder="Plan" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="free">Free</SelectItem>
-                <SelectItem value="pro">PRO</SelectItem>
+                {plans.map((p) => (
+                  <SelectItem key={p.slug} value={p.slug}>{p.name}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Select value={assignCycle} onValueChange={(v: string) => setAssignCycle(v)}>

@@ -1,18 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase-admin'
+import { assertSuperAdmin } from '@/app/api/_utils/auth'
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
+  const auth = await assertSuperAdmin(request);
+  if (!('ok' in auth) || auth.ok === false) {
+      return NextResponse.json(auth.body, { status: auth.status });
+  }
+
   try {
     const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-    }
-    const { data: userData } = await supabase.from('users').select('role').eq('id', user.id).single()
-    if (userData?.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 })
-    }
 
     const body = await request.json() as Record<string, unknown>
     let adminClient
@@ -31,17 +29,14 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
   }
 }
 
-export async function DELETE(_request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+  const auth = await assertSuperAdmin(request);
+  if (!('ok' in auth) || auth.ok === false) {
+      return NextResponse.json(auth.body, { status: auth.status });
+  }
+
   try {
     const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-    }
-    const { data: userData } = await supabase.from('users').select('role').eq('id', user.id).single()
-    if (userData?.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 })
-    }
 
     let adminClient
     try {

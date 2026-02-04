@@ -66,7 +66,10 @@ export function useUsers(options: UseUsersOptions = {}) {
                 total: json.total || 0,
             };
         },
-        staleTime: 2 * 60 * 1000,
+        staleTime: 5 * 60 * 1000, // 5 minutes - usuarios cambian con menos frecuencia
+        gcTime: 10 * 60 * 1000, // 10 minutes (antes cacheTime)
+        refetchOnWindowFocus: false, // No refetch al cambiar de tab
+        refetchOnMount: false, // No refetch si hay cache válido
     });
 
     const users = data?.users || [];

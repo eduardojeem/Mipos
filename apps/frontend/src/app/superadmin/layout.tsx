@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase-admin';
 import SuperAdminClientLayout from './SuperAdminClientLayout';
 
 export const metadata: Metadata = {
@@ -47,13 +48,48 @@ export default async function SuperAdminLayout({
   const supabase = await createClient();
   
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+  } = await supabase.auth.getUser();
 
   // Verificar autenticación
-  if (!session) {
+  if (!user) {
     redirect('/auth/signin');
   }
 
-  return <SuperAdminClientLayout>{children}</SuperAdminClientLayout>;
+  // Verificar rol de Super Admin (Server-Side)
+  // 1. Check Metadata (Fastest)
+  const metadataRole = (user.user_metadata as any)?.role?.toUpperCase();
+  if (metadataRole === 'SUPER_ADMIN') {
+    return <SuperAdminClientLayout>{children}</SuperAdminClientLayout>;
+  }
+
+  // 2. Check DB via Admin Client (Most Robust)
+  const adminClient = await createAdminClient();
+  
+  // Check user_roles table
+  const { data: userRoles } = await adminClient
+    .from('user_roles')
+    .select('role:roles(name)')
+    .eq('user_id', user.id)
+    .eq('is_active', true);
+    
+  const hasRole = userRoles?.some((ur: any) => ur.role?.name === 'SUPER_ADMIN');
+  
+  if (hasRole) {
+    return <SuperAdminClientLayout>{children}</SuperAdminClientLayout>;
+  }
+
+  // 3. Check users table (Legacy/Fallback)
+  const { data: userData } = await supabase
+    .from('users')
+    .select('role')
+    .eq('id', user.id)
+    .single();
+
+  if (userData?.role === 'SUPER_ADMIN') {
+    return <SuperAdminClientLayout>{children}</SuperAdminClientLayout>;
+  }
+
+  // Si no es Super Admin, redirigir
+  redirect('/dashboard');
 }

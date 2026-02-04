@@ -1,36 +1,19 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
+import { assertSuperAdmin } from '@/app/api/_utils/auth';
 
 /**
  * GET /api/superadmin/settings
  * Obtiene todas las configuraciones del sistema
  */
 export async function GET(request: NextRequest) {
+  const auth = await assertSuperAdmin(request);
+  if (!('ok' in auth) || auth.ok === false) {
+      return NextResponse.json(auth.body, { status: auth.status });
+  }
+
   try {
     const supabase = await createClient();
-
-    // Verificar autenticación
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
-    }
-
-    // Verificar que es SUPER_ADMIN
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-
-    if (userError || userData?.role !== 'SUPER_ADMIN') {
-      return NextResponse.json(
-        { error: 'No tienes permisos de SuperAdmin' },
-        { status: 403 }
-      );
-    }
 
     // Obtener todas las configuraciones
     const { data: settings, error: settingsError } = await supabase
@@ -50,7 +33,7 @@ export async function GET(request: NextRequest) {
 
     // Transformar a formato objeto plano para el frontend
     const settingsObject: Record<string, unknown> = {};
-    settings?.forEach((setting) => {
+    settings?.forEach((setting: { key: string; value: any }) => {
       // Parsear el valor JSONB
       let value = setting.value;
       
@@ -85,31 +68,17 @@ export async function GET(request: NextRequest) {
  * Actualiza las configuraciones del sistema
  */
 export async function POST(request: NextRequest) {
+  const auth = await assertSuperAdmin(request);
+  if (!('ok' in auth) || auth.ok === false) {
+      return NextResponse.json(auth.body, { status: auth.status });
+  }
+
   try {
-    const supabase = await createClient();
+      const supabase = await createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not found');
 
-    // Verificar autenticación
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
-    }
-
-    // Verificar que es SUPER_ADMIN
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-
-    if (userError || userData?.role !== 'SUPER_ADMIN') {
-      return NextResponse.json(
-        { error: 'No tienes permisos de SuperAdmin' },
-        { status: 403 }
-      );
-    }
+      // Obtener datos del body
 
     // Obtener datos del body
     const body = await request.json();

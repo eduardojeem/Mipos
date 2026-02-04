@@ -1,18 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase-admin'
+import { assertSuperAdmin } from '@/app/api/_utils/auth'
 
 export async function GET(request: NextRequest) {
+  const auth = await assertSuperAdmin(request);
+  if (!('ok' in auth) || auth.ok === false) {
+      return NextResponse.json(auth.body, { status: auth.status });
+  }
+
   try {
     const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-    }
-    const { data: userData, error: userError } = await supabase.from('users').select('role').eq('id', user.id).single()
-    if (userError || userData?.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 })
-    }
 
     const searchParams = new URL(request.url).searchParams
     const pageRaw = parseInt(searchParams.get('page') ?? '1', 10)

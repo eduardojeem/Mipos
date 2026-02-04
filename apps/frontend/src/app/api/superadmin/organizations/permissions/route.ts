@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
+import { assertSuperAdmin } from '@/app/api/_utils/auth'
 
 type Org = { id: string; name: string; slug: string }
 type OrgMember = { organization_id: string; user_id: string; role_id: string | null; is_owner: boolean }
@@ -8,7 +9,12 @@ type Role = { id: string; name: string }
 type Permission = { id: string; name: string; resource?: string; action?: string }
 type RolePermission = { role_id: string; permission_id: string }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const auth = await assertSuperAdmin(request);
+  if (!('ok' in auth) || auth.ok === false) {
+      return NextResponse.json(auth.body, { status: auth.status });
+  }
+
   try {
     const supabase = await createAdminClient()
     if (!supabase) {

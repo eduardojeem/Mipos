@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { structuredLogger } from '@/lib/logger';
+import { assertSuperAdmin } from '@/app/api/_utils/auth';
 
 const COMPONENT = 'SuperAdminOrganizationDetailAPI';
 
@@ -8,21 +9,14 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const auth = await assertSuperAdmin(request);
+  if (!('ok' in auth) || auth.ok === false) {
+      return NextResponse.json(auth.body, { status: auth.status });
+  }
+
   try {
     const { id } = params;
     const supabase = await createClient();
-    
-    // Auth check
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-    }
-
-    // Role check
-    const { data: userData } = await supabase.from('users').select('role').eq('id', user.id).single();
-    if (userData?.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
-    }
 
     const { data: organization, error } = await supabase
       .from('organizations')
@@ -53,17 +47,15 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const auth = await assertSuperAdmin(request);
+  if (!('ok' in auth) || auth.ok === false) {
+      return NextResponse.json(auth.body, { status: auth.status });
+  }
+
   try {
     const { id } = params;
     const supabase = await createClient();
     const body = await request.json();
-    
-    // Auth check
-    const { data: { user } } = await supabase.auth.getUser();
-    const { data: userData } = await supabase.from('users').select('role').eq('id', user?.id).single();
-    if (userData?.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
-    }
 
     const { data, error } = await supabase
       .from('organizations')

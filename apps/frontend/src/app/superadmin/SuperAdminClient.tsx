@@ -21,7 +21,7 @@ import {
   BarChart3,
   TrendingUp
 } from 'lucide-react';
-import { UnifiedPermissionGuard } from '@/components/auth/UnifiedPermissionGuard';
+import { SuperAdminGuard } from './components/SuperAdminGuard';
 import { useToast } from '@/components/ui/use-toast';
 
 interface SuperAdminClientProps {
@@ -96,7 +96,7 @@ export function SuperAdminClient({ initialOrganizations, initialStats }: SuperAd
 
   if (error) {
     return (
-      <UnifiedPermissionGuard role="SUPER_ADMIN" allowSuperAdmin={true}>
+      <SuperAdminGuard>
         <div className="p-8 space-y-6">
           <div className="space-y-1">
             <h2 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-slate-700 to-slate-900 dark:from-slate-300 dark:to-slate-100 bg-clip-text text-transparent">
@@ -150,12 +150,12 @@ export function SuperAdminClient({ initialOrganizations, initialStats }: SuperAd
             </div>
           )}
         </div>
-      </UnifiedPermissionGuard>
+      </SuperAdminGuard>
     );
   }
 
   return (
-    <UnifiedPermissionGuard role="SUPER_ADMIN" allowSuperAdmin={true}>
+    <SuperAdminGuard>
       <div className="flex-1 space-y-6 p-8 pt-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
@@ -283,6 +283,6 @@ export function SuperAdminClient({ initialOrganizations, initialStats }: SuperAd
           </div>
         )}
       </div>
-    </UnifiedPermissionGuard>
+    </SuperAdminGuard>
   );
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { createClient } from '@/lib/supabase/client';
+// import { createClient } from '@/lib/supabase/client'; // Removed unused import
 import { ErrorState, classifyError } from '@/types/error-state';
 import { 
   loadAdminDataCache, 

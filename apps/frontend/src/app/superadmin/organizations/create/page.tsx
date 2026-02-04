@@ -33,7 +33,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { createClient } from '@/lib/supabase/client';
+// import { createClient } from '@/lib/supabase/client'; // Removed
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 interface OrganizationFormData {
@@ -166,58 +166,21 @@ export default function CreateOrganizationPage() {
 
   const createMutation = useMutation({
     mutationFn: async (data: OrganizationFormData) => {
-      const supabase = createClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: organization, error: orgError } = await (supabase
-        .from('organizations') as any)
-        .insert({
-          name: data.name,
-          slug: data.slug,
-          subscription_plan: data.subscriptionPlan,
-          subscription_status: data.subscriptionStatus,
-          settings: {
-            contactInfo: {
-              email: data.email,
-              phone: data.phone,
-              website: data.website,
-              address: data.address,
-              city: data.city,
-              state: data.state,
-              country: data.country,
-              postalCode: data.postalCode,
-            },
-            taxRate: data.settings.taxRate,
-            currency: data.settings.currency,
-            timezone: data.settings.timezone,
-            language: data.settings.language,
-            industry: data.industry,
-            description: data.description,
-            limits: {
-              maxUsers: data.maxUsers,
-            },
-            features: data.features,
-            adminInfo: {
-              name: data.adminName,
-              email: data.adminEmail,
-              phone: data.adminPhone,
-            },
-            trial: data.allowTrialPeriod ? {
-              enabled: true,
-              days: data.trialDays,
-            } : null,
-          },
-        })
-        .select()
-        .single();
+      const response = await fetch('/api/superadmin/organizations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
 
-      if (orgError) {
-        if (orgError.code === '23505') {
-          throw new Error('Ya existe una organización con ese slug. Por favor usa uno diferente.');
-        }
-        throw orgError;
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Error al crear la organización');
       }
 
-      return organization;
+      return result.organization;
     },
     onSuccess: (newOrg: { name: string }) => {
       toast.success('¡Organización creada!', { 

@@ -24,6 +24,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SuperAdminThemeToggle } from "./components/SuperAdminThemeToggle";
+import { useSuperAdminPrefetch } from "./hooks/usePrefetch";
+import { SuperAdminGuard } from "./components/SuperAdminGuard";
 
 interface SuperAdminLayoutProps {
   children: React.ReactNode;
@@ -132,22 +134,14 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  // Verificar permisos de super admin con endpoint unificado
-  const [permLoading, setPermLoading] = useState(false);
+  // ✅ Prefetch de datos comunes para mejorar navegación
+  useSuperAdminPrefetch();
+
+  // Verificación simple de autenticación (permisos verificados en layout.tsx server-side)
   useEffect(() => {
     if (!user) {
       router.push("/auth/signin");
-      return;
     }
-    setPermLoading(true);
-    fetch('/api/superadmin/me')
-      .then(async (r) => {
-        const j = await r.json();
-        if (!r.ok || !j?.isSuperAdmin) {
-          router.push('/dashboard');
-        }
-      })
-      .finally(() => setPermLoading(false));
   }, [user, router]);
 
   const toggleExpanded = (title: string) => {
@@ -165,7 +159,7 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
     router.push("/auth/signin");
   };
 
-  if (!user || permLoading) {
+  if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -174,136 +168,137 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 relative overflow-hidden transition-colors duration-500">
-      {/* Animated Background Elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-slate-400/20 dark:bg-slate-600/10 rounded-full blur-3xl animate-pulse transition-colors duration-500"></div>
-        <div
-          className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-400/20 dark:bg-blue-600/10 rounded-full blur-3xl animate-pulse transition-colors duration-500"
-          style={{ animationDelay: "1s" }}
-        ></div>
-        <div
-          className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-slate-300/15 dark:bg-slate-700/10 rounded-full blur-3xl animate-pulse transition-colors duration-500"
-          style={{ animationDelay: "2s" }}
-        ></div>
-      </div>
+    <SuperAdminGuard>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 relative overflow-hidden transition-colors duration-500">
+        {/* Animated Background Elements */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute -top-40 -right-40 w-80 h-80 bg-slate-400/20 dark:bg-slate-600/10 rounded-full blur-3xl animate-pulse transition-colors duration-500"></div>
+          <div
+            className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-400/20 dark:bg-blue-600/10 rounded-full blur-3xl animate-pulse transition-colors duration-500"
+            style={{ animationDelay: "1s" }}
+          ></div>
+          <div
+            className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-slate-300/15 dark:bg-slate-700/10 rounded-full blur-3xl animate-pulse transition-colors duration-500"
+            style={{ animationDelay: "2s" }}
+          ></div>
+        </div>
 
-      <div className="flex h-screen relative z-10">
-        {/* Sidebar with Glassmorphism */}
-        <div
-          className={cn(
-            "backdrop-blur-xl bg-white/95 dark:bg-slate-900/95 border-r border-slate-200/50 dark:border-slate-700/50 transition-all duration-300 flex flex-col shadow-xl",
-            isCollapsed ? "w-20" : "w-80",
-          )}
-        >
-          {/* Header */}
-          <div className="p-6 border-b border-slate-200/50 dark:border-slate-700/50">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Button
-                  onClick={() => setIsCollapsed(!isCollapsed)}
-                  className="w-12 h-12 p-0 rounded-2xl bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center shadow-lg shadow-slate-500/25 hover:scale-105 transition-transform border-0"
-                >
-                  <Crown className="h-6 w-6 text-white" />
-                </Button>
-                {!isCollapsed && (
-                  <div>
-                    <h1 className="text-xl font-bold bg-gradient-to-r from-slate-700 to-slate-900 dark:from-slate-300 dark:to-slate-100 bg-clip-text text-transparent">
-                      Super Admin
-                    </h1>
-                    <p className="text-xs text-slate-600 dark:text-slate-400 font-medium">
-                      Panel de Control SaaS
-                    </p>
-                  </div>
-                )}
+        <div className="flex h-screen relative z-10">
+          {/* Sidebar with Glassmorphism */}
+          <div
+            className={cn(
+              "backdrop-blur-xl bg-white/95 dark:bg-slate-900/95 border-r border-slate-200/50 dark:border-slate-700/50 transition-all duration-300 flex flex-col shadow-xl",
+              isCollapsed ? "w-20" : "w-80",
+            )}
+          >
+            {/* Header */}
+            <div className="p-6 border-b border-slate-200/50 dark:border-slate-700/50">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Button
+                    onClick={() => setIsCollapsed(!isCollapsed)}
+                    className="w-12 h-12 p-0 rounded-2xl bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center shadow-lg shadow-slate-500/25 hover:scale-105 transition-transform border-0"
+                  >
+                    <Crown className="h-6 w-6 text-white" />
+                  </Button>
+                  {!isCollapsed && (
+                    <div>
+                      <h1 className="text-xl font-bold bg-gradient-to-r from-slate-700 to-slate-900 dark:from-slate-300 dark:to-slate-100 bg-clip-text text-transparent">
+                        Super Admin
+                      </h1>
+                      <p className="text-xs text-slate-600 dark:text-slate-400 font-medium">
+                        Panel de Control SaaS
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Navigation */}
-          <ScrollArea className="flex-1 px-3 py-6">
-            <nav className="space-y-1">
-              {navigationItems.map((item) => (
-                <div key={item.title} className="group">
-                  <Button
-                    variant="ghost"
-                    className={cn(
-                      "w-full justify-start gap-3 h-auto py-3 px-4 transition-all duration-200",
-                      !isCollapsed && "text-left",
-                      activeItem === item.href &&
-                      "bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-800 dark:to-slate-700 border border-slate-300 dark:border-slate-600 shadow-md",
-                      "hover:bg-gradient-to-r hover:from-slate-50 hover:to-slate-100 dark:hover:from-slate-800 dark:hover:to-slate-700 hover:scale-[1.02] hover:shadow-sm",
-                    )}
-                    onClick={() => {
-                      if (item.children) {
-                        toggleExpanded(item.title);
-                      } else {
-                        setActiveItem(item.href);
-                        router.push(item.href);
-                      }
-                    }}
-                  >
-                    <div
+            {/* Navigation */}
+            <ScrollArea className="flex-1 px-3 py-6">
+              <nav className="space-y-1">
+                {navigationItems.map((item) => (
+                  <div key={item.title} className="group">
+                    <Button
+                      variant="ghost"
                       className={cn(
-                        "p-2 rounded-xl transition-all duration-200",
-                        activeItem === item.href
-                          ? "bg-gradient-to-br from-slate-600 to-slate-700 shadow-lg shadow-slate-500/25"
-                          : "bg-slate-100 dark:bg-slate-800 group-hover:bg-gradient-to-br group-hover:from-slate-600 group-hover:to-slate-700",
+                        "w-full justify-start gap-3 h-auto py-3 px-4 transition-all duration-200",
+                        !isCollapsed && "text-left",
+                        activeItem === item.href &&
+                        "bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-800 dark:to-slate-700 border border-slate-300 dark:border-slate-600 shadow-md",
+                        "hover:bg-gradient-to-r hover:from-slate-50 hover:to-slate-100 dark:hover:from-slate-800 dark:hover:to-slate-700 hover:scale-[1.02] hover:shadow-sm",
                       )}
+                      onClick={() => {
+                        if (item.children) {
+                          toggleExpanded(item.title);
+                        } else {
+                          setActiveItem(item.href);
+                          router.push(item.href);
+                        }
+                      }}
                     >
-                      <item.icon
+                      <div
                         className={cn(
-                          "h-5 w-5 transition-colors",
+                          "p-2 rounded-xl transition-all duration-200",
                           activeItem === item.href
-                            ? "text-white"
-                            : "text-slate-600 dark:text-slate-400 group-hover:text-white",
+                            ? "bg-gradient-to-br from-slate-600 to-slate-700 shadow-lg shadow-slate-500/25"
+                            : "bg-slate-100 dark:bg-slate-800 group-hover:bg-gradient-to-br group-hover:from-slate-600 group-hover:to-slate-700",
                         )}
-                      />
-                    </div>
-                    {!isCollapsed && (
-                      <>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-slate-800 dark:text-slate-200">
-                              {item.title}
-                            </span>
-                            {item.badge && (
-                              <Badge className="text-xs px-2 py-0.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white border-0">
-                                {item.badge}
-                              </Badge>
+                      >
+                        <item.icon
+                          className={cn(
+                            "h-5 w-5 transition-colors",
+                            activeItem === item.href
+                              ? "text-white"
+                              : "text-slate-600 dark:text-slate-400 group-hover:text-white",
+                          )}
+                        />
+                      </div>
+                      {!isCollapsed && (
+                        <>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                {item.title}
+                              </span>
+                              {item.badge && (
+                                <Badge className="text-xs px-2 py-0.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white border-0">
+                                  {item.badge}
+                                </Badge>
+                              )}
+                            </div>
+                            {item.description && (
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                {item.description}
+                              </p>
                             )}
                           </div>
-                          {item.description && (
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                              {item.description}
-                            </p>
+                          {item.children && (
+                            <ChevronDown
+                              className={cn(
+                                "h-4 w-4 transition-transform text-slate-600 dark:text-slate-400",
+                                expandedItems.has(item.title) && "rotate-180",
+                              )}
+                            />
                           )}
-                        </div>
-                        {item.children && (
-                          <ChevronDown
-                            className={cn(
-                              "h-4 w-4 transition-transform text-slate-600 dark:text-slate-400",
-                              expandedItems.has(item.title) && "rotate-180",
-                            )}
-                          />
-                        )}
-                      </>
-                    )}
-                  </Button>
+                        </>
+                      )}
+                    </Button>
 
-                  {/* Subitems */}
-                  {!isCollapsed &&
-                    item.children &&
-                    expandedItems.has(item.title) && (
-                      <div className="ml-8 mt-1 space-y-1 border-l-2 border-slate-300 dark:border-slate-700 pl-4 py-2">
-                        {item.children.map((child) => (
-                          <Button
-                            key={child.href}
-                            variant="ghost"
-                            className={cn(
-                              "w-full justify-start gap-3 h-10 px-3 text-sm transition-all duration-200",
-                              activeItem === child.href &&
-                              "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300",
+                    {/* Subitems */}
+                    {!isCollapsed &&
+                      item.children &&
+                      expandedItems.has(item.title) && (
+                        <div className="ml-8 mt-1 space-y-1 border-l-2 border-slate-300 dark:border-slate-700 pl-4 py-2">
+                          {item.children.map((child) => (
+                            <Button
+                              key={child.href}
+                              variant="ghost"
+                              className={cn(
+                                "w-full justify-start gap-3 h-10 px-3 text-sm transition-all duration-200",
+                                activeItem === child.href &&
+                                "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300",
                               "hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:translate-x-1",
                             )}
                             onClick={() => {
@@ -420,5 +415,6 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
         </div>
       </div>
     </div>
+    </SuperAdminGuard>
   );
 }

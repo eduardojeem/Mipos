@@ -26,8 +26,17 @@ export function SuperAdminGuard({ children, fallback }: SuperAdminGuardProps) {
 
   useEffect(() => {
     if (!loading && user) {
+      // Short-circuit: si ya tenemos rol SUPER_ADMIN desde Auth, no consultar API
+      if (String(user.role || '').toUpperCase() === 'SUPER_ADMIN') {
+        setIsSuperAdmin(true);
+        return;
+      }
+
       setPermLoading(true);
-      fetch('/api/superadmin/me')
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+      fetch('/api/superadmin/me', { signal: controller.signal })
         .then(async (r) => {
           const j = await r.json();
           if (r.ok && j && typeof j.isSuperAdmin === 'boolean') {
@@ -37,7 +46,10 @@ export function SuperAdminGuard({ children, fallback }: SuperAdminGuardProps) {
           }
         })
         .catch(() => setIsSuperAdmin(false))
-        .finally(() => setPermLoading(false));
+        .finally(() => {
+          clearTimeout(timeoutId);
+          setPermLoading(false);
+        });
     }
   }, [loading, user]);
 

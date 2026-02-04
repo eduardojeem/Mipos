@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { assertAdmin } from '@/app/api/_utils/auth';
+import { assertSuperAdmin } from '@/app/api/_utils/auth';
 import { createAdminClient } from '@/lib/supabase-admin';
 import { withCache } from '@/lib/api-cache';
 
@@ -16,10 +16,11 @@ interface SlowQuery {
  * Obtiene estadísticas de rendimiento y queries lentas
  * 
  * Requiere que pg_stat_statements esté habilitado
+ * Obtiene estadísticas de rendimiento
  */
 export async function GET(request: NextRequest) {
     // Verificar que el usuario es superadmin
-    const auth = await assertAdmin(request);
+    const auth = await assertSuperAdmin(request);
     if (!('ok' in auth) || auth.ok === false) {
         return NextResponse.json(auth.body, { status: auth.status });
     }
