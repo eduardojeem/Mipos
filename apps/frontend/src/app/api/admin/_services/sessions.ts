@@ -39,6 +39,7 @@ export interface SessionListFilters {
   dateTo?: string
   sortBy?: 'createdAt' | 'lastActivityAt' | 'expiresAt' | 'userName' | 'riskLevel'
   sortDir?: 'asc' | 'desc'
+  allowedUserIds?: string[] // ✅ NUEVO: Filtrar por usuarios permitidos
 }
 
 export interface PaginationOpts { page: number; limit: number }
@@ -175,6 +176,12 @@ const mockSessions: UserSession[] = [
 
 function applyFilters(data: UserSession[], f: SessionListFilters): UserSession[] {
   let filtered = data
+  
+  // ✅ CRÍTICO: Filtrar por usuarios permitidos (multitenancy)
+  if (f.allowedUserIds && f.allowedUserIds.length > 0) {
+    filtered = filtered.filter(s => f.allowedUserIds!.includes(s.userId))
+  }
+  
   const search = (f.search || '').toLowerCase()
   if (search) {
     filtered = filtered.filter(

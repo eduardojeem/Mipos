@@ -27,38 +27,38 @@ export async function GET(request: NextRequest) {
     // Agrupar por mes
     const growthData = aggregateByMonth(organizations || [], 'created_at');
 
-    // 2. Plan Distribution
+    // 2. Plan Distribution - usando subscription_plan directamente de organizations
     const { data: planDistribution, error: planError } = await supabase
       .from('organizations')
-      .select('plan_id, subscription_plans(name)');
+      .select('subscription_plan');
 
     if (planError) throw planError;
 
-    const planCounts = planDistribution?.reduce((acc: Record<string, number>, org: { plan_id: string; subscription_plans: { name: string } | null }) => {
-      const planName = org.subscription_plans?.name || 'Free';
+    const planCounts = planDistribution?.reduce((acc: Record<string, number>, org: { subscription_plan: string | null }) => {
+      const planName = org.subscription_plan || 'free';
       acc[planName] = (acc[planName] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
 
-    // 3. User Activity - Usuarios activos vs inactivos por mes
+    // 3. User Activity - Usuarios creados por mes (sin is_active que no existe)
     const { data: users, error: usersError } = await supabase
       .from('users')
-      .select('created_at, is_active, last_sign_in_at')
+      .select('created_at')
       .gte('created_at', sixMonthsAgo.toISOString());
 
     if (usersError) throw usersError;
 
-    const activityData = aggregateUserActivity(users || []);
+    const activityData = aggregateUsersByMonth(users || []);
 
-    // 4. Revenue Estimation (basado en planes)
+    // 4. Revenue Estimation (basado en saas_subscriptions)
     const { data: subscriptions, error: subsError } = await supabase
-      .from('subscriptions')
+      .from('saas_subscriptions')
       .select(`
-        amount,
+        plan_id,
         billing_cycle,
         status,
         organization_id,
-        organizations(plan_id)
+        saas_plans(price_monthly, price_yearly)
       `)
       .eq('status', 'active');
 
@@ -66,31 +66,17 @@ export async function GET(request: NextRequest) {
 
     const revenueData = calculateRevenueMetrics(subscriptions || []);
 
-    // 5. Top Organizations por usuarios
-    const { data: topOrgs, error: topOrgsError } = await supabase
-      .rpc('get_organizations_with_user_count')
+    // 5. Top Organizations - simplificado, solo mostramos las más recientes
+    const { data: topOrgs } = await supabase
+      .from('organizations')
+      .select('name, created_at')
+      .order('created_at', { ascending: false })
       .limit(5);
 
-    // Si el RPC no existe, usar un query alternativo
-    let topOrganizations = [];
-    if (topOrgsError) {
-      const { data: orgsWithCounts } = await supabase
-        .from('organizations')
-        .select(`
-          id,
-          name,
-          organization_users(count)
-        `)
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      topOrganizations = orgsWithCounts?.map((org: { id: string; name: string; organization_users: Array<{ count: number }> }) => ({
-        name: org.name,
-        user_count: org.organization_users?.[0]?.count || 0
-      })) || [];
-    } else {
-      topOrganizations = topOrgs || [];
-    }
+    const topOrganizations = topOrgs?.map(org => ({
+      name: org.name,
+      user_count: 0 // Por ahora no tenemos forma de contar usuarios por org
+    })) || [];
 
     return NextResponse.json({
       growthData,
@@ -142,8 +128,8 @@ function aggregateByMonth(data: Array<{ [key: string]: string }>, dateField: str
   }));
 }
 
-function aggregateUserActivity(users: Array<{ created_at: string; is_active: boolean; last_sign_in_at: string | null }>) {
-  const monthMap = new Map<string, { active: number; inactive: number }>();
+function aggregateUsersByMonth(users: Array<{ created_at: string }>) {
+  const monthMap = new Map<string, number>();
   
   // Inicializar últimos 6 meses
   const months = [];
@@ -151,43 +137,45 @@ function aggregateUserActivity(users: Array<{ created_at: string; is_active: boo
     const date = new Date();
     date.setMonth(date.getMonth() - i);
     const monthKey = date.toISOString().slice(0, 7);
-    monthMap.set(monthKey, { active: 0, inactive: 0 });
+    monthMap.set(monthKey, 0);
     months.push(monthKey);
   }
 
-  // Contar usuarios activos vs inactivos
+  // Contar usuarios por mes
   users.forEach(user => {
     const date = new Date(user.created_at);
     const monthKey = date.toISOString().slice(0, 7);
     
     if (monthMap.has(monthKey)) {
-      const current = monthMap.get(monthKey)!;
-      if (user.is_active) {
-        current.active++;
-      } else {
-        current.inactive++;
-      }
+      monthMap.set(monthKey, (monthMap.get(monthKey) || 0) + 1);
     }
   });
 
   return months.map(month => ({
     month: formatMonth(month),
-    active: monthMap.get(month)?.active || 0,
-    inactive: monthMap.get(month)?.inactive || 0
+    active: monthMap.get(month) || 0,
+    inactive: 0 // No tenemos datos de inactivos por ahora
   }));
 }
 
-function calculateRevenueMetrics(subscriptions: Array<{ amount: number; billing_cycle: string; status: string; organization_id: string }>) {
+function calculateRevenueMetrics(subscriptions: Array<{ 
+  billing_cycle: string; 
+  status: string; 
+  organization_id: string;
+  saas_plans: { price_monthly: number; price_yearly: number } | null;
+}>) {
   let mrr = 0; // Monthly Recurring Revenue
   
   subscriptions.forEach(sub => {
-    const amount = sub.amount || 0;
     const cycle = sub.billing_cycle || 'monthly';
+    const plan = sub.saas_plans;
+    
+    if (!plan) return;
     
     if (cycle === 'monthly') {
-      mrr += amount;
+      mrr += plan.price_monthly || 0;
     } else if (cycle === 'yearly') {
-      mrr += amount / 12;
+      mrr += (plan.price_yearly || 0) / 12;
     }
   });
 

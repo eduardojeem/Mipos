@@ -1,13 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { assertAdmin } from '@/app/api/_utils/auth'
+import { createClient } from '@/lib/supabase/server'
 import { listSessions, SessionListFilters } from '@/app/api/admin/_services/sessions'
 
 // Migrado a servicio centralizado en _services/sessions.ts
 
 export async function GET(req: NextRequest) {
   const auth = await assertAdmin(req)
-  if (!('ok' in auth) || auth.ok === false) {
+  if (!auth.ok) {
     return NextResponse.json(auth.body, { status: auth.status })
+  }
+
+  const { organizationId, isSuperAdmin } = auth
+
+  const { organizationId, isSuperAdmin } = auth
+
+  // ✅ CRÍTICO: Obtener usuarios de la organización para filtrar sesiones
+  let allowedUserIds: string[] | undefined = undefined
+  
+  if (!isSuperAdmin && organizationId) {
+    const supabase = await createClient()
+    const { data: members } = await supabase
+      .from('organization_members')
+      .select('user_id')
+      .eq('organization_id', organizationId)
+    
+    allowedUserIds = members?.map(m => m.user_id) || []
+    
+    // Si no hay usuarios en la org, retornar vacío
+    if (allowedUserIds.length === 0) {
+      return NextResponse.json({
+        items: [],
+        total: 0,
+        page: 1,
+        limit: 10,
+        pageCount: 0
+      })
+    }
   }
 
   const { searchParams } = new URL(req.url)
@@ -28,7 +57,9 @@ export async function GET(req: NextRequest) {
     dateFrom: searchParams.get('dateFrom') || undefined,
     dateTo: searchParams.get('dateTo') || undefined,
     sortBy: (searchParams.get('sortBy') as any) || undefined,
-    sortDir: searchParams.get('sortDir') === 'asc' ? 'asc' : 'desc'
+    sortDir: searchParams.get('sortDir') === 'asc' ? 'asc' : 'desc',
+    // ✅ NUEVO: Filtrar por usuarios de la organización
+    allowedUserIds
   }
 
   const res = await listSessions(filters, { page, limit })

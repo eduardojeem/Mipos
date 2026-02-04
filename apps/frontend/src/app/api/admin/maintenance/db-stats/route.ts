@@ -1,12 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { assertAdmin } from '@/app/api/_utils/auth'
 import { isSupabaseActive } from '@/lib/env'
-import { createAdminClient } from '@/lib/supabase-admin'
+import { createClient } from '@/lib/supabase/server'
 
 export async function GET(request: NextRequest) {
   const auth = await assertAdmin(request)
-  if (!('ok' in auth) || auth.ok === false) {
+  if (!auth.ok) {
     return NextResponse.json(auth.body, { status: auth.status })
+  }
+
+  const { isSuperAdmin } = auth
+
+  // Solo super admin puede ver estadísticas globales de la base de datos
+  if (!isSuperAdmin) {
+    return NextResponse.json({ 
+      success: false, 
+      error: 'Requiere permisos de Super Admin' 
+    }, { status: 403 })
   }
 
   if (!isSupabaseActive()) {
@@ -14,7 +24,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const admin = createAdminClient() as any
+    const supabase = await createClient()
     const sql = `
       select
         relname as table,
@@ -27,7 +37,7 @@ export async function GET(request: NextRequest) {
     `
     let tables: any[] = []
     try {
-      const { data, error } = await admin.rpc('exec_sql', { sql })
+      const { data, error } = await (supabase as any).rpc('exec_sql', { sql })
       if (!error && Array.isArray(data)) {
         tables = data
       }
@@ -36,7 +46,7 @@ export async function GET(request: NextRequest) {
     const counts: Record<string, number> = {}
     const countFor = async (name: string, col: string = 'id') => {
       try {
-        const { count, error } = await admin.from(name).select(col, { count: 'exact', head: true })
+        const { count, error } = await supabase.from(name).select(col, { count: 'exact', head: true })
         if (!error) counts[name] = count || 0
       } catch {}
     }

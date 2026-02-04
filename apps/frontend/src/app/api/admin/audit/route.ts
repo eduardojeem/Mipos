@@ -7,9 +7,11 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   const auth = await assertAdmin(request)
-  if (!('ok' in auth) || auth.ok === false) {
+  if (!auth.ok) {
     return NextResponse.json(auth.body, { status: auth.status })
   }
+
+  const { organizationId, isSuperAdmin } = auth
 
   try {
     const { searchParams } = new URL(request.url)
@@ -54,6 +56,11 @@ export async function GET(request: NextRequest) {
     let query = (supabase as any)
       .from('audit_logs')
       .select('*', { count: 'exact' })
+
+    // ✅ CRÍTICO: Filtrar por organización si no es super admin
+    if (!isSuperAdmin && organizationId) {
+      query = query.eq('organization_id', organizationId)
+    }
 
     if (actionEq && actionEq.trim()) {
       query = query.eq('action', actionEq)

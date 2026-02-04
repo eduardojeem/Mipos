@@ -1,12 +1,19 @@
 import { NextRequest } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { logAudit } from '@/app/api/admin/_utils/audit'
+import { getUserOrganizationId } from './organization'
 
 // Verifica que el solicitante sea ADMIN o SUPER_ADMIN.
 // - En modo mock: usa cabecera x-user-role
 // - En producción: verifica sesión y rol desde la tabla users
+// Retorna información de organización para filtrado de datos
 export async function assertAdmin(request: NextRequest): Promise<
-  | { ok: true; session?: any }
+  | { 
+      ok: true
+      userId: string
+      organizationId: string | null
+      isSuperAdmin: boolean
+    }
   | { ok: false; status: number; body: { error: string } }
 > {
   // Solo permitir verificación real de sesión con Supabase
@@ -40,8 +47,29 @@ export async function assertAdmin(request: NextRequest): Promise<
 
     if (hasAdminRole) {
       const roleName = dbRoles.find((r: string) => r === 'ADMIN' || r === 'SUPER_ADMIN') || metadataRole
-      logAudit('auth.ok', { mode: 'prod', role: roleName, userId: user.id, url: request.url })
-      return { ok: true }
+      const isSuperAdmin = roleName === 'SUPER_ADMIN'
+      
+      // Obtener organization_id para admins regulares
+      let organizationId: string | null = null
+      if (!isSuperAdmin) {
+        organizationId = await getUserOrganizationId(user.id)
+        if (!organizationId) {
+          logAudit('auth.denied', { mode: 'prod', reason: 'admin_without_org', userId: user.id, url: request.url })
+          return { 
+            ok: false, 
+            status: 403, 
+            body: { error: 'Admin sin organización asignada' } 
+          }
+        }
+      }
+      
+      logAudit('auth.ok', { mode: 'prod', role: roleName, userId: user.id, organizationId, url: request.url })
+      return { 
+        ok: true, 
+        userId: user.id,
+        organizationId,
+        isSuperAdmin
+      }
     }
     const rolesFound = [...dbRoles, metadataRole].filter(Boolean).join(',') || 'none'
     logAudit('auth.denied', { mode: 'prod', reason: 'role_not_allowed', role: rolesFound, userId: user.id, url: request.url })

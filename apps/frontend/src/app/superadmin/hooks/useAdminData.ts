@@ -109,6 +109,10 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
     isFetchingRef.current = true;
     console.log('🔄 [useAdminData] Starting fetch...');
 
+    const controller = new AbortController();
+    const signal = controller.signal;
+    let timeoutId: NodeJS.Timeout | undefined;
+
     try {
       if (isRefresh) {
         setRefreshing(true);
@@ -123,39 +127,60 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
       let statsData: AdminStats | null = null;
       let orgsData: Organization[] | null = null;
 
-      const controller = new AbortController();
-      const signal = controller.signal;
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      timeoutId = setTimeout(() => {
+        console.warn('⏰ [useAdminData] Timeout reached (30s), aborting requests...');
+        controller.abort();
+      }, 30000); // 30 segundos
+
+      console.log('📡 [useAdminData] Fetching stats and organizations...');
+      const fetchStartTime = Date.now();
 
       const [statsRes, orgsRes] = await Promise.allSettled([
         fetch('/api/superadmin/stats', { headers: { 'Content-Type': 'application/json' }, cache: 'no-store', signal }),
         fetch('/api/superadmin/organizations?pageSize=100', { headers: { 'Content-Type': 'application/json' }, cache: 'no-store', signal }),
       ]);
 
+      const fetchDuration = Date.now() - fetchStartTime;
+      console.log(`⏱️ [useAdminData] Fetch completed in ${fetchDuration}ms`);
+
+      clearTimeout(timeoutId); // Limpiar el timeout inmediatamente después de las peticiones
+      timeoutId = undefined;
+
       if (statsRes.status === 'fulfilled') {
         const r = statsRes.value;
+        console.log(`📊 [useAdminData] Stats response: ${r.status} ${r.statusText}`);
         if (r.ok) {
           statsData = await r.json();
+          console.log('✅ [useAdminData] Stats data received:', statsData);
         } else {
-          statsError = classifyError(new Error(`Error ${r.status}`), { url: '/api/superadmin/stats', method: 'GET' });
+          const errorText = await r.text();
+          console.error('❌ [useAdminData] Stats error:', errorText);
+          statsError = classifyError(new Error(`Error ${r.status}: ${errorText}`), { url: '/api/superadmin/stats', method: 'GET' });
         }
       } else {
+        console.error('❌ [useAdminData] Stats request failed:', statsRes.reason);
         statsError = classifyError(statsRes.reason, { url: '/api/superadmin/stats', method: 'GET' });
       }
 
       if (orgsRes.status === 'fulfilled') {
         const r = orgsRes.value;
+        console.log(`🏢 [useAdminData] Organizations response: ${r.status} ${r.statusText}`);
         if (r.ok) {
           const json = await r.json();
           if (json.error) {
+            console.error('❌ [useAdminData] Organizations error in response:', json.error);
             orgsError = classifyError(new Error(json.error), { url: '/api/superadmin/organizations', method: 'GET' });
           } else {
             orgsData = json.organizations || [];
+            console.log(`✅ [useAdminData] Organizations data received: ${orgsData.length} items`);
           }
         } else {
-          orgsError = classifyError(new Error(`Error ${r.status}`), { url: '/api/superadmin/organizations', method: 'GET' });
+          const errorText = await r.text();
+          console.error('❌ [useAdminData] Organizations error:', errorText);
+          orgsError = classifyError(new Error(`Error ${r.status}: ${errorText}`), { url: '/api/superadmin/organizations', method: 'GET' });
         }
       } else {
+        console.error('❌ [useAdminData] Organizations request failed:', orgsRes.reason);
         orgsError = classifyError(orgsRes.reason, { url: '/api/superadmin/organizations', method: 'GET' });
       }
 
@@ -243,7 +268,9 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
       setError(errorState);
       onErrorRef.current?.(errorState.message);
     } finally {
-      try { clearTimeout(timeoutId); } catch {}
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
       setLoading(false);
       setRefreshing(false);
       isFetchingRef.current = false;
@@ -265,7 +292,8 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
     if (!initialOrganizations) {
       fetchData();
     }
-  }, [fetchData, initialOrganizations]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Solo ejecutar una vez al montar
 
   // Auto-refresh interval
   useEffect(() => {

@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { assertAdmin } from '@/app/api/_utils/auth'
-import { createAdminClient } from '@/lib/supabase-admin'
+import { createClient } from '@/lib/supabase/server' // ✅ Cambio crítico
 
 export async function GET(request: NextRequest) {
   const auth = await assertAdmin(request)
-  if (!('ok' in auth) || auth.ok === false) {
+  if (!auth.ok) {
     return NextResponse.json(auth.body, { status: auth.status })
   }
 
-  const supabase = createAdminClient() as any
+  const { organizationId, isSuperAdmin } = auth
+  const supabase = await createClient() // ✅ NO usar createAdminClient
   const { searchParams } = new URL(request.url)
   const pageRaw = parseInt(searchParams.get('page') ?? '1', 10)
   const limitRaw = parseInt(searchParams.get('limit') ?? '10', 10)
@@ -23,6 +24,12 @@ export async function GET(request: NextRequest) {
     .from('promotions')
     .select('id,name,discount_type,discount_value,start_date,end_date,is_active', { count: 'exact' })
     .eq('is_active', true)
+  
+  // ✅ CRÍTICO: Filtrar por organización si no es super admin
+  if (!isSuperAdmin && organizationId) {
+    query = query.eq('organization_id', organizationId)
+  }
+  
   if (strict) {
     query = query.lte('start_date', now).gte('end_date', now)
   }

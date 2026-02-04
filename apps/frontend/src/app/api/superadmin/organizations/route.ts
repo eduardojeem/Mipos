@@ -80,11 +80,12 @@ export async function GET(request: NextRequest) {
 // Helper removed - replaced by assertSuperAdmin
 
 export async function POST(request: NextRequest) {
-  try {
-    const supabase = await createClient();
-    const auth = await checkSuperAdmin(supabase);
-    if (auth.error) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  const auth = await assertSuperAdmin(request);
+  if (!('ok' in auth) || auth.ok === false) {
+      return NextResponse.json(auth.body, { status: auth.status });
+  }
 
+  try {
     const body = await request.json();
     const {
       name,

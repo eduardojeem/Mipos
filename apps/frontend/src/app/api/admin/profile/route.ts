@@ -1,19 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { assertAdmin } from '@/app/api/_utils/auth';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const auth = await assertAdmin(request);
+  if (!auth.ok) {
+    return NextResponse.json(auth.body, { status: auth.status });
+  }
+
+  const { userId, organizationId } = auth;
+
   try {
     const supabase = await createClient();
-    
-    // Obtener usuario autenticado
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'No autorizado' },
-        { status: 401 }
-      );
-    }
 
     // Obtener perfil del usuario desde la tabla users
     const { data: profile, error: profileError } = await supabase
@@ -31,7 +29,7 @@ export async function GET() {
         updated_at,
         last_login
       `)
-      .eq('id', user.id)
+      .eq('id', userId)
       .single();
 
     if (profileError) {
@@ -40,6 +38,30 @@ export async function GET() {
         { error: 'Error al obtener perfil' },
         { status: 500 }
       );
+    }
+
+    // Obtener información de la organización
+    let organizationInfo = null;
+    if (organizationId) {
+      const { data: orgData } = await supabase
+        .from('organization_members')
+        .select(`
+          role_id,
+          is_owner,
+          organization:organizations(
+            id,
+            name,
+            slug,
+            subscription_plan,
+            subscription_status,
+            settings
+          )
+        `)
+        .eq('user_id', userId)
+        .eq('organization_id', organizationId)
+        .single();
+
+      organizationInfo = orgData;
     }
 
     // Obtener permisos del usuario
@@ -56,7 +78,7 @@ export async function GET() {
           )
         )
       `)
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .eq('is_active', true);
 
     let permissions: string[] = [];
@@ -66,13 +88,20 @@ export async function GET() {
       );
     }
 
-    // Obtener actividad reciente (últimas 10 acciones)
-    const { data: recentActivity, error: activityError } = await supabase
+    // Obtener actividad reciente (filtrada por organización)
+    let activityQuery = supabase
       .from('role_audit_logs')
       .select('action, resource_type, created_at, ip_address')
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(10);
+
+    // Filtrar actividad por organización si aplica
+    if (organizationId) {
+      activityQuery = activityQuery.eq('organization_id', organizationId);
+    }
+
+    const { data: recentActivity } = await activityQuery;
 
     const adminProfile = {
       id: profile.id,
@@ -88,6 +117,7 @@ export async function GET() {
       lastLogin: profile.last_login,
       permissions: permissions,
       recentActivity: recentActivity || [],
+      organization: organizationInfo,
       twoFactorEnabled: false, // TODO: Implementar 2FA
     };
 
@@ -102,19 +132,15 @@ export async function GET() {
 }
 
 export async function PUT(request: NextRequest) {
+  const auth = await assertAdmin(request);
+  if (!auth.ok) {
+    return NextResponse.json(auth.body, { status: auth.status });
+  }
+
+  const { userId, organizationId } = auth;
+
   try {
     const supabase = await createClient();
-    
-    // Obtener usuario autenticado
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'No autorizado' },
-        { status: 401 }
-      );
-    }
-
     const updates = await request.json();
 
     // Validar que solo se actualicen campos permitidos
@@ -134,7 +160,7 @@ export async function PUT(request: NextRequest) {
     const { data: updatedProfile, error: updateError } = await supabase
       .from('users')
       .update(filteredUpdates)
-      .eq('id', user.id)
+      .eq('id', userId)
       .select()
       .single();
 
@@ -146,17 +172,18 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    // Registrar la acción en el log de auditoría
+    // Registrar la acción en el log de auditoría con organization_id
     await supabase
       .from('role_audit_logs')
       .insert({
-        user_id: user.id,
+        user_id: userId,
+        organization_id: organizationId,
         action: 'UPDATE',
         resource_type: 'profile',
-        resource_id: user.id,
+        resource_id: userId,
         old_values: {},
         new_values: filteredUpdates,
-        performed_by: user.id,
+        performed_by: userId,
         ip_address: request.headers.get('x-forwarded-for') || 'unknown',
         user_agent: request.headers.get('user-agent') || 'unknown'
       });
@@ -177,19 +204,15 @@ export async function PUT(request: NextRequest) {
 
 // Endpoint para cambiar contraseña
 export async function PATCH(request: NextRequest) {
+  const auth = await assertAdmin(request);
+  if (!auth.ok) {
+    return NextResponse.json(auth.body, { status: auth.status });
+  }
+
+  const { userId, organizationId } = auth;
+
   try {
     const supabase = await createClient();
-    
-    // Obtener usuario autenticado
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'No autorizado' },
-        { status: 401 }
-      );
-    }
-
     const { currentPassword, newPassword } = await request.json();
 
     if (!currentPassword || !newPassword) {
@@ -206,9 +229,23 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    // Obtener email del usuario
+    const { data: userData } = await supabase
+      .from('users')
+      .select('email')
+      .eq('id', userId)
+      .single();
+
+    if (!userData?.email) {
+      return NextResponse.json(
+        { error: 'Usuario no encontrado' },
+        { status: 404 }
+      );
+    }
+
     // Verificar contraseña actual
     const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: user.email!,
+      email: userData.email,
       password: currentPassword
     });
 
@@ -232,17 +269,18 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    // Registrar cambio de contraseña en el log de auditoría
+    // Registrar cambio de contraseña en el log de auditoría con organization_id
     await supabase
       .from('role_audit_logs')
       .insert({
-        user_id: user.id,
+        user_id: userId,
+        organization_id: organizationId,
         action: 'PASSWORD_CHANGE',
         resource_type: 'auth',
-        resource_id: user.id,
+        resource_id: userId,
         old_values: {},
         new_values: { password_changed: true },
-        performed_by: user.id,
+        performed_by: userId,
         ip_address: request.headers.get('x-forwarded-for') || 'unknown',
         user_agent: request.headers.get('user-agent') || 'unknown'
       });

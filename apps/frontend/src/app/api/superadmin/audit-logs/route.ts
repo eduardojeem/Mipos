@@ -21,10 +21,17 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.error('[Audit Logs API] Error fetching logs:', error);
+      
+      // Si la tabla no existe, devolver array vacío en lugar de error
+      if (error.message?.includes('does not exist') || error.code === '42P01') {
+        console.warn('[Audit Logs API] Table does not exist, returning empty array');
+        return NextResponse.json([]);
+      }
+      
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json(data);
+    return NextResponse.json(data || []);
   } catch (error: any) {
     console.error('[Audit Logs API] Internal error:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
