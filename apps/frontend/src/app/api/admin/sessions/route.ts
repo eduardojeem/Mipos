@@ -13,8 +13,6 @@ export async function GET(req: NextRequest) {
 
   const { organizationId, isSuperAdmin } = auth
 
-  const { organizationId, isSuperAdmin } = auth
-
   // ✅ CRÍTICO: Obtener usuarios de la organización para filtrar sesiones
   let allowedUserIds: string[] | undefined = undefined
   
