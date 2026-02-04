@@ -125,6 +125,7 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
 
       const controller = new AbortController();
       const signal = controller.signal;
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
 
       const [statsRes, orgsRes] = await Promise.allSettled([
         fetch('/api/superadmin/stats', { headers: { 'Content-Type': 'application/json' }, cache: 'no-store', signal }),
@@ -242,6 +243,7 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
       setError(errorState);
       onErrorRef.current?.(errorState.message);
     } finally {
+      try { clearTimeout(timeoutId); } catch {}
       setLoading(false);
       setRefreshing(false);
       isFetchingRef.current = false;
