@@ -933,24 +933,6 @@ export default function SessionsPage() {
             </div>
           </div>
         </CardContent>
-      </Card>   disabled={currentPage <= 1 || loading}
-              >
-                Anterior
-              </Button>
-              <div className="text-sm">
-                Página {currentPage} de {Math.max(1, Math.ceil(totalCount / pageSize))}
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage((p) => p + 1)}
-                disabled={currentPage >= Math.ceil(totalCount / pageSize) || loading}
-              >
-                Siguiente
-              </Button>
-            </div>
-          </div>
-        </CardContent>
       </Card>
 
       {/* Session Detail Dialog */}
