@@ -31,63 +31,74 @@
     --chart-5: 27 87% 67%;
   }
 
-  /* 🌙 Trae AI Dark Mode - Deep Black & Vibrant Violet */
+  /* 🌙 Modern Dark Mode - Unified & Elegant */
   .dark {
-    /* Backgrounds - Pure Black / Deepest Gray */
-    --background: 0 0% 4%; 
-    /* #0a0a0a - Trae's deep background */
-    --foreground: 0 0% 100%;
-    /* #ffffff - Pure white text */
+    /* ===== BACKGROUNDS ===== */
+    /* Deep slate background for main areas */
+    --background: 222 47% 11%;           /* #0f172a - Slate 900 */
+    --foreground: 210 40% 98%;           /* #f8fafc - Slate 50 */
 
-    /* Cards - Subtle elevation, nearly black */
-    --card: 0 0% 7%;
-    /* #111111 - Very dark card */
-    --card-foreground: 0 0% 100%;
+    /* Cards - Elevated surfaces with subtle contrast */
+    --card: 217 33% 17%;                 /* #1e293b - Slate 800 */
+    --card-foreground: 210 40% 98%;      /* #f8fafc - Slate 50 */
 
-    /* Popovers */
-    --popover: 0 0% 7%;
-    /* #111111 */
-    --popover-foreground: 0 0% 100%;
+    /* Popovers & Dropdowns - Slightly lighter than cards */
+    --popover: 217 33% 17%;              /* #1e293b - Slate 800 */
+    --popover-foreground: 210 40% 98%;   /* #f8fafc - Slate 50 */
 
-    /* Primary - Trae's Electric Violet */
-    --primary: 245 100% 66%;
-    /* #6153ff - Trae AI Brand Color */
-    --primary-foreground: 0 0% 100%;
+    /* ===== PRIMARY COLORS ===== */
+    /* Modern blue-violet for primary actions */
+    --primary: 217 91% 60%;              /* #3b82f6 - Blue 500 */
+    --primary-foreground: 0 0% 100%;     /* #ffffff - White */
 
-    /* Secondary - Dark Gray */
-    --secondary: 0 0% 11%;
-    /* #1c1c1c */
-    --secondary-foreground: 0 0% 100%;
+    /* ===== SECONDARY COLORS ===== */
+    /* Subtle gray for secondary elements */
+    --secondary: 215 25% 27%;            /* #334155 - Slate 700 */
+    --secondary-foreground: 210 40% 98%; /* #f8fafc - Slate 50 */
 
-    /* Muted */
-    --muted: 240 4% 16%;
-    /* #27272a */
-    --muted-foreground: 240 5% 65%;
-    /* #a1a1aa */
+    /* ===== MUTED COLORS ===== */
+    /* For disabled states and subtle text */
+    --muted: 215 25% 27%;                /* #334155 - Slate 700 */
+    --muted-foreground: 215 16% 47%;     /* #64748b - Slate 500 */
 
-    /* Accent - Darker gray for hovers */
-    --accent: 0 0% 15%; 
-    --accent-foreground: 0 0% 100%;
+    /* ===== ACCENT COLORS ===== */
+    /* For hover states and highlights */
+    --accent: 215 25% 27%;               /* #334155 - Slate 700 */
+    --accent-foreground: 210 40% 98%;    /* #f8fafc - Slate 50 */
 
-    /* Destructive */
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
+    /* ===== DESTRUCTIVE COLORS ===== */
+    /* For errors and dangerous actions */
+    --destructive: 0 84% 60%;            /* #ef4444 - Red 500 */
+    --destructive-foreground: 0 0% 100%; /* #ffffff - White */
 
-    /* Borders */
-    --border: 240 4% 16%;
-    /* #27272a */
-    --input: 240 4% 16%;
+    /* ===== BORDERS & INPUTS ===== */
+    /* Subtle borders that don't overpower */
+    --border: 215 25% 27%;               /* #334155 - Slate 700 */
+    --input: 215 25% 27%;                /* #334155 - Slate 700 */
     
-    /* Ring */
-    --ring: 245 100% 66%;
-    /* Match primary */
+    /* ===== FOCUS RING ===== */
+    /* Visible focus indicator */
+    --ring: 217 91% 60%;                 /* #3b82f6 - Blue 500 */
 
-    /* Charts - Updated to fit the new palette */
-    --chart-1: 245 100% 66%; /* Trae Violet */
-    --chart-2: 190 100% 50%; /* Cyan/Blue (Trae gradient) */
-    --chart-3: 300 100% 50%; /* Magenta/Pink (Trae gradient) */
-    --chart-4: 280 65% 60%; /* Purple */
-    --chart-5: 340 75% 55%; /* Pinkish */
+    /* ===== CHART COLORS ===== */
+    /* Vibrant, distinguishable colors for data visualization */
+    --chart-1: 217 91% 60%;              /* Blue 500 */
+    --chart-2: 142 76% 36%;              /* Green 600 */
+    --chart-3: 280 65% 60%;              /* Purple 500 */
+    --chart-4: 38 92% 50%;               /* Orange 500 */
+    --chart-5: 340 75% 55%;              /* Pink 500 */
+
+    /* ===== SUCCESS COLOR ===== */
+    --success: 142 76% 36%;              /* #16a34a - Green 600 */
+    --success-foreground: 0 0% 100%;     /* #ffffff - White */
+
+    /* ===== WARNING COLOR ===== */
+    --warning: 38 92% 50%;               /* #f59e0b - Amber 500 */
+    --warning-foreground: 0 0% 100%;     /* #ffffff - White */
+
+    /* ===== INFO COLOR ===== */
+    --info: 199 89% 48%;                 /* #0ea5e9 - Sky 500 */
+    --info-foreground: 0 0% 100%;        /* #ffffff - White */
   }
 }
 
@@ -124,35 +135,48 @@
   }
 
   .glass-effect {
-    backdrop-filter: blur(10px);
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(12px) saturate(180%);
+    background: rgba(255, 255, 255, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
   }
 
   .dark .glass-effect {
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(30, 41, 59, 0.7);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
   }
 
-  /* Enhanced glassmorphism for dark mode POS interface */
+  /* Enhanced glassmorphism for dark mode */
   .glass-dark {
-    background: rgba(30, 41, 59, 0.4);
-    backdrop-filter: blur(12px);
-    border: 1px solid rgba(148, 163, 184, 0.1);
+    background: rgba(30, 41, 59, 0.5);
+    backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
   }
 
   .glass-dark-card {
-    background: rgba(30, 41, 59, 0.6);
-    backdrop-filter: blur(16px);
-    border: 1px solid rgba(148, 163, 184, 0.15);
+    background: rgba(30, 41, 59, 0.7);
+    backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.4);
   }
 
+  /* Modern gradient backgrounds */
   .gradient-bg {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  }
+
+  .gradient-bg-subtle {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+  }
+
+  .dark .gradient-bg-subtle {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%);
   }
 
   .gradient-text {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -171,20 +195,36 @@
   }
 
   .btn-gradient {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    @apply text-white font-medium py-2 px-4 rounded-lg transition-all duration-300 hover:shadow-lg hover:scale-105;
+    background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+    @apply text-white font-semibold py-2.5 px-6 rounded-lg transition-all duration-300 hover:shadow-xl hover:scale-105 active:scale-95;
+  }
+
+  .dark .btn-gradient {
+    box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);
+  }
+
+  .dark .btn-gradient:hover {
+    box-shadow: 0 8px 30px rgba(59, 130, 246, 0.4);
   }
 
   .sidebar-item {
-    @apply flex items-center px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 group;
+    @apply flex items-center px-4 py-3 text-sm font-medium rounded-xl transition-all duration-200 group;
   }
 
   .sidebar-item-active {
-    @apply bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg transform scale-105;
+    @apply bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg;
+  }
+
+  .dark .sidebar-item-active {
+    box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3);
   }
 
   .sidebar-item-inactive {
-    @apply text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700 hover:scale-105;
+    @apply text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-slate-700/50;
+  }
+
+  .dark .sidebar-item-inactive:hover {
+    background: rgba(51, 65, 85, 0.5);
   }
 
 }
@@ -193,24 +233,25 @@
    Dark Theme Utilities & Overrides (Consolidated from dark-theme.css)
    --------------------------------------------------------- */
 
-/* Scrollbar styles */
+/* Scrollbar styles - Modern & Elegant */
 .dark ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 
 .dark ::-webkit-scrollbar-track {
-  background: hsl(var(--muted));
-  border-radius: 4px;
+  background: hsl(222 47% 11%);
+  border-radius: 5px;
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted-foreground));
-  border-radius: 4px;
+  background: hsl(215 25% 27%);
+  border-radius: 5px;
+  border: 2px solid hsl(222 47% 11%);
 }
 
 .dark ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--accent-foreground));
+  background: hsl(217 91% 60%);
 }
 
 /* Card hover effects in dark theme */
