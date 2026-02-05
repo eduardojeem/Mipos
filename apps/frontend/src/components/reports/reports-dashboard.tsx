@@ -19,6 +19,7 @@ import {
   AlertTriangleIcon,
   ArrowLeftRightIcon,
   FileText,
+  Building2,
 } from 'lucide-react';
 import { ReportFilters } from './report-filters';
 import { SalesReport } from './sales-report';
@@ -46,6 +47,11 @@ export const ReportsDashboard: React.FC = () => {
     // Default to current month
     return DATE_PRESETS.thisMonth.getValue();
   });
+
+  // ✅ NUEVO: Estado para organizaciones y rol de usuario
+  const [organizations, setOrganizations] = useState<Array<{ id: string; name: string }>>([]);
+  const [currentOrganization, setCurrentOrganization] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const { sales, inventory, customer, financial, isLoading, error, refetchAll } = useReports(filters);
   const { exportReport, isExporting } = useReportExport();
@@ -221,6 +227,48 @@ export const ReportsDashboard: React.FC = () => {
     refetchAll();
   }, [refetchAll]);
 
+  // ✅ NUEVO: Funciones para organizaciones
+  const checkUserRole = async () => {
+    try {
+      const response = await fetch('/api/auth/profile')
+      const data = await response.json()
+      if (data.success && data.data) {
+        const userRole = data.data.role
+        setIsAdmin(userRole === 'ADMIN' || userRole === 'SUPER_ADMIN')
+      }
+    } catch (error) {
+      console.error('Error checking user role:', error)
+    }
+  }
+
+  const loadOrganizations = async () => {
+    try {
+      const response = await fetch('/api/admin/organizations')
+      const data = await response.json()
+      if (data.success && data.organizations) {
+        setOrganizations(data.organizations)
+        if (data.organizations.length > 0 && !currentOrganization) {
+          setCurrentOrganization(data.organizations[0].id)
+        }
+      }
+    } catch (error) {
+      console.error('Error loading organizations:', error)
+    }
+  }
+
+  // ✅ NUEVO: useEffect para cargar datos iniciales
+  useEffect(() => {
+    checkUserRole()
+    loadOrganizations()
+  }, [])
+
+  // ✅ NUEVO: Actualizar filtros cuando cambia la organización
+  useEffect(() => {
+    if (currentOrganization) {
+      setFilters(prev => ({ ...prev, organizationId: currentOrganization }))
+    }
+  }, [currentOrganization])
+
   // Overview metrics
   const overviewMetrics = {
     totalSales: sales.data?.summary.totalSales || 0,
@@ -289,6 +337,28 @@ export const ReportsDashboard: React.FC = () => {
                     Estado de exportación en background. Clic para ver progreso o historial.
                   </TooltipContent>
                 </Tooltip>
+              )}
+              {/* ✅ NUEVO: Selector de organización - Solo visible para admins */}
+              {isAdmin && organizations.length > 0 && (
+                <Select 
+                  value={currentOrganization || 'all'} 
+                  onValueChange={(value) => {
+                    setCurrentOrganization(value === 'all' ? null : value)
+                  }}
+                >
+                  <SelectTrigger className="w-64 bg-slate-800/50 border-slate-700">
+                    <Building2 className="w-4 h-4 mr-2" />
+                    <SelectValue placeholder="Organización" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas las organizaciones</SelectItem>
+                    {organizations.map(org => (
+                      <SelectItem key={org.id} value={org.id}>
+                        {org.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               )}
             </div>
           </div>

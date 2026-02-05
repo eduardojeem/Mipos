@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { api, getErrorMessage, isNetworkError, isTimeoutError, isServerError, isClientError } from '@/lib/api'
 import { createClient } from '@/lib/supabase/server'
 import { isMockAuthEnabled, isSupabaseActive } from '@/lib/env'
+import { assertAdmin } from '@/app/api/_utils/auth'
 
 // Caché simple en memoria por instancia (serverless/lambda) con TTL por tipo
 type CachedEntry = { expiresAt: number; payload: any; headers: Record<string, string> };
@@ -513,20 +514,15 @@ async function getFinancialReportSupabase(supabase: any, params: Record<string, 
 // GET /api/reports -> proxy to backend `/api/reports`
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
-
-    // Basic auth check: require authenticated user unless mock auth is enabled
-    try {
-      const supabase = await createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user && !isMockAuthEnabled()) {
-        return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-      }
-    } catch {
-      if (!isMockAuthEnabled()) {
-        return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-      }
+    // ✅ Usar assertAdmin para autenticación y obtener organizationId
+    const auth = await assertAdmin(request);
+    if (!('ok' in auth) || auth.ok === false) {
+      return NextResponse.json(auth.body, { status: auth.status });
     }
+
+    const { organizationId, isSuperAdmin } = auth;
+
+    const { searchParams } = new URL(request.url)
 
     const params = Object.fromEntries(searchParams.entries())
     const source = params['source'] || process.env.NEXT_PUBLIC_REPORTS_SOURCE || process.env.REPORTS_SOURCE
@@ -548,8 +544,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Formato de fecha inválido en "end_date" (YYYY-MM-DD)' }, { status: 400 })
     }
 
-    // Cache HIT (según parámetros de consulta)
-    const cacheKey = buildCacheKey(request.url)
+    // ✅ Permitir filtro por organización desde query params (solo para super admins)
+    const orgFilter = params['organizationId'] || params['organization_id'];
+    const effectiveOrgId = (isSuperAdmin && orgFilter) ? orgFilter : organizationId;
+
+    if (!effectiveOrgId) {
+      return NextResponse.json({ error: 'Organization ID no disponible' }, { status: 400 });
+    }
+
+    // Cache HIT (según parámetros de consulta + orgId)
+    const cacheKey = buildCacheKey(request.url + `&orgId=${effectiveOrgId}`)
     const now = Date.now()
     const cached = reportsCache.get(cacheKey)
     if (cached && cached.expiresAt > now) {
@@ -562,13 +566,9 @@ export async function GET(request: NextRequest) {
     // Fast-path con Supabase opcional para reducir latencia
     if (String(source).toLowerCase() === 'supabase') {
       const supabase = await createClient()
-      const orgId = (request.headers.get('x-organization-id') || '').trim();
-      if (!orgId) {
-        return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
-      }
 
       if (type === 'sales') {
-        const data = await getSalesReportSupabase(supabase, params, orgId)
+        const data = await getSalesReportSupabase(supabase, params, effectiveOrgId)
         const dur = Date.now() - t0
         const ttl = getTtlByType(String(type))
         const headers = { 'Server-Timing': `total;dur=${dur}`, 'Cache-Control': `private, max-age=${ttl}, stale-while-revalidate=${ttl * 3}` }
@@ -576,7 +576,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ success: true, data }, { headers: { ...headers, 'X-Cache': 'MISS' } })
       }
       if (type === 'inventory') {
-        const data = await getInventoryReportSupabase(supabase, params, orgId)
+        const data = await getInventoryReportSupabase(supabase, params, effectiveOrgId)
         const dur = Date.now() - t0
         const ttl = getTtlByType(String(type))
         const headers = { 'Server-Timing': `total;dur=${dur}`, 'Cache-Control': `private, max-age=${ttl}, stale-while-revalidate=${ttl * 3}` }
@@ -584,7 +584,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ success: true, data }, { headers: { ...headers, 'X-Cache': 'MISS' } })
       }
       if (type === 'customers') {
-        const data = await getCustomerReportSupabase(supabase, params, orgId)
+        const data = await getCustomerReportSupabase(supabase, params, effectiveOrgId)
         const dur = Date.now() - t0
         const ttl = getTtlByType(String(type))
         const headers = { 'Server-Timing': `total;dur=${dur}`, 'Cache-Control': `private, max-age=${ttl}, stale-while-revalidate=${ttl * 3}` }
@@ -592,7 +592,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ success: true, data }, { headers: { ...headers, 'X-Cache': 'MISS' } })
       }
       if (type === 'financial') {
-        const data = await getFinancialReportSupabase(supabase, params, orgId)
+        const data = await getFinancialReportSupabase(supabase, params, effectiveOrgId)
         const dur = Date.now() - t0
         const ttl = getTtlByType(String(type))
         const headers = { 'Server-Timing': `total;dur=${dur}`, 'Cache-Control': `private, max-age=${ttl}, stale-while-revalidate=${ttl * 3}` }

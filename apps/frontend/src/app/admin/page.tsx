@@ -330,12 +330,6 @@ export default function AdminDashboardPageOptimized() {
                   Ver Reportes
                 </Link>
               </Button>
-              <Button variant="outline" className="w-full justify-start" asChild>
-                <Link href="/admin/system">
-                  <Activity className="mr-2 h-4 w-4" />
-                  Estado del Sistema
-                </Link>
-              </Button>
             </CardContent>
           </Card>
         </div>

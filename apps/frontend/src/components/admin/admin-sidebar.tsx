@@ -98,13 +98,6 @@ export const adminNavItems: AdminNavItem[] = [
     category: 'Análisis'
   },
   {
-    title: 'Sistema',
-    href: '/admin/system',
-    icon: Database,
-    description: 'Monitoreo del sistema',
-    category: 'Sistema'
-  },
-  {
     title: 'Configuración',
     href: '/admin/settings',
     icon: Settings,

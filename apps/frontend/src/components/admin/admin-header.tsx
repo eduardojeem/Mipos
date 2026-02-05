@@ -64,7 +64,6 @@ const breadcrumbLabels: Record<string, string> = {
   'sessions': 'Sesiones',
   'conflicts': 'Conflictos',
   'reports': 'Reportes',
-  'system': 'Sistema',
   'settings': 'Configuración',
   'business-config': 'Config. Negocio',
 
