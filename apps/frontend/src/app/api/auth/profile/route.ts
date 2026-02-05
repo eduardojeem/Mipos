@@ -34,11 +34,7 @@ export async function GET(request: NextRequest) {
         .select(`
           id,
           email,
-          name,
-          phone,
-          bio,
-          location,
-          avatar_url,
+          full_name,
           role,
           created_at,
           updated_at
@@ -48,9 +44,16 @@ export async function GET(request: NextRequest) {
 
       if (userRecord && !userError2) {
         userData = {
-          ...(userRecord as any),
-          bio: (userRecord as any)?.bio ?? user.user_metadata?.bio ?? '',
-          location: (userRecord as any)?.location ?? user.user_metadata?.location ?? '',
+          id: (userRecord as any).id,
+          email: (userRecord as any).email,
+          name: (userRecord as any).full_name || (userRecord as any).email?.split('@')[0] || 'Usuario',
+          phone: user.user_metadata?.phone || (user as any).phone || '',
+          bio: user.user_metadata?.bio || '',
+          location: user.user_metadata?.location || '',
+          avatar_url: user.user_metadata?.avatar_url || '',
+          role: (userRecord as any).role || 'USER',
+          created_at: (userRecord as any).created_at,
+          updated_at: (userRecord as any).updated_at,
         } as UserProfileData;
       }
     } catch (error) {
