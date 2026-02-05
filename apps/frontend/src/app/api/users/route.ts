@@ -15,6 +15,8 @@ type UserListItem = {
   status: string;
   createdAt: string;
   lastLogin: string;
+  organizationId?: string;
+  organizationName?: string;
 };
 
 export async function GET(request: NextRequest) {
@@ -72,6 +74,7 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || '';
     const roleFilter = (searchParams.get('role') || '').toUpperCase();
     const source = (searchParams.get('source') || 'auto').toLowerCase();
+    const organizationFilter = searchParams.get('organizationId') || '';
 
     const userRoleFromSession = (((effectiveUser as any)?.user_metadata?.role || '') as string).toUpperCase() || 'ADMIN';
 
@@ -91,24 +94,57 @@ export async function GET(request: NextRequest) {
       // Verificar que el usuario sea admin usando la tabla personalizada, con fallback a metadata
       const { data: profile } = await (supabase as any)
         .from('users')
-        .select('role')
+        .select('role, organization_id')
         .eq('id', effectiveUser.id)
         .single();
 
       const adminRole = (((profile as any)?.role || userRoleFromSession) as string).toUpperCase();
+      const currentUserOrgId = profile?.organization_id;
+      const isSuperAdmin = adminRole === 'SUPER_ADMIN';
+      
       if (adminRole !== 'ADMIN' && adminRole !== 'SUPER_ADMIN') {
         return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
       }
 
-      // Obtener usuarios de la tabla personalizada
-      const { data: users, error } = await (supabase as any)
+      // ✅ CRÍTICO: Construir query con filtrado por organización
+      let query = (supabase as any)
         .from('users')
-        .select('id, email, full_name, role, created_at, updated_at')
-        .order('created_at', { ascending: false });
+        .select('id, email, full_name, role, organization_id, created_at, updated_at');
+
+      // Si no es super admin, filtrar por organización
+      if (!isSuperAdmin && currentUserOrgId) {
+        query = query.eq('organization_id', currentUserOrgId);
+      }
+
+      // Si se especifica filtro de organización en query params (para admins)
+      if (organizationFilter && organizationFilter !== 'all') {
+        query = query.eq('organization_id', organizationFilter);
+      }
+
+      query = query.order('created_at', { ascending: false });
+
+      const { data: users, error } = await query;
 
       if (error) {
         console.error('Error fetching users:', error);
         return NextResponse.json({ error: 'Error al obtener usuarios' }, { status: 500 });
+      }
+
+      // ✅ NUEVO: Obtener nombres de organizaciones
+      const orgIds = [...new Set((users || []).map((u: any) => u.organization_id).filter(Boolean))];
+      let organizationsMap = new Map<string, string>();
+      
+      if (orgIds.length > 0) {
+        const { data: orgs } = await (supabase as any)
+          .from('organizations')
+          .select('id, name')
+          .in('id', orgIds);
+        
+        if (orgs) {
+          orgs.forEach((org: any) => {
+            organizationsMap.set(org.id, org.name);
+          });
+        }
       }
 
       let transformed: UserListItem[] = (users || []).map((user: any) => ({
@@ -119,7 +155,9 @@ export async function GET(request: NextRequest) {
         status: 'active',
         createdAt: user.created_at,
         lastLogin: user.updated_at || user.created_at,
-      }));
+        organizationId: user.organization_id || undefined,
+        organizationName: user.organization_id ? organizationsMap.get(user.organization_id) || 'Desconocida' : undefined,
+      } as any));
 
       if (search) {
         transformed = transformed.filter((u: UserListItem) => (u.email?.includes(search) || u.name?.includes(search)));

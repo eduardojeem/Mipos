@@ -8,6 +8,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(auth.body, { status: auth.status })
   }
 
+  const { organizationId, isSuperAdmin } = auth
+
   const supabase = await createAdminClient()
   const includeInactive = request.nextUrl.searchParams.get('includeInactive') === 'true'
 
@@ -15,6 +17,13 @@ export async function GET(request: NextRequest) {
 
   if (!includeInactive) {
     query = query.eq('is_active', true)
+  }
+
+  // ✅ CRÍTICO: Filtrar por organización si no es super admin
+  // Los roles pueden ser globales (organization_id = null) o específicos de una organización
+  if (!isSuperAdmin && organizationId) {
+    // Mostrar roles globales + roles de la organización del usuario
+    query = query.or(`organization_id.is.null,organization_id.eq.${organizationId}`)
   }
 
   const { data: rolesData, error } = await query
@@ -49,6 +58,23 @@ export async function GET(request: NextRequest) {
 
   const permissionsMap = new Map(safePermissions.map((p: any) => [p.id, p]))
   
+  // ✅ NUEVO: Obtener nombres de organizaciones para los roles
+  const orgIds = [...new Set((rolesData || []).map((r: any) => r.organization_id).filter(Boolean))]
+  let organizationsMap = new Map<string, string>()
+  
+  if (orgIds.length > 0) {
+    const { data: orgs } = await supabase
+      .from('organizations')
+      .select('id, name')
+      .in('id', orgIds)
+    
+    if (orgs) {
+      orgs.forEach((org: any) => {
+        organizationsMap.set(org.id, org.name)
+      })
+    }
+  }
+  
   // Map to expected format
   const roles = rolesData.map((r: any) => {
     const rolePerms = safeRolePerms.filter((rp: any) => rp.role_id === r.id)
@@ -79,7 +105,10 @@ export async function GET(request: NextRequest) {
         isSystem: r.name === 'ADMIN' || r.name === 'admin',
         priority: 0,
         createdAt: r.created_at,
-        updatedAt: r.updated_at
+        updatedAt: r.updated_at,
+        // ✅ NUEVO: Agregar información de organización
+        organizationId: r.organization_id || null,
+        organizationName: r.organization_id ? organizationsMap.get(r.organization_id) || 'Desconocida' : null
     }
   })
 
