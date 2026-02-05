@@ -516,7 +516,7 @@ export async function GET(request: NextRequest) {
   try {
     // ✅ Usar assertAdmin para autenticación y obtener organizationId
     const auth = await assertAdmin(request);
-    if (!('ok' in auth) || auth.ok === false) {
+    if (!auth.ok) {
       return NextResponse.json(auth.body, { status: auth.status });
     }
 
@@ -668,11 +668,25 @@ export async function GET(request: NextRequest) {
       if (transient && isSupabaseActive() && ['sales','inventory','customers','financial'].includes(type)) {
         const supabase = await createClient()
         const params = Object.fromEntries(searchParams.entries()) as Record<string, string>
+        
+        // Obtener organizationId del auth
+        const auth = await assertAdmin(request);
+        if (!auth.ok) {
+          throw new Error('No autorizado');
+        }
+        const { organizationId, isSuperAdmin } = auth;
+        const orgFilter = params['organizationId'] || params['organization_id'];
+        const effectiveOrgId = (isSuperAdmin && orgFilter) ? orgFilter : organizationId;
+        
+        if (!effectiveOrgId) {
+          throw new Error('Organization ID no disponible');
+        }
+        
         let data: any = null
-        if (type === 'sales') data = await getSalesReportSupabase(supabase, params)
-        else if (type === 'inventory') data = await getInventoryReportSupabase(supabase, params)
-        else if (type === 'customers') data = await getCustomerReportSupabase(supabase, params)
-        else if (type === 'financial') data = await getFinancialReportSupabase(supabase, params)
+        if (type === 'sales') data = await getSalesReportSupabase(supabase, params, effectiveOrgId)
+        else if (type === 'inventory') data = await getInventoryReportSupabase(supabase, params, effectiveOrgId)
+        else if (type === 'customers') data = await getCustomerReportSupabase(supabase, params, effectiveOrgId)
+        else if (type === 'financial') data = await getFinancialReportSupabase(supabase, params, effectiveOrgId)
 
         const ttl = getTtlByType(type)
         const headers = { 'X-Fallback': 'supabase', 'Cache-Control': `private, max-age=${ttl}, stale-while-revalidate=${ttl * 3}` }
