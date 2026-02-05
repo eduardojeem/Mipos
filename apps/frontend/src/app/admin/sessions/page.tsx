@@ -33,7 +33,8 @@ import {
   Smartphone,
   Laptop,
   Tablet,
-  Globe
+  Globe,
+  Building2
 } from 'lucide-react'
 import { format, formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -242,6 +243,9 @@ export default function SessionsPage() {
   const [loading, setLoading] = useState(false)
   const [selectedSession, setSelectedSession] = useState<UserSession | null>(null)
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false)
+  const [organizations, setOrganizations] = useState<Array<{ id: string; name: string }>>([])
+  const [currentOrganization, setCurrentOrganization] = useState<string | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
 
   // Filters
   const [filters, setFilters] = useState({
@@ -250,7 +254,8 @@ export default function SessionsPage() {
     userRole: '',
     deviceType: '',
     riskLevel: '',
-    loginMethod: ''
+    loginMethod: '',
+    organizationId: ''
   })
 
   // Pagination
@@ -277,6 +282,38 @@ export default function SessionsPage() {
     return token
   }
 
+  // Verificar rol del usuario
+  const checkUserRole = async () => {
+    try {
+      const response = await fetch('/api/auth/profile');
+      if (response.ok) {
+        const data = await response.json();
+        const role = data.user?.role || '';
+        setIsAdmin(role === 'ADMIN' || role === 'SUPER_ADMIN');
+      }
+    } catch (error) {
+      console.error('Error checking user role:', error);
+    }
+  };
+
+  // Cargar organizaciones
+  const loadOrganizations = async () => {
+    try {
+      const response = await fetch('/api/admin/organizations');
+      if (response.ok) {
+        const data = await response.json();
+        setOrganizations(data.organizations || []);
+      }
+    } catch (error) {
+      console.error('Error loading organizations:', error);
+    }
+  };
+
+  useEffect(() => {
+    checkUserRole();
+    loadOrganizations();
+  }, []);
+
   useEffect(() => {
     loadSessions()
   }, [filters, currentPage])
@@ -289,6 +326,7 @@ export default function SessionsPage() {
     if (filters.deviceType) params.set('deviceType', filters.deviceType)
     if (filters.riskLevel) params.set('riskLevel', filters.riskLevel)
     if (filters.loginMethod) params.set('loginMethod', filters.loginMethod)
+    if (filters.organizationId) params.set('organizationId', filters.organizationId)
     params.set('page', String(currentPage))
     params.set('limit', String(pageSize))
     return params.toString()
@@ -421,8 +459,10 @@ export default function SessionsPage() {
       userRole: '',
       deviceType: '',
       riskLevel: '',
-      loginMethod: ''
+      loginMethod: '',
+      organizationId: ''
     })
+    setCurrentOrganization(null)
     setCurrentPage(1)
   }
 
@@ -471,27 +511,34 @@ export default function SessionsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Gestión de Sesiones</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+            <div className="p-2 rounded-lg glass-dark-card border border-slate-700/50">
+              <Shield className="h-6 w-6 text-blue-400" />
+            </div>
+            <span className="bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+              Gestión de Sesiones
+            </span>
+          </h1>
+          <p className="text-slate-400 mt-2">
             Monitorea y administra las sesiones activas de usuarios
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => loadSessions()}>
+          <Button variant="outline" onClick={() => loadSessions()} className="border-slate-700/50">
             <RefreshCw className="h-4 w-4 mr-2" />
             Actualizar
           </Button>
-          <Button variant="outline" onClick={() => exportSessions('json')}>
+          <Button variant="outline" onClick={() => exportSessions('json')} className="border-slate-700/50">
             <Download className="h-4 w-4 mr-2" />
             Exportar JSON
           </Button>
-          <Button variant="outline" onClick={() => exportSessions('csv')}>
+          <Button variant="outline" onClick={() => exportSessions('csv')} className="border-slate-700/50">
             <Download className="h-4 w-4 mr-2" />
             Exportar CSV
           </Button>
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="outline">
+              <Button variant="outline" className="border-slate-700/50">
                 <Trash2 className="h-4 w-4 mr-2" />
                 Limpiar Expiradas
               </Button>
@@ -516,53 +563,61 @@ export default function SessionsPage() {
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
+        <Card className="glass-dark-card border-slate-700/50">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Sesiones Activas</CardTitle>
-            <Activity className="h-4 w-4 text-green-500" />
+            <CardTitle className="text-sm font-medium text-slate-300">Sesiones Activas</CardTitle>
+            <div className="p-2 rounded-lg bg-gradient-to-br from-green-500/20 to-green-600/20 border border-green-500/30 shadow-lg shadow-green-500/20">
+              <Activity className="h-4 w-4 text-green-400" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.activeSessions}</div>
-            <p className="text-xs text-muted-foreground">
+            <div className="text-2xl font-bold text-green-400">{stats.activeSessions}</div>
+            <p className="text-xs text-slate-400">
               De {stats.totalSessions} totales
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-dark-card border-slate-700/50">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Usuarios Únicos</CardTitle>
-            <User className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-slate-300">Usuarios Únicos</CardTitle>
+            <div className="p-2 rounded-lg bg-gradient-to-br from-blue-500/20 to-blue-600/20 border border-blue-500/30 shadow-lg shadow-blue-500/20">
+              <User className="h-4 w-4 text-blue-400" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.uniqueUsers}</div>
-            <p className="text-xs text-muted-foreground">
+            <div className="text-2xl font-bold text-white">{stats.uniqueUsers}</div>
+            <p className="text-xs text-slate-400">
               Usuarios conectados
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-dark-card border-slate-700/50">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Sesiones Sospechosas</CardTitle>
-            <Shield className="h-4 w-4 text-red-500" />
+            <CardTitle className="text-sm font-medium text-slate-300">Sesiones Sospechosas</CardTitle>
+            <div className="p-2 rounded-lg bg-gradient-to-br from-red-500/20 to-red-600/20 border border-red-500/30 shadow-lg shadow-red-500/20">
+              <Shield className="h-4 w-4 text-red-400" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">{stats.suspiciousSessions}</div>
-            <p className="text-xs text-muted-foreground">
+            <div className="text-2xl font-bold text-red-400">{stats.suspiciousSessions}</div>
+            <p className="text-xs text-slate-400">
               Requieren atención
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-dark-card border-slate-700/50">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Duración Promedio</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-slate-300">Duración Promedio</CardTitle>
+            <div className="p-2 rounded-lg bg-gradient-to-br from-purple-500/20 to-purple-600/20 border border-purple-500/30 shadow-lg shadow-purple-500/20">
+              <Clock className="h-4 w-4 text-purple-400" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.averageSessionDuration}h</div>
-            <p className="text-xs text-muted-foreground">
+            <div className="text-2xl font-bold text-white">{stats.averageSessionDuration}h</div>
+            <p className="text-xs text-slate-400">
               Por sesión
             </p>
           </CardContent>
@@ -570,36 +625,62 @@ export default function SessionsPage() {
       </div>
 
       {/* Filters */}
-      <Card>
+      <Card className="glass-dark-card border-slate-700/50">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="h-5 w-5" />
+          <CardTitle className="flex items-center gap-2 text-slate-200">
+            <Filter className="h-5 w-5 text-blue-400" />
             Filtros
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {/* Selector de organización (solo para admins) */}
+            {isAdmin && organizations.length > 0 && (
+              <div>
+                <Label htmlFor="organization" className="text-slate-300">Organización</Label>
+                <Select
+                  value={filters.organizationId || 'all'}
+                  onValueChange={(value) => {
+                    setFilters({ ...filters, organizationId: value === 'all' ? '' : value });
+                    setCurrentOrganization(value === 'all' ? null : value);
+                  }}
+                >
+                  <SelectTrigger className="bg-slate-800/50 border-slate-700/50 text-white">
+                    <SelectValue placeholder="Todas las organizaciones" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas las organizaciones</SelectItem>
+                    {organizations.map(org => (
+                      <SelectItem key={org.id} value={org.id}>
+                        {org.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <div>
-              <Label htmlFor="search">Buscar</Label>
+              <Label htmlFor="search" className="text-slate-300">Buscar</Label>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4" />
                 <Input
                   id="search"
                   placeholder="Usuario, email o IP..."
                   value={filters.search}
                   onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-                  className="pl-10"
+                  className="pl-10 bg-slate-800/50 border-slate-700/50 text-white placeholder:text-slate-500"
                 />
               </div>
             </div>
 
             <div>
-              <Label htmlFor="status">Estado</Label>
+              <Label htmlFor="status" className="text-slate-300">Estado</Label>
               <Select
                 value={filters.status}
                 onValueChange={(value) => setFilters({ ...filters, status: value })}
               >
-                <SelectTrigger>
+                <SelectTrigger className="bg-slate-800/50 border-slate-700/50 text-white">
                   <SelectValue placeholder="Todos los estados" />
                 </SelectTrigger>
                 <SelectContent>
@@ -611,12 +692,12 @@ export default function SessionsPage() {
             </div>
 
             <div>
-              <Label htmlFor="userRole">Rol de Usuario</Label>
+              <Label htmlFor="userRole" className="text-slate-300">Rol de Usuario</Label>
               <Select
                 value={filters.userRole}
                 onValueChange={(value) => setFilters({ ...filters, userRole: value })}
               >
-                <SelectTrigger>
+                <SelectTrigger className="bg-slate-800/50 border-slate-700/50 text-white">
                   <SelectValue placeholder="Todos los roles" />
                 </SelectTrigger>
                 <SelectContent>
@@ -630,12 +711,12 @@ export default function SessionsPage() {
             </div>
 
             <div>
-              <Label htmlFor="deviceType">Tipo de Dispositivo</Label>
+              <Label htmlFor="deviceType" className="text-slate-300">Tipo de Dispositivo</Label>
               <Select
                 value={filters.deviceType}
                 onValueChange={(value) => setFilters({ ...filters, deviceType: value })}
               >
-                <SelectTrigger>
+                <SelectTrigger className="bg-slate-800/50 border-slate-700/50 text-white">
                   <SelectValue placeholder="Todos los dispositivos" />
                 </SelectTrigger>
                 <SelectContent>
@@ -649,12 +730,12 @@ export default function SessionsPage() {
             </div>
 
             <div>
-              <Label htmlFor="riskLevel">Nivel de Riesgo</Label>
+              <Label htmlFor="riskLevel" className="text-slate-300">Nivel de Riesgo</Label>
               <Select
                 value={filters.riskLevel}
                 onValueChange={(value) => setFilters({ ...filters, riskLevel: value })}
               >
-                <SelectTrigger>
+                <SelectTrigger className="bg-slate-800/50 border-slate-700/50 text-white">
                   <SelectValue placeholder="Todos los niveles" />
                 </SelectTrigger>
                 <SelectContent>
@@ -667,12 +748,12 @@ export default function SessionsPage() {
             </div>
 
             <div>
-              <Label htmlFor="loginMethod">Método de Login</Label>
+              <Label htmlFor="loginMethod" className="text-slate-300">Método de Login</Label>
               <Select
                 value={filters.loginMethod}
                 onValueChange={(value) => setFilters({ ...filters, loginMethod: value })}
               >
-                <SelectTrigger>
+                <SelectTrigger className="bg-slate-800/50 border-slate-700/50 text-white">
                   <SelectValue placeholder="Todos los métodos" />
                 </SelectTrigger>
                 <SelectContent>
@@ -686,7 +767,7 @@ export default function SessionsPage() {
             </div>
 
             <div className="flex items-end">
-              <Button variant="outline" onClick={clearFilters} className="w-full">
+              <Button variant="outline" onClick={clearFilters} className="w-full border-slate-700/50">
                 Limpiar Filtros
               </Button>
             </div>
@@ -695,52 +776,52 @@ export default function SessionsPage() {
       </Card>
 
       {/* Sessions Table */}
-      <Card>
+      <Card className="glass-dark-card border-slate-700/50">
         <CardHeader>
-          <CardTitle>Sesiones de Usuario</CardTitle>
-          <CardDescription>
+          <CardTitle className="text-slate-200">Sesiones de Usuario</CardTitle>
+          <CardDescription className="text-slate-400">
             Lista de todas las sesiones activas y recientes del sistema
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
+          <div className="rounded-md border border-slate-700/50">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Usuario</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead>Dispositivo</TableHead>
-                  <TableHead>Ubicación</TableHead>
-                  <TableHead>IP Address</TableHead>
-                  <TableHead>Última Actividad</TableHead>
-                  <TableHead>Riesgo</TableHead>
-                  <TableHead>Acciones</TableHead>
+                <TableRow className="border-slate-700/50 hover:bg-slate-800/30">
+                  <TableHead className="text-slate-300">Usuario</TableHead>
+                  <TableHead className="text-slate-300">Estado</TableHead>
+                  <TableHead className="text-slate-300">Dispositivo</TableHead>
+                  <TableHead className="text-slate-300">Ubicación</TableHead>
+                  <TableHead className="text-slate-300">IP Address</TableHead>
+                  <TableHead className="text-slate-300">Última Actividad</TableHead>
+                  <TableHead className="text-slate-300">Riesgo</TableHead>
+                  <TableHead className="text-slate-300">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  <TableRow>
+                  <TableRow className="border-slate-700/50">
                     <TableCell colSpan={8} className="text-center py-8">
                       <div className="flex items-center justify-center">
-                        <RefreshCw className="h-4 w-4 animate-spin mr-2" />
-                        Cargando sesiones...
+                        <RefreshCw className="h-4 w-4 animate-spin mr-2 text-blue-400" />
+                        <span className="text-slate-300">Cargando sesiones...</span>
                       </div>
                     </TableCell>
                   </TableRow>
                 ) : sessions.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  <TableRow className="border-slate-700/50">
+                    <TableCell colSpan={8} className="text-center py-8 text-slate-400">
                       No se encontraron sesiones con los filtros aplicados
                     </TableCell>
                   </TableRow>
                 ) : (
                   sessions.map((session) => (
-                    <TableRow key={session.id}>
+                    <TableRow key={session.id} className="border-slate-700/50 hover:bg-slate-800/30">
                       <TableCell>
                         <div>
-                          <div className="font-medium">{session.userName}</div>
-                          <div className="text-sm text-muted-foreground">{session.userEmail}</div>
-                          <Badge variant="outline" className="text-xs mt-1">
+                          <div className="font-medium text-white">{session.userName}</div>
+                          <div className="text-sm text-slate-400">{session.userEmail}</div>
+                          <Badge variant="outline" className="text-xs mt-1 border-slate-600 text-slate-300">
                             {session.userRole}
                           </Badge>
                         </div>
@@ -752,15 +833,15 @@ export default function SessionsPage() {
                         <div className="flex items-center gap-2">
                           {getDeviceIcon(session.deviceType)}
                           <div>
-                            <div className="text-sm">{session.browser}</div>
-                            <div className="text-xs text-muted-foreground">{session.os}</div>
+                            <div className="text-sm text-white">{session.browser}</div>
+                            <div className="text-xs text-slate-400">{session.os}</div>
                           </div>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <MapPin className="h-3 w-3 text-muted-foreground" />
-                          <div className="text-sm">
+                          <MapPin className="h-3 w-3 text-slate-400" />
+                          <div className="text-sm text-slate-300">
                             {session.location ? 
                               `${session.location.city}, ${session.location.country}` : 
                               'Desconocida'
@@ -768,11 +849,11 @@ export default function SessionsPage() {
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="font-mono text-sm">
+                      <TableCell className="font-mono text-sm text-slate-300">
                         {session.ipAddress}
                       </TableCell>
                       <TableCell>
-                        <div className="text-sm">
+                        <div className="text-sm text-slate-300">
                           {formatDistanceToNow(new Date(session.lastActivityAt), { 
                             addSuffix: true, 
                             locale: es 
@@ -788,13 +869,14 @@ export default function SessionsPage() {
                             variant="ghost"
                             size="sm"
                             onClick={() => openSessionDetail(session)}
+                            className="hover:bg-slate-700/50"
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
                           {session.isActive && !session.isCurrent && (
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="sm">
+                                <Button variant="ghost" size="sm" className="hover:bg-slate-700/50">
                                   <LogOut className="h-4 w-4" />
                                 </Button>
                               </AlertDialogTrigger>
@@ -823,7 +905,7 @@ export default function SessionsPage() {
             </Table>
           </div>
           <div className="flex items-center justify-between mt-4">
-            <div className="text-sm text-muted-foreground">
+            <div className="text-sm text-slate-400">
               Mostrando {sessions.length} de {totalCount} sesiones
             </div>
             <div className="flex items-center gap-2">
@@ -831,7 +913,27 @@ export default function SessionsPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage <= 1 || loading}
+                disabled={currentPage === 1}
+                className="border-slate-700/50"
+              >
+                Anterior
+              </Button>
+              <span className="text-sm text-slate-300">
+                Página {currentPage} de {Math.ceil(totalCount / pageSize)}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => p + 1)}
+                disabled={currentPage >= Math.ceil(totalCount / pageSize)}
+                className="border-slate-700/50"
+              >
+                Siguiente
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>   disabled={currentPage <= 1 || loading}
               >
                 Anterior
               </Button>

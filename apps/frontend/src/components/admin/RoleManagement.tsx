@@ -6,7 +6,8 @@ import {
   Edit, Trash2, Copy, MoreHorizontal, CheckCircle, XCircle,
   AlertTriangle, Info, Eye, EyeOff, Save, X, ChevronDown,
   ChevronRight, Database, ShoppingCart, FileText, BarChart3,
-  UserCheck, Cog, Building, Package, DollarSign, Calendar
+  UserCheck, Cog, Building, Package, DollarSign, Calendar,
+  Building2, Filter
 } from 'lucide-react'
 
 // UI Components
@@ -66,6 +67,8 @@ interface Role {
   userCount: number
   createdAt: string
   updatedAt: string
+  organizationId?: string
+  organizationName?: string
 }
 
 interface PermissionCategory {
@@ -107,6 +110,8 @@ export default function RoleManagement() {
   const [roles, setRoles] = useState<Role[]>([])
   const [permissions, setPermissions] = useState<Permission[]>([])
   const [permissionCategories, setPermissionCategories] = useState<PermissionCategory[]>([])
+  const [organizations, setOrganizations] = useState<Array<{ id: string; name: string }>>([])
+  const [currentOrganization, setCurrentOrganization] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedRole, setSelectedRole] = useState<Role | null>(null)
@@ -117,6 +122,7 @@ export default function RoleManagement() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [expandedCategories, setExpandedCategories] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState('roles')
+  const [isAdmin, setIsAdmin] = useState(false)
 
   const { toast } = useToast()
 
@@ -175,6 +181,8 @@ export default function RoleManagement() {
   // Effects
   useEffect(() => {
     loadData()
+    loadOrganizations()
+    checkUserRole()
   }, [])
 
   useEffect(() => {
@@ -186,14 +194,27 @@ export default function RoleManagement() {
 
   // Computed values
   const filteredRoles = useMemo(() => {
-    if (!searchTerm) return roles
-    const searchLower = searchTerm.toLowerCase()
-    return roles.filter(role => 
-      role.displayName.toLowerCase().includes(searchLower) ||
-      role.description.toLowerCase().includes(searchLower) ||
-      role.name.toLowerCase().includes(searchLower)
-    )
-  }, [searchTerm, roles])
+    let filtered = roles
+    
+    // Filtrar por búsqueda
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase()
+      filtered = filtered.filter(role => 
+        role.displayName.toLowerCase().includes(searchLower) ||
+        role.description.toLowerCase().includes(searchLower) ||
+        role.name.toLowerCase().includes(searchLower)
+      )
+    }
+    
+    // Filtrar por organización (si está seleccionada y no es admin viendo todas)
+    if (currentOrganization && currentOrganization !== 'all') {
+      filtered = filtered.filter(role => 
+        role.organizationId === currentOrganization || !role.organizationId // Incluir roles globales
+      )
+    }
+    
+    return filtered
+  }, [searchTerm, roles, currentOrganization])
 
   const roleStats = useMemo(() => {
     const total = roles.length
@@ -205,6 +226,34 @@ export default function RoleManagement() {
   }, [roles])
 
   // Functions
+  const checkUserRole = async () => {
+    try {
+      const response = await fetch('/api/auth/profile')
+      const data = await response.json()
+      if (data.success && data.data) {
+        const userRole = data.data.role
+        setIsAdmin(userRole === 'ADMIN' || userRole === 'SUPER_ADMIN')
+      }
+    } catch (error) {
+      console.error('Error checking user role:', error)
+    }
+  }
+
+  const loadOrganizations = async () => {
+    try {
+      const response = await fetch('/api/admin/organizations')
+      const data = await response.json()
+      if (data.success && data.organizations) {
+        setOrganizations(data.organizations)
+        if (data.organizations.length > 0 && !currentOrganization) {
+          setCurrentOrganization(data.organizations[0].id)
+        }
+      }
+    } catch (error) {
+      console.error('Error loading organizations:', error)
+    }
+  }
+
   const loadData = async () => {
     try {
       setLoading(true)
@@ -213,7 +262,19 @@ export default function RoleManagement() {
         roleService.getPermissionsByCategory(),
       ])
 
-      const mappedRoles = apiRoles.map(mapRole)
+      const mappedRoles = apiRoles.map((r: any) => {
+        const role = mapRole(r)
+        // Agregar información de organización si está disponible
+        const orgFilter = currentOrganization && currentOrganization !== 'all' ? currentOrganization : null
+        if (orgFilter) {
+          role.organizationId = orgFilter
+          const org = organizations.find(o => o.id === orgFilter)
+          if (org) {
+            role.organizationName = org.name
+          }
+        }
+        return role
+      })
       const mappedCategories = apiCategories.map(mapPermissionCategory)
       const flatPermissions = mappedCategories.flatMap(c => c.permissions)
 
@@ -443,75 +504,87 @@ export default function RoleManagement() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Gestión de Roles y Permisos</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-700 to-slate-900 dark:from-slate-300 dark:to-slate-100 bg-clip-text text-transparent">
+            Gestión de Roles y Permisos
+          </h1>
+          <p className="text-muted-foreground mt-1">
             Administra roles, permisos y controla el acceso al sistema
           </p>
         </div>
-        <Button onClick={openCreateDialog}>
-          <Plus className="w-4 h-4 mr-2" />
+        <Button onClick={openCreateDialog} className="gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800">
+          <Plus className="w-4 h-4" />
           Nuevo Rol
         </Button>
       </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <Card>
+        <Card className="glass-dark-card border-slate-700/50">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Total Roles</p>
                 <p className="text-2xl font-bold">{roleStats.total}</p>
               </div>
-              <Shield className="w-8 h-8 text-blue-500" />
+              <div className="p-3 rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 shadow-lg shadow-blue-500/25">
+                <Shield className="w-6 h-6 text-white" />
+              </div>
             </div>
           </CardContent>
         </Card>
         
-        <Card>
+        <Card className="glass-dark-card border-slate-700/50">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Activos</p>
-                <p className="text-2xl font-bold text-green-600">{roleStats.active}</p>
+                <p className="text-2xl font-bold text-green-600 dark:text-green-400">{roleStats.active}</p>
               </div>
-              <CheckCircle className="w-8 h-8 text-green-500" />
+              <div className="p-3 rounded-xl bg-gradient-to-br from-green-600 to-green-700 shadow-lg shadow-green-500/25">
+                <CheckCircle className="w-6 h-6 text-white" />
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-dark-card border-slate-700/50">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Inactivos</p>
-                <p className="text-2xl font-bold text-gray-600">{roleStats.inactive}</p>
+                <p className="text-2xl font-bold text-gray-600 dark:text-gray-400">{roleStats.inactive}</p>
               </div>
-              <XCircle className="w-8 h-8 text-gray-500" />
+              <div className="p-3 rounded-xl bg-gradient-to-br from-gray-600 to-gray-700 shadow-lg shadow-gray-500/25">
+                <XCircle className="w-6 h-6 text-white" />
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-dark-card border-slate-700/50">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Sistema</p>
-                <p className="text-2xl font-bold text-purple-600">{roleStats.system}</p>
+                <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">{roleStats.system}</p>
               </div>
-              <Lock className="w-8 h-8 text-purple-500" />
+              <div className="p-3 rounded-xl bg-gradient-to-br from-purple-600 to-purple-700 shadow-lg shadow-purple-500/25">
+                <Lock className="w-6 h-6 text-white" />
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-dark-card border-slate-700/50">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Personalizados</p>
-                <p className="text-2xl font-bold text-blue-600">{roleStats.custom}</p>
+                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{roleStats.custom}</p>
               </div>
-              <Settings className="w-8 h-8 text-blue-500" />
+              <div className="p-3 rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 shadow-lg shadow-blue-500/25">
+                <Settings className="w-6 h-6 text-white" />
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -526,28 +599,57 @@ export default function RoleManagement() {
 
         {/* Roles Tab */}
         <TabsContent value="roles" className="space-y-4">
-          {/* Search */}
-          <Card>
+          {/* Search and Filters */}
+          <Card className="glass-dark-card border-slate-700/50">
             <CardContent className="p-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar roles por nombre o descripción..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
+              <div className="flex flex-col lg:flex-row gap-4">
+                {/* Search */}
+                <div className="flex-1">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar roles por nombre o descripción..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10 bg-slate-800/50 border-slate-700"
+                    />
+                  </div>
+                </div>
+
+                {/* Organization Filter - Solo visible para admins */}
+                {isAdmin && organizations.length > 0 && (
+                  <Select 
+                    value={currentOrganization || 'all'} 
+                    onValueChange={(value) => {
+                      setCurrentOrganization(value === 'all' ? null : value)
+                    }}
+                  >
+                    <SelectTrigger className="w-64 bg-slate-800/50 border-slate-700">
+                      <Building2 className="w-4 h-4 mr-2" />
+                      <SelectValue placeholder="Organización" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas las organizaciones</SelectItem>
+                      {organizations.map(org => (
+                        <SelectItem key={org.id} value={org.id}>
+                          {org.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             </CardContent>
           </Card>
 
           {/* Roles Table */}
-          <Card>
+          <Card className="glass-dark-card border-slate-700/50">
             <CardContent className="p-0">
               <Table>
                 <TableHeader>
-                  <TableRow>
+                  <TableRow className="border-slate-700/50">
                     <TableHead>Rol</TableHead>
+                    {isAdmin && <TableHead>Organización</TableHead>}
                     <TableHead>Usuarios</TableHead>
                     <TableHead>Permisos</TableHead>
                     <TableHead>Estado</TableHead>
@@ -557,7 +659,7 @@ export default function RoleManagement() {
                 </TableHeader>
                 <TableBody>
                   {filteredRoles.map((role) => (
-                    <TableRow key={role.id}>
+                    <TableRow key={role.id} className="border-slate-700/50 hover:bg-slate-800/30">
                       <TableCell>
                         <div className="flex items-center gap-3">
                           <div className={`w-3 h-3 rounded-full ${getRoleColorClass(role.color).replace('text-', 'bg-').replace('border-', '').replace('bg-', 'bg-')}`} />
@@ -565,7 +667,7 @@ export default function RoleManagement() {
                             <div className="font-medium flex items-center gap-2">
                               {role.displayName}
                               {role.isSystemRole && (
-                                <Badge variant="outline" className="text-xs">
+                                <Badge variant="outline" className="text-xs border-slate-600 bg-slate-800/50">
                                   <Lock className="w-3 h-3 mr-1" />
                                   Sistema
                                 </Badge>
@@ -577,6 +679,21 @@ export default function RoleManagement() {
                           </div>
                         </div>
                       </TableCell>
+                      {isAdmin && (
+                        <TableCell>
+                          {role.organizationName ? (
+                            <Badge variant="outline" className="gap-1 border-slate-600 bg-slate-800/50">
+                              <Building2 className="w-3 h-3" />
+                              {role.organizationName}
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="gap-1 border-purple-600 bg-purple-900/30 text-purple-400">
+                              <Shield className="w-3 h-3" />
+                              Global
+                            </Badge>
+                          )}
+                        </TableCell>
+                      )}
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Users className="w-4 h-4 text-muted-foreground" />
@@ -591,7 +708,7 @@ export default function RoleManagement() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge className={role.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
+                        <Badge className={role.isActive ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400'}>
                           {role.isActive ? (
                             <>
                               <CheckCircle className="w-3 h-3 mr-1" />
@@ -668,7 +785,7 @@ export default function RoleManagement() {
 
         {/* Permissions Tab */}
         <TabsContent value="permissions" className="space-y-4">
-          <Card>
+          <Card className="glass-dark-card border-slate-700/50">
             <CardHeader>
               <CardTitle>Permisos del Sistema</CardTitle>
               <CardDescription>
@@ -683,16 +800,18 @@ export default function RoleManagement() {
                 return (
                   <Collapsible key={category.id} open={isExpanded} onOpenChange={() => toggleCategory(category.id)}>
                     <CollapsibleTrigger asChild>
-                      <Button variant="ghost" className="w-full justify-between p-4 h-auto">
+                      <Button variant="ghost" className="w-full justify-between p-4 h-auto hover:bg-slate-800/50">
                         <div className="flex items-center gap-3">
-                          <Icon className="w-5 h-5" />
+                          <div className="p-2 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700">
+                            <Icon className="w-5 h-5 text-white" />
+                          </div>
                           <div className="text-left">
                             <div className="font-medium">{category.displayName}</div>
                             <div className="text-sm text-muted-foreground">{category.description}</div>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Badge variant="outline">{category.permissions.length} permisos</Badge>
+                          <Badge variant="outline" className="border-slate-600 bg-slate-800/50">{category.permissions.length} permisos</Badge>
                           {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                         </div>
                       </Button>
@@ -700,7 +819,7 @@ export default function RoleManagement() {
                     <CollapsibleContent className="px-4 pb-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
                         {category.permissions.map((permission) => (
-                          <Card key={permission.id} className="p-3">
+                          <Card key={permission.id} className="p-3 glass-dark-card border-slate-700/50">
                             <div className="flex items-start justify-between">
                               <div className="flex-1">
                                 <div className="font-medium text-sm flex items-center gap-2">
@@ -716,7 +835,7 @@ export default function RoleManagement() {
                                   {permission.description}
                                 </div>
                                 <div className="text-xs text-muted-foreground mt-1">
-                                  <code className="bg-muted px-1 rounded">{permission.name}</code>
+                                  <code className="bg-slate-800/50 px-1 rounded">{permission.name}</code>
                                 </div>
                               </div>
                             </div>
@@ -764,6 +883,7 @@ export default function RoleManagement() {
                   value={formData.displayName}
                   onChange={(e) => setFormData(prev => ({ ...prev, displayName: e.target.value }))}
                   placeholder="Ej: Gerente de Ventas"
+                  className="bg-slate-800/50 border-slate-700"
                 />
               </div>
 
@@ -774,6 +894,7 @@ export default function RoleManagement() {
                   value={formData.name}
                   onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                   placeholder="Ej: SALES_MANAGER"
+                  className="bg-slate-800/50 border-slate-700"
                 />
               </div>
 
@@ -785,6 +906,7 @@ export default function RoleManagement() {
                   onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                   placeholder="Describe las responsabilidades y alcance de este rol..."
                   rows={3}
+                  className="bg-slate-800/50 border-slate-700"
                 />
               </div>
 
@@ -800,6 +922,33 @@ export default function RoleManagement() {
                   </Label>
                 </div>
               </div>
+
+              {/* Organization Scope Info */}
+              {isAdmin && currentOrganization && currentOrganization !== 'all' && (
+                <div className="col-span-2">
+                  <div className="p-3 rounded-lg bg-blue-900/20 border border-blue-700/50">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Info className="w-4 h-4 text-blue-400" />
+                      <span className="text-blue-400">
+                        Este rol se creará para la organización: <strong>{organizations.find(o => o.id === currentOrganization)?.name}</strong>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {isAdmin && (!currentOrganization || currentOrganization === 'all') && (
+                <div className="col-span-2">
+                  <div className="p-3 rounded-lg bg-purple-900/20 border border-purple-700/50">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Shield className="w-4 h-4 text-purple-400" />
+                      <span className="text-purple-400">
+                        Este rol será <strong>global</strong> y estará disponible para todas las organizaciones
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <Separator />
@@ -813,7 +962,7 @@ export default function RoleManagement() {
                 </p>
               </div>
 
-              <ScrollArea className="h-96 border rounded-lg p-4">
+              <ScrollArea className="h-96 border border-slate-700 rounded-lg p-4 bg-slate-900/50">
                 <div className="space-y-4">
                   {permissionCategories.map((category) => {
                     const Icon = category.icon
@@ -824,29 +973,31 @@ export default function RoleManagement() {
 
                     return (
                       <div key={category.id} className="space-y-3">
-                        <div className="flex items-center space-x-2 p-2 bg-muted rounded-lg">
+                        <div className="flex items-center space-x-2 p-3 bg-slate-800/50 rounded-lg border border-slate-700">
                           <Checkbox
                             checked={isAllSelected}
                             onCheckedChange={(checked) => handleCategoryToggle(category.id, !!checked)}
                           />
-                          <Icon className="w-4 h-4" />
+                          <div className="p-2 rounded-lg bg-gradient-to-br from-blue-600 to-blue-700">
+                            <Icon className="w-4 h-4 text-white" />
+                          </div>
                           <Label className="font-medium flex-1">
                             {category.displayName}
                           </Label>
-                          <Badge variant="outline">
+                          <Badge variant="outline" className="border-slate-600 bg-slate-800/50">
                             {selectedCategoryPermissions.length}/{categoryPermissions.length}
                           </Badge>
                         </div>
 
                         <div className="ml-6 space-y-2">
                           {categoryPermissions.map((permission) => (
-                            <div key={permission.id} className="flex items-start space-x-2">
+                            <div key={permission.id} className="flex items-start space-x-2 p-2 rounded hover:bg-slate-800/30">
                               <Checkbox
                                 checked={formData.permissions.includes(permission.id)}
                                 onCheckedChange={(checked) => handlePermissionToggle(permission.id, !!checked)}
                               />
                               <div className="flex-1">
-                                <Label className="text-sm font-medium flex items-center gap-2">
+                                <Label className="text-sm font-medium flex items-center gap-2 cursor-pointer">
                                   {permission.displayName}
                                   {permission.isSystemPermission && (
                                     <Badge variant="destructive" className="text-xs">
@@ -855,7 +1006,7 @@ export default function RoleManagement() {
                                     </Badge>
                                   )}
                                 </Label>
-                                <p className="text-xs text-muted-foreground">
+                                <p className="text-xs text-muted-foreground mt-1">
                                   {permission.description}
                                 </p>
                               </div>

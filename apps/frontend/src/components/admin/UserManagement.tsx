@@ -6,7 +6,8 @@ import {
   Users, Plus, Download, MoreHorizontal,
   Edit, Trash2, UserCheck, UserX,
   AlertTriangle, CheckCircle, Clock, User as UserIcon,
-  RefreshCw, Search, Mail, Phone, Shield, Eye, Key, History
+  RefreshCw, Search, Mail, Phone, Shield, Eye, Key, History,
+  Building2, Filter
 } from 'lucide-react'
 
 // UI Components
@@ -68,6 +69,8 @@ interface User {
   isEmailVerified: boolean
   twoFactorEnabled: boolean
   permissions: Permission[]
+  organizationId?: string
+  organizationName?: string
 }
 
 interface Role {
@@ -95,6 +98,7 @@ interface UserFilters {
   dateRange: string
   sortBy: string
   sortOrder: 'asc' | 'desc'
+  organizationId?: string
 }
 
 interface UserFormData {
@@ -182,6 +186,8 @@ export default function UserManagement() {
   // State
   const [users, setUsers] = useState<User[]>([])
   const [roles, setRoles] = useState<Role[]>([])
+  const [organizations, setOrganizations] = useState<Array<{ id: string; name: string }>>([])
+  const [currentOrganization, setCurrentOrganization] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [filters, setFilters] = useState<UserFilters>(INITIAL_FILTERS)
   const [selectedUsers, setSelectedUsers] = useState<string[]>([])
@@ -196,6 +202,7 @@ export default function UserManagement() {
   const [isResetPasswordDialogOpen, setIsResetPasswordDialogOpen] = useState(false)
   const [isActivityDialogOpen, setIsActivityDialogOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
   
   const { toast } = useToast()
 
@@ -283,6 +290,8 @@ export default function UserManagement() {
   // Effects
   useEffect(() => {
     loadData()
+    loadOrganizations()
+    checkUserRole()
   }, [])
 
   useEffect(() => {
@@ -347,15 +356,59 @@ export default function UserManagement() {
   }, [users])
 
   // Functions
+  const checkUserRole = async () => {
+    try {
+      const response = await fetch('/api/auth/profile')
+      const data = await response.json()
+      if (data.success && data.data) {
+        const userRole = data.data.role
+        setIsAdmin(userRole === 'ADMIN' || userRole === 'SUPER_ADMIN')
+      }
+    } catch (error) {
+      console.error('Error checking user role:', error)
+    }
+  }
+
+  const loadOrganizations = async () => {
+    try {
+      const response = await fetch('/api/admin/organizations')
+      const data = await response.json()
+      if (data.success && data.organizations) {
+        setOrganizations(data.organizations)
+        // Si hay organizaciones, seleccionar la primera por defecto
+        if (data.organizations.length > 0 && !currentOrganization) {
+          setCurrentOrganization(data.organizations[0].id)
+        }
+      }
+    } catch (error) {
+      console.error('Error loading organizations:', error)
+    }
+  }
+
   const loadData = async () => {
     try {
       setLoading(true)
+      const orgFilter = filters.organizationId || currentOrganization
       const { users: resultUsers } = await userService.getUsers(1, 25, {
         search: filters.search || undefined,
         role: filters.role !== 'all' ? filters.role : undefined,
         status: filters.status !== 'all' ? (filters.status as any) : undefined
       })
-      const mappedUsers = resultUsers.map(u => toUIUser(u))
+      
+      // Mapear usuarios y agregar información de organización
+      const mappedUsers = resultUsers.map(u => {
+        const uiUser = toUIUser(u)
+        // Agregar información de organización si está disponible
+        if (orgFilter) {
+          uiUser.organizationId = orgFilter
+          const org = organizations.find(o => o.id === orgFilter)
+          if (org) {
+            uiUser.organizationName = org.name
+          }
+        }
+        return uiUser
+      })
+      
       setUsers(mappedUsers)
       // Fallback de roles si aún no están cargados
       setRoles(prev => prev.length ? prev : [
@@ -675,18 +728,20 @@ export default function UserManagement() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Gestión de Usuarios</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-700 to-slate-900 dark:from-slate-300 dark:to-slate-100 bg-clip-text text-transparent">
+            Gestión de Usuarios
+          </h1>
+          <p className="text-muted-foreground mt-1">
             Administra usuarios, roles y permisos del sistema
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={exportUsers}>
-            <Download className="w-4 h-4 mr-2" />
+          <Button variant="outline" onClick={exportUsers} className="gap-2">
+            <Download className="w-4 h-4" />
             Exportar
           </Button>
-          <Button onClick={openCreateDialog}>
-            <Plus className="w-4 h-4 mr-2" />
+          <Button onClick={openCreateDialog} className="gap-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800">
+            <Plus className="w-4 h-4" />
             Nuevo Usuario
           </Button>
         </div>
@@ -694,69 +749,79 @@ export default function UserManagement() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <Card>
+        <Card className="glass-dark-card border-slate-700/50">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Total</p>
                 <p className="text-2xl font-bold">{userStats.total}</p>
               </div>
-              <Users className="w-8 h-8 text-blue-500" />
+              <div className="p-3 rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 shadow-lg shadow-blue-500/25">
+                <Users className="w-6 h-6 text-white" />
+              </div>
             </div>
           </CardContent>
         </Card>
         
-        <Card>
+        <Card className="glass-dark-card border-slate-700/50">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Activos</p>
-                <p className="text-2xl font-bold text-green-600">{userStats.active}</p>
+                <p className="text-2xl font-bold text-green-600 dark:text-green-400">{userStats.active}</p>
               </div>
-              <UserCheck className="w-8 h-8 text-green-500" />
+              <div className="p-3 rounded-xl bg-gradient-to-br from-green-600 to-green-700 shadow-lg shadow-green-500/25">
+                <UserCheck className="w-6 h-6 text-white" />
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-dark-card border-slate-700/50">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Inactivos</p>
-                <p className="text-2xl font-bold text-gray-600">{userStats.inactive}</p>
+                <p className="text-2xl font-bold text-gray-600 dark:text-gray-400">{userStats.inactive}</p>
               </div>
-              <UserX className="w-8 h-8 text-gray-500" />
+              <div className="p-3 rounded-xl bg-gradient-to-br from-gray-600 to-gray-700 shadow-lg shadow-gray-500/25">
+                <UserX className="w-6 h-6 text-white" />
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-dark-card border-slate-700/50">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Suspendidos</p>
-                <p className="text-2xl font-bold text-red-600">{userStats.suspended}</p>
+                <p className="text-2xl font-bold text-red-600 dark:text-red-400">{userStats.suspended}</p>
               </div>
-              <AlertTriangle className="w-8 h-8 text-red-500" />
+              <div className="p-3 rounded-xl bg-gradient-to-br from-red-600 to-red-700 shadow-lg shadow-red-500/25">
+                <AlertTriangle className="w-6 h-6 text-white" />
+              </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-dark-card border-slate-700/50">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Pendientes</p>
-                <p className="text-2xl font-bold text-yellow-600">{userStats.pending}</p>
+                <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{userStats.pending}</p>
               </div>
-              <Clock className="w-8 h-8 text-yellow-500" />
+              <div className="p-3 rounded-xl bg-gradient-to-br from-yellow-600 to-yellow-700 shadow-lg shadow-yellow-500/25">
+                <Clock className="w-6 h-6 text-white" />
+              </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
       {/* Filters and Actions */}
-      <Card>
+      <Card className="glass-dark-card border-slate-700/50">
         <CardContent className="p-4">
           <div className="flex flex-col lg:flex-row gap-4">
             {/* Search */}
@@ -767,15 +832,39 @@ export default function UserManagement() {
                   placeholder="Buscar por nombre, email o teléfono..."
                   value={filters.search}
                   onChange={(e) => handleFilterChange('search', e.target.value)}
-                  className="pl-10"
+                  className="pl-10 bg-slate-800/50 border-slate-700"
                 />
               </div>
             </div>
 
             {/* Filters */}
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
+              {/* Organization Filter - Solo visible para admins */}
+              {isAdmin && organizations.length > 0 && (
+                <Select 
+                  value={currentOrganization || 'all'} 
+                  onValueChange={(value) => {
+                    setCurrentOrganization(value === 'all' ? null : value)
+                    handleFilterChange('organizationId', value === 'all' ? '' : value)
+                  }}
+                >
+                  <SelectTrigger className="w-48 bg-slate-800/50 border-slate-700">
+                    <Building2 className="w-4 h-4 mr-2" />
+                    <SelectValue placeholder="Organización" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas las organizaciones</SelectItem>
+                    {organizations.map(org => (
+                      <SelectItem key={org.id} value={org.id}>
+                        {org.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+
               <Select value={filters.role} onValueChange={(value) => handleFilterChange('role', value)}>
-                <SelectTrigger className="w-40">
+                <SelectTrigger className="w-40 bg-slate-800/50 border-slate-700">
                   <SelectValue placeholder="Rol" />
                 </SelectTrigger>
                 <SelectContent>
@@ -789,7 +878,7 @@ export default function UserManagement() {
               </Select>
 
               <Select value={filters.status} onValueChange={(value) => handleFilterChange('status', value)}>
-                <SelectTrigger className="w-40">
+                <SelectTrigger className="w-40 bg-slate-800/50 border-slate-700">
                   <SelectValue placeholder="Estado" />
                 </SelectTrigger>
                 <SelectContent>
@@ -801,7 +890,7 @@ export default function UserManagement() {
               </Select>
 
               <Select value={filters.sortBy} onValueChange={(value) => handleFilterChange('sortBy', value)}>
-                <SelectTrigger className="w-40">
+                <SelectTrigger className="w-40 bg-slate-800/50 border-slate-700">
                   <SelectValue placeholder="Ordenar por" />
                 </SelectTrigger>
                 <SelectContent>
@@ -862,11 +951,11 @@ export default function UserManagement() {
       </Card>
 
       {/* Users Table */}
-      <Card>
+      <Card className="glass-dark-card border-slate-700/50">
         <CardContent className="p-0">
           <Table>
             <TableHeader>
-              <TableRow>
+              <TableRow className="border-slate-700/50">
                 <TableHead className="w-12">
                   <Checkbox
                     checked={selectedUsers.length === filteredUsers.length && filteredUsers.length > 0}
@@ -874,6 +963,7 @@ export default function UserManagement() {
                   />
                 </TableHead>
                 <TableHead>Usuario</TableHead>
+                {isAdmin && <TableHead>Organización</TableHead>}
                 <TableHead>Roles</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead>Último acceso</TableHead>
@@ -883,7 +973,7 @@ export default function UserManagement() {
             </TableHeader>
             <TableBody>
               {filteredUsers.map((user) => (
-                <TableRow key={user.id}>
+                <TableRow key={user.id} className="border-slate-700/50 hover:bg-slate-800/30">
                   <TableCell>
                     <Checkbox
                       checked={selectedUsers.includes(user.id)}
@@ -892,9 +982,9 @@ export default function UserManagement() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <Avatar>
+                      <Avatar className="border-2 border-slate-700">
                         <AvatarImage src={user.avatar} />
-                        <AvatarFallback>
+                        <AvatarFallback className="bg-gradient-to-br from-blue-600 to-blue-700 text-white">
                           {user.firstName[0]}{user.lastName[0]}
                         </AvatarFallback>
                       </Avatar>
@@ -913,6 +1003,18 @@ export default function UserManagement() {
                       </div>
                     </div>
                   </TableCell>
+                  {isAdmin && (
+                    <TableCell>
+                      {user.organizationName ? (
+                        <Badge variant="outline" className="gap-1 border-slate-600 bg-slate-800/50">
+                          <Building2 className="w-3 h-3" />
+                          {user.organizationName}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">Sin organización</span>
+                      )}
+                    </TableCell>
+                  )}
                   <TableCell>
                     <div className="flex flex-wrap gap-1">
                       {getRoleBadges(user.roles)}

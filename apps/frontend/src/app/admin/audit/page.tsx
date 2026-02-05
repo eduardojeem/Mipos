@@ -1,4 +1,11 @@
- 'use client';
- export default function Page() {
-   return <div className="p-6"><h1 className="text-2xl font-bold">Auditoría</h1><p>En construcción</p></div>;
- }
+'use client';
+
+import { AuditDashboard } from './components/AuditDashboard';
+
+export default function AuditPage() {
+  return (
+    <div className="container mx-auto p-6">
+      <AuditDashboard />
+    </div>
+  );
+}
