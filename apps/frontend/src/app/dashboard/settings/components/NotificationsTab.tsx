@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { Save, Bell, Settings, Mail, Smartphone, Info, RefreshCw } from 'lucide-react';
+import { Save, Bell, Settings, Mail, Smartphone, Info, RefreshCw, Server, Send, Eye, EyeOff, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { PermissionGuard } from '@/components/ui/permission-guard';
+import { useToast } from '@/components/ui/use-toast';
 import {
   useUserSettings,
   useUpdateUserSettings,
@@ -21,9 +23,12 @@ export function NotificationsTab() {
   const { data: systemSettings, isLoading: systemLoading } = useSystemSettings();
   const updateUserSettings = useUpdateUserSettings();
   const updateSystemSettings = useUpdateSystemSettings();
+  const { toast } = useToast();
 
   const [localUserSettings, setLocalUserSettings] = useState<Partial<UserSettings>>({});
   const [localSystemSettings, setLocalSystemSettings] = useState<Partial<SystemSettings>>({});
+  const [showSmtpPassword, setShowSmtpPassword] = useState(false);
+  const [testingEmail, setTestingEmail] = useState(false);
 
   // Merge server data with local changes
   const currentUserSettings = { ...userSettings, ...localUserSettings };
@@ -46,8 +51,57 @@ export function NotificationsTab() {
 
   const handleSaveSystemSettings = () => {
     if (Object.keys(localSystemSettings).length > 0) {
-      updateSystemSettings.mutate(localSystemSettings);
+      updateSystemSettings.mutate(localSystemSettings, {
+        onSuccess: () => {
+          toast({
+            title: 'Configuración guardada',
+            description: 'La configuración del sistema se actualizó correctamente',
+          });
+        }
+      });
       setLocalSystemSettings({});
+    }
+  };
+
+  const testSmtpConnection = async () => {
+    setTestingEmail(true);
+    try {
+      // Llamar a API para probar conexión SMTP real
+      const response = await fetch('/api/system/smtp/test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          smtp_host: currentSystemSettings.smtp_host,
+          smtp_port: currentSystemSettings.smtp_port,
+          smtp_user: currentSystemSettings.smtp_user,
+          smtp_password: currentSystemSettings.smtp_password,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        toast({
+          title: 'Conexión exitosa',
+          description: data.message || 'El servidor SMTP está configurado correctamente',
+        });
+      } else {
+        toast({
+          title: 'Error de conexión',
+          description: data.error || 'No se pudo conectar al servidor SMTP. Verifica la configuración.',
+          variant: 'destructive'
+        });
+      }
+    } catch (error) {
+      toast({
+        title: 'Error de conexión',
+        description: 'No se pudo conectar al servidor SMTP. Verifica la configuración.',
+        variant: 'destructive'
+      });
+    } finally {
+      setTestingEmail(false);
     }
   };
 
@@ -59,7 +113,7 @@ export function NotificationsTab() {
   }
 
   return (
-    <div className="grid gap-8 md:grid-cols-2 animate-in fade-in duration-500">
+    <div className="grid gap-8 animate-in fade-in duration-500">
       {/* User Notifications with premium card style */}
       <Card className="border-none shadow-xl shadow-purple-500/5 bg-white/50 dark:bg-card/50 backdrop-blur-sm overflow-hidden group">
         <div className="absolute top-0 left-0 w-1 h-full bg-purple-600"></div>
@@ -141,7 +195,7 @@ export function NotificationsTab() {
         </CardContent>
       </Card>
 
-      {/* System Notifications with premium card style */}
+      {/* System Notifications */}
       <Card className="border-none shadow-xl shadow-blue-500/5 bg-white/50 dark:bg-card/50 backdrop-blur-sm overflow-hidden group">
         <div className="absolute top-0 left-0 w-1 h-full bg-blue-600"></div>
         <CardHeader className="pb-4">
@@ -232,6 +286,137 @@ export function NotificationsTab() {
           )}
         </CardContent>
       </Card>
+
+      {/* SMTP Configuration - Only for ADMIN/SUPER_ADMIN */}
+      <PermissionGuard permission="settings.edit" requireAdmin>
+        <Card className="border-none shadow-xl shadow-indigo-500/5 bg-white/50 dark:bg-card/50 backdrop-blur-sm overflow-hidden group">
+          <div className="absolute top-0 left-0 w-1 h-full bg-indigo-600"></div>
+          <CardHeader className="pb-4">
+            <CardTitle className="flex items-center gap-3 text-xl font-bold">
+              <div className="p-2 rounded-lg bg-indigo-600 text-white shadow-lg shadow-indigo-600/20 group-hover:scale-110 transition-transform duration-300">
+                <Server className="h-5 w-5" />
+              </div>
+              Configuración SMTP
+            </CardTitle>
+            <CardDescription className="text-base">
+              Servidor de correo saliente para notificaciones del sistema
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-2.5">
+                <Label htmlFor="smtp_host" className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                  Servidor SMTP
+                </Label>
+                <Input
+                  id="smtp_host"
+                  className="bg-muted/30 border-none h-11"
+                  value={currentSystemSettings.smtp_host || ''}
+                  onChange={(e) => updateSystemSetting('smtp_host', e.target.value)}
+                  placeholder="smtp.gmail.com"
+                />
+              </div>
+
+              <div className="space-y-2.5">
+                <Label htmlFor="smtp_port" className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                  Puerto
+                </Label>
+                <Input
+                  id="smtp_port"
+                  type="number"
+                  className="bg-muted/30 border-none h-11"
+                  value={currentSystemSettings.smtp_port || 587}
+                  onChange={(e) => updateSystemSetting('smtp_port', parseInt(e.target.value))}
+                  placeholder="587"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2.5">
+              <Label htmlFor="smtp_user" className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                Usuario / Email
+              </Label>
+              <Input
+                id="smtp_user"
+                type="email"
+                className="bg-muted/30 border-none h-11"
+                value={currentSystemSettings.smtp_user || ''}
+                onChange={(e) => updateSystemSetting('smtp_user', e.target.value)}
+                placeholder="notificaciones@miempresa.com"
+              />
+            </div>
+
+            <div className="space-y-2.5">
+              <Label htmlFor="smtp_password" className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                Contraseña / App Password
+              </Label>
+              <div className="relative">
+                <Input
+                  id="smtp_password"
+                  type={showSmtpPassword ? 'text' : 'password'}
+                  className="bg-muted/30 border-none h-11 pr-10"
+                  value={currentSystemSettings.smtp_password || ''}
+                  onChange={(e) => updateSystemSetting('smtp_password', e.target.value)}
+                  placeholder="••••••••••••••••"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowSmtpPassword(!showSmtpPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showSmtpPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Para Gmail, usa una "App Password" en lugar de tu contraseña normal
+              </p>
+            </div>
+
+            <Separator className="bg-muted/50" />
+
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={testSmtpConnection}
+                disabled={testingEmail || !currentSystemSettings.smtp_host}
+                className="flex-1 rounded-xl border-indigo-200 dark:border-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+              >
+                {testingEmail ? (
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4 mr-2" />
+                )}
+                Probar Conexión
+              </Button>
+
+              {hasSystemChanges && (
+                <Button
+                  onClick={handleSaveSystemSettings}
+                  disabled={updateSystemSettings.isPending}
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-600/20 rounded-xl"
+                >
+                  {updateSystemSettings.isPending ? (
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-2" />
+                  )}
+                  Guardar SMTP
+                </Button>
+              )}
+            </div>
+
+            <Alert className="bg-indigo-500/5 border-indigo-500/10 rounded-xl">
+              <CheckCircle className="h-4 w-4 text-indigo-600" />
+              <AlertDescription className="text-xs text-indigo-800 dark:text-indigo-300">
+                <strong>Proveedores comunes:</strong><br />
+                • Gmail: smtp.gmail.com:587<br />
+                • Outlook: smtp-mail.outlook.com:587<br />
+                • SendGrid: smtp.sendgrid.net:587
+              </AlertDescription>
+            </Alert>
+          </CardContent>
+        </Card>
+      </PermissionGuard>
     </div>
   );
 }

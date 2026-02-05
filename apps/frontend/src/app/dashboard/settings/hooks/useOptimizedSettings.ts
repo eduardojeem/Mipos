@@ -34,40 +34,60 @@ interface UserSettings {
 }
 
 interface SystemSettings {
-  store_name?: string;
-  store_address?: string;
-  store_phone?: string;
-  store_email?: string;
-  store_website?: string;
-  store_logo_url?: string;
+  // Información de la tienda (nombres reales de columnas en Supabase)
+  business_name?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+  logo_url?: string;
+  
+  // Configuración fiscal y monetaria
   tax_rate?: number;
   currency?: string;
   receipt_footer?: string;
+  
+  // Inventario
   low_stock_threshold?: number;
+  enable_inventory_tracking?: boolean;
+  
+  // Respaldos
   auto_backup?: boolean;
   backup_frequency?: 'daily' | 'weekly' | 'monthly';
+  
+  // Notificaciones
   email_notifications?: boolean;
   sms_notifications?: boolean;
   push_notifications?: boolean;
+  enable_notifications?: boolean;
+  
+  // Configuración regional
   timezone?: string;
   date_format?: string;
   time_format?: '12h' | '24h';
   decimal_places?: number;
+  language?: string;
+  
+  // Hardware POS
   enable_barcode_scanner?: boolean;
   enable_receipt_printer?: boolean;
   enable_cash_drawer?: boolean;
+  
+  // Descuentos y clientes
   max_discount_percentage?: number;
   require_customer_info?: boolean;
+  
+  // Programa de lealtad
   enable_loyalty_program?: boolean;
-  // Campos del API
-  businessName?: string;
-  enableInventoryTracking?: boolean;
-  enableLoyaltyProgram?: boolean;
-  enableNotifications?: boolean;
-  backupFrequency?: 'daily' | 'weekly' | 'monthly';
-  dateFormat?: string;
-  timeFormat?: '12h' | '24h' | '24h'; // Fix type mismatch if API returns different literal
-  taxRate?: number;
+  
+  // SMTP Configuration
+  smtp_host?: string;
+  smtp_port?: number;
+  smtp_user?: string;
+  smtp_password?: string;
+  smtp_secure?: boolean;
+  smtp_from_email?: string;
+  smtp_from_name?: string;
 }
 
 interface SecuritySettings {
@@ -78,6 +98,8 @@ interface SecuritySettings {
   require_password_change: boolean;
   enable_login_notifications: boolean;
   allowed_ip_addresses: string[];
+  require_strong_passwords?: boolean;
+  lockout_duration?: number;
 }
 
 // Default values
@@ -111,12 +133,12 @@ const DEFAULT_USER_SETTINGS: UserSettings = {
 };
 
 const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
-  store_name: '',
-  store_address: '',
-  store_phone: '',
-  store_email: '',
-  store_website: '',
-  store_logo_url: '',
+  business_name: '',
+  address: '',
+  phone: '',
+  email: '',
+  website: '',
+  logo_url: '',
   tax_rate: 0,
   currency: 'PYG',
   receipt_footer: '',
@@ -126,16 +148,26 @@ const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
   email_notifications: true,
   sms_notifications: false,
   push_notifications: true,
+  enable_notifications: true,
   timezone: 'America/Asuncion',
   date_format: 'DD/MM/YYYY',
   time_format: '24h',
   decimal_places: 0,
+  language: 'es',
   enable_barcode_scanner: true,
   enable_receipt_printer: true,
   enable_cash_drawer: true,
+  enable_inventory_tracking: true,
   max_discount_percentage: 50,
   require_customer_info: false,
-  enable_loyalty_program: false
+  enable_loyalty_program: false,
+  smtp_host: '',
+  smtp_port: 587,
+  smtp_user: '',
+  smtp_password: '',
+  smtp_secure: true,
+  smtp_from_email: '',
+  smtp_from_name: ''
 };
 
 const DEFAULT_SECURITY_SETTINGS: SecuritySettings = {
@@ -145,7 +177,9 @@ const DEFAULT_SECURITY_SETTINGS: SecuritySettings = {
   max_login_attempts: 5,
   require_password_change: false,
   enable_login_notifications: true,
-  allowed_ip_addresses: []
+  allowed_ip_addresses: [],
+  require_strong_passwords: true,
+  lockout_duration: 15
 };
 
 const logger = createLogger('SettingsHook');
@@ -179,7 +213,11 @@ export function useSystemSettings() {
         // si data.data existe úsalo, si no, usa data
         const settings = response.data.data || response.data;
         return { ...DEFAULT_SYSTEM_SETTINGS, ...settings };
-      } catch (error) {
+      } catch (error: any) {
+        const status = error?.response?.status;
+        if (status === 401 || status === 403) {
+          throw error;
+        }
         logger.warn('Failed to load system settings, using defaults');
         return DEFAULT_SYSTEM_SETTINGS;
       }
@@ -197,7 +235,11 @@ export function useSecuritySettings() {
       try {
         const response = await api.get('/security/settings');
         return { ...DEFAULT_SECURITY_SETTINGS, ...response.data.data };
-      } catch (error) {
+      } catch (error: any) {
+        const status = error?.response?.status;
+        if (status === 401 || status === 403) {
+          throw error;
+        }
         logger.warn('Failed to load security settings, using defaults');
         return DEFAULT_SECURITY_SETTINGS;
       }

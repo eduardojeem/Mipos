@@ -424,7 +424,7 @@ export function AdminHeader({ compact = false }: { compact?: boolean }) {
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg" asChild>
-                  <Link href="/admin/settings">
+                  <Link href="/dashboard/settings">
                     <Settings className="h-4 w-4 text-muted-foreground hover:rotate-90 transition-transform duration-300" />
                   </Link>
                 </Button>
@@ -490,7 +490,7 @@ export function AdminHeader({ compact = false }: { compact?: boolean }) {
                 </DropdownMenuItem>
 
                 <DropdownMenuItem asChild className="rounded-lg gap-3 py-2.5">
-                  <Link href="/admin/settings">
+                  <Link href="/dashboard/settings">
                     <Settings className="h-4 w-4 text-muted-foreground" />
                     <span>Configuración</span>
                   </Link>

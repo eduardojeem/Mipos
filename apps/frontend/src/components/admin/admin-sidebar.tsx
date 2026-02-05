@@ -99,7 +99,7 @@ export const adminNavItems: AdminNavItem[] = [
   },
   {
     title: 'Configuración',
-    href: '/admin/settings',
+    href: '/dashboard/settings',
     icon: Settings,
     description: 'Configuración del sistema',
     category: 'Sistema'

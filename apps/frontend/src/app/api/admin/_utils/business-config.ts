@@ -1,3 +1,20 @@
+/**
+ * @deprecated This file is DEPRECATED and should not be used for new code.
+ * 
+ * REASON FOR DEPRECATION:
+ * - Uses global in-memory cache that is incompatible with multitenancy
+ * - Uses createAdminClient() which bypasses RLS policies
+ * - Does not support organization-scoped configuration
+ * 
+ * MIGRATION PATH:
+ * - For validation: Use business-config-validation.ts
+ * - For data access: Use /api/business-config endpoints directly
+ * - For organization-scoped config: Query settings table with organization_id filter
+ * 
+ * This file is kept temporarily for backward compatibility but will be removed
+ * in a future version. Please update your code to use the new patterns.
+ */
+
 import type { BusinessConfig } from '@/types/business-config'
 import { defaultBusinessConfig } from '@/types/business-config'
 import { isSupabaseActive } from '@/lib/env'
@@ -11,7 +28,11 @@ declare global {
 
 const g = globalThis as typeof globalThis & { __BUSINESS_CONFIG__?: BusinessConfig }
 
+/**
+ * @deprecated Use /api/business-config GET endpoint instead
+ */
 export function getBusinessConfig(): BusinessConfig {
+  console.warn('[DEPRECATED] getBusinessConfig() is deprecated. Use /api/business-config endpoint instead.')
   // Solo memoria: sincronía para llamadas existentes
   if (!g.__BUSINESS_CONFIG__) {
     g.__BUSINESS_CONFIG__ = { ...defaultBusinessConfig }
@@ -19,7 +40,11 @@ export function getBusinessConfig(): BusinessConfig {
   return g.__BUSINESS_CONFIG__!
 }
 
+/**
+ * @deprecated Use /api/business-config GET endpoint instead
+ */
 export async function getBusinessConfigAsync(): Promise<BusinessConfig> {
+  console.warn('[DEPRECATED] getBusinessConfigAsync() is deprecated. Use /api/business-config endpoint instead.')
   if (!isSupabaseActive()) return getBusinessConfig()
   try {
     const admin = createAdminClient()
@@ -46,12 +71,20 @@ export async function getBusinessConfigAsync(): Promise<BusinessConfig> {
   }
 }
 
+/**
+ * @deprecated Use /api/business-config PUT endpoint instead
+ */
 export function setBusinessConfig(next: BusinessConfig): BusinessConfig {
+  console.warn('[DEPRECATED] setBusinessConfig() is deprecated. Use /api/business-config endpoint instead.')
   g.__BUSINESS_CONFIG__ = { ...next }
   return g.__BUSINESS_CONFIG__!
 }
 
+/**
+ * @deprecated Use /api/business-config PUT endpoint instead
+ */
 export async function setBusinessConfigAsync(next: BusinessConfig): Promise<BusinessConfig> {
+  console.warn('[DEPRECATED] setBusinessConfigAsync() is deprecated. Use /api/business-config endpoint instead.')
   g.__BUSINESS_CONFIG__ = { ...next }
   if (!isSupabaseActive()) return g.__BUSINESS_CONFIG__!
   try {
@@ -65,12 +98,20 @@ export async function setBusinessConfigAsync(next: BusinessConfig): Promise<Busi
   return g.__BUSINESS_CONFIG__!
 }
 
+/**
+ * @deprecated Use /api/business-config/reset POST endpoint instead
+ */
 export function resetBusinessConfig(): BusinessConfig {
+  console.warn('[DEPRECATED] resetBusinessConfig() is deprecated. Use /api/business-config/reset endpoint instead.')
   g.__BUSINESS_CONFIG__ = { ...defaultBusinessConfig }
   return g.__BUSINESS_CONFIG__!
 }
 
+/**
+ * @deprecated Use /api/business-config/reset POST endpoint instead
+ */
 export async function resetBusinessConfigAsync(): Promise<BusinessConfig> {
+  console.warn('[DEPRECATED] resetBusinessConfigAsync() is deprecated. Use /api/business-config/reset endpoint instead.')
   g.__BUSINESS_CONFIG__ = { ...defaultBusinessConfig }
   if (!isSupabaseActive()) return g.__BUSINESS_CONFIG__!
   try {
@@ -84,7 +125,12 @@ export async function resetBusinessConfigAsync(): Promise<BusinessConfig> {
   return g.__BUSINESS_CONFIG__!
 }
 
+/**
+ * @deprecated Moved to business-config-validation.ts
+ * Import from: @/app/api/admin/_utils/business-config-validation
+ */
 export function validateBusinessConfig(cfg: BusinessConfig): { ok: true } | { ok: false, errors: Record<string, string> } {
+  console.warn('[DEPRECATED] validateBusinessConfig() moved to business-config-validation.ts')
   const errors: Record<string, string> = {}
   if (!cfg.businessName || cfg.businessName.trim().length < 2) {
     errors['businessName'] = 'El nombre del negocio es requerido'

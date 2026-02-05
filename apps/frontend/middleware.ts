@@ -7,6 +7,12 @@ export async function middleware(request: NextRequest) {
   if (url.searchParams.has('_rsc')) {
     return NextResponse.next();
   }
+
+  // Redirect /admin/settings to /dashboard/settings
+  if (url.pathname === '/admin/settings') {
+    return NextResponse.redirect(new URL('/dashboard/settings', request.url));
+  }
+
   return await updateSession(request);
 }
 

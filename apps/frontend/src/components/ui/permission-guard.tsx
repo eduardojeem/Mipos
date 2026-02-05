@@ -120,6 +120,8 @@ interface PermissionGuardProps {
   fallback?: React.ReactNode;
   showError?: boolean;
   requireAll?: boolean; // Si es true, requiere TODOS los permisos. Si es false, requiere AL MENOS UNO
+  requireAdmin?: boolean; // Requiere rol ADMIN o SUPER_ADMIN
+  requireRoles?: string[]; // Lista de roles permitidos adicionales
 }
 
 interface PermissionContextType {
@@ -186,7 +188,9 @@ export function PermissionGuard({
   children,
   fallback,
   showError = true,
-  requireAll = false
+  requireAll = false,
+  requireAdmin = false,
+  requireRoles
 }: PermissionGuardProps) {
   const { user, loading } = useAuth();
   const { hasPermission, userRole, userPermissions } = usePermissions();
@@ -215,6 +219,44 @@ export function PermissionGuard({
   }
 
   const permissions = Array.isArray(permission) ? permission : [permission];
+
+  // Verificación de rol ADMIN/SUPER_ADMIN o roles específicos
+  const normalizedRole = (userRole || '').toUpperCase();
+  const adminOK = ['ADMIN', 'SUPER_ADMIN'].includes(normalizedRole);
+  const rolesOK = Array.isArray(requireRoles)
+    ? requireRoles.map(r => r.toUpperCase()).includes(normalizedRole)
+    : true;
+  if (requireAdmin && !adminOK) {
+    // sin acceso por rol
+    if (fallback) return <>{fallback}</>;
+    if (showError) {
+      return (
+        <Alert className="border-red-200 bg-red-50">
+          <Shield className="h-4 w-4 text-red-600" />
+          <AlertDescription className="text-red-800">
+            Requiere rol de administrador.
+            <div className="mt-2 text-sm text-red-600">Rol actual: <span className="font-medium">{userRole}</span></div>
+          </AlertDescription>
+        </Alert>
+      );
+    }
+    return null;
+  }
+  if (!rolesOK) {
+    if (fallback) return <>{fallback}</>;
+    if (showError) {
+      return (
+        <Alert className="border-red-200 bg-red-50">
+          <Shield className="h-4 w-4 text-red-600" />
+          <AlertDescription className="text-red-800">
+            Tu rol no tiene acceso a esta sección.
+            <div className="mt-2 text-sm text-red-600">Rol actual: <span className="font-medium">{userRole}</span></div>
+          </AlertDescription>
+        </Alert>
+      );
+    }
+    return null;
+  }
 
   // Verificar permisos
   const hasAccess = requireAll 

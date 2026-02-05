@@ -135,7 +135,7 @@ export default function SuperAdminUsersPage() {
     if (selectedUsers.length === users.length) {
       setSelectedUsers([]);
     } else {
-      setSelectedUsers(users.map(u => (u as AdminUser).id));
+      setSelectedUsers(users.map((u: AdminUser) => u.id));
     }
   };
 
@@ -175,7 +175,7 @@ export default function SuperAdminUsersPage() {
         return;
       }
 
-      const dataToExport = (users as AdminUser[]).map((user: AdminUser) => ({
+      const dataToExport = users.map((user: AdminUser) => ({
         ID: user.id,
         Nombre: user.full_name || 'Sin nombre',
         Email: user.email,
@@ -200,7 +200,7 @@ export default function SuperAdminUsersPage() {
         return;
       }
 
-      const dataToExport = (users as AdminUser[]).map((user: AdminUser) => ({
+      const dataToExport = users.map((user: AdminUser) => ({
         ID: user.id,
         Nombre: user.full_name || 'Sin nombre',
         Email: user.email,
@@ -422,7 +422,7 @@ export default function SuperAdminUsersPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {(users as AdminUser[]).map((user) => (
+                    {users.map((user) => (
                       <TableRow 
                         key={user.id}
                         className={`hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors ${selectedUsers.includes(user.id) ? 'bg-slate-50/80 dark:bg-slate-900/80' : ''}`}

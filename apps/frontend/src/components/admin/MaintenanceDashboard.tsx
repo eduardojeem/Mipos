@@ -7,11 +7,22 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { 
   Database, HardDrive, Users, Package, ShoppingCart, 
   TrendingUp, AlertTriangle, CheckCircle, Crown,
   Building2, Zap, Shield, Activity, RefreshCw,
-  Trash2, Settings, BarChart3
+  Trash2, Settings, BarChart3, Server
 } from 'lucide-react'
 
 interface PlanInfo {
@@ -41,12 +52,19 @@ interface DatabaseStats {
   connections: number
 }
 
+interface CacheStats {
+  total: number
+  valid: number
+  expired: number
+}
+
 export function MaintenanceDashboard() {
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
   const [planInfo, setPlanInfo] = useState<PlanInfo | null>(null)
   const [orgStats, setOrgStats] = useState<OrganizationStats | null>(null)
   const [dbStats, setDbStats] = useState<DatabaseStats | null>(null)
+  const [cacheStats, setCacheStats] = useState<CacheStats | null>(null)
   const [organizationName, setOrganizationName] = useState<string>('')
 
   useEffect(() => {
@@ -59,7 +77,8 @@ export function MaintenanceDashboard() {
       await Promise.all([
         loadPlanInfo(),
         loadOrganizationStats(),
-        loadDatabaseStats()
+        loadDatabaseStats(),
+        loadCacheStats()
       ])
     } catch (error) {
       console.error('Error loading data:', error)
@@ -109,6 +128,33 @@ export function MaintenanceDashboard() {
       }
     } catch (error) {
       console.error('Error loading database stats:', error)
+    }
+  }
+
+  const loadCacheStats = async () => {
+    try {
+      const response = await fetch('/api/admin/maintenance/cache')
+      const data = await response.json()
+      if (data.success) {
+        setCacheStats(data.stats)
+      }
+    } catch (error) {
+      console.error('Error loading cache stats:', error)
+    }
+  }
+
+  const clearCache = async () => {
+    try {
+      const response = await fetch('/api/admin/maintenance/cache', { method: 'DELETE' })
+      const data = await response.json()
+      if (response.ok) {
+        toast({ title: 'Éxito', description: 'Caché del sistema limpiado correctamente' })
+        setCacheStats(data.stats)
+      } else {
+        toast({ title: 'Error', description: data.error || 'Error al limpiar caché', variant: 'destructive' })
+      }
+    } catch (error) {
+      toast({ title: 'Error', description: 'Error al limpiar caché', variant: 'destructive' })
     }
   }
 
@@ -485,6 +531,48 @@ export function MaintenanceDashboard() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {/* System Cache */}
+              <div className="flex items-center justify-between p-4 rounded-lg bg-slate-800/30 border border-slate-700/50">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-orange-500/10">
+                    <Zap className="w-5 h-5 text-orange-400" />
+                  </div>
+                  <div>
+                    <div className="font-medium">Caché del Sistema</div>
+                    <div className="text-sm text-muted-foreground">
+                      {cacheStats ? (
+                        <span>
+                          {cacheStats.total} entradas ({cacheStats.valid} válidas, {cacheStats.expired} expiradas)
+                        </span>
+                      ) : (
+                        'Gestionar la memoria caché del servidor'
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      Limpiar
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>¿Limpiar caché del sistema?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Esta acción eliminará todas las entradas en memoria caché. Esto podría ralentizar temporalmente algunas respuestas mientras se regenera el caché.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction onClick={clearCache}>
+                        Confirmar
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+
               {/* Clean Expired Sessions */}
               <div className="flex items-center justify-between p-4 rounded-lg bg-slate-800/30 border border-slate-700/50">
                 <div className="flex items-center gap-3">
@@ -498,9 +586,27 @@ export function MaintenanceDashboard() {
                     </div>
                   </div>
                 </div>
-                <Button onClick={cleanupExpiredSessions} variant="outline" size="sm">
-                  Ejecutar
-                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      Ejecutar
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>¿Limpiar sesiones expiradas?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Esta acción eliminará permanentemente todas las sesiones de usuario que hayan expirado hace más de 30 días. Esta acción no se puede deshacer.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction onClick={cleanupExpiredSessions}>
+                        Confirmar
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
 
               {/* Purge Old Audit Logs */}
@@ -517,15 +623,29 @@ export function MaintenanceDashboard() {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Button onClick={() => purgeOldAuditLogs(30)} variant="outline" size="sm">
-                    30 días
-                  </Button>
-                  <Button onClick={() => purgeOldAuditLogs(60)} variant="outline" size="sm">
-                    60 días
-                  </Button>
-                  <Button onClick={() => purgeOldAuditLogs(90)} variant="outline" size="sm">
-                    90 días
-                  </Button>
+                  {[30, 60, 90].map((days) => (
+                    <AlertDialog key={days}>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="outline" size="sm">
+                          {days} días
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>¿Purgar logs de más de {days} días?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Esta acción eliminará permanentemente todos los registros de auditoría anteriores a {days} días. Esta acción no se puede deshacer.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => purgeOldAuditLogs(days)}>
+                            Confirmar
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  ))}
                 </div>
               </div>
 

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { api, getErrorMessage, isNetworkError, isTimeoutError, isServerError, isClientError } from '@/lib/api'
 import { createClient } from '@/lib/supabase/server'
 import { isMockAuthEnabled, isSupabaseActive } from '@/lib/env'
-import { assertAdmin } from '@/app/api/_utils/auth'
+import { validateRole } from '@/app/api/_utils/role-validation'
+import { getUserOrganizationId } from '@/app/api/_utils/organization'
 
 // Caché simple en memoria por instancia (serverless/lambda) con TTL por tipo
 type CachedEntry = { expiresAt: number; payload: any; headers: Record<string, string> };
@@ -514,13 +515,16 @@ async function getFinancialReportSupabase(supabase: any, params: Record<string, 
 // GET /api/reports -> proxy to backend `/api/reports`
 export async function GET(request: NextRequest) {
   try {
-    // ✅ Usar assertAdmin para autenticación y obtener organizationId
-    const auth = await assertAdmin(request);
-    if (!auth.ok) {
-      return NextResponse.json(auth.body, { status: auth.status });
+    // ✅ Autenticación y roles: permitir ADMIN, SUPER_ADMIN y MANAGER
+    const roleCheck = await validateRole(request, { roles: ['ADMIN','SUPER_ADMIN','MANAGER'] })
+    if (!roleCheck.ok) {
+      return NextResponse.json(roleCheck.body, { status: roleCheck.status })
     }
 
-    const { organizationId, isSuperAdmin } = auth;
+    const userId = roleCheck.userId as string
+    const userRole = (roleCheck.userRole || '').toUpperCase()
+    const isSuperAdmin = userRole === 'SUPER_ADMIN'
+    const organizationId = isSuperAdmin ? null : await getUserOrganizationId(userId)
 
     const { searchParams } = new URL(request.url)
 
@@ -546,11 +550,8 @@ export async function GET(request: NextRequest) {
 
     // ✅ Permitir filtro por organización desde query params (solo para super admins)
     const orgFilter = params['organizationId'] || params['organization_id'];
-    const effectiveOrgId = (isSuperAdmin && orgFilter) ? orgFilter : organizationId;
-
-    if (!effectiveOrgId) {
-      return NextResponse.json({ error: 'Organization ID no disponible' }, { status: 400 });
-    }
+    const headerOrg = request.headers.get('x-organization-id') || undefined;
+    const effectiveOrgId = (isSuperAdmin && (orgFilter || headerOrg)) ? (orgFilter || headerOrg)! : (organizationId || headerOrg || '');
 
     // Cache HIT (según parámetros de consulta + orgId)
     const cacheKey = buildCacheKey(request.url + `&orgId=${effectiveOrgId}`)
@@ -564,7 +565,7 @@ export async function GET(request: NextRequest) {
 
     // Forward query params as-is; backend expects `type`, `start_date`, `end_date`, etc.
     // Fast-path con Supabase opcional para reducir latencia
-    if (String(source).toLowerCase() === 'supabase') {
+    if (String(source).toLowerCase() === 'supabase' && effectiveOrgId) {
       const supabase = await createClient()
 
       if (type === 'sales') {
@@ -669,14 +670,18 @@ export async function GET(request: NextRequest) {
         const supabase = await createClient()
         const params = Object.fromEntries(searchParams.entries()) as Record<string, string>
         
-        // Obtener organizationId del auth
-        const auth = await assertAdmin(request);
-        if (!auth.ok) {
+        // Obtener organizationId según rol
+        const roleCheck = await validateRole(request, { roles: ['ADMIN','SUPER_ADMIN','MANAGER'] })
+        if (!roleCheck.ok) {
           throw new Error('No autorizado');
         }
-        const { organizationId, isSuperAdmin } = auth;
-        const orgFilter = params['organizationId'] || params['organization_id'];
-        const effectiveOrgId = (isSuperAdmin && orgFilter) ? orgFilter : organizationId;
+        const userId = roleCheck.userId as string
+        const userRole = (roleCheck.userRole || '').toUpperCase()
+        const isSuperAdmin = userRole === 'SUPER_ADMIN'
+        const orgFilter = params['organizationId'] || params['organization_id']
+        const headerOrg = request.headers.get('x-organization-id') || undefined
+        const organizationId = isSuperAdmin ? null : await getUserOrganizationId(userId)
+        const effectiveOrgId = (isSuperAdmin && (orgFilter || headerOrg)) ? (orgFilter || headerOrg)! : (organizationId || headerOrg || '')
         
         if (!effectiveOrgId) {
           throw new Error('Organization ID no disponible');

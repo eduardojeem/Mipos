@@ -51,7 +51,7 @@ export function useUsers(options: UseUsersOptions = {}) {
         isLoading: loading,
         error: queryError,
         refetch,
-    } = useQuery({
+    } = useQuery<{ users: AdminUser[]; total: number }>({
         queryKey,
         queryFn: async () => {
             const params = new URLSearchParams();

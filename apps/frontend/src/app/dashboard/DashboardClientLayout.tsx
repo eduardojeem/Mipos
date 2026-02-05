@@ -114,7 +114,15 @@ export default function DashboardClientLayout({
   return (
     <DashboardErrorBoundary>
       <UserAppearanceManager />
-      <UnifiedPermissionGuard resource="dashboard" action="read" allowAdmin>
+      <UnifiedPermissionGuard roles={[
+        'SUPER_ADMIN',
+        'ADMIN',
+        'OWNER',
+        'MANAGER',
+        'CASHIER',
+        'EMPLOYEE',
+        'USER'
+      ]} allowAdmin>
         <ResponsiveLayout
           className="transition-colors duration-300"
           sidebar={<Sidebar />}

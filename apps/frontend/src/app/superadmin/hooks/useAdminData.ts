@@ -57,7 +57,7 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
     onError,
     onSuccess,
     initialOrganizations,
-    initialStats,
+    initialStats: _initialStats,
   } = options;
 
   const [organizations, setOrganizations] = useState<Organization[]>([]);
@@ -97,7 +97,10 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
       setOrganizations(cached.organizations);
       setStats(cached.stats);
     }
-  }, []);
+    if (_initialStats) {
+      setStats(_initialStats);
+    }
+  }, [_initialStats]);
 
   // Fetch function
   const fetchData = useCallback(async (isRefresh = false) => {
@@ -172,7 +175,7 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
             orgsError = classifyError(new Error(json.error), { url: '/api/superadmin/organizations', method: 'GET' });
           } else {
             orgsData = json.organizations || [];
-            console.log(`✅ [useAdminData] Organizations data received: ${orgsData.length} items`);
+            console.log(`✅ [useAdminData] Organizations data received: ${orgsData?.length ?? 0} items`);
           }
         } else {
           const errorText = await r.text();

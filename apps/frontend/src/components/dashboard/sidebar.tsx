@@ -215,7 +215,7 @@ export const navigation: NavItem[] = [
     name: 'Configuración',
     href: '/dashboard/settings',
     icon: Settings,
-    roles: ['ADMIN'],
+    roles: ['ADMIN', 'CASHIER', 'SUPER_ADMIN', 'OWNER', 'MANAGER'],
     category: 'admin',
     description: 'Configuración del sistema',
     color: 'text-red-600 dark:text-red-400',
@@ -295,7 +295,13 @@ export function Sidebar() {
 
       // Check plan permissions
       if (item.href === '/dashboard/analytics' && !permissions.can_access_analytics) return false;
-      if (item.category === 'admin' && !permissions.can_access_admin_panel && userRole !== 'SUPER_ADMIN') return false;
+      if (item.category === 'admin' && !permissions.can_access_admin_panel && userRole !== 'SUPER_ADMIN') {
+        // Permitir siempre acceder a Configuración aunque el plan no tenga admin panel
+        if (item.href === '/dashboard/settings') {
+          return true;
+        }
+        return false;
+      }
       
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();

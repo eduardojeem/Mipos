@@ -1,94 +1,74 @@
-import { useState } from 'react';
-import { Download, RefreshCw, AlertCircle, HelpCircle, FileText, Mail, User, Palette } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { AlertCircle, HelpCircle, FileText, Mail, User, Palette, Settings, Shield, ShoppingCart, CreditCard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { useToast } from '@/components/ui/use-toast';
+ 
 import { PermissionGuard } from '@/components/ui/permission-guard';
-import { ProfileTab } from './ProfileTab';
-import { SystemTab } from './SystemTab';
-import { NotificationsTab } from './NotificationsTab';
-import { SecurityTab } from './SecurityTab';
-import { AppearanceTab } from './AppearanceTab';
+ 
+import dynamic from 'next/dynamic';
+const ProfileTab = dynamic(() => import('./ProfileTab').then(m => m.ProfileTab), { ssr: false });
+const SystemSettingsTab = dynamic(() => import('./SystemSettingsTab').then(m => m.SystemSettingsTab), { ssr: false });
+const NotificationsTab = dynamic(() => import('./NotificationsTab').then(m => m.NotificationsTab), { ssr: false });
+const SecuritySettingsTab = dynamic(() => import('./SecuritySettingsTab').then(m => m.SecuritySettingsTab), { ssr: false });
+const POSTab = dynamic(() => import('./POSTab').then(m => m.POSTab), { ssr: false });
+const AppearanceTab = dynamic(() => import('./AppearanceTab').then(m => m.AppearanceTab), { ssr: false });
+const BillingTab = dynamic(() => import('./BillingTab').then(m => m.BillingTab), { ssr: false });
 import { SettingsLoadingSkeleton } from './SettingsLoadingSkeleton';
 import {
   useUserSettings,
   useSystemSettings,
-  useSecuritySettings,
-  useUpdateUserSettings
+  useSecuritySettings
 } from '../hooks/useOptimizedSettings';
 
+type SupabaseStatus = {
+  configured?: boolean;
+  connected?: boolean;
+  error?: { message: string } | null;
+  timestamp?: string;
+};
+type HealthState = { ok: boolean; supabase?: { ok: boolean; storage?: boolean; admin?: boolean; configured?: boolean; connected?: boolean } };
+
 export default function SettingsPageContent() {
-  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('profile');
+  
 
   // Check for unsaved changes (this is a simplified version)
   const [hasUnsavedChanges] = useState(false);
 
-  const { data: userSettings, isLoading: isLoadingUser } = useUserSettings();
-  const { data: systemSettings, isLoading: isLoadingSystem } = useSystemSettings();
-  const { data: securitySettings, isLoading: isLoadingSecurity } = useSecuritySettings();
-  const updateUserSettings = useUpdateUserSettings();
+  const { isLoading: isLoadingUser } = useUserSettings();
+  const { isLoading: isLoadingSystem } = useSystemSettings();
+  const { isLoading: isLoadingSecurity } = useSecuritySettings();
+  const [health, setHealth] = useState<HealthState | null>(null);
+
+  useEffect(() => {
+    const loadHealth = async () => {
+      try {
+        const res = await fetch('/api/health');
+        const base = await res.json();
+        let supa: SupabaseStatus | null = null;
+        try {
+          const sres = await fetch('/api/supabase/status');
+          supa = await sres.json();
+        } catch {}
+        const supaOk = Boolean(supa?.configured) && Boolean(supa?.connected);
+        const overallOk = Boolean(base?.ok ?? false);
+        setHealth({ ok: overallOk, supabase: { ok: supaOk, configured: Boolean(supa?.configured), connected: Boolean(supa?.connected) } });
+      } catch {
+        setHealth({ ok: false });
+      }
+    };
+    loadHealth();
+  }, []);
+
+  
+
+  
 
   if (isLoadingUser || isLoadingSystem || isLoadingSecurity) {
     return <SettingsLoadingSkeleton />;
   }
-
-  const exportSettings = async () => {
-    try {
-      const settings = {
-        userSettings,
-        systemSettings,
-        securitySettings,
-        exportDate: new Date().toISOString()
-      };
-
-      const blob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `configuracion-${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-
-      toast({
-        title: 'Éxito',
-        description: 'Configuración exportada correctamente',
-      });
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo exportar la configuración',
-        variant: 'destructive'
-      });
-    }
-  };
-
-  const resetToDefaults = () => {
-    if (confirm('¿Estás seguro de que quieres restaurar la configuración por defecto? Esta acción no se puede deshacer.')) {
-      const defaultUserSettings = {
-        theme: 'system' as const,
-        language: 'es',
-        dashboard_layout: 'comfortable' as const,
-        sidebar_collapsed: false,
-        show_tooltips: true,
-        enable_animations: true,
-        auto_save: true
-      };
-
-      updateUserSettings.mutate(defaultUserSettings, {
-        onSuccess: () => {
-          toast({
-            title: 'Configuración restaurada',
-            description: 'Se han restaurado los valores por defecto',
-          });
-        }
-      });
-    }
-  };
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -112,27 +92,28 @@ export default function SettingsPageContent() {
           )}
 
           <div className="flex bg-muted/30 p-1 rounded-xl backdrop-blur-sm border border-border/50">
-            <PermissionGuard permission="settings.edit">
-              <Button
-                variant="ghost"
-                onClick={exportSettings}
-                className="hover:bg-blue-500/10 hover:text-blue-600 dark:hover:text-blue-400 transition-all duration-300 rounded-lg"
+            {health && (
+              <Badge variant="outline" className={health.ok ? 'text-emerald-600' : 'text-red-600'}>
+                {health.ok ? 'SaaS OK' : 'SaaS fallando'}
+              </Badge>
+            )}
+            {health?.supabase && !(health.supabase.configured && health.supabase.connected) && (
+              <Badge
+                variant="outline"
+                className={
+                  health.supabase.configured
+                    ? (health.supabase.connected ? 'text-emerald-600' : 'text-amber-600')
+                    : 'text-muted-foreground'
+                }
               >
-                <Download className="h-4 w-4 mr-2" />
-                Exportar
-              </Button>
-            </PermissionGuard>
+                {health.supabase.configured
+                  ? (health.supabase.connected ? '' : 'Supabase sin conexión')
+                  : 'Supabase no configurado'}
+              </Badge>
+            )}
+            
 
-            <PermissionGuard permission="settings.edit">
-              <Button
-                variant="ghost"
-                onClick={resetToDefaults}
-                className="hover:bg-red-500/10 hover:text-red-500 transition-all duration-300 rounded-lg"
-              >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Restaurar
-              </Button>
-            </PermissionGuard>
+            
           </div>
         </div>
       </div>
@@ -141,6 +122,7 @@ export default function SettingsPageContent() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-8">
         <div className="relative">
           <TabsList className="flex w-full overflow-x-auto justify-start h-auto p-1.5 bg-muted/40 backdrop-blur-md rounded-2xl border border-border/50 custom-scrollbar">
+            {/* Always visible - Preferencias */}
             <TabsTrigger
               value="profile"
               className="flex-1 items-center gap-2.5 py-3 px-6 rounded-xl data-[state=active]:bg-background data-[state=active]:text-blue-600 data-[state=active]:shadow-lg transition-all duration-300 group"
@@ -148,17 +130,43 @@ export default function SettingsPageContent() {
               <div className="p-1.5 rounded-lg bg-blue-500/10 group-data-[state=active]:bg-blue-600 group-data-[state=active]:text-white transition-colors duration-300">
                 <User className="h-4 w-4" />
               </div>
-              <span className="font-semibold">Perfil</span>
+              <span className="font-semibold">Preferencias</span>
             </TabsTrigger>
+
+            {/* Always visible - Sistema */}
             <TabsTrigger
               value="system"
               className="flex-1 items-center gap-2.5 py-3 px-6 rounded-xl data-[state=active]:bg-background data-[state=active]:text-indigo-600 data-[state=active]:shadow-lg transition-all duration-300 group"
             >
               <div className="p-1.5 rounded-lg bg-indigo-500/10 group-data-[state=active]:bg-indigo-600 group-data-[state=active]:text-white transition-colors duration-300">
-                <RefreshCw className="h-4 w-4" />
+                <Settings className="h-4 w-4" />
               </div>
               <span className="font-semibold">Sistema</span>
             </TabsTrigger>
+
+            {/* Always visible - Seguridad */}
+            <TabsTrigger
+              value="security"
+              className="flex-1 items-center gap-2.5 py-3 px-6 rounded-xl data-[state=active]:bg-background data-[state=active]:text-emerald-600 data-[state=active]:shadow-lg transition-all duration-300 group"
+            >
+              <div className="p-1.5 rounded-lg bg-emerald-500/10 group-data-[state=active]:bg-emerald-600 group-data-[state=active]:text-white transition-colors duration-300">
+                <Shield className="h-4 w-4" />
+              </div>
+              <span className="font-semibold">Seguridad</span>
+            </TabsTrigger>
+
+            {/* Always visible - POS */}
+            <TabsTrigger
+              value="pos"
+              className="flex-1 items-center gap-2.5 py-3 px-6 rounded-xl data-[state=active]:bg-background data-[state=active]:text-green-600 data-[state=active]:shadow-lg transition-all duration-300 group"
+            >
+              <div className="p-1.5 rounded-lg bg-green-500/10 group-data-[state=active]:bg-green-600 group-data-[state=active]:text-white transition-colors duration-300">
+                <ShoppingCart className="h-4 w-4" />
+              </div>
+              <span className="font-semibold">POS</span>
+            </TabsTrigger>
+
+            {/* Always visible - Notificaciones */}
             <TabsTrigger
               value="notifications"
               className="flex-1 items-center gap-2.5 py-3 px-6 rounded-xl data-[state=active]:bg-background data-[state=active]:text-purple-600 data-[state=active]:shadow-lg transition-all duration-300 group"
@@ -168,15 +176,8 @@ export default function SettingsPageContent() {
               </div>
               <span className="font-semibold">Notificaciones</span>
             </TabsTrigger>
-            <TabsTrigger
-              value="security"
-              className="flex-1 items-center gap-2.5 py-3 px-6 rounded-xl data-[state=active]:bg-background data-[state=active]:text-emerald-600 data-[state=active]:shadow-lg transition-all duration-300 group"
-            >
-              <div className="p-1.5 rounded-lg bg-emerald-500/10 group-data-[state=active]:bg-emerald-600 group-data-[state=active]:text-white transition-colors duration-300">
-                <HelpCircle className="h-4 w-4" />
-              </div>
-              <span className="font-semibold">Seguridad</span>
-            </TabsTrigger>
+
+            {/* Always visible - Apariencia */}
             <TabsTrigger
               value="appearance"
               className="flex-1 items-center gap-2.5 py-3 px-6 rounded-xl data-[state=active]:bg-background data-[state=active]:text-pink-600 data-[state=active]:shadow-lg transition-all duration-300 group"
@@ -186,32 +187,99 @@ export default function SettingsPageContent() {
               </div>
               <span className="font-semibold">Apariencia</span>
             </TabsTrigger>
+
+            {/* Always visible - Plan y Facturación */}
+            <TabsTrigger
+              value="billing"
+              className="flex-1 items-center gap-2.5 py-3 px-6 rounded-xl data-[state=active]:bg-background data-[state=active]:text-amber-600 data-[state=active]:shadow-lg transition-all duration-300 group"
+            >
+              <div className="p-1.5 rounded-lg bg-amber-500/10 group-data-[state=active]:bg-amber-600 group-data-[state=active]:text-white transition-colors duration-300">
+                <CreditCard className="h-4 w-4" />
+              </div>
+              <span className="font-semibold">Plan</span>
+            </TabsTrigger>
           </TabsList>
         </div>
 
         {/* Profile Tab */}
         <TabsContent value="profile" className="space-y-6 animate-in fade-in-50 slide-in-from-bottom-2 duration-300">
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold tracking-tight">Preferencias de Usuario</h2>
+            <p className="text-muted-foreground mt-1">
+              Personaliza tu experiencia en el sistema
+            </p>
+          </div>
           <ProfileTab />
         </TabsContent>
 
-        {/* System Tab */}
+        {/* System Tab - Ahora visible para todos */}
         <TabsContent value="system" className="space-y-6 animate-in fade-in-50 slide-in-from-bottom-2 duration-300">
-          <SystemTab />
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold tracking-tight">Configuración del Sistema</h2>
+            <p className="text-muted-foreground mt-1">
+              Gestiona la información de la empresa y configuración regional
+            </p>
+          </div>
+          <PermissionGuard permission="settings.view" showError>
+            <SystemSettingsTab />
+          </PermissionGuard>
+        </TabsContent>
+
+        {/* Security Tab - Ahora visible para todos */}
+        <TabsContent value="security" className="space-y-6 animate-in fade-in-50 slide-in-from-bottom-2 duration-300">
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold tracking-tight">Seguridad del Sistema</h2>
+            <p className="text-muted-foreground mt-1">
+              Políticas de contraseñas, autenticación y control de acceso
+            </p>
+          </div>
+          <PermissionGuard permission="settings.view" showError>
+            <SecuritySettingsTab />
+          </PermissionGuard>
+        </TabsContent>
+
+        {/* POS Tab - Ahora visible para todos */}
+        <TabsContent value="pos" className="space-y-6 animate-in fade-in-50 slide-in-from-bottom-2 duration-300">
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold tracking-tight">Configuración del Punto de Venta</h2>
+            <p className="text-muted-foreground mt-1">
+              Impuestos, inventario, hardware y programa de fidelización
+            </p>
+          </div>
+          <POSTab />
         </TabsContent>
 
         {/* Notifications Tab */}
         <TabsContent value="notifications" className="space-y-6 animate-in fade-in-50 slide-in-from-bottom-2 duration-300">
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold tracking-tight">Notificaciones</h2>
+            <p className="text-muted-foreground mt-1">
+              Configura cómo y cuándo recibir alertas del sistema
+            </p>
+          </div>
           <NotificationsTab />
-        </TabsContent>
-
-        {/* Security Tab */}
-        <TabsContent value="security" className="space-y-6 animate-in fade-in-50 slide-in-from-bottom-2 duration-300">
-          <SecurityTab />
         </TabsContent>
 
         {/* Appearance Tab */}
         <TabsContent value="appearance" className="space-y-6 animate-in fade-in-50 slide-in-from-bottom-2 duration-300">
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold tracking-tight">Apariencia</h2>
+            <p className="text-muted-foreground mt-1">
+              Personaliza el aspecto visual de tu interfaz
+            </p>
+          </div>
           <AppearanceTab />
+        </TabsContent>
+
+        {/* Billing Tab */}
+        <TabsContent value="billing" className="space-y-6 animate-in fade-in-50 slide-in-from-bottom-2 duration-300">
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold tracking-tight">Plan y Facturación</h2>
+            <p className="text-muted-foreground mt-1">
+              Gestiona tu suscripción y cambia de plan
+            </p>
+          </div>
+          <BillingTab />
         </TabsContent>
       </Tabs>
 

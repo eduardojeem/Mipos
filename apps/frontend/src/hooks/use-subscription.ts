@@ -59,10 +59,17 @@ export function useSubscription(): UseSubscriptionReturn {
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.error || 'Error al cargar la suscripción');
+                // Si el error es por falta de organización, no es un error crítico
+                if (data.error?.includes('organización') || data.error?.includes('organization')) {
+                    console.warn('Usuario sin organización asignada');
+                    setSubscription(null);
+                    setError(null); // No mostrar como error
+                } else {
+                    throw new Error(data.error || 'Error al cargar la suscripción');
+                }
+            } else {
+                setSubscription(data.subscription);
             }
-
-            setSubscription(data.subscription);
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'Error desconocido';
             setError(errorMessage);

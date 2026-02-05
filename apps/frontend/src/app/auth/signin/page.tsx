@@ -87,14 +87,28 @@ export default function SignInPage() {
   const fetchUserOrganizations = async (userId: string) => {
     setLoadingOrgs(true);
     try {
+      // Log detallado para debugging
+      console.log('🔍 Fetching organizations for user:', userId);
+      
       const { data: memberData, error: memberError } = await supabase
         .from('organization_members')
         .select('organization_id')
         .eq('user_id', userId);
 
-      if (memberError) throw memberError;
+      if (memberError) {
+        console.error('❌ Error fetching organization_members:', {
+          message: memberError.message,
+          details: memberError.details,
+          hint: memberError.hint,
+          code: memberError.code
+        });
+        throw memberError;
+      }
+
+      console.log('✅ Member data:', memberData);
 
       if (!memberData || memberData.length === 0) {
+        console.warn('⚠️ User has no organization memberships');
         toast({
           title: 'Sin organizaciones',
           description: 'No perteneces a ninguna organización. Contacta al administrador.',
@@ -105,6 +119,7 @@ export default function SignInPage() {
       }
 
       const orgIds = memberData.map(m => m.organization_id);
+      console.log('🔍 Fetching organizations with IDs:', orgIds);
 
       const { data: orgsData, error: orgsError } = await supabase
         .from('organizations')
@@ -112,7 +127,17 @@ export default function SignInPage() {
         .in('id', orgIds)
         .eq('subscription_status', 'ACTIVE');
 
-      if (orgsError) throw orgsError;
+      if (orgsError) {
+        console.error('❌ Error fetching organizations:', {
+          message: orgsError.message,
+          details: orgsError.details,
+          hint: orgsError.hint,
+          code: orgsError.code
+        });
+        throw orgsError;
+      }
+
+      console.log('✅ Organizations data:', orgsData);
 
       if (orgsData && orgsData.length > 0) {
         setUserOrganizations(orgsData);
@@ -123,6 +148,7 @@ export default function SignInPage() {
           setShowOrgSelector(true);
         }
       } else {
+        console.warn('⚠️ No active organizations found');
         toast({
           title: 'Sin organizaciones activas',
           description: 'No tienes acceso a organizaciones activas.',
@@ -130,10 +156,17 @@ export default function SignInPage() {
         });
       }
     } catch (error: any) {
-      console.error('Error fetching organizations:', error);
+      console.error('❌ Error fetching organizations:', {
+        error,
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+        code: error?.code,
+        stack: error?.stack
+      });
       toast({
         title: 'Error',
-        description: 'No se pudieron cargar las organizaciones.',
+        description: error?.message || 'No se pudieron cargar las organizaciones. Verifica las políticas RLS.',
         variant: 'destructive',
       });
     } finally {
