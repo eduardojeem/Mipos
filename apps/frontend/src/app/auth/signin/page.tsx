@@ -90,24 +90,29 @@ export default function SignInPage() {
       // Log detallado para debugging
       console.log('🔍 Fetching organizations for user:', userId);
       
-      const { data: memberData, error: memberError } = await supabase
-        .from('organization_members')
-        .select('organization_id')
-        .eq('user_id', userId);
-
-      if (memberError) {
-        console.error('❌ Error fetching organization_members:', {
-          message: memberError.message,
-          details: memberError.details,
-          hint: memberError.hint,
-          code: memberError.code
-        });
-        throw memberError;
+      // Preferir función RPC (SECURITY DEFINER) para evitar recursión en políticas
+      let orgIds: string[] = [];
+      try {
+        const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_org_ids');
+        if (rpcError) {
+          throw rpcError;
+        }
+        orgIds = Array.isArray(rpcData) ? rpcData : [];
+      } catch (rpcErr: any) {
+        const msg = rpcErr?.message || '';
+        // Fallback sólo si no es el error de recursión
+        if (msg.toLowerCase().includes('infinite recursion')) {
+          throw rpcErr;
+        }
+        const { data: memberData, error: memberError } = await supabase
+          .from('organization_members')
+          .select('organization_id')
+          .eq('user_id', userId);
+        if (memberError) throw memberError;
+        orgIds = (memberData || []).map((m: any) => m.organization_id);
       }
 
-      console.log('✅ Member data:', memberData);
-
-      if (!memberData || memberData.length === 0) {
+      if (!orgIds.length) {
         console.warn('⚠️ User has no organization memberships');
         toast({
           title: 'Sin organizaciones',
@@ -117,23 +122,19 @@ export default function SignInPage() {
         setLoadingOrgs(false);
         return;
       }
-
-      const orgIds = memberData.map(m => m.organization_id);
       console.log('🔍 Fetching organizations with IDs:', orgIds);
 
       const { data: orgsData, error: orgsError } = await supabase
         .from('organizations')
         .select('id, name, slug, subscription_plan, subscription_status')
         .in('id', orgIds)
-        .eq('subscription_status', 'ACTIVE');
+        .eq('subscription_status', 'ACTIVE')
+        .order('name', { ascending: true });
 
       if (orgsError) {
-        console.error('❌ Error fetching organizations:', {
-          message: orgsError.message,
-          details: orgsError.details,
-          hint: orgsError.hint,
-          code: orgsError.code
-        });
+        try {
+          console.error('❌ Error fetching organizations:', orgsError);
+        } catch {}
         throw orgsError;
       }
 
@@ -155,18 +156,24 @@ export default function SignInPage() {
           variant: 'destructive',
         });
       }
-    } catch (error: any) {
-      console.error('❌ Error fetching organizations:', {
-        error,
-        message: error?.message,
-        details: error?.details,
-        hint: error?.hint,
-        code: error?.code,
-        stack: error?.stack
-      });
+    } catch (err: any) {
+      const errorObj = err || {};
+      const name = errorObj?.name || 'Error desconocido';
+      const message = errorObj?.message || (typeof err === 'string' ? err : 'No se pudieron cargar las organizaciones');
+      const code = errorObj?.code || errorObj?.status || undefined;
+      const details = errorObj?.details || errorObj?.hint || undefined;
+      try {
+        console.error('❌ Error fetching organizations:', { name, message, code, details });
+        if (process.env.NODE_ENV !== 'production') {
+          console.debug('Raw error:', errorObj);
+        }
+      } catch {}
+      const friendly = String(message).toLowerCase().includes('row-level security')
+        ? 'Sin permisos para ver organizaciones. Contacta al administrador.'
+        : message;
       toast({
         title: 'Error',
-        description: error?.message || 'No se pudieron cargar las organizaciones. Verifica las políticas RLS.',
+        description: friendly,
         variant: 'destructive',
       });
     } finally {

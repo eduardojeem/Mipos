@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { assertAdmin } from '@/app/api/_utils/auth'
 import { getUserOrganizationId } from '@/app/api/_utils/organization'
 import { defaultBusinessConfig } from '@/types/business-config'
+import { invalidateCachedConfig } from '../cache'
 import { logAudit } from '../../admin/_utils/audit'
 
 export async function POST(request: NextRequest) {
@@ -64,6 +65,9 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    // Invalidate cache para garantizar GET fresco
+    try { invalidateCachedConfig(organizationId) } catch {}
 
     // Audit log
     await logAudit(

@@ -6,27 +6,9 @@ import { validateBusinessConfig } from '@/app/api/admin/_utils/business-config-v
 import { logAudit } from '@/app/api/admin/_utils/audit'
 import type { BusinessConfig } from '@/types/business-config'
 import { defaultBusinessConfig } from '@/types/business-config'
+import { getCachedConfig, setCachedConfig } from './cache'
 
-// ✅ Per-organization cache with TTL
-type CachedConfig = { config: BusinessConfig; expiresAt: number }
-const configCache = new Map<string, CachedConfig>()
-const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
-
-function getCachedConfig(orgId: string): BusinessConfig | null {
-  const cached = configCache.get(orgId)
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.config
-  }
-  configCache.delete(orgId)
-  return null
-}
-
-function setCachedConfig(orgId: string, config: BusinessConfig): void {
-  configCache.set(orgId, {
-    config,
-    expiresAt: Date.now() + CACHE_TTL
-  })
-}
+// ✅ Cache per organización (compartido entre rutas)
 
 export async function GET(request: NextRequest) {
   try {

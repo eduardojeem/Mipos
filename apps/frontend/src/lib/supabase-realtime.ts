@@ -1267,15 +1267,61 @@ export class SupabaseRealtimeService {
    */
   subscribeToBusinessConfig(callback: (payload: BusinessConfigChangePayload) => void): UnsubscribePromise {
     const channelName = 'business-config';
+    let orgId: string | null = null;
+    let orgIds: string[] = [];
+    try {
+      if (typeof window !== 'undefined') {
+        const raw = window.localStorage.getItem('selected_organization');
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            orgId = parsed?.id || parsed?.organization_id || null;
+          } catch {
+            orgId = raw;
+          }
+        }
+      }
+      const ses = (this.supabase as any).auth?.getSession?.();
+      if (!orgId && ses && typeof ses.then === 'function') {
+        ses
+          .then((res: any) => {
+            const session = res?.data || res;
+            const uid = session?.session?.user?.id || session?.user?.id || null;
+            if (uid) {
+              return this.supabase
+                .from('organization_members')
+                .select('organization_id')
+                .eq('user_id', uid);
+            }
+            return null;
+          })
+          .then((r: any) => {
+            if (r && r.data) {
+              orgIds = (r.data || []).map((m: any) => String(m.organization_id)).filter(Boolean);
+              if (!orgId && orgIds.length === 1) orgId = orgIds[0];
+            }
+          })
+          .catch(() => { /* no-op */ });
+      }
+    } catch { /* no-op */ }
+    const orgFilter = orgId && String(orgId).trim() ? `organization_id=eq.${String(orgId).trim()}` : undefined;
+
     const channel = this.supabase
       .channel(channelName)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'settings' },
+        orgFilter
+          ? { event: '*', schema: 'public', table: 'settings', filter: `${orgFilter},key=eq.business_config` }
+          : { event: '*', schema: 'public', table: 'settings', filter: 'key=eq.business_config' },
         (payload: RealtimePostgresChangesPayload<any>) => {
           const keyNew = (payload.new as any)?.key;
           const keyOld = (payload.old as any)?.key;
           if (keyNew !== 'business_config' && keyOld !== 'business_config') return;
+
+          if (orgIds.length > 0) {
+            const oid = (payload.new as any)?.organization_id || (payload.old as any)?.organization_id;
+            if (oid && !orgIds.includes(String(oid))) return;
+          }
 
           const value = ((payload.new as any)?.value ?? (payload.old as any)?.value) || {};
           const change: BusinessConfigChangePayload = {

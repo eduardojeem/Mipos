@@ -8,6 +8,9 @@ export interface Organization {
   subscription_plan: 'FREE' | 'PRO' | 'ENTERPRISE';
   subscription_status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'TRIAL';
   created_at: string;
+  subdomain?: string | null;
+  custom_domain?: string | null;
+  domain_verified?: boolean;
   settings?: Record<string, unknown>;
   branding?: {
     logo?: string;
@@ -58,28 +61,35 @@ export function useUserOrganizations(userId?: string) {
     setError(null);
     
     try {
-      // Fetch organization memberships - FIXED: Changed 'role' to 'role_id'
-      const { data: memberData, error: memberError } = await supabase
-        .from('organization_members')
-        .select('organization_id, role_id')
-        .eq('user_id', currentUserId);
-
-      if (memberError) {
-        throw memberError;
+      // Preferir RPC para evitar recursión en políticas de organization_members
+      let orgIds: string[] = [];
+      try {
+        const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_org_ids');
+        if (rpcError) throw rpcError;
+        orgIds = Array.isArray(rpcData) ? rpcData : [];
+      } catch (rpcErr: any) {
+        const msg = rpcErr?.message || '';
+        if (msg.toLowerCase().includes('infinite recursion')) {
+          throw rpcErr;
+        }
+        const { data: memberData, error: memberError } = await supabase
+          .from('organization_members')
+          .select('organization_id')
+          .eq('user_id', currentUserId);
+        if (memberError) throw memberError;
+        orgIds = (memberData || []).map((m: any) => m.organization_id);
       }
 
-      if (!memberData || memberData.length === 0) {
+      if (!orgIds.length) {
         setOrganizations([]);
         setLoading(false);
         return;
       }
 
-      const orgIds = memberData.map((m: OrganizationMember) => m.organization_id);
-
-      // Fetch organization details
+      // Fetch organization details (including domain fields)
       const { data: orgsData, error: orgsError } = await supabase
         .from('organizations')
-        .select('*')
+        .select('id, name, slug, subscription_plan, subscription_status, created_at, subdomain, custom_domain, domain_verified, settings, branding')
         .in('id', orgIds)
         .order('name');
 

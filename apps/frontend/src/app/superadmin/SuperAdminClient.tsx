@@ -9,6 +9,7 @@ const SystemOverview = dynamic(() => import('@/app/superadmin/components/SystemO
 import { ErrorDisplay } from '@/app/superadmin/components/ErrorDisplay';
 import { PartialFailureWarning } from '@/app/superadmin/components/PartialFailureWarning';
 const AnalyticsDashboard = dynamic(() => import('@/app/superadmin/components/AnalyticsDashboard').then(m => m.AnalyticsDashboard), { ssr: false });
+import { SystemSettings } from '@/app/superadmin/components/SystemSettings';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -19,7 +20,8 @@ import {
   RefreshCw,
   Building2,
   BarChart3,
-  TrendingUp
+  TrendingUp,
+  Settings
 } from 'lucide-react';
 import { SuperAdminGuard } from './components/SuperAdminGuard';
 import { useToast } from '@/components/ui/use-toast';
@@ -222,7 +224,7 @@ export function SuperAdminClient({ initialOrganizations, initialStats }: SuperAd
             <AdminStats stats={stats} />
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-              <TabsList className="grid w-full grid-cols-3 lg:w-[600px]">
+              <TabsList className="grid w-full grid-cols-4 lg:w-[800px]">
                 <TabsTrigger value="overview" className="gap-2">
                   <TrendingUp className="h-4 w-4" />
                   <span className="hidden sm:inline">Resumen</span>
@@ -234,6 +236,10 @@ export function SuperAdminClient({ initialOrganizations, initialStats }: SuperAd
                 <TabsTrigger value="analytics" className="gap-2">
                   <BarChart3 className="h-4 w-4" />
                   <span className="hidden sm:inline">Analíticas</span>
+                </TabsTrigger>
+                <TabsTrigger value="settings" className="gap-2">
+                  <Settings className="h-4 w-4" />
+                  <span className="hidden sm:inline">Configuración</span>
                 </TabsTrigger>
               </TabsList>
 
@@ -278,6 +284,10 @@ export function SuperAdminClient({ initialOrganizations, initialStats }: SuperAd
 
               <TabsContent value="analytics" className="space-y-4">
                 <AnalyticsDashboard />
+              </TabsContent>
+
+              <TabsContent value="settings" className="space-y-4">
+                <SystemSettings onUpdate={refresh} />
               </TabsContent>
             </Tabs>
           </div>

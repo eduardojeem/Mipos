@@ -27,7 +27,7 @@ interface DomainSettingsFormProps {
 
 export function DomainSettingsForm({ onUpdate }: DomainSettingsFormProps) {
   const { user } = useAuth();
-  const { currentOrganization, loading: orgLoading } = useUserOrganizations();
+  const { selectedOrganization, loading: orgLoading } = useUserOrganizations(user?.id);
   const { toast } = useToast();
   
   const [subdomain, setSubdomain] = useState('');
@@ -35,25 +35,37 @@ export function DomainSettingsForm({ onUpdate }: DomainSettingsFormProps) {
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [previewUrl, setPreviewUrl] = useState('');
+  const [baseDomain, setBaseDomain] = useState('miposparaguay.vercel.app');
+
+  // Cargar dominio base del sistema
+  useEffect(() => {
+    fetch('/api/superadmin/system-settings')
+      .then(res => res.json())
+      .then(data => {
+        if (data.baseDomain) {
+          setBaseDomain(data.baseDomain);
+        }
+      })
+      .catch(err => console.error('Error loading base domain:', err));
+  }, []);
 
   // Cargar datos de la organización
   useEffect(() => {
-    if (currentOrganization) {
-      setSubdomain(currentOrganization.subdomain || currentOrganization.slug || '');
-      setCustomDomain(currentOrganization.custom_domain || '');
+    if (selectedOrganization) {
+      setSubdomain(selectedOrganization.subdomain || selectedOrganization.slug || '');
+      setCustomDomain(selectedOrganization.custom_domain || '');
     }
-  }, [currentOrganization]);
+  }, [selectedOrganization]);
 
   // Actualizar preview URL
   useEffect(() => {
     if (subdomain) {
-      // En producción sería: `https://${subdomain}.tudominio.com`
-      setPreviewUrl(`${subdomain}.tudominio.com`);
+      setPreviewUrl(`${subdomain}.${baseDomain}`);
     }
-  }, [subdomain]);
+  }, [subdomain, baseDomain]);
 
   const handleSave = async () => {
-    if (!currentOrganization?.id) {
+    if (!selectedOrganization?.id) {
       toast({
         title: 'Error',
         description: 'No se pudo identificar la organización',
@@ -86,7 +98,7 @@ export function DomainSettingsForm({ onUpdate }: DomainSettingsFormProps) {
     setSaving(true);
 
     try {
-      const response = await fetch(`/api/admin/organizations/${currentOrganization.id}`, {
+      const response = await fetch(`/api/admin/organizations/${selectedOrganization.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -233,7 +245,7 @@ export function DomainSettingsForm({ onUpdate }: DomainSettingsFormProps) {
                     <Store className="h-8 w-8" />
                   </div>
                   <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
-                    {currentOrganization?.name || 'Tu Tienda'}
+                    {selectedOrganization?.name || 'Tu Tienda'}
                   </h3>
                   <p className="text-slate-600 dark:text-slate-400 text-sm">
                     Así verán tus clientes tu tienda online
@@ -282,7 +294,7 @@ export function DomainSettingsForm({ onUpdate }: DomainSettingsFormProps) {
               </div>
               <p className="text-xs text-slate-500 flex items-center gap-1">
                 <span className="font-mono bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-                  {subdomain || 'mi-tienda'}.tudominio.com
+                  {subdomain || 'mi-tienda'}.{baseDomain}
                 </span>
               </p>
             </div>

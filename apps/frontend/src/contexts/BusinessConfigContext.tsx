@@ -306,6 +306,7 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
   // Configurar suscripciones y listeners - separado del loadConfig
   useEffect(() => {
     if (!organizationId) return; // No suscribirse sin organización
+    if (!isSupabaseActive()) return; // Evitar suscripciones cuando Supabase está inactivo
     
     // Suscribirse a cambios de business_config en tiempo real (si Supabase está activo)
     let unsubscribe: (() => Promise<void>) | null = null
