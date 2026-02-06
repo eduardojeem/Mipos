@@ -25,7 +25,6 @@ import {
 
 import { useBusinessConfig } from '@/contexts/BusinessConfigContext';
 import { BusinessConfig } from '@/types/business-config';
-import { useAutoSave } from './hooks/useAutoSave';
 import { useAuth } from '@/hooks/use-auth';
 import { useUserOrganizations } from '@/hooks/use-user-organizations';
 // Lazy load components for better performance
@@ -113,36 +112,9 @@ export default function BusinessConfigPage() {
   const [saving, setSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [localChanges, setLocalChanges] = useState<Partial<BusinessConfig>>({});
-  const [autoSaveEnabled, setAutoSaveEnabled] = useState(false);
 
   // Combinar configuración actual con cambios locales para mostrar el estado actual
   const currentConfig = { ...config, ...localChanges };
-
-  // Auto-save functionality
-  const autoSave = useAutoSave(currentConfig, {
-    enabled: autoSaveEnabled && hasUnsavedChanges,
-    delay: 2000, // 2 seconds delay
-    onSave: async (configToSave) => {
-      const result = await updateConfig({
-        ...localChanges,
-        updatedAt: new Date().toISOString()
-      });
-      
-      if (result.persisted) {
-        setHasUnsavedChanges(false);
-        setLocalChanges({});
-      }
-      
-      return result;
-    },
-    onError: (error) => {
-      toast({
-        title: "Error en auto-guardado",
-        description: error.message,
-        variant: "destructive"
-      });
-    }
-  });
 
   // Función para manejar cambios locales (sin guardar automáticamente)
   const handleConfigUpdate = useCallback((updates: Partial<BusinessConfig>) => {
@@ -197,6 +169,31 @@ export default function BusinessConfigPage() {
       setSaving(false);
     }
   }, [localChanges, hasUnsavedChanges, updateConfig, toast]);
+
+  // Keyboard shortcut para guardar (Ctrl+S)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const k = e.key?.toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && k === 's') {
+        e.preventDefault();
+        handleSave();
+      }
+    };
+    window.addEventListener('keydown', handler as any);
+    return () => window.removeEventListener('keydown', handler as any);
+  }, [handleSave]);
+
+  // Advertencia antes de salir con cambios sin guardar
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = '' as any;
+      }
+    };
+    window.addEventListener('beforeunload', onBeforeUnload as any);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload as any);
+  }, [hasUnsavedChanges]);
 
   // Función para descartar cambios locales
   const handleDiscardChanges = useCallback(() => {
@@ -391,22 +388,6 @@ export default function BusinessConfigPage() {
               </Badge>
             )}
 
-            {autoSave.isSaving && (
-              <Badge variant="outline" className="text-blue-600 border-blue-600">
-                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                Auto-guardando...
-              </Badge>
-            )}
-
-            <div className="flex items-center gap-2 px-3 py-1 rounded-md border">
-              <label className="text-sm font-medium">Auto-guardar:</label>
-              <input
-                type="checkbox"
-                checked={autoSaveEnabled}
-                onChange={(e) => setAutoSaveEnabled(e.target.checked)}
-                className="rounded"
-              />
-            </div>
 
             {hasUnsavedChanges && (
               <Button
@@ -465,22 +446,26 @@ export default function BusinessConfigPage() {
           })}
         </TabsList>
 
-        {TABS.map((tab) => (
-          <TabsContent key={tab.id} value={tab.id} className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <tab.icon className="h-5 w-5" />
-                  {tab.label}
-                </CardTitle>
-                <p className="text-sm text-gray-600">{tab.description}</p>
-              </CardHeader>
-              <CardContent>
-                {renderTabContent()}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        ))}
+        <TabsContent key={activeTab} value={activeTab} className="space-y-6">
+          {(() => {
+            const tab = TABS.find(t => t.id === activeTab)!;
+            const IconComp = tab.icon;
+            return (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <IconComp className="h-5 w-5" />
+                    {tab.label}
+                  </CardTitle>
+                  <p className="text-sm text-gray-600">{tab.description}</p>
+                </CardHeader>
+                <CardContent>
+                  {renderTabContent()}
+                </CardContent>
+              </Card>
+            );
+          })()}
+        </TabsContent>
       </Tabs>
 
       {/* Floating Save Button */}
