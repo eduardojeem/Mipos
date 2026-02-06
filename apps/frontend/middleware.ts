@@ -56,8 +56,20 @@ export async function middleware(request: NextRequest) {
       if (org && !error) {
         console.log(`✅ Organization detected via path: ${org.name} (${org.slug})`);
 
+        // Reescribir URL: /bfjeem/home → /home (con contexto de organización)
+        const restSegments = segments.slice(1);
+        const rewritePath = '/' + (restSegments.length ? restSegments.join('/') : 'home');
+        const rewriteUrl = new URL(rewritePath, request.url);
+        
+        console.log(`🔄 Rewriting: ${url.pathname} → ${rewritePath}`);
+        
+        // Crear response con rewrite Y establecer cookies
+        const response = NextResponse.rewrite(rewriteUrl);
+        
+        // Actualizar sesión de Supabase
+        await updateSession(request);
+        
         // Establecer cookies con información de la organización
-        const response = await updateSession(request);
         response.cookies.set('x-organization-id', org.id, { 
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
@@ -76,15 +88,8 @@ export async function middleware(request: NextRequest) {
           sameSite: 'lax',
           path: '/'
         });
-
-        // Reescribir URL: /bfjeem/home → /home (con contexto de organización)
-        const restSegments = segments.slice(1);
-        const rewritePath = '/' + (restSegments.length ? restSegments.join('/') : 'home');
-        const rewriteUrl = new URL(rewritePath, request.url);
         
-        console.log(`🔄 Rewriting: ${url.pathname} → ${rewritePath}`);
-        
-        return NextResponse.rewrite(rewriteUrl, { request: { headers: request.headers } });
+        return response;
       }
     } catch (error) {
       console.error('❌ Error detecting organization by path:', error);
