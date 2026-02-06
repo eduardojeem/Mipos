@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 
 /**
  * Obtiene la organización actual desde las cookies
- * El middleware inyecta estas cookies después de detectar la organización por hostname
+ * El middleware inyecta estas cookies después de detectar la organización por hostname o path
  */
 export async function getCurrentOrganization() {
   const cookieStore = cookies();
@@ -12,7 +12,20 @@ export async function getCurrentOrganization() {
   const slug = cookieStore.get('x-organization-slug')?.value;
   
   if (!id) {
-    throw new Error('No organization context found. Make sure middleware is configured correctly.');
+    // En desarrollo, intentar obtener la primera organización activa
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('⚠️  No organization context found in cookies. Using fallback in development.');
+      
+      // Retornar una organización por defecto para desarrollo
+      // En producción, esto debería fallar
+      return {
+        id: 'development-fallback',
+        name: 'Development Organization',
+        slug: 'development',
+      };
+    }
+    
+    throw new Error('No organization context found. Make sure middleware is configured correctly and you are accessing via /{slug}/page format.');
   }
   
   return {
