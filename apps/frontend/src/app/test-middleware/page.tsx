@@ -1,8 +1,14 @@
 import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
 
 export default async function TestMiddlewarePage() {
+  // Solo permitir en desarrollo
+  if (process.env.NODE_ENV === 'production') {
+    redirect('/');
+  }
+  
   const cookieStore = cookies();
   const allCookies = cookieStore.getAll();
   
