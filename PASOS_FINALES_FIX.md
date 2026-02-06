@@ -1,191 +1,138 @@
-# 🚀 Pasos Finales para Fix Path-Based Routing
+# 🎯 PASOS FINALES - FIX ORGANIZACIONES
 
-**Estado Actual:** 
-- ✅ Organizaciones existen en Supabase (6 organizaciones ACTIVE)
-- ✅ SERVICE_ROLE_KEY configurado en Vercel
-- ✅ Middleware actualizado para usar service role key
-- ⏳ Falta hacer deploy de los cambios
+## ✅ CAMBIOS APLICADOS
 
----
+### 1. Middleware actualizado para usar Service Role Key
+- **Archivo**: `apps/frontend/middleware.ts`
+- **Cambio**: Usar `SUPABASE_SERVICE_ROLE_KEY` en lugar de `ANON_KEY`
+- **Razón**: El ANON_KEY tiene restricciones RLS que impedían leer organizaciones
+- **Ubicaciones actualizadas**:
+  - Path-based routing (línea ~50)
+  - Subdomain-based routing (línea ~120)
+  - Localhost fallback (línea ~160)
 
-## 📝 CAMBIOS REALIZADOS (Pendientes de Deploy)
+### 2. Fix de cookies en path-based routing
+- **Archivo**: `apps/frontend/middleware.ts`
+- **Problema**: Las cookies no se establecían porque el `NextResponse.rewrite()` creaba una nueva respuesta sin las cookies
+- **Solución**: Crear el response con rewrite primero, luego establecer las cookies en ese response
+- **Commit**: `48b789a`
 
-### 1. Middleware Actualizado
-**Archivo:** `apps/frontend/middleware.ts`
-
-**Cambio:** Ahora usa `SUPABASE_SERVICE_ROLE_KEY` en lugar de `ANON_KEY` para evitar restricciones RLS.
-
-```typescript
-// Antes (con restricciones RLS):
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-// Ahora (sin restricciones RLS):
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-```
-
-### 2. Página de Test
-**Archivo:** `apps/frontend/src/app/test-middleware/page.tsx`
-
-Nueva página para probar que el middleware establece las cookies correctamente.
+### 3. Commits completados
+- **Commit 1**: `539b92b` - "fix: Usar service role key en middleware para leer organizaciones"
+- **Commit 2**: `48b789a` - "fix: Establecer cookies correctamente en path-based routing"
+- **Estado**: ✅ Pusheado a GitHub
 
 ---
 
-## 🚀 PASOS PARA DEPLOY
+## 🚀 PRÓXIMOS PASOS
 
-### Paso 1: Hacer Commit
+### 1. Esperar Deploy de Vercel (2-3 minutos)
+- Vercel detectará el push automáticamente
+- Verificar en: https://vercel.com/eduardojeem/mipos/deployments
+- Esperar a que el estado sea "Ready"
+
+### 2. Verificar que `SUPABASE_SERVICE_ROLE_KEY` esté en Vercel
 ```bash
-git add -A
-git commit -m "fix: usar service role key en middleware para evitar RLS
-
-- Middleware ahora usa SUPABASE_SERVICE_ROLE_KEY
-- Evita restricciones RLS al buscar organizaciones
-- Agregada página test-middleware para diagnóstico
-- Path-based routing debería funcionar ahora"
+# Ir a: https://vercel.com/eduardojeem/mipos/settings/environment-variables
+# Verificar que exista: SUPABASE_SERVICE_ROLE_KEY
+# Debe tener el valor del service role key de Supabase
 ```
 
-### Paso 2: Push a GitHub
-```bash
-git push
+### 3. Probar Path-Based Routing
+Una vez que el deploy esté listo:
+
+#### Opción A: Probar con bfjeem
+```
+https://miposparaguay.vercel.app/bfjeem/home
 ```
 
-### Paso 3: Esperar Deploy (2-3 min)
-Vercel detectará el push y hará deploy automáticamente.
+#### Opción B: Probar con otras organizaciones
+```
+https://miposparaguay.vercel.app/john-espinoza-org/home
+https://miposparaguay.vercel.app/globex/home
+https://miposparaguay.vercel.app/main-org/home
+https://miposparaguay.vercel.app/soylent/home
+```
 
----
-
-## 🧪 CÓMO PROBAR DESPUÉS DEL DEPLOY
-
-### Test 1: Página de Debug
+### 4. Verificar que las cookies se establecen
+Después de visitar cualquier URL de arriba, ir a:
 ```
 https://miposparaguay.vercel.app/debug-org
 ```
-Debería mostrar las 6 organizaciones (ya lo hace ✅)
 
-### Test 2: Click en Test URL
-Click en: `/bfjeem/home`
-
-**Esperado:**
-- ✅ Te lleva a la página home
-- ✅ Muestra contenido de BFJEEM
-- ✅ No hay error 404
-
-### Test 3: Volver a Debug
-Vuelve a `/debug-org`
-
-**Esperado:**
-- ✅ Cookies establecidas:
-  - `x-organization-id`: [uuid]
-  - `x-organization-name`: MiPOS BFJEEM
-  - `x-organization-slug`: bfjeem
-
-### Test 4: Página de Test Middleware
-```
-https://miposparaguay.vercel.app/bfjeem/test-middleware
-```
-
-**Esperado:**
-- ✅ Muestra cookies de organización
-- ✅ Confirma que el middleware se ejecutó
+**Deberías ver**:
+- ✅ `x-organization-id`: [UUID de la organización]
+- ✅ `x-organization-name`: [Nombre de la organización]
+- ✅ `x-organization-slug`: [Slug de la organización]
 
 ---
 
 ## 🔍 SI AÚN NO FUNCIONA
 
-### Verificar Logs en Vercel:
-1. Ve a **Vercel Dashboard** → **Deployments**
+### Revisar logs en Vercel
+1. Ir a: https://vercel.com/eduardojeem/mipos/deployments
 2. Click en el último deployment
-3. Click en **Functions**
-4. Busca logs del middleware:
+3. Click en "Functions" tab
+4. Buscar logs del middleware
+5. Verificar si hay errores
 
-**Logs esperados:**
-```
-✅ Organization detected via path: MiPOS BFJEEM (bfjeem)
-🔄 Rewriting: /bfjeem/home → /home
-```
-
-**Si ves errores:**
-- Copia el error completo
-- Compártelo para ayudarte
-
-### Verificar Variables de Entorno:
-1. Ve a **Settings** → **Environment Variables**
-2. Verifica que exista: `SUPABASE_SERVICE_ROLE_KEY`
-3. Si no existe, agrégala y redeploy
-
----
-
-## 📊 RESUMEN DE ARCHIVOS MODIFICADOS
-
-```
-✅ apps/frontend/middleware.ts
-   - Usa service role key para evitar RLS
-   - Actualizado en 3 lugares (path-based, subdomain-based, localhost)
-
-✅ apps/frontend/src/app/test-middleware/page.tsx
-   - Nueva página para testing
-
-✅ apps/frontend/src/app/debug-org/page.tsx
-   - Ya actualizada en deploy anterior
-
-✅ scripts/seed-organizations-production.ts
-   - Script para verificar organizaciones
-```
-
----
-
-## 🎯 RESULTADO ESPERADO
-
-Después del deploy, estas URLs deberían funcionar:
-
-```
-✅ https://miposparaguay.vercel.app/bfjeem/home
-✅ https://miposparaguay.vercel.app/acme-corp/home
-✅ https://miposparaguay.vercel.app/globex/home
-✅ https://miposparaguay.vercel.app/john-espinoza-org/home
-✅ https://miposparaguay.vercel.app/main-org/home
-✅ https://miposparaguay.vercel.app/soylent/home
-```
-
-Cada una mostrará:
-- ✅ Página home de esa organización
-- ✅ Solo productos de esa organización
-- ✅ Nombre de la organización en el header
-
----
-
-## 💡 POR QUÉ ESTE FIX FUNCIONA
-
-### Problema Original:
-El middleware usaba `ANON_KEY` que tiene restricciones RLS. No podía leer las organizaciones sin autenticación.
-
-### Solución:
-Usar `SERVICE_ROLE_KEY` que bypasea RLS y puede leer todas las organizaciones.
-
-### Seguridad:
-- ✅ Service role key solo se usa en el servidor (middleware)
-- ✅ Nunca se expone al cliente
-- ✅ Solo se usa para operaciones de lectura de organizaciones
-
----
-
-## 🚨 IMPORTANTE
-
-**Antes de hacer commit, asegúrate de que:**
-- ✅ Los cambios en `middleware.ts` están guardados
-- ✅ La página `test-middleware/page.tsx` existe
-- ✅ No hay errores de TypeScript
-
-**Comando para verificar:**
+### Verificar variables de entorno
 ```bash
-# Ver archivos modificados
-git status
-
-# Ver cambios en middleware
-git diff apps/frontend/middleware.ts
+# En Vercel → Settings → Environment Variables
+# Debe existir:
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGc...
 ```
+
+### Si las cookies no se establecen
+- Verificar que el middleware se está ejecutando (ver logs)
+- Verificar que la organización existe en Supabase
+- Verificar que `subscription_status = 'ACTIVE'`
 
 ---
 
-**Preparado por:** Kiro AI  
-**Fecha:** 5 de febrero de 2026  
-**Estado:** Listo para deploy
+## 📊 ORGANIZACIONES DISPONIBLES
+
+| Nombre | Slug | Status |
+|--------|------|--------|
+| MiPOS BFJEEM | bfjeem | ACTIVE |
+| Empresa John Espinoza | john-espinoza-org | ACTIVE |
+| Globex Corporation | globex | ACTIVE |
+| Organización Principal | main-org | ACTIVE |
+| Soylent Corp | soylent | ACTIVE |
+| ACME Corp | acme-corp | ACTIVE |
+
+---
+
+## ✅ CHECKLIST
+
+- [x] Middleware actualizado para usar service role key
+- [x] Fix de cookies en path-based routing
+- [x] Commits y push completados
+- [ ] Deploy de Vercel completado
+- [ ] Variables de entorno verificadas
+- [ ] Path-based routing probado
+- [ ] Cookies establecidas correctamente
+- [ ] Página `/debug-org` muestra cookies
+
+---
+
+## 🎉 CUANDO TODO FUNCIONE
+
+Una vez que las cookies se establezcan correctamente:
+1. Las páginas públicas (`/home`, `/offers`, `/catalog`) mostrarán datos de la organización
+2. Los usuarios podrán navegar entre organizaciones cambiando el slug en la URL
+3. El sistema estará listo para producción con path-based routing
+
+---
+
+## 💡 EXPLICACIÓN DEL FIX
+
+### Problema 1: RLS bloqueaba lectura de organizaciones
+- **Causa**: Middleware usaba `ANON_KEY` con restricciones RLS
+- **Solución**: Usar `SERVICE_ROLE_KEY` que bypasea RLS
+- **Seguridad**: Service role key solo se usa en servidor, nunca se expone al cliente
+
+### Problema 2: Cookies no se establecían
+- **Causa**: `NextResponse.rewrite()` creaba nueva respuesta sin cookies
+- **Solución**: Crear response con rewrite primero, luego establecer cookies
+- **Resultado**: Las cookies ahora se envían correctamente al cliente
