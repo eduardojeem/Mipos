@@ -3,11 +3,7 @@ import { updateSession } from '@/lib/supabase/middleware';
 import { createClient } from '@supabase/supabase-js';
 
 export async function middleware(request: NextRequest) {
-  // Skip middleware for RSC fetches to avoid aborting server component streams
   const url = request.nextUrl;
-  if (url.searchParams.has('_rsc')) {
-    return NextResponse.next();
-  }
 
   // Redirect /admin/settings to /dashboard/settings
   if (url.pathname === '/admin/settings') {
@@ -15,21 +11,30 @@ export async function middleware(request: NextRequest) {
   }
 
   // ============================================
-  // DETECCIÓN DE ORGANIZACIÓN PARA PÁGINAS PÚBLICAS
+  // PATH-BASED ROUTING: /{slug}/page
+  // Ejemplo: /bfjeem/home → Detecta organización "bfjeem"
   // ============================================
-  const publicPages = ['/home', '/offers', '/catalog', '/orders/track'];
-  const isPublicPage = publicPages.some(page => url.pathname.startsWith(page));
+  const segments = url.pathname.split('/').filter(Boolean);
+  
+  // Rutas reservadas que NO son slugs de organización
+  const reserved = new Set([
+    'api', 'admin', 'dashboard', 'auth', '_next', 
+    'home', 'offers', 'catalog', 'orders', 'inicio',
+    'signin', 'signup', 'signout', 'forgot-password',
+    'pos', 'products', 'customers', 'sales', 'reports',
+    'settings', 'profile', 'help', 'about', 'contact',
+    'terms', 'privacy', 'suspended', '404', '500'
+  ]);
+  
+  const firstSegment = segments[0];
+  
+  // Verificar si el primer segmento es un slug válido de organización
+  const isValidSlug = firstSegment && 
+                      !reserved.has(firstSegment) && 
+                      /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(firstSegment);
 
-  if (isPublicPage) {
+  if (isValidSlug) {
     try {
-      // Detectar organización por hostname
-      const hostname = request.headers.get('host') || '';
-      
-      // Extraer subdomain (primera parte del hostname)
-      const parts = hostname.split('.');
-      const subdomain = parts[0].split(':')[0]; // Remover puerto si existe
-
-      // Crear cliente Supabase para buscar organización
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
       const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -40,19 +45,118 @@ export async function middleware(request: NextRequest) {
 
       const supabase = createClient(supabaseUrl, supabaseKey);
 
-      // Buscar organización por subdomain o custom_domain
+      // Buscar organización por slug o subdomain
       const { data: org, error } = await supabase
         .from('organizations')
-        .select('id, slug, name, subscription_status')
-        .or(`subdomain.eq.${subdomain},custom_domain.eq.${hostname}`)
+        .select('id, slug, name, subdomain, subscription_status')
+        .or(`slug.eq.${firstSegment},subdomain.eq.${firstSegment}`)
         .eq('subscription_status', 'ACTIVE')
         .single();
 
-      if (error || !org) {
-        console.warn(`⚠️  No organization found for hostname: ${hostname}`);
+      if (org && !error) {
+        console.log(`✅ Organization detected via path: ${org.name} (${org.slug})`);
+
+        // Establecer cookies con información de la organización
+        const response = await updateSession(request);
+        response.cookies.set('x-organization-id', org.id, { 
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          path: '/'
+        });
+        response.cookies.set('x-organization-name', org.name, { 
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          path: '/'
+        });
+        response.cookies.set('x-organization-slug', org.slug, { 
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          path: '/'
+        });
+
+        // Reescribir URL: /bfjeem/home → /home (con contexto de organización)
+        const restSegments = segments.slice(1);
+        const rewritePath = '/' + (restSegments.length ? restSegments.join('/') : 'home');
+        const rewriteUrl = new URL(rewritePath, request.url);
         
-        // En desarrollo (localhost), usar organización por defecto
-        if (hostname.includes('localhost')) {
+        console.log(`🔄 Rewriting: ${url.pathname} → ${rewritePath}`);
+        
+        return NextResponse.rewrite(rewriteUrl, { request: { headers: request.headers } });
+      }
+    } catch (error) {
+      console.error('❌ Error detecting organization by path:', error);
+    }
+  }
+
+  // ============================================
+  // SUBDOMAIN-BASED ROUTING (Fallback para Vercel Pro)
+  // Ejemplo: bfjeem.miposparaguay.vercel.app
+  // ============================================
+  const publicPages = ['/home', '/offers', '/catalog', '/orders/track'];
+  const isPublicPage = publicPages.some(page => url.pathname.startsWith(page));
+
+  if (isPublicPage) {
+    try {
+      const hostname = request.headers.get('host') || '';
+      const parts = hostname.split('.');
+      const subdomain = parts[0].split(':')[0];
+
+      // Solo intentar detección por subdomain si NO es localhost o el dominio base
+      const isSubdomain = parts.length > 2 && !hostname.includes('localhost');
+
+      if (isSubdomain) {
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+        if (supabaseUrl && supabaseKey) {
+          const supabase = createClient(supabaseUrl, supabaseKey);
+
+          const { data: org, error } = await supabase
+            .from('organizations')
+            .select('id, slug, name, subdomain, subscription_status')
+            .or(`subdomain.eq.${subdomain},custom_domain.eq.${hostname}`)
+            .eq('subscription_status', 'ACTIVE')
+            .single();
+
+          if (org && !error) {
+            console.log(`✅ Organization detected via subdomain: ${org.name} (${org.slug})`);
+
+            const response = await updateSession(request);
+            response.cookies.set('x-organization-id', org.id, { 
+              httpOnly: true,
+              secure: process.env.NODE_ENV === 'production',
+              sameSite: 'lax',
+              path: '/'
+            });
+            response.cookies.set('x-organization-name', org.name, { 
+              httpOnly: true,
+              secure: process.env.NODE_ENV === 'production',
+              sameSite: 'lax',
+              path: '/'
+            });
+            response.cookies.set('x-organization-slug', org.slug, { 
+              httpOnly: true,
+              secure: process.env.NODE_ENV === 'production',
+              sameSite: 'lax',
+              path: '/'
+            });
+
+            return response;
+          }
+        }
+      }
+
+      // En desarrollo (localhost), usar organización por defecto
+      if (hostname.includes('localhost')) {
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+        if (supabaseUrl && supabaseKey) {
+          const supabase = createClient(supabaseUrl, supabaseKey);
+          
           const { data: defaultOrg } = await supabase
             .from('organizations')
             .select('id, slug, name, subscription_status')
@@ -63,7 +167,6 @@ export async function middleware(request: NextRequest) {
           if (defaultOrg) {
             console.log(`ℹ️  Using default organization in development: ${defaultOrg.name}`);
             
-            // Usar cookies para pasar la información de organización
             const response = await updateSession(request);
             response.cookies.set('x-organization-id', defaultOrg.id, { 
               httpOnly: true,
@@ -87,49 +190,13 @@ export async function middleware(request: NextRequest) {
             return response;
           }
         }
-
-        // En producción, redirigir a 404
-        return NextResponse.redirect(new URL('/404', request.url));
       }
-
-      // Verificar que la suscripción esté activa
-      if (org.subscription_status !== 'ACTIVE') {
-        console.warn(`⚠️  Organization ${org.name} has inactive subscription`);
-        return NextResponse.redirect(new URL('/suspended', request.url));
-      }
-
-      console.log(`✅ Organization detected: ${org.name} (${org.slug})`);
-
-      // Usar cookies para pasar la información de organización
-      const response = await updateSession(request);
-      response.cookies.set('x-organization-id', org.id, { 
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/'
-      });
-      response.cookies.set('x-organization-name', org.name, { 
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/'
-      });
-      response.cookies.set('x-organization-slug', org.slug, { 
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/'
-      });
-
-      return response;
-
     } catch (error) {
-      console.error('❌ Error detecting organization:', error);
-      return await updateSession(request);
+      console.error('❌ Error detecting organization by subdomain:', error);
     }
   }
 
-  // Para páginas no públicas, continuar normalmente
+  // Para todas las demás rutas, continuar normalmente
   return await updateSession(request);
 }
 
