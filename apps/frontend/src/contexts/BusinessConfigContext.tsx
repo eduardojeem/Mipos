@@ -5,6 +5,8 @@ import { BusinessConfig, BusinessConfigUpdate, defaultBusinessConfig } from '@/t
 import { supabaseRealtimeService } from '@/lib/supabase-realtime'
 import { isSupabaseActive } from '@/lib/env'
 import { syncLogger } from '@/lib/sync/sync-logging'
+import { useAuth } from '@/hooks/use-auth'
+import { useUserOrganizations } from '@/hooks/use-user-organizations'
 
 // Normaliza el esquema de BusinessConfig para compatibilidad del carrusel
 function normalizeBusinessConfig(input: BusinessConfig): BusinessConfig {
@@ -66,6 +68,8 @@ interface BusinessConfigContextType {
   error: string | null;
   resetConfig: () => Promise<void>;
   persisted: boolean;
+  organizationId: string | null;
+  organizationName: string | null;
 }
 
 const BusinessConfigContext = createContext<BusinessConfigContextType | undefined>(undefined);
@@ -75,6 +79,9 @@ interface BusinessConfigProviderProps {
 }
 
 export function BusinessConfigProvider({ children }: BusinessConfigProviderProps) {
+  const { user } = useAuth();
+  const { selectedOrganization } = useUserOrganizations(user?.id);
+  
   const [config, setConfig] = useState<BusinessConfig>(defaultBusinessConfig);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -87,6 +94,10 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
   });
   // BroadcastChannel para sincronización entre pestañas/ventanas
   const [bc, setBc] = useState<BroadcastChannel | null>(null)
+  
+  // Organization context
+  const organizationId = selectedOrganization?.id || null;
+  const organizationName = selectedOrganization?.name || null;
 
   // Helpers para convertir HEX a HSL (compatible con tokens shadcn: hsl(var(--token)))
   const hexToRgb = useCallback((hex: string) => {
@@ -122,44 +133,68 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
   // Cola offline mínima para operaciones pendientes de persistencia
   type PendingUpdate = { config: BusinessConfig; queuedAt: number }
   const QUEUE_KEY = 'businessConfigQueue'
+  
+  // Helper to get organization-scoped localStorage key
+  const getStorageKey = useCallback((key: string) => {
+    return organizationId ? `${key}_${organizationId}` : key;
+  }, [organizationId]);
+  
   const getQueue = useCallback((): PendingUpdate[] => {
     try {
-      const raw = localStorage.getItem(QUEUE_KEY)
+      const raw = localStorage.getItem(getStorageKey(QUEUE_KEY))
       return raw ? JSON.parse(raw) : []
     } catch {
       return []
     }
-  }, []);
+  }, [getStorageKey]);
+  
   const saveQueue = useCallback((queue: PendingUpdate[]) => {
-    try { localStorage.setItem(QUEUE_KEY, JSON.stringify(queue)) } catch {}
-  }, []);
+    try { localStorage.setItem(getStorageKey(QUEUE_KEY), JSON.stringify(queue)) } catch {}
+  }, [getStorageKey]);
+  
   const enqueueUpdate = useCallback((cfg: BusinessConfig) => {
     const q = getQueue()
     q.push({ config: cfg, queuedAt: Date.now() })
     saveQueue(q)
-    syncLogger.warn('BusinessConfig encolado para persistencia offline', { queuedAt: new Date().toISOString() })
-  }, [getQueue, saveQueue]);
+    syncLogger.warn('BusinessConfig encolado para persistencia offline', { 
+      organizationId,
+      queuedAt: new Date().toISOString() 
+    })
+  }, [getQueue, saveQueue, organizationId]);
+  
   const tryPersistToApi = useCallback(async (cfg: BusinessConfig): Promise<{ ok: boolean; status: 'success' | 'error'; message?: string }> => {
+    if (!organizationId) {
+      return { ok: false, status: 'error', message: 'No organization selected' }
+    }
+    
     try {
-      const response = await fetch('/api/business-config', {
+      const url = `/api/business-config?organizationId=${organizationId}`;
+      const response = await fetch(url, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cfg)
       })
       if (response.ok) {
-        syncLogger.info('BusinessConfig persistido en API/Supabase', { updatedAt: cfg.updatedAt })
+        syncLogger.info('BusinessConfig persistido en API/Supabase', { 
+          organizationId,
+          organizationName,
+          updatedAt: cfg.updatedAt 
+        })
         return { ok: true, status: 'success' }
       } else {
         const data = await response.json().catch(() => null)
         const msg = data?.error || 'Error al guardar la configuración'
-        syncLogger.warn('Fallo al persistir BusinessConfig en API', { message: msg })
+        syncLogger.warn('Fallo al persistir BusinessConfig en API', { 
+          organizationId,
+          message: msg 
+        })
         return { ok: false, status: 'error', message: msg }
       }
     } catch (apiErr: any) {
       syncLogger.error('Error de red al persistir BusinessConfig en API', undefined, apiErr)
       return { ok: false, status: 'error', message: apiErr?.message }
     }
-  }, []);
+  }, [organizationId, organizationName]);
   const flushQueue = useCallback(async () => {
     // Intentar despachar en orden FIFO
     const q = getQueue()
@@ -191,14 +226,21 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
   }, [getQueue, saveQueue, tryPersistToApi]);
 
   const loadConfig = useCallback(async () => {
+    if (!organizationId) {
+      // No organization selected yet, use defaults
+      setConfig(defaultBusinessConfig);
+      setLoading(false);
+      return;
+    }
+    
     try {
       setLoading(true);
       setError(null);
 
-      // Cargar desde localStorage primero
+      // Cargar desde localStorage primero (scoped por organización)
       try {
-        const savedConfig = localStorage.getItem('businessConfig');
-        const savedPersistedFlag = localStorage.getItem('businessConfigPersisted');
+        const savedConfig = localStorage.getItem(getStorageKey('businessConfig'));
+        const savedPersistedFlag = localStorage.getItem(getStorageKey('businessConfigPersisted'));
         const lastPersisted = savedPersistedFlag === 'true';
         
         if (savedConfig) {
@@ -213,7 +255,8 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
       // Intentar cargar desde API si Supabase está activo
       try {
         if (isSupabaseActive()) {
-          const response = await fetch('/api/business-config', { 
+          const url = `/api/business-config?organizationId=${organizationId}`;
+          const response = await fetch(url, { 
             cache: 'no-store',
             signal: AbortSignal.timeout(15000) // 15 second timeout
           });
@@ -226,10 +269,15 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
               const normalized = normalizeBusinessConfig({ ...defaultBusinessConfig, ...apiConfig });
               setConfig(normalized);
               
-              // Guardar en localStorage
-              localStorage.setItem('businessConfig', JSON.stringify(normalized));
-              localStorage.setItem('businessConfigPersisted', 'true');
+              // Guardar en localStorage (scoped por organización)
+              localStorage.setItem(getStorageKey('businessConfig'), JSON.stringify(normalized));
+              localStorage.setItem(getStorageKey('businessConfigPersisted'), 'true');
               setPersisted(true);
+              
+              syncLogger.info('BusinessConfig cargado desde API', { 
+                organizationId,
+                organizationName 
+              });
             }
           }
         }
@@ -248,20 +296,23 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
     } finally {
       setLoading(false);
     }
-  }, []); // Sin dependencias para evitar recreación
+  }, [organizationId, organizationName, getStorageKey]); // Dependencias actualizadas
 
-  // Cargar configuración desde localStorage o API - SOLO UNA VEZ al montar
+  // Cargar configuración desde localStorage o API - cuando cambia la organización
   useEffect(() => {
     loadConfig();
-  }, []); // Sin dependencias para evitar bucle infinito
+  }, [loadConfig]); // Recargar cuando cambia organizationId
 
   // Configurar suscripciones y listeners - separado del loadConfig
   useEffect(() => {
+    if (!organizationId) return; // No suscribirse sin organización
+    
     // Suscribirse a cambios de business_config en tiempo real (si Supabase está activo)
     let unsubscribe: (() => Promise<void>) | null = null
     let storageListener: ((e: StorageEvent) => void) | null = null
     let bcListener: ((ev: MessageEvent) => void) | null = null
     let onlineListener: (() => void) | null = null
+    
     try {
       supabaseRealtimeService.subscribeToBusinessConfig(async (payload) => {
         if (payload?.config && typeof payload.config === 'object') {
@@ -270,11 +321,14 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
             
             // Aplicar configuración remota directamente para evitar conflictos
             setConfig(remote);
-            localStorage.setItem('businessConfig', JSON.stringify(remote));
-            localStorage.setItem('businessConfigPersisted', 'true');
+            localStorage.setItem(getStorageKey('businessConfig'), JSON.stringify(remote));
+            localStorage.setItem(getStorageKey('businessConfigPersisted'), 'true');
             setPersisted(true);
             
-            syncLogger.info('BusinessConfig actualizado desde remoto (realtime)');
+            syncLogger.info('BusinessConfig actualizado desde remoto (realtime)', {
+              organizationId,
+              organizationName
+            });
           } catch (err) {
             console.warn('Error processing remote config update:', err);
           }
@@ -284,19 +338,22 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
       }).catch(() => {});
     } catch {}
 
-    // Sincronización entre pestañas simplificada
+    // Sincronización entre pestañas simplificada (scoped por organización)
     try {
+      const storageKey = getStorageKey('businessConfig');
       storageListener = (e: StorageEvent) => {
-        if (e.key === 'businessConfig' && typeof e.newValue === 'string') {
+        if (e.key === storageKey && typeof e.newValue === 'string') {
           try {
             const parsed = JSON.parse(e.newValue);
             const merged = normalizeBusinessConfig({ ...defaultBusinessConfig, ...parsed });
             setConfig(merged);
             
-            const flag = localStorage.getItem('businessConfigPersisted') === 'true';
+            const flag = localStorage.getItem(getStorageKey('businessConfigPersisted')) === 'true';
             setPersisted(flag);
             
-            syncLogger.info('BusinessConfig sincronizado vía storage event');
+            syncLogger.info('BusinessConfig sincronizado vía storage event', {
+              organizationId
+            });
           } catch (err) {
             console.warn('Error syncing storage event:', err);
           }
@@ -305,8 +362,10 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
       window.addEventListener('storage', storageListener);
     } catch {}
 
+    // BroadcastChannel scoped por organización
     try {
-      const channel = new BroadcastChannel('business-config');
+      const channelName = `business-config-${organizationId}`;
+      const channel = new BroadcastChannel(channelName);
       setBc(channel);
       
       bcListener = (ev: MessageEvent) => {
@@ -315,12 +374,14 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
           try {
             const merged = normalizeBusinessConfig({ ...defaultBusinessConfig, ...data.payload });
             setConfig(merged);
-            localStorage.setItem('businessConfig', JSON.stringify(merged));
+            localStorage.setItem(getStorageKey('businessConfig'), JSON.stringify(merged));
             
-            const flag = localStorage.getItem('businessConfigPersisted') === 'true';
+            const flag = localStorage.getItem(getStorageKey('businessConfigPersisted')) === 'true';
             setPersisted(flag);
             
-            syncLogger.info('BusinessConfig sincronizado vía BroadcastChannel');
+            syncLogger.info('BusinessConfig sincronizado vía BroadcastChannel', {
+              organizationId
+            });
           } catch (err) {
             console.warn('Error syncing broadcast channel:', err);
           }
@@ -346,7 +407,7 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
         window.removeEventListener('online', onlineListener)
       }
     }
-  }, []); // Sin dependencias para evitar recreación constante
+  }, [organizationId, organizationName, getStorageKey]); // Recrear cuando cambia la organización
 
   // Propagar colores de marca a variables CSS globales para toda la web
   useEffect(() => {
@@ -416,6 +477,11 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
 
 
   const updateConfig = async (updates: BusinessConfigUpdate) => {
+    if (!organizationId) {
+      setError('No hay organización seleccionada');
+      return { persisted: false, status: 'error', message: 'No organization selected' }
+    }
+    
     try {
       setLoading(true);
       setError(null);
@@ -430,11 +496,12 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
       // Actualizar estado local
       setConfig(normalizedUpdated);
 
-      // Guardar en localStorage
-      localStorage.setItem('businessConfig', JSON.stringify(normalizedUpdated));
+      // Guardar en localStorage (scoped por organización)
+      localStorage.setItem(getStorageKey('businessConfig'), JSON.stringify(normalizedUpdated));
       // Por defecto marcamos como no persistido hasta confirmar
-      localStorage.setItem('businessConfigPersisted', 'false');
+      localStorage.setItem(getStorageKey('businessConfigPersisted'), 'false');
       setPersisted(false)
+      
       // Difundir actualización inmediata
       try { bc?.postMessage({ type: 'business-config:update', payload: normalizedUpdated }) } catch {}
       try { window.dispatchEvent(new CustomEvent('business-config:updated', { detail: { config: normalizedUpdated } })) } catch {}
@@ -444,14 +511,18 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
       const apiRes = await tryPersistToApi(normalizedUpdated)
       if (apiRes.ok) {
         persisted = true
-        localStorage.setItem('businessConfigPersisted', 'true')
+        localStorage.setItem(getStorageKey('businessConfigPersisted'), 'true')
         setPersisted(true)
       } else {
         // Encolar para persistencia cuando vuelva conexión / permisos
         enqueueUpdate(normalizedUpdated)
       }
 
-      syncLogger.info('Configuración de negocio actualizada localmente', { persisted })
+      syncLogger.info('Configuración de negocio actualizada localmente', { 
+        organizationId,
+        organizationName,
+        persisted 
+      })
       return { persisted, status: apiRes.ok ? 'success' : 'queued', message: apiRes.message }
 
     } catch (err) {
@@ -465,6 +536,11 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
   };
 
   const resetConfig = async () => {
+    if (!organizationId) {
+      setError('No hay organización seleccionada');
+      throw new Error('No organization selected');
+    }
+    
     try {
       setLoading(true);
       setError(null);
@@ -475,13 +551,14 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
       };
 
       setConfig(resetConfigData);
-      localStorage.setItem('businessConfig', JSON.stringify(resetConfigData));
-      localStorage.setItem('businessConfigPersisted', 'false');
+      localStorage.setItem(getStorageKey('businessConfig'), JSON.stringify(resetConfigData));
+      localStorage.setItem(getStorageKey('businessConfigPersisted'), 'false');
       setPersisted(false)
 
       // Resetear en API (requiere rol admin)
       try {
-        const response = await fetch('/api/business-config/reset', { method: 'POST' })
+        const url = `/api/business-config/reset?organizationId=${organizationId}`;
+        const response = await fetch(url, { method: 'POST' })
         if (!response.ok) {
           const data = await response.json().catch(() => null)
           const msg = data?.error || 'Error al resetear en API'
@@ -491,12 +568,15 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
         const apiConfig = apiData?.config || null
         if (apiConfig) {
           setConfig(apiConfig)
-          localStorage.setItem('businessConfig', JSON.stringify(apiConfig))
-          localStorage.setItem('businessConfigPersisted', 'true')
+          localStorage.setItem(getStorageKey('businessConfig'), JSON.stringify(apiConfig))
+          localStorage.setItem(getStorageKey('businessConfigPersisted'), 'true')
           setPersisted(true)
           try { bc?.postMessage({ type: 'business-config:update', payload: apiConfig }) } catch {}
           try { window.dispatchEvent(new CustomEvent('business-config:updated', { detail: { config: apiConfig } })) } catch {}
-          syncLogger.info('BusinessConfig reseteado y persistido en API')
+          syncLogger.info('BusinessConfig reseteado y persistido en API', {
+            organizationId,
+            organizationName
+          })
         }
       } catch (apiErr) {
         console.warn('Fallo al resetear en API, se mantiene localStorage:', apiErr)
@@ -518,7 +598,9 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
     loading,
     error,
     resetConfig,
-    persisted
+    persisted,
+    organizationId,
+    organizationName
   };
 
   return (

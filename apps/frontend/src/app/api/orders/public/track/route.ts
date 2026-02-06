@@ -1,41 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+import { cookies } from 'next/headers';
 
-// GET - Buscar pedido por número o email (público)
+/**
+ * API Endpoint Público para Tracking de Pedidos
+ * 
+ * Este endpoint permite a los clientes rastrear sus pedidos sin autenticación
+ * Requiere que el middleware haya inyectado el organization_id en las cookies
+ */
 export async function GET(request: NextRequest) {
   try {
-    const url = new URL(request.url);
-    const orderNumber = url.searchParams.get('orderNumber');
-    const customerEmail = url.searchParams.get('customerEmail');
-
-    if (!orderNumber && !customerEmail) {
-      return NextResponse.json({ 
-        error: 'Se requiere número de pedido o email del cliente' 
-      }, { status: 400 });
-    }
-
-    const { createClient } = await import('@/lib/supabase/server');
-    const supabase = await createClient();
-
-    // Verificar si las tablas existen
-    const { data: tableCheck } = await supabase
-      .from('orders')
-      .select('id')
-      .limit(1)
-      .maybeSingle();
-
-    // Si no existen las tablas, devolver mensaje informativo
-    if (tableCheck === null) {
-      return NextResponse.json({ 
-        error: 'El sistema de pedidos aún no está completamente configurado. Por favor, ejecuta el script SQL en Supabase para crear las tablas necesarias.',
-        instructions: {
-          step1: 'Ve a tu proyecto de Supabase',
-          step2: 'Abre el SQL Editor',
-          step3: 'Ejecuta el contenido del archivo scripts/setup-orders-tables.sql',
-          step4: 'Vuelve a probar esta funcionalidad'
-        }
-      }, { status: 503 });
+    // ✅ Obtener organización de las cookies (inyectado por middleware)
+    const cookieStore = cookies();
+    const organizationId = cookieStore.get('x-organization-id')?.value;
+    
+    if (!organizationId) {
+      return NextResponse.json(
+        { 
+          success: false,
+          error: 'Organización no identificada. Verifica que estés accediendo desde el dominio correcto.' 
+        },
+        { status: 400 }
+      );
     }
     
+    const { searchParams } = new URL(request.url);
+    const orderNumber = searchParams.get('orderNumber');
+    const customerEmail = searchParams.get('customerEmail');
+    
+    // Validar que se proporcione al menos un parámetro de búsqueda
+    if (!orderNumber && !customerEmail) {
+      return NextResponse.json(
+        { 
+          success: false,
+          error: 'Se requiere número de pedido o email del cliente' 
+        },
+        { status: 400 }
+      );
+    }
+    
+    const supabase = await createClient();
+    
+    // ✅ Query con filtro de organización para aislamiento de datos
     let query = supabase
       .from('orders')
       .select(`
@@ -49,67 +55,79 @@ export async function GET(request: NextRequest) {
         shipping_cost,
         total,
         payment_method,
-        payment_status,
         status,
         notes,
         created_at,
         estimated_delivery_date,
-        shipped_at,
-        delivered_at,
         order_items (
           id,
           product_name,
           quantity,
           unit_price,
           subtotal
-        ),
-        order_status_history (
-          id,
-          status,
-          notes,
-          changed_at
         )
-      `);
-
+      `)
+      .eq('organization_id', organizationId); // ← CRÍTICO: Filtrar por organización
+    
+    // Aplicar filtro de búsqueda
     if (orderNumber) {
-      query = query.eq('order_number', orderNumber.toUpperCase());
+      query = query.eq('order_number', orderNumber);
     } else if (customerEmail) {
-      query = query
-        .eq('customer_email', customerEmail.toLowerCase())
-        .order('created_at', { ascending: false })
-        .limit(1);
+      query = query.eq('customer_email', customerEmail.toLowerCase());
     }
-
-    const { data: orders, error } = await query;
-
+    
+    const { data: order, error } = await query.single();
+    
     if (error) {
       console.error('Error fetching order:', error);
-      return NextResponse.json({ error: 'Error al buscar pedido' }, { status: 500 });
+      
+      // Si no se encuentra, devolver 404
+      if (error.code === 'PGRST116') {
+        return NextResponse.json(
+          { 
+            success: false, 
+            message: 'Pedido no encontrado. Verifica el número de pedido o email.' 
+          },
+          { status: 404 }
+        );
+      }
+      
+      throw error;
     }
-
-    if (!orders || orders.length === 0) {
-      return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 });
-    }
-
-    const order = orders[0];
-
-    // Ordenar historial por fecha
-    if (order.order_status_history && Array.isArray(order.order_status_history)) {
-      order.order_status_history.sort((a: any, b: any) => 
-        new Date(a.changed_at).getTime() - new Date(b.changed_at).getTime()
+    
+    if (!order) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          message: 'Pedido no encontrado' 
+        },
+        { status: 404 }
       );
     }
-
+    
+    // Log para auditoría (opcional)
+    console.log(`✅ Order tracked: ${order.order_number} for org: ${organizationId}`);
+    
     return NextResponse.json({
       success: true,
       data: { order }
     });
-
-  } catch (error) {
-    console.error('Error in GET /api/orders/public/track:', error);
-    return NextResponse.json({ 
-      error: 'El sistema de pedidos necesita ser configurado. Por favor, ejecuta las migraciones SQL en Supabase.',
-      details: 'Consulta el archivo CONFIGURACION_PEDIDOS.md para instrucciones completas.'
-    }, { status: 503 });
+    
+  } catch (error: any) {
+    console.error('Error tracking order:', error);
+    return NextResponse.json(
+      { 
+        success: false,
+        error: 'Error interno del servidor. Por favor intenta nuevamente.' 
+      },
+      { status: 500 }
+    );
   }
+}
+
+/**
+ * Endpoint de salud para verificar que el API está funcionando
+ */
+export async function HEAD(request: NextRequest) {
+  return new NextResponse(null, { status: 200 });
 }

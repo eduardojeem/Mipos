@@ -7,7 +7,6 @@ import { Providers } from '@/components/providers'
 import { Toaster } from '@/components/ui/toaster'
 
 import { defaultBusinessConfig } from '@/types/business-config'
-import { getBusinessConfigAsync } from '@/app/api/admin/_utils/business-config'
 
 // Force dynamic rendering
 export const dynamic = 'force-dynamic'
@@ -19,14 +18,10 @@ export async function generateMetadata(): Promise<Metadata> {
   const port = process.env.PORT || '3000';
   const defaultBase = `http://localhost:${port}`;
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || defaultBase;
-  let config = defaultBusinessConfig;
-
-  try {
-    // Usar la utilitaria directamente en lugar de fetch para evitar ECONNREFUSED en build
-    config = await getBusinessConfigAsync();
-  } catch (e) {
-    console.warn('Error getting business config for metadata, using defaults:', e);
-  }
+  
+  // Use default config for metadata generation
+  // Business config will be loaded dynamically in the client via BusinessConfigContext
+  const config = defaultBusinessConfig;
 
   const businessName = config.businessName || 'BeautyPOS';
   const tagline = config.tagline || 'Sistema de Punto de Venta para Cosméticos';

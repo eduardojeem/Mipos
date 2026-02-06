@@ -530,6 +530,8 @@ export default function OrganizationDetailsPage() {
   const [formData, setFormData] = useState({
     name: '',
     slug: '',
+    subdomain: '',
+    custom_domain: '',
   });
 
   // Update form data when organization loads
@@ -538,6 +540,8 @@ export default function OrganizationDetailsPage() {
       setFormData({
         name: organization.name || '',
         slug: organization.slug || '',
+        subdomain: organization.subdomain || '',
+        custom_domain: organization.custom_domain || '',
       });
     }
   }, [organization]);
@@ -546,9 +550,11 @@ export default function OrganizationDetailsPage() {
   const handleUpdateGeneral = useCallback(async () => {
     await updateOrganization({
       name: formData.name,
-      slug: formData.slug
+      slug: formData.slug,
+      subdomain: formData.subdomain,
+      custom_domain: formData.custom_domain || null,
     });
-  }, [formData.name, formData.slug, updateOrganization]);
+  }, [formData.name, formData.slug, formData.subdomain, formData.custom_domain, updateOrganization]);
 
   const handleStatusChange = useCallback(async (value: string) => {
     await updateOrganization({ subscription_status: value });
@@ -692,8 +698,14 @@ export default function OrganizationDetailsPage() {
                 <div className="flex items-center gap-4 text-white/60 font-medium">
                   <div className="flex items-center gap-1.5 bg-white/5 px-3 py-1 rounded-full text-sm">
                     <Globe className="h-3.5 w-3.5" />
-                    mipos.app/{organization.slug}
+                    {organization.subdomain ? `${organization.subdomain}.tudominio.com` : `mipos.app/${organization.slug}`}
                   </div>
+                  {organization.custom_domain && (
+                    <div className="flex items-center gap-1.5 bg-purple-500/20 px-3 py-1 rounded-full text-sm text-purple-300 border border-purple-400/30">
+                      <Globe className="h-3.5 w-3.5" />
+                      {organization.custom_domain}
+                    </div>
+                  )}
                   <div className="flex items-center gap-1.5 bg-white/5 px-3 py-1 rounded-full text-sm">
                     <Activity className="h-3.5 w-3.5" />
                     ID: {organization.id.substring(0, 8)}...
@@ -757,6 +769,48 @@ export default function OrganizationDetailsPage() {
                           />
                           <Globe className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                         </div>
+                      </div>
+                      
+                      {/* NUEVO: Subdomain */}
+                      <div className="grid gap-2">
+                        <Label className="text-xs uppercase font-bold text-blue-600 tracking-wider flex items-center gap-2">
+                          <Globe className="h-3 w-3" />
+                          Subdominio (Tienda Pública)
+                        </Label>
+                        <div className="relative">
+                          <Input 
+                            value={formData.subdomain} 
+                            onChange={(e) => setFormData({...formData, subdomain: e.target.value})}
+                            className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900 rounded-xl h-12 font-medium pl-10"
+                            placeholder="mi-tienda"
+                          />
+                          <Globe className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-600" />
+                        </div>
+                        <p className="text-xs text-slate-500 flex items-center gap-1">
+                          <span className="font-mono bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+                            {formData.subdomain || 'mi-tienda'}.tudominio.com
+                          </span>
+                        </p>
+                      </div>
+                      
+                      {/* NUEVO: Custom Domain */}
+                      <div className="grid gap-2">
+                        <Label className="text-xs uppercase font-bold text-purple-600 tracking-wider flex items-center gap-2">
+                          <Globe className="h-3 w-3" />
+                          Dominio Personalizado (Premium)
+                        </Label>
+                        <div className="relative">
+                          <Input 
+                            value={formData.custom_domain} 
+                            onChange={(e) => setFormData({...formData, custom_domain: e.target.value})}
+                            className="bg-purple-50 dark:bg-purple-950/20 border-purple-200 dark:border-purple-900 rounded-xl h-12 font-medium pl-10"
+                            placeholder="www.mi-tienda.com"
+                          />
+                          <Globe className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-purple-600" />
+                        </div>
+                        <p className="text-xs text-slate-500">
+                          Opcional. Requiere configuración DNS del cliente.
+                        </p>
                       </div>
                     </div>
                     

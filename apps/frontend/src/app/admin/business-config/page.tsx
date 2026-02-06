@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, lazy, Suspense } from 'react';
+import { useState, useCallback, lazy, Suspense, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -18,14 +18,19 @@ import {
   Save,
   Loader2,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Building,
+  Globe
 } from 'lucide-react';
 
 import { useBusinessConfig } from '@/contexts/BusinessConfigContext';
 import { BusinessConfig } from '@/types/business-config';
 import { useAutoSave } from './hooks/useAutoSave';
+import { useAuth } from '@/hooks/use-auth';
+import { useUserOrganizations } from '@/hooks/use-user-organizations';
 // Lazy load components for better performance
 const BusinessInfoForm = lazy(() => import('./components/BusinessInfoForm').then(m => ({ default: m.BusinessInfoForm })));
+const DomainSettingsForm = lazy(() => import('./components/DomainSettingsForm').then(m => ({ default: m.DomainSettingsForm })));
 const LegalInfoForm = lazy(() => import('./components/LegalInfoForm').then(m => ({ default: m.LegalInfoForm })));
 const ContactForm = lazy(() => import('./components/ContactForm').then(m => ({ default: m.ContactForm })));
 const BrandingForm = lazy(() => import('./components/BrandingForm').then(m => ({ default: m.BrandingForm })));
@@ -33,6 +38,8 @@ const StoreSettingsForm = lazy(() => import('./components/StoreSettingsForm').th
 const CarouselEditor = lazy(() => import('./components/CarouselEditor').then(m => ({ default: m.CarouselEditor })));
 const SystemSettingsForm = lazy(() => import('./components/SystemSettingsForm').then(m => ({ default: m.SystemSettingsForm })));
 const ConfigPreview = lazy(() => import('./components/ConfigPreview').then(m => ({ default: m.ConfigPreview })));
+const OrganizationSelectorForConfig = lazy(() => import('./components/OrganizationSelectorForConfig').then(m => ({ default: m.OrganizationSelectorForConfig })));
+const ConfigHistory = lazy(() => import('./components/ConfigHistory').then(m => ({ default: m.ConfigHistory })));
 
 const TABS = [
   {
@@ -40,6 +47,12 @@ const TABS = [
     label: 'Información Básica',
     icon: Building2,
     description: 'Datos generales del negocio'
+  },
+  {
+    id: 'domain',
+    label: 'Dominio y Tienda',
+    icon: Globe,
+    description: 'Configuración de tu tienda pública'
   },
   {
     id: 'legal',
@@ -82,11 +95,19 @@ const TABS = [
     label: 'Vista Previa',
     icon: Eye,
     description: 'Resumen y preview de la configuración'
+  },
+  {
+    id: 'history',
+    label: 'Historial',
+    icon: Building,
+    description: 'Historial de cambios y versiones'
   }
 ];
 
 export default function BusinessConfigPage() {
-  const { config, updateConfig, loading, error, resetConfig, persisted } = useBusinessConfig();
+  const { config, updateConfig, loading, error, resetConfig, persisted, organizationId, organizationName } = useBusinessConfig();
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('business');
   const [saving, setSaving] = useState(false);
@@ -250,6 +271,13 @@ export default function BusinessConfigPage() {
           switch (activeTab) {
             case 'business':
               return <BusinessInfoForm config={currentConfig} onUpdate={handleConfigUpdate} />;
+            case 'domain':
+              return <DomainSettingsForm onUpdate={() => {
+                toast({
+                  title: 'Dominio actualizado',
+                  description: 'Tu tienda pública está lista con el nuevo dominio',
+                });
+              }} />;
             case 'legal':
               return <LegalInfoForm config={currentConfig} onUpdate={handleConfigUpdate} />;
             case 'contact':
@@ -264,6 +292,23 @@ export default function BusinessConfigPage() {
               return <SystemSettingsForm config={currentConfig} onUpdate={handleConfigUpdate} />;
             case 'preview':
               return <ConfigPreview config={currentConfig} onUpdate={handleConfigUpdate} onReset={handleReset} />;
+            case 'history':
+              return organizationId ? (
+                <ConfigHistory 
+                  organizationId={organizationId} 
+                  onRestore={(config) => {
+                    handleConfigUpdate(config);
+                    toast({
+                      title: 'Configuración restaurada',
+                      description: 'Recuerda guardar los cambios para aplicarlos.',
+                    });
+                  }}
+                />
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  Selecciona una organización para ver el historial
+                </div>
+              );
             default:
               return null;
           }
@@ -300,12 +345,24 @@ export default function BusinessConfigPage() {
   return (
     <div className="container mx-auto p-6 max-w-7xl">
       <div className="mb-6">
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1">
             <h1 className="text-3xl font-bold text-gray-900">Configuración de Negocio</h1>
             <p className="text-gray-600 mt-1">
               Configure todos los aspectos de su negocio desde un solo lugar
             </p>
+            
+            {/* Selector de organización (solo visible para super admin) */}
+            <div className="mt-4">
+              <Suspense fallback={
+                <div className="flex items-center gap-2 px-3 py-2 rounded-md border bg-muted/50">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="text-sm">Cargando...</span>
+                </div>
+              }>
+                <OrganizationSelectorForConfig />
+              </Suspense>
+            </div>
           </div>
           
           <div className="flex items-center gap-3">

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { validateBusinessConfig } from '@/app/api/admin/_utils/business-config';
 
 interface OrderItem {
   productId: string;

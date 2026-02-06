@@ -1,18 +1,25 @@
 import { Metadata } from 'next';
 import HomeClient from './HomeClient';
 import { createClient } from '@/lib/supabase/server';
+import { getCurrentOrganization } from '@/lib/organization/get-current-organization';
 export const dynamic = 'force-dynamic';
 
 export async function generateMetadata(): Promise<Metadata> {
     let config: any = null;
     try {
+        const organization = await getCurrentOrganization();
         const supabase = await createClient();
+        
         if (supabase && typeof supabase.from === 'function') {
+            // ✅ Obtener config de la organización específica
             const { data } = await supabase
-                .from('business_config')
-                .select('*')
+                .from('settings')
+                .select('value')
+                .eq('key', 'business_config')
+                .eq('organization_id', organization.id)
                 .single();
-            config = data;
+            
+            config = data?.value;
         }
     } catch (e) {
         // Fallback to defaults
@@ -61,13 +68,19 @@ export default async function HomePage() {
     let config: any = null;
 
     try {
+        const organization = await getCurrentOrganization();
         const supabase = await createClient();
+        
         if (supabase && typeof supabase.from === 'function') {
+            // ✅ Obtener config de la organización específica
             const { data } = await supabase
-                .from('business_config')
-                .select('*')
+                .from('settings')
+                .select('value')
+                .eq('key', 'business_config')
+                .eq('organization_id', organization.id)
                 .single();
-            config = data;
+            
+            config = data?.value;
         } else {
             console.warn('⚠️ Supabase client is invalid or mock mode is incomplete.');
         }
@@ -130,14 +143,19 @@ export default async function HomePage() {
     const currency = (config as any)?.storeSettings?.currency || 'PYG';
     let itemListElements: any[] = [];
     try {
+        const organization = await getCurrentOrganization();
         const supabase = await createClient();
         const since = new Date();
         since.setDate(since.getDate() - 30);
+        
+        // ✅ Filtrar sale_items por organización
         const { data: items } = await supabase
             .from('sale_items')
             .select('product_id, quantity, created_at')
+            .eq('organization_id', organization.id)
             .gte('created_at', since.toISOString())
             .limit(500);
+            
         const totals: Record<string, number> = {};
         (Array.isArray(items) ? items : []).forEach((it: any) => {
             const pid = String(it?.product_id || '');
@@ -148,11 +166,15 @@ export default async function HomePage() {
             .sort((a, b) => b[1] - a[1])
             .slice(0, 6)
             .map(([pid]) => pid);
+            
         if (topIds.length > 0) {
+            // ✅ Filtrar productos por organización
             const { data: prods } = await supabase
                 .from('products')
                 .select('id, name, sale_price, offer_price, image_url, images')
+                .eq('organization_id', organization.id)
                 .in('id', topIds);
+                
             const list = (Array.isArray(prods) ? prods : []);
             itemListElements = list.map((p: any, idx: number) => ({
                 '@type': 'Product',

@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import CatalogClient from "./CatalogClient";
 import type { Product, Category } from "@/types";
 import { Metadata } from "next";
+import { getCurrentOrganization } from "@/lib/organization/get-current-organization";
 
 interface CatalogPageProps {
   searchParams: Promise<{
@@ -17,14 +18,19 @@ interface CatalogPageProps {
 // ✅ Metadata simplificado - solo lo esencial para SEO
 export async function generateMetadata({ searchParams }: CatalogPageProps): Promise<Metadata> {
   const { search = '', category = '' } = await searchParams;
+  const organization = await getCurrentOrganization();
   const supabase = await createClient();
 
-  const { data: config } = await supabase
-    .from('business_config')
-    .select('business_name')
+  // ✅ Obtener config de la organización específica
+  const { data: configData } = await supabase
+    .from('settings')
+    .select('value')
+    .eq('key', 'business_config')
+    .eq('organization_id', organization.id)
     .single();
 
-  const businessName = config?.business_name || 'Nuestra Tienda';
+  const config = configData?.value;
+  const businessName = config?.business_name || organization.name || 'Nuestra Tienda';
 
   // Título dinámico simple
   const title = search
@@ -44,12 +50,14 @@ export async function generateMetadata({ searchParams }: CatalogPageProps): Prom
 
 export default async function CatalogPage({ searchParams }: CatalogPageProps) {
   const params = await searchParams;
+  const organization = await getCurrentOrganization();
   const supabase = await createClient();
 
-  // Construir query de productos
+  // ✅ Construir query de productos con filtro de organización
   let query = supabase
     .from('products')
     .select('id, name, sku, sale_price, offer_price, stock_quantity, image_url, images, category_id, is_active')
+    .eq('organization_id', organization.id)
     .eq('is_active', true);
 
   // Aplicar filtros
@@ -81,10 +89,11 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
 
   const { data: products } = await query;
 
-  // Obtener categorías
+  // ✅ Obtener categorías de la organización
   const { data: categories } = await supabase
     .from('categories')
     .select('id, name')
+    .eq('organization_id', organization.id)
     .order('name');
 
   return (

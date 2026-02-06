@@ -2,16 +2,22 @@ import { createClient } from "@/lib/supabase/server";
 import OffersClient, { OfferItem, Product, Promotion, DiscountType } from "./OffersClient";
 import { Metadata } from "next";
 import { calculateOfferPrice } from "@/lib/offers";
+import { getCurrentOrganization } from "@/lib/organization/get-current-organization";
 
 export async function generateMetadata(): Promise<Metadata> {
+  const organization = await getCurrentOrganization();
   const supabase = await createClient();
 
-  const { data: config } = await supabase
-    .from('business_config')
-    .select('business_name')
+  // ✅ Obtener config de la organización específica
+  const { data: configData } = await supabase
+    .from('settings')
+    .select('value')
+    .eq('key', 'business_config')
+    .eq('organization_id', organization.id)
     .single();
 
-  const businessName = config?.business_name || 'Nuestra Tienda';
+  const config = configData?.value;
+  const businessName = config?.business_name || organization.name || 'Nuestra Tienda';
 
   return {
     title: `Ofertas y Promociones | ${businessName}`,
@@ -21,13 +27,15 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function OffersPage() {
+  const organization = await getCurrentOrganization();
   const supabase = await createClient();
   const now = new Date().toISOString();
 
-  // Obtener promociones activas simplificado
+  // ✅ Obtener promociones activas de la organización
   const { data: promotions } = await supabase
     .from('promotions')
     .select('*')
+    .eq('organization_id', organization.id)
     .eq('is_active', true)
     .lte('start_date', now)
     .or(`end_date.gte.${now},end_date.is.null`)
@@ -38,7 +46,7 @@ export default async function OffersPage() {
     return <OffersClient initialOffers={[]} initialCategories={[]} />;
   }
 
-  // Obtener productos de las promociones
+  // ✅ Obtener productos de las promociones (filtrados por organización)
   const { data: promoProducts } = await supabase
     .from('promotions_products')
     .select(`
@@ -46,11 +54,13 @@ export default async function OffersPage() {
       promotion_id,
       products!inner(
         id, name, sale_price, stock_quantity, 
-        image_url, images, category_id, is_active
+        image_url, images, category_id, is_active,
+        organization_id
       )
     `)
     .in('promotion_id', promotions.map((p: any) => p.id))
     .eq('products.is_active', true)
+    .eq('products.organization_id', organization.id)
     .limit(100);
 
   // Construir las ofertas
@@ -103,11 +113,12 @@ export default async function OffersPage() {
     }
   }
 
-  // Obtener categorías
+  // ✅ Obtener categorías de la organización
   const { data: categories } = categoryIds.size > 0
     ? await supabase
       .from('categories')
       .select('id, name')
+      .eq('organization_id', organization.id)
       .in('id', Array.from(categoryIds))
     : { data: [] };
 
