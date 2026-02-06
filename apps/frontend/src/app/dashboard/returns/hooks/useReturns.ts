@@ -87,7 +87,8 @@ export function useReturns(filters: any) {
   // Update return mutation
   const updateReturnMutation = useMutation({
     mutationFn: async ({ id, status, notes }: { id: string; status: string; notes?: string }) => {
-      const response = await api.patch(`/returns/${id}`, { status, notes });
+      const backendStatus = status === 'processed' ? 'COMPLETED' : String(status).toUpperCase();
+      const response = await api.patch(`/returns/${id}`, { status: backendStatus, notes });
       return response.data;
     },
     onSuccess: (_, variables) => {
@@ -97,11 +98,13 @@ export function useReturns(filters: any) {
       const statusMessages = {
         approved: 'Devolución aprobada',
         rejected: 'Devolución rechazada',
-        processed: 'Devolución procesada'
-      };
+        processed: 'Devolución procesada',
+        COMPLETED: 'Devolución procesada'
+      } as Record<string, string>;
       
+      const msgKey = variables.status === 'processed' ? 'processed' : variables.status;
       toast({
-        title: statusMessages[variables.status as keyof typeof statusMessages] || 'Estado actualizado',
+        title: statusMessages[msgKey] || 'Estado actualizado',
         description: 'El estado de la devolución ha sido actualizado.',
       });
     },

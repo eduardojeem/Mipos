@@ -228,6 +228,31 @@ export async function POST(request: NextRequest) {
       );
     }
     
+    try {
+      const origin = new URL(request.url).origin;
+      const payload = {
+        id: newProduct.id,
+        name: newProduct.name,
+        sku: newProduct.sku,
+        sale_price: newProduct.sale_price,
+        cost_price: newProduct.cost_price,
+        wholesale_price: newProduct.wholesale_price,
+        stock_quantity: newProduct.stock_quantity,
+        barcode: newProduct.barcode,
+        brand: newProduct.brand,
+        category_id: newProduct.category_id,
+        supplier_id: newProduct.supplier_id,
+        is_active: newProduct.is_active,
+        updated_at: newProduct.updated_at,
+        organization_id: orgId
+      };
+      await fetch(`${origin}/api/external-sync/products`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ records: [payload] })
+      });
+    } catch {}
+
     return NextResponse.json({
       product: newProduct,
       message: 'Producto creado exitosamente'

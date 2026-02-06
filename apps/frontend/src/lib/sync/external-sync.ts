@@ -157,10 +157,12 @@ export class ExternalSyncService extends EventEmitter {
   private scheduledEntityJobs: Map<string, NodeJS.Timeout> = new Map();
   private nextEntityRunTimes: Map<string, Date> = new Map();
   private webhookHandlers: Map<string, (data: any) => Promise<void>> = new Map();
+  private outboundQueues: Map<string, any[]> = new Map();
 
   constructor() {
     super();
     this.loadSystems();
+    this.ensureDemoSystem();
     this.setupScheduledJobs();
   }
 
@@ -295,6 +297,19 @@ export class ExternalSyncService extends EventEmitter {
     }
 
     return jobId;
+  }
+
+  enqueueOutboundRecords(systemId: string, entityType: EntityType, records: any[]): void {
+    const key = `${systemId}:${entityType}`;
+    const queue = this.outboundQueues.get(key) || [];
+    this.outboundQueues.set(key, queue.concat(records));
+  }
+
+  private getAndFlushOutboundRecords(systemId: string, entityType: EntityType): any[] {
+    const key = `${systemId}:${entityType}`;
+    const queue = this.outboundQueues.get(key) || [];
+    this.outboundQueues.delete(key);
+    return queue;
   }
 
   async syncAllEntities(systemId: string, trigger: SyncTrigger = 'manual'): Promise<string[]> {
@@ -467,8 +482,11 @@ export class ExternalSyncService extends EventEmitter {
   }
 
   private async syncOutbound(job: SyncJob, system: ExternalSystemConfig, mapping: EntityMapping): Promise<void> {
-    // Get local data
-    const localData = await this.getLocalData(job.entityType, mapping.filters?.local);
+    // Prefer queued realtime records; fallback to local batch data
+    let localData = this.getAndFlushOutboundRecords(job.systemId, job.entityType);
+    if (!localData || localData.length === 0) {
+      localData = await this.getLocalData(job.entityType, mapping.filters?.local);
+    }
     job.progress.total = localData.length;
 
     const batchSize = system.syncSettings.batchSize;
@@ -534,15 +552,18 @@ export class ExternalSyncService extends EventEmitter {
   }
 
   private async getLocalData(entityType: EntityType, filters?: Record<string, any>): Promise<any[]> {
-    // Implementation to fetch local data from the database
-    // This would integrate with your existing data layer
+    // Placeholder: in ausencia de payload encolado, retornar lote vacío
+    // Podrías integrar con Supabase/Prisma para obtener registros recientes
     return [];
   }
 
   private async getRemoteData(system: ExternalSystemConfig, entity: string, filters?: Record<string, any>): Promise<any[]> {
-    // Implementation to fetch data from external system
-    // This would use the system's API configuration
-    return [];
+    const url = this.composeUrl(system.connection.baseUrl, entity);
+    const headers = this.composeAuthHeaders(system);
+    const params = filters ? `?${new URLSearchParams(this.normalizeFilters(filters)).toString()}` : '';
+    const res = await fetch(url + params, { headers });
+    if (!res.ok) throw new Error(`Remote fetch failed: ${res.status}`);
+    return await res.json();
   }
 
   private async transformData(data: any[], mapping: EntityMapping, direction: 'inbound' | 'outbound'): Promise<any[]> {
@@ -555,7 +576,27 @@ export class ExternalSyncService extends EventEmitter {
           const sourceField = direction === 'inbound' ? fieldMapping.remoteField : fieldMapping.localField;
           const targetField = direction === 'inbound' ? fieldMapping.localField : fieldMapping.remoteField;
           
-          transformed[targetField] = record[sourceField] || fieldMapping.defaultValue;
+          let value = record[sourceField] ?? fieldMapping.defaultValue;
+          // Normalización básica por tipo
+          switch (fieldMapping.dataType) {
+            case 'number':
+              value = value == null ? value : Number(value);
+              break;
+            case 'boolean':
+              value = value == null ? value : Boolean(value);
+              break;
+            case 'date':
+              if (value instanceof Date) value = value.toISOString();
+              else if (typeof value === 'string') {
+                const d = new Date(value);
+                value = isNaN(d.getTime()) ? value : d.toISOString();
+              }
+              break;
+            case 'string':
+              value = value == null ? value : String(value);
+              break;
+          }
+          transformed[targetField] = value;
         }
       }
       
@@ -564,13 +605,22 @@ export class ExternalSyncService extends EventEmitter {
   }
 
   private async sendToExternalSystem(system: ExternalSystemConfig, entity: string, data: any[]): Promise<void> {
-    // Implementation to send data to external system
-    // This would use the system's API configuration
+    if (!data || data.length === 0) return;
+    const url = this.composeUrl(system.connection.baseUrl, entity);
+    const headers = {
+      'Content-Type': 'application/json',
+      ...this.composeAuthHeaders(system)
+    } as Record<string, string>;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ records: data })
+    });
+    if (!res.ok) throw new Error(`External POST failed: ${res.status}`);
   }
 
   private async saveToLocalSystem(entityType: EntityType, data: any[]): Promise<void> {
-    // Implementation to save data to local system
-    // This would integrate with your existing data layer
+    // Placeholder inbound: no-op; integrar con Supabase según tablas locales
   }
 
   private async applyResolvedRecord(systemId: string, entityType: EntityType, record: any): Promise<void> {
@@ -757,15 +807,217 @@ export class ExternalSyncService extends EventEmitter {
   }
 
   private async loadSystems(): Promise<void> {
-    // Implementation to load systems from storage
+    try {
+      const raw = typeof window !== 'undefined' ? window.localStorage.getItem('externalSystems') : null;
+      if (raw) {
+        const arr = JSON.parse(raw) as ExternalSystemConfig[];
+        for (const s of arr) {
+          this.systems.set(s.id, s);
+        }
+      }
+    } catch {}
   }
 
   private async saveSystem(system: ExternalSystemConfig): Promise<void> {
-    // Implementation to save system to storage
+    try {
+      const arr = Array.from(this.systems.values());
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('externalSystems', JSON.stringify(arr));
+      }
+    } catch {}
   }
 
   private async deleteSystem(systemId: string): Promise<void> {
-    // Implementation to delete system from storage
+    try {
+      this.systems.delete(systemId);
+      const arr = Array.from(this.systems.values());
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('externalSystems', JSON.stringify(arr));
+      }
+    } catch {}
+  }
+
+  private async ensureDemoSystem(): Promise<void> {
+    if (this.systems.size > 0) return;
+    const demo = {
+      name: 'Demo SaaS',
+      type: 'accounting' as const,
+      enabled: true,
+      connection: {
+        baseUrl: '/api/external-sync',
+        authentication: { type: 'api_key', credentials: { apiKey: 'demo-key' } },
+        timeout: 30000,
+        retryAttempts: 3,
+      },
+      mappings: [
+        {
+          id: 'map-sales',
+          localEntity: 'sales',
+          remoteEntity: 'sales',
+          enabled: true,
+          fieldMappings: [
+            { localField: 'id', remoteField: 'id', direction: 'outbound', required: true, dataType: 'string' },
+            { localField: 'amount', remoteField: 'total', direction: 'outbound', required: true, dataType: 'number' },
+            { localField: 'createdAt', remoteField: 'date', direction: 'outbound', required: true, dataType: 'date' },
+            { localField: 'sessionId', remoteField: 'cash_session_id', direction: 'outbound', required: false, dataType: 'string' },
+            { localField: 'notes', remoteField: 'memo', direction: 'outbound', required: false, dataType: 'string' },
+            { localField: 'event', remoteField: 'action', direction: 'outbound', required: false, dataType: 'string' },
+          ],
+        },
+        {
+          id: 'map-inventory',
+          localEntity: 'inventory_movements',
+          remoteEntity: 'inventory_movements',
+          enabled: true,
+          fieldMappings: [
+            { localField: 'id', remoteField: 'movementId', direction: 'outbound', required: true, dataType: 'string' },
+            { localField: 'type', remoteField: 'movementType', direction: 'outbound', required: true, dataType: 'string' },
+            { localField: 'amount', remoteField: 'quantity', direction: 'outbound', required: true, dataType: 'number' },
+            { localField: 'createdAt', remoteField: 'date', direction: 'outbound', required: true, dataType: 'date' },
+            { localField: 'sessionId', remoteField: 'cash_session_id', direction: 'outbound', required: false, dataType: 'string' },
+            { localField: 'reason', remoteField: 'memo', direction: 'outbound', required: false, dataType: 'string' },
+          ],
+        },
+        {
+          id: 'map-products',
+          localEntity: 'products',
+          remoteEntity: 'products',
+          enabled: true,
+          fieldMappings: [
+            { localField: 'id', remoteField: 'id', direction: 'outbound', required: true, dataType: 'string' },
+            { localField: 'name', remoteField: 'name', direction: 'outbound', required: true, dataType: 'string' },
+            { localField: 'sku', remoteField: 'sku', direction: 'outbound', required: true, dataType: 'string' },
+            { localField: 'sale_price', remoteField: 'sale_price', direction: 'outbound', required: false, dataType: 'number' },
+            { localField: 'cost_price', remoteField: 'cost_price', direction: 'outbound', required: false, dataType: 'number' },
+            { localField: 'wholesale_price', remoteField: 'wholesale_price', direction: 'outbound', required: false, dataType: 'number' },
+            { localField: 'stock_quantity', remoteField: 'stock', direction: 'outbound', required: false, dataType: 'number' },
+            { localField: 'barcode', remoteField: 'barcode', direction: 'outbound', required: false, dataType: 'string' },
+            { localField: 'brand', remoteField: 'brand', direction: 'outbound', required: false, dataType: 'string' },
+            { localField: 'updated_at', remoteField: 'updated_at', direction: 'outbound', required: false, dataType: 'date' },
+          ],
+        },
+        {
+          id: 'map-customers',
+          localEntity: 'customers',
+          remoteEntity: 'customers',
+          enabled: true,
+          fieldMappings: [
+            { localField: 'id', remoteField: 'id', direction: 'outbound', required: true, dataType: 'string' },
+            { localField: 'name', remoteField: 'name', direction: 'outbound', required: true, dataType: 'string' },
+            { localField: 'email', remoteField: 'email', direction: 'outbound', required: false, dataType: 'string' },
+            { localField: 'phone', remoteField: 'phone', direction: 'outbound', required: false, dataType: 'string' },
+            { localField: 'address', remoteField: 'address', direction: 'outbound', required: false, dataType: 'string' },
+            { localField: 'customer_code', remoteField: 'code', direction: 'outbound', required: false, dataType: 'string' },
+            { localField: 'customer_type', remoteField: 'type', direction: 'outbound', required: false, dataType: 'string' },
+            { localField: 'created_at', remoteField: 'created_at', direction: 'outbound', required: false, dataType: 'date' },
+            { localField: 'updated_at', remoteField: 'updated_at', direction: 'outbound', required: false, dataType: 'date' },
+          ],
+        },
+        {
+          id: 'map-returns',
+          localEntity: 'returns',
+          remoteEntity: 'returns',
+          enabled: true,
+          fieldMappings: [
+            { localField: 'id', remoteField: 'id', direction: 'outbound', required: true, dataType: 'string' },
+            { localField: 'originalSaleId', remoteField: 'sale_id', direction: 'outbound', required: true, dataType: 'string' },
+            { localField: 'customerId', remoteField: 'customer_id', direction: 'outbound', required: false, dataType: 'string' },
+            { localField: 'total', remoteField: 'total', direction: 'outbound', required: true, dataType: 'number' },
+            { localField: 'reason', remoteField: 'reason', direction: 'outbound', required: false, dataType: 'string' },
+            { localField: 'refundMethod', remoteField: 'refund_method', direction: 'outbound', required: true, dataType: 'string' },
+            { localField: 'status', remoteField: 'status', direction: 'outbound', required: true, dataType: 'string' },
+          ],
+        },
+        {
+          id: 'map-loyalty-adjustments',
+          localEntity: 'loyalty_points',
+          remoteEntity: 'loyalty/adjustments',
+          enabled: true,
+          fieldMappings: [
+            { localField: 'id', remoteField: 'id', direction: 'outbound', required: false, dataType: 'string' },
+            { localField: 'customerId', remoteField: 'customer_id', direction: 'outbound', required: true, dataType: 'string' },
+            { localField: 'programId', remoteField: 'program_id', direction: 'outbound', required: false, dataType: 'string' },
+            { localField: 'points', remoteField: 'points', direction: 'outbound', required: true, dataType: 'number' },
+            { localField: 'reason', remoteField: 'reason', direction: 'outbound', required: false, dataType: 'string' },
+            { localField: 'referenceType', remoteField: 'reference_type', direction: 'outbound', required: false, dataType: 'string' },
+            { localField: 'createdAt', remoteField: 'created_at', direction: 'outbound', required: false, dataType: 'date' },
+          ],
+        },
+        {
+          id: 'map-loyalty-redemptions',
+          localEntity: 'loyalty_redemptions',
+          remoteEntity: 'loyalty/redemptions',
+          enabled: true,
+          fieldMappings: [
+            { localField: 'id', remoteField: 'id', direction: 'outbound', required: false, dataType: 'string' },
+            { localField: 'customerId', remoteField: 'customer_id', direction: 'outbound', required: true, dataType: 'string' },
+            { localField: 'programId', remoteField: 'program_id', direction: 'outbound', required: true, dataType: 'string' },
+            { localField: 'rewardId', remoteField: 'reward_id', direction: 'outbound', required: true, dataType: 'string' },
+            { localField: 'pointsSpent', remoteField: 'points_spent', direction: 'outbound', required: false, dataType: 'number' },
+            { localField: 'createdAt', remoteField: 'created_at', direction: 'outbound', required: false, dataType: 'date' },
+          ],
+        },
+      ],
+      syncSettings: {
+        direction: 'outbound' as const,
+        triggers: ['manual', 'realtime'] as SyncTrigger[],
+        batchSize: 100,
+        conflictResolution: 'timestamp',
+      },
+      webhooks: undefined,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } satisfies Omit<ExternalSystemConfig, 'id'>;
+
+    try {
+      await this.addSystem(demo);
+    } catch {}
+  }
+
+  private composeUrl(baseUrl: string, entity: string): string {
+    const trimmed = baseUrl.replace(/\/$/, '');
+    const path = entity.replace(/^\//, '');
+    return `${trimmed}/${path}`;
+  }
+
+  private composeAuthHeaders(system: ExternalSystemConfig): Record<string, string> {
+    const { authentication } = system.connection;
+    const headers: Record<string, string> = {};
+    switch (authentication.type) {
+      case 'api_key':
+        if (authentication.credentials?.apiKey) {
+          headers['x-api-key'] = String(authentication.credentials.apiKey);
+        }
+        break;
+      case 'bearer':
+        if (authentication.credentials?.token) {
+          headers['Authorization'] = `Bearer ${String(authentication.credentials.token)}`;
+        }
+        break;
+      case 'basic':
+        if (authentication.credentials?.username && authentication.credentials?.password) {
+          const b64 = btoa(`${authentication.credentials.username}:${authentication.credentials.password}`);
+          headers['Authorization'] = `Basic ${b64}`;
+        }
+        break;
+      case 'oauth2':
+        if (authentication.credentials?.accessToken) {
+          headers['Authorization'] = `Bearer ${String(authentication.credentials.accessToken)}`;
+        }
+        break;
+      default:
+        break;
+    }
+    return headers;
+  }
+
+  private normalizeFilters(filters: Record<string, any>): Record<string, string> {
+    const out: Record<string, string> = {};
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v == null) return;
+      out[k] = typeof v === 'string' ? v : JSON.stringify(v);
+    });
+    return out;
   }
 }
 

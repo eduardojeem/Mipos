@@ -4,6 +4,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { useConfirmationDialog } from '@/components/ui/confirmation-dialog';
 import { useCurrencyFormatter } from '@/contexts/BusinessConfigContext';
 import api from '@/lib/api';
+import { triggerCashSaasSync } from '@/lib/sync/cash-saas';
 import type { CashSession } from '@/types/cash';
 import type { CashMutationPayload, CashSummary, LoadingStates } from '../types/cash.types';
 import {
@@ -107,6 +108,8 @@ export function useCashMutations(options: UseCashMutationsOptions): UseCashMutat
                 if (amount > 1000000) throw new Error('Monto de apertura demasiado alto');
                 await openSessionMutation.mutateAsync({ amount, notes });
                 toast({ description: 'Sesión de caja abierta exitosamente' });
+                // Disparar sincronización SaaS con payload
+                triggerCashSaasSync('open', { amount, notes, createdAt: new Date().toISOString() });
             } catch (e: unknown) {
                 const error = e as any;
                 console.error('Error opening session:', error);
@@ -167,6 +170,8 @@ export function useCashMutations(options: UseCashMutationsOptions): UseCashMutat
 
                 await closeSessionMutation.mutateAsync(amount);
                 toast({ description: 'Sesión de caja cerrada exitosamente' });
+                // Disparar sincronización SaaS con payload
+                triggerCashSaasSync('close', { amount, sessionId: session?.id, createdAt: new Date().toISOString() });
             } catch (e: unknown) {
                 const error = e as any;
                 console.error('Error closing session:', error);
@@ -245,6 +250,14 @@ export function useCashMutations(options: UseCashMutationsOptions): UseCashMutat
                 });
 
                 toast({ description: 'Movimiento registrado exitosamente' });
+                // Disparar sincronización SaaS con payload
+                triggerCashSaasSync('movement', {
+                    amount: normalizedAmount,
+                    type: payload.type,
+                    reason: payload.reason,
+                    sessionId: session?.id,
+                    createdAt: new Date().toISOString(),
+                });
             } catch (e: unknown) {
                 const error = e as any;
                 console.error('Error registering movement:', error);

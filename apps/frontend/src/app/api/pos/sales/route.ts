@@ -123,6 +123,34 @@ export async function POST(request: NextRequest) {
     // Generate sale number for display
     const saleNumber = `POS-${sale.id.slice(-8).toUpperCase()}`;
 
+    // Sync to external SaaS (outbound)
+    try {
+      const origin = new URL(request.url).origin;
+      const salePayload = {
+        id: sale.id,
+        total: Number(total_amount),
+        discount: Number(discount_amount || 0),
+        tax: Number(tax_amount || 0),
+        payment_method,
+        sale_type,
+        customer_id: customer_id || null,
+        notes,
+        created_at: sale.created_at,
+        items: saleItems.map((si: any) => ({
+          product_id: si.product_id,
+          quantity: si.quantity,
+          unit_price: si.unit_price,
+          total_price: si.total_price,
+          discount_amount: si.discount_amount || 0
+        }))
+      };
+      await fetch(`${origin}/api/external-sync/sales`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ records: [salePayload] })
+      });
+    } catch {}
+
     // Fetch complete sale data with items for response
     const { data: completeSale } = await supabase
       .from('sales')

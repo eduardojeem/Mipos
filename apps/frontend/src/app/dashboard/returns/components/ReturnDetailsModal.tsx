@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog, DialogContent, DialogDescription,
   DialogFooter, DialogHeader, DialogTitle
@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { createLogger } from '@/lib/logger';
+import { useToast } from '@/components/ui/use-toast';
+import api from '@/lib/api';
 
 interface ReturnDetailsModalProps {
   return: {
@@ -56,6 +58,26 @@ export function ReturnDetailsModal({
 }: ReturnDetailsModalProps) {
   const [notes, setNotes] = useState(returnItem.notes || '');
   const [isUpdating, setIsUpdating] = useState(false);
+  const [refundMethod, setRefundMethod] = useState<string | null>(null);
+  const [refundTotal, setRefundTotal] = useState<number | null>(null);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await api.get(`/returns/${returnItem.id}`);
+        const data = res.data || {};
+        const method = data?.refundMethod || data?.refund_method || null;
+        const total = typeof data?.total === 'number' ? data.total : (typeof data?.totalAmount === 'number' ? data.totalAmount : null);
+        if (mounted) {
+          setRefundMethod(method);
+          setRefundTotal(total);
+        }
+      } catch {}
+    })();
+    return () => { mounted = false };
+  }, [returnItem.id]);
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {
@@ -80,6 +102,36 @@ export function ReturnDetailsModal({
   const handleUpdateStatus = async (status: string) => {
     setIsUpdating(true);
     try {
+      if (status === 'approved') {
+        // Validación dura: no superar cantidad del ítem original de la venta
+        try {
+          const res = await api.get(`/returns/${returnItem.id}`);
+          const data = res.data || {};
+          const saleItems: Array<any> = data?.originalSale?.saleItems || [];
+          const returnItems: Array<any> = data?.returnItems || [];
+          const qtyByOriginal: Record<string, number> = {};
+          for (const it of returnItems) {
+            const key = it.originalSaleItemId || it.originalSaleItem?.id;
+            if (!key) continue;
+            qtyByOriginal[key] = (qtyByOriginal[key] || 0) + Number(it.quantity || 0);
+          }
+          const violations: Array<{ productName: string; requested: number; available: number }> = [];
+          for (const si of saleItems) {
+            const originalId = si.id || si.originalSaleItem?.id;
+            const requested = qtyByOriginal[originalId] || 0;
+            const available = Number(si.quantity || si.originalSaleItem?.quantity || 0);
+            if (requested > available) {
+              violations.push({ productName: si.product?.name || si.productName || 'Producto', requested, available });
+            }
+          }
+          if (violations.length > 0) {
+            const msg = violations.map(v => `${v.productName}: solicitado ${v.requested} > disponible ${v.available}`).join('\n');
+            toast({ title: 'Cantidad inválida al aprobar', description: msg, variant: 'destructive' });
+            setIsUpdating(false);
+            return;
+          }
+        } catch {}
+      }
       await onUpdate(returnItem.id, status, notes);
       onOpenChange(false);
     } catch (error) {
@@ -175,6 +227,20 @@ export function ReturnDetailsModal({
           </div>
 
           <Separator />
+
+          <div className="space-y-3">
+            <h4 className="font-medium">Resumen de Reembolso</h4>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="text-muted-foreground">Método</p>
+                <p className="font-medium">{refundMethod || '—'}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Monto a reembolsar</p>
+                <p className="font-medium">{typeof refundTotal === 'number' ? formatCurrency(refundTotal) : '—'}</p>
+              </div>
+            </div>
+          </div>
 
           {/* Reason and Notes */}
           <div className="space-y-3">

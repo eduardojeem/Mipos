@@ -109,6 +109,27 @@ export async function POST(request: NextRequest) {
     // Transform response data
     const transformedCustomer = transformCustomerData(customer);
 
+    try {
+      const origin = new URL(request.url).origin;
+      const payload = {
+        id: transformedCustomer.id,
+        name: transformedCustomer.name,
+        email: transformedCustomer.email,
+        phone: transformedCustomer.phone,
+        address: transformedCustomer.address,
+        customer_code: transformedCustomer.customer_code,
+        customer_type: transformedCustomer.customer_type,
+        created_at: transformedCustomer.created_at,
+        updated_at: transformedCustomer.updated_at,
+        organization_id: orgId
+      };
+      await fetch(`${origin}/api/external-sync/customers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ records: [payload] })
+      });
+    } catch {}
+
     return NextResponse.json({
       success: true,
       data: transformedCustomer,

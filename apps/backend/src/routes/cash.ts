@@ -37,8 +37,13 @@ const discrepancySchema = z.object({
 
 // Get current open session
 router.get('/session/current', requirePermission('cash', 'read'), asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
+  const organizationId = req.user!.organizationId;
+  
   const session = await prisma.cashSession.findFirst({
-    where: { status: 'OPEN' },
+    where: { 
+      organizationId,
+      status: 'OPEN' 
+    },
     orderBy: { openedAt: 'desc' },
     include: {
       openedByUser: { select: { id: true, fullName: true, email: true } },
@@ -52,14 +57,21 @@ router.get('/session/current', requirePermission('cash', 'read'), asyncHandler(a
 router.post('/session/open', requirePermission('cash', 'open'), asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
   const { openingAmount, notes } = openSessionSchema.parse(req.body);
   const userId = req.user!.id;
+  const organizationId = req.user!.organizationId;
 
-  const existingOpen = await prisma.cashSession.findFirst({ where: { status: 'OPEN' } });
+  const existingOpen = await prisma.cashSession.findFirst({ 
+    where: { 
+      organizationId,
+      status: 'OPEN' 
+    } 
+  });
   if (existingOpen) {
-    throw createError('Ya existe una sesión de caja abierta', 400);
+    throw createError('Ya existe una sesión de caja abierta en tu organización', 400);
   }
 
   const session = await prisma.cashSession.create({
     data: {
+      organizationId,
       openedBy: userId,
       openingAmount,
       status: 'OPEN',
@@ -74,14 +86,21 @@ router.post('/session/open', requirePermission('cash', 'open'), asyncHandler(asy
 router.post('/session/close', requirePermission('cash', 'close'), asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
   const { closingAmount, systemExpected, notes, counts } = closeSessionSchema.parse(req.body);
   const userId = req.user!.id;
+  const organizationId = req.user!.organizationId;
 
-  const session = await prisma.cashSession.findFirst({ where: { status: 'OPEN' } });
-  if (!session) throw createError('No hay sesión de caja abierta', 400);
+  const session = await prisma.cashSession.findFirst({ 
+    where: { 
+      organizationId,
+      status: 'OPEN' 
+    } 
+  });
+  if (!session) throw createError('No hay sesión de caja abierta en tu organización', 400);
 
   // Save counts if provided
   if (counts && counts.length > 0) {
     await prisma.cashCount.createMany({
       data: counts.map(c => ({
+        organizationId,
         sessionId: session.id,
         denomination: c.denomination,
         quantity: c.quantity,
@@ -113,12 +132,21 @@ router.post('/session/close', requirePermission('cash', 'close'), asyncHandler(a
 router.post('/movements', requirePermission('cash', 'move'), asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
   const { sessionId, type, amount, reason, referenceType, referenceId } = movementSchema.parse(req.body);
   const userId = req.user!.id;
+  const organizationId = req.user!.organizationId;
 
-  const session = await prisma.cashSession.findUnique({ where: { id: sessionId } });
+  const session = await prisma.cashSession.findFirst({ 
+    where: { 
+      id: sessionId,
+      organizationId 
+    } 
+  });
   if (!session || session.status !== 'OPEN') throw createError('Sesión inválida o cerrada', 400);
 
   const sum = await prisma.cashMovement.aggregate({
-    where: { sessionId },
+    where: { 
+      sessionId,
+      organizationId 
+    },
     _sum: { amount: true }
   });
   const currentBalance = Number(session.openingAmount || 0) + Number(sum._sum?.amount || 0);
@@ -142,6 +170,7 @@ router.post('/movements', requirePermission('cash', 'move'), asyncHandler(async 
 
   const movement = await prisma.cashMovement.create({
     data: {
+      organizationId,
       sessionId,
       type,
       amount,
@@ -156,7 +185,9 @@ router.post('/movements', requirePermission('cash', 'move'), asyncHandler(async 
 }));
 
 // List movements with pagination and filters
-router.get('/movements', requirePermission('cash', 'read'), asyncHandler(async (req, res) => {
+router.get('/movements', requirePermission('cash', 'read'), asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
+  const organizationId = req.user!.organizationId;
+  
   const querySchema = z.object({
     sessionId: z.string().optional(),
     page: z.coerce.number().int().min(1).optional().default(1),
@@ -191,8 +222,18 @@ router.get('/movements', requirePermission('cash', 'read'), asyncHandler(async (
     orderDir
   } = querySchema.parse(req.query);
 
-  const where: any = {};
-  if (sessionId) where.sessionId = sessionId;
+  const where: any = {
+    organizationId
+  };
+  
+  if (sessionId) {
+    // Verify session belongs to organization
+    const session = await prisma.cashSession.findFirst({
+      where: { id: sessionId, organizationId }
+    });
+    if (!session) throw createError('Sesión no encontrada', 404);
+    where.sessionId = sessionId;
+  }
   if (type) where.type = type;
   if (referenceType) where.referenceType = referenceType;
   if (from || to) {
@@ -242,7 +283,9 @@ router.get('/movements', requirePermission('cash', 'read'), asyncHandler(async (
 }));
 
 // Export movements as CSV
-router.get('/movements/export', requirePermission('cash', 'read'), asyncHandler(async (req, res) => {
+router.get('/movements/export', requirePermission('cash', 'read'), asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
+  const organizationId = req.user!.organizationId;
+  
   const querySchema = z.object({
     sessionId: z.string().optional(),
     type: z.enum(['IN', 'OUT', 'SALE', 'RETURN', 'ADJUSTMENT']).optional(),
@@ -273,8 +316,17 @@ router.get('/movements/export', requirePermission('cash', 'read'), asyncHandler(
     orderDir
   } = querySchema.parse(req.query);
 
-  const where: any = {};
-  if (sessionId) where.sessionId = sessionId;
+  const where: any = {
+    organizationId
+  };
+  
+  if (sessionId) {
+    const session = await prisma.cashSession.findFirst({
+      where: { id: sessionId, organizationId }
+    });
+    if (!session) throw createError('Sesión no encontrada', 404);
+    where.sessionId = sessionId;
+  }
   if (type) where.type = type;
   if (referenceType) where.referenceType = referenceType;
   if (from || to) {
@@ -321,12 +373,19 @@ router.get('/movements/export', requirePermission('cash', 'read'), asyncHandler(
 router.post('/discrepancies', requirePermission('cash', 'reconcile'), asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
   const { sessionId, type, amount, explanation } = discrepancySchema.parse(req.body);
   const userId = req.user!.id;
+  const organizationId = req.user!.organizationId;
 
-  const session = await prisma.cashSession.findUnique({ where: { id: sessionId } });
+  const session = await prisma.cashSession.findFirst({ 
+    where: { 
+      id: sessionId,
+      organizationId 
+    } 
+  });
   if (!session) throw createError('Sesión no existe', 404);
 
   const discrepancy = await prisma.cashDiscrepancy.create({
     data: {
+      organizationId,
       sessionId,
       type,
       amount,
@@ -340,6 +399,8 @@ router.post('/discrepancies', requirePermission('cash', 'reconcile'), asyncHandl
 
 // Get all sessions with pagination and filters
 router.get('/sessions', requirePermission('cash', 'read'), asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
+  const organizationId = req.user!.organizationId;
+  
   const {
     page = 1,
     limit = 20,
@@ -349,7 +410,9 @@ router.get('/sessions', requirePermission('cash', 'read'), asyncHandler(async (r
     userId
   } = req.query;
 
-  const where: any = {};
+  const where: any = {
+    organizationId
+  };
 
   if (status && status !== 'all') where.status = status;
   if (from || to) {
@@ -398,17 +461,29 @@ router.get('/sessions', requirePermission('cash', 'read'), asyncHandler(async (r
 router.post('/sessions/:sessionId/counts', requirePermission('cash', 'close'), asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
   const { sessionId } = req.params;
   const { counts } = req.body;
+  const organizationId = req.user!.organizationId;
 
-  const session = await prisma.cashSession.findUnique({ where: { id: sessionId } });
+  const session = await prisma.cashSession.findFirst({ 
+    where: { 
+      id: sessionId,
+      organizationId 
+    } 
+  });
   if (!session) throw createError('Sesión no encontrada', 404);
 
   // Delete existing counts
-  await prisma.cashCount.deleteMany({ where: { sessionId } });
+  await prisma.cashCount.deleteMany({ 
+    where: { 
+      sessionId,
+      organizationId 
+    } 
+  });
 
   // Create new counts
   if (counts && counts.length > 0) {
     await prisma.cashCount.createMany({
       data: counts.map((c: any) => ({
+        organizationId,
         sessionId,
         denomination: c.denomination,
         quantity: c.quantity,

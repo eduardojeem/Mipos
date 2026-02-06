@@ -1,5 +1,6 @@
 import { SyncedStore } from './synced-store'
 import api from '@/lib/api'
+import { triggerLoyaltySaasSync } from '@/lib/sync/loyalty-saas'
 import { startRealtimeSync, stopRealtimeSync } from './realtime'
 import { attachOnlineResync } from './resync'
 import { SyncEvent, SyncState } from './types'
@@ -104,6 +105,14 @@ export function createLoyaltyStore(customerId: string, branchId?: string, posId?
           description: reason || 'Ajuste manual',
           referenceType: 'MANUAL'
         })
+        triggerLoyaltySaasSync('adjust', {
+          customerId: prev.customerId,
+          programId,
+          points: Number(delta),
+          reason: reason || 'Ajuste manual',
+          referenceType: 'MANUAL',
+          createdAt: new Date().toISOString(),
+        })
         
         console.log('[Loyalty Sync] Points adjusted successfully:', { delta, reason, programId })
       } catch (error: any) {
@@ -134,6 +143,12 @@ export function createLoyaltyStore(customerId: string, branchId?: string, posId?
         })
         
         store.setState({ lastActivity: new Date().toISOString() }, 'points.redeem')
+        triggerLoyaltySaasSync('redeem', {
+          customerId: prev.customerId,
+          programId,
+          rewardId,
+          createdAt: new Date().toISOString(),
+        })
         
         console.log('[Loyalty Sync] Points redeemed successfully:', { programId, rewardId })
       } catch (error: any) {

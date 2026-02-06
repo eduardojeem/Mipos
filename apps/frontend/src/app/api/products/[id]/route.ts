@@ -67,6 +67,10 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json();
     const supabase = await createClient();
+    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    if (!orgId) {
+      return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
+    }
 
     // Check if product exists
     const { data: existingProduct } = await supabase
@@ -128,6 +132,31 @@ export async function PUT(
       .single();
 
     if (error) throw error;
+
+    try {
+      const origin = new URL(request.url).origin;
+      const payload = {
+        id: product.id,
+        name: product.name,
+        sku: product.sku,
+        sale_price: product.sale_price,
+        cost_price: product.cost_price,
+        wholesale_price: product.wholesale_price,
+        stock_quantity: product.stock_quantity,
+        barcode: product.barcode,
+        brand: product.brand,
+        category_id: product.category_id,
+        supplier_id: product.supplier_id,
+        is_active: product.is_active,
+        updated_at: product.updated_at,
+        organization_id: orgId
+      };
+      await fetch(`${origin}/api/external-sync/products`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ records: [payload] })
+      });
+    } catch {}
 
     return NextResponse.json({
       success: true,

@@ -419,6 +419,42 @@ router.post('/',
     }
   });
 
+  try {
+    const base = process.env.EXTERNAL_SAAS_BASE_URL?.replace(/\/$/, '') || '';
+    if (base) {
+      const url = `${base}/returns`;
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const apiKey = process.env.EXTERNAL_SAAS_API_KEY;
+      const bearer = process.env.EXTERNAL_SAAS_BEARER_TOKEN;
+      const basicUser = process.env.EXTERNAL_SAAS_BASIC_USER;
+      const basicPass = process.env.EXTERNAL_SAAS_BASIC_PASS;
+      if (apiKey) headers['x-api-key'] = apiKey;
+      if (bearer) headers['Authorization'] = `Bearer ${bearer}`;
+      if (basicUser && basicPass) {
+        const b64 = Buffer.from(`${basicUser}:${basicPass}`).toString('base64');
+        headers['Authorization'] = `Basic ${b64}`;
+      }
+      const payload = {
+        records: [{
+          id: completeReturn!.id,
+          originalSaleId,
+          customerId: customerId || null,
+          total,
+          reason,
+          refundMethod,
+          status: 'PENDING',
+          items: items.map((it: any) => ({
+            productId: it.productId,
+            quantity: it.quantity,
+            unitPrice: it.unitPrice,
+            originalSaleItemId: it.originalSaleItemId
+          }))
+        }]
+      };
+      await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
+    }
+  } catch {}
+
   res.status(201).json({
     return: completeReturn,
     summary: {
@@ -496,6 +532,40 @@ router.patch('/:id/status',
 
     return updated;
   });
+
+  try {
+    const base = process.env.EXTERNAL_SAAS_BASE_URL?.replace(/\/$/, '') || '';
+    if (base) {
+      const url = `${base}/returns`;
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const apiKey = process.env.EXTERNAL_SAAS_API_KEY;
+      const bearer = process.env.EXTERNAL_SAAS_BEARER_TOKEN;
+      const basicUser = process.env.EXTERNAL_SAAS_BASIC_USER;
+      const basicPass = process.env.EXTERNAL_SAAS_BASIC_PASS;
+      if (apiKey) headers['x-api-key'] = apiKey;
+      if (bearer) headers['Authorization'] = `Bearer ${bearer}`;
+      if (basicUser && basicPass) {
+        const b64 = Buffer.from(`${basicUser}:${basicPass}`).toString('base64');
+        headers['Authorization'] = `Basic ${b64}`;
+      }
+      let detailed: any = { id, status, notes: notes || null };
+      if (status === 'COMPLETED') {
+        const rr = await prisma.return.findUnique({
+          where: { id },
+          include: { returnItems: { include: { product: { select: { id: true, sku: true, name: true } } } } }
+        });
+        detailed.items = (rr?.returnItems || []).map((it) => ({
+          productId: it.productId,
+          sku: it.product?.sku,
+          name: it.product?.name,
+          quantity: it.quantity,
+          unitPrice: it.unitPrice
+        }));
+      }
+      const payload = { records: [detailed] };
+      await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) });
+    }
+  } catch {}
 
   res.json({
     return: updatedReturn,
