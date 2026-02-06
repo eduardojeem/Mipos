@@ -15,6 +15,7 @@ export async function POST(request: NextRequest) {
     }
 
     const userId = auth.userId as string
+    const userEmail = auth.email
     const isSuperAdmin = auth.isSuperAdmin || false
 
     // ✅ Get organization context
@@ -80,7 +81,7 @@ export async function POST(request: NextRequest) {
       },
       {
         id: userId,
-        email: auth.userId,
+        email: userEmail || null,
         role: isSuperAdmin ? 'SUPER_ADMIN' : 'ADMIN'
       }
     )

@@ -11,6 +11,7 @@ export async function assertAdmin(request: NextRequest): Promise<
   | { 
       ok: true
       userId: string
+      email: string | null
       organizationId: string | null
       isSuperAdmin: boolean
     }
@@ -67,6 +68,7 @@ export async function assertAdmin(request: NextRequest): Promise<
       return { 
         ok: true, 
         userId: user.id,
+        email: user.email ?? null,
         organizationId,
         isSuperAdmin
       }

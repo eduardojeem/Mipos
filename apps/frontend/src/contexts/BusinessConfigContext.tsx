@@ -85,13 +85,7 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
   const [config, setConfig] = useState<BusinessConfig>(defaultBusinessConfig);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [persisted, setPersisted] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('businessConfigPersisted') === 'true'
-    } catch {
-      return false
-    }
-  });
+  const [persisted, setPersisted] = useState<boolean>(false);
   // BroadcastChannel para sincronización entre pestañas/ventanas
   const [bc, setBc] = useState<BroadcastChannel | null>(null)
   
@@ -209,8 +203,8 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
       if (res.ok) {
         // Marcar como persistido localmente
         try {
-          localStorage.setItem('businessConfig', JSON.stringify(item.config))
-          localStorage.setItem('businessConfigPersisted', 'true')
+          localStorage.setItem(getStorageKey('businessConfig'), JSON.stringify(item.config))
+          localStorage.setItem(getStorageKey('businessConfigPersisted'), 'true')
           setConfig({ ...defaultBusinessConfig, ...item.config })
           setPersisted(true)
         } catch {}
