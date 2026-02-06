@@ -66,8 +66,11 @@ export async function middleware(request: NextRequest) {
         // Crear response con rewrite Y establecer cookies
         const response = NextResponse.rewrite(rewriteUrl);
         
-        // Actualizar sesión de Supabase
-        await updateSession(request);
+        // Actualizar sesión de Supabase y copiar cookies al response reescrito
+        const sessionResponse = await updateSession(request);
+        sessionResponse.cookies.getAll().forEach(({ name, value, options }) => {
+          response.cookies.set(name, value, options);
+        });
         
         // Establecer cookies con información de la organización
         response.cookies.set('x-organization-id', org.id, { 
