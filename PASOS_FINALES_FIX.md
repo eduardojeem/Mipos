@@ -55,10 +55,18 @@ https://miposparaguay.vercel.app/soylent/home
 ```
 
 ### 4. Verificar que las cookies se establecen
-Después de visitar cualquier URL de arriba, ir a:
+Después de visitar cualquier URL de arriba:
+
+**En desarrollo (localhost):**
 ```
-https://miposparaguay.vercel.app/debug-org
+http://localhost:3000/debug-org
 ```
+
+**En producción:**
+Las páginas de debug están deshabilitadas por seguridad. Para verificar:
+1. Abrir DevTools del navegador (F12)
+2. Ir a Application → Cookies
+3. Buscar cookies que empiecen con `x-organization-`
 
 **Deberías ver**:
 - ✅ `x-organization-id`: [UUID de la organización]
@@ -107,12 +115,12 @@ SUPABASE_SERVICE_ROLE_KEY=eyJhbGc...
 
 - [x] Middleware actualizado para usar service role key
 - [x] Fix de cookies en path-based routing
+- [x] Páginas de debug deshabilitadas en producción
 - [x] Commits y push completados
 - [ ] Deploy de Vercel completado
 - [ ] Variables de entorno verificadas
 - [ ] Path-based routing probado
 - [ ] Cookies establecidas correctamente
-- [ ] Página `/debug-org` muestra cookies
 
 ---
 
