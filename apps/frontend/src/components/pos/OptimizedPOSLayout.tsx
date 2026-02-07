@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { useDebounce } from 'use-debounce';
-import { ShoppingCart, Clock } from 'lucide-react';
+import { ShoppingCart, Clock, Wallet } from 'lucide-react';
 import { toast } from '@/lib/toast';
 import { usePOSStore } from '@/store';
 import { useCart } from '@/hooks/useCart';
@@ -23,9 +23,14 @@ import CartPanel from './CartPanel';
 import MobileCartSheet from './MobileCartSheet';
 import ProcessSaleModal from './ProcessSaleModal';
 import { ReceiptModal } from './ReceiptModal';
+import OpenCashSessionModal from './OpenCashSessionModal';
 
 // Device detection hook
 import { useDeviceType } from '@/components/ui/responsive-layout';
+
+// Cash session hooks
+import { useCashSession } from '@/app/dashboard/cash/hooks/useCashSession';
+import { useCashMutations } from '@/app/dashboard/cash/hooks/useCashMutations';
 
 // Loading fallback
 const LoadingFallback = () => (
@@ -51,6 +56,7 @@ export default function OptimizedPOSLayout() {
   const [showReceiptModal, setShowReceiptModal] = useState(false);
   const [lastSale, setLastSale] = useState<SaleResponse | null>(null);
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
+  const [showOpenCashModal, setShowOpenCashModal] = useState(false);
 
   // Device detection
   const deviceType = useDeviceType();
@@ -73,6 +79,32 @@ export default function OptimizedPOSLayout() {
     loading,
     refetchAll
   } = usePOSData();
+
+  // Cash session management
+  const { session: cashSession, isLoading: cashSessionLoading, refetch: refetchCashSession } = useCashSession();
+  const cashSessionSummary = useMemo(() => ({
+    balance: 0,
+    totalIn: 0,
+    totalOut: 0,
+    in: 0,
+    out: 0,
+    adjustment: 0,
+    sale: 0,
+    return: 0,
+  }), []);
+
+  const { 
+    handleOpenSession, 
+    loadingStates,
+    ConfirmationDialog 
+  } = useCashMutations({
+    session: cashSession,
+    summary: cashSessionSummary,
+    onSuccess: () => {
+      refetchCashSession();
+      setShowOpenCashModal(false);
+    }
+  });
 
   // Cash session validation
   const { validateCashPayment, hasOpenSession, session } = useCashSessionValidation();
@@ -317,6 +349,25 @@ export default function OptimizedPOSLayout() {
         </div>
 
         <div className="flex items-center space-x-3 ml-4">
+          {/* Indicador y Botón de Caja */}
+          {!hasOpenSession ? (
+            <button
+              onClick={() => setShowOpenCashModal(true)}
+              className="flex items-center space-x-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-xl shadow-lg shadow-green-500/20 active:scale-95 transition-all"
+              title="Abrir sesión de caja"
+            >
+              <Wallet className="w-4 h-4" />
+              <span className="text-xs font-bold uppercase hidden sm:inline">Abrir Caja</span>
+            </button>
+          ) : (
+            <div className="flex items-center space-x-2 px-4 py-2 bg-green-50 dark:bg-green-950/30 border-2 border-green-500 rounded-xl">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span className="text-xs font-bold text-green-700 dark:text-green-400 uppercase hidden sm:inline">
+                Caja Abierta
+              </span>
+            </div>
+          )}
+
           {/* Botón de Venta en Espera */}
           <button
             onClick={handleHoldSale}
@@ -447,6 +498,17 @@ export default function OptimizedPOSLayout() {
           onDownload={() => toast.success('Descargando comprobante...')}
         />
       )}
+
+      {/* Open Cash Session Modal */}
+      <OpenCashSessionModal
+        isOpen={showOpenCashModal}
+        onClose={() => setShowOpenCashModal(false)}
+        onConfirm={handleOpenSession}
+        isLoading={loadingStates.openingSession}
+      />
+
+      {/* Confirmation Dialog */}
+      <ConfirmationDialog />
     </div>
   );
 }

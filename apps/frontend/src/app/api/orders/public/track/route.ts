@@ -11,7 +11,7 @@ import { cookies } from 'next/headers';
 export async function GET(request: NextRequest) {
   try {
     // ✅ Obtener organización de las cookies (inyectado por middleware)
-    const cookieStore = cookies();
+    const cookieStore = await cookies();
     const organizationId = cookieStore.get('x-organization-id')?.value;
     
     if (!organizationId) {

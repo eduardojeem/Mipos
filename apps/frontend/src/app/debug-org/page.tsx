@@ -1,5 +1,4 @@
 import { cookies } from 'next/headers';
-import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
@@ -10,7 +9,7 @@ export default async function DebugOrgPage() {
     redirect('/');
   }
   
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   
   // Obtener cookies
   const orgId = cookieStore.get('x-organization-id')?.value;
@@ -21,7 +20,7 @@ export default async function DebugOrgPage() {
   const allCookies = cookieStore.getAll();
   
   // Intentar obtener organizaciones de la DB usando service role
-  let organizations = [];
+  let organizations: Array<{ id: string; name: string; slug: string; subdomain?: string; subscription_status: string }> = [];
   let dbError = null;
   try {
     // Usar fetch directo a la API para evitar problemas de RLS
@@ -38,8 +37,8 @@ export default async function DebugOrgPage() {
     } else {
       dbError = `HTTP ${response.status}: ${response.statusText}`;
     }
-  } catch (error: any) {
-    dbError = error.message;
+  } catch (error) {
+    dbError = (error as Error).message;
     console.error('Error fetching organizations:', error);
   }
   
@@ -76,7 +75,7 @@ export default async function DebugOrgPage() {
       <div style={{ marginBottom: '2rem', padding: '1rem', background: '#f5f5f5', borderRadius: '8px' }}>
         <h2 style={{ fontSize: '1.5rem', marginBottom: '1rem' }}>🍪 All Cookies</h2>
         <pre style={{ overflow: 'auto', background: 'white', padding: '1rem', borderRadius: '4px', fontSize: '0.8rem' }}>
-          {JSON.stringify(allCookies.map(c => ({ name: c.name, value: c.value.substring(0, 50) + (c.value.length > 50 ? '...' : '') })), null, 2)}
+          {JSON.stringify(allCookies.map((c: { name: string; value: string }) => ({ name: c.name, value: c.value.substring(0, 50) + (c.value.length > 50 ? '...' : '') })), null, 2)}
         </pre>
       </div>
       
@@ -99,7 +98,7 @@ export default async function DebugOrgPage() {
               </tr>
             </thead>
             <tbody>
-              {organizations.map((org: any) => (
+              {organizations.map((org) => (
                 <tr key={org.id} style={{ borderBottom: '1px solid #ddd' }}>
                   <td style={{ padding: '0.5rem' }}>{org.name}</td>
                   <td style={{ padding: '0.5rem', fontWeight: 'bold' }}>{org.slug}</td>
@@ -135,7 +134,7 @@ export default async function DebugOrgPage() {
       <div style={{ padding: '1rem', background: '#fff3cd', borderRadius: '8px', border: '1px solid #ffc107' }}>
         <h3 style={{ marginTop: 0 }}>💡 How to test:</h3>
         <ol>
-          <li>Click on one of the "Test URL" links above</li>
+          <li>Click on one of the &quot;Test URL&quot; links above</li>
           <li>The middleware should detect the organization from the path</li>
           <li>Come back to this page to see if cookies were set</li>
         </ol>

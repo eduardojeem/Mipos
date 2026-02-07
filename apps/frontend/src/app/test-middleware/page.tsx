@@ -9,7 +9,7 @@ export default async function TestMiddlewarePage() {
     redirect('/');
   }
   
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const allCookies = cookieStore.getAll();
   
   return (

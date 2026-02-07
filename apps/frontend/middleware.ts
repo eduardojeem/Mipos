@@ -93,6 +93,23 @@ export async function middleware(request: NextRequest) {
         });
         
         return response;
+      } else {
+        // Fallback: reescribir y establecer solo slug para resolución en el servidor
+        const restSegments = segments.slice(1);
+        const rewritePath = '/' + (restSegments.length ? restSegments.join('/') : 'home');
+        const rewriteUrl = new URL(rewritePath, request.url);
+        const response = NextResponse.rewrite(rewriteUrl);
+        const sessionResponse = await updateSession(request);
+        sessionResponse.cookies.getAll().forEach(({ name, value, options }) => {
+          response.cookies.set(name, value, options);
+        });
+        response.cookies.set('x-organization-slug', firstSegment, { 
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+          path: '/'
+        });
+        return response;
       }
     } catch (error) {
       console.error('❌ Error detecting organization by path:', error);
