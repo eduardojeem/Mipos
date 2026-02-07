@@ -100,6 +100,7 @@ export async function POST(request: NextRequest) {
       message: 'Sale processed successfully',
     });
 
+  } catch (error) {
     console.error('Process sale error:', error);
     
     return NextResponse.json(
