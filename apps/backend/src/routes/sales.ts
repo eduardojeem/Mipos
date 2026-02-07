@@ -5,6 +5,7 @@ import { asyncHandler, createError } from '../middleware/errorHandler';
 import { EnhancedAuthenticatedRequest, requirePermission, requireAnyPermission, hasPermission } from '../middleware/enhanced-auth';
 import { criticalOperationsRateLimit, apiRateLimit } from '../middleware/rate-limiter';
 import { loyaltyService } from '../services/loyalty';
+import { validateDiscountMiddleware } from '../middleware/validateDiscount';
 
 const router = express.Router();
 
@@ -223,7 +224,7 @@ router.get('/:id', requirePermission('sales', 'read'), asyncHandler(async (req: 
 }));
 
 // Create sale (requires sales:create permission) - Rate limited for critical operations
-router.post('/', criticalOperationsRateLimit, requirePermission('sales', 'create'), asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
+router.post('/', criticalOperationsRateLimit, requirePermission('sales', 'create'), validateDiscountMiddleware, asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
   const { customerId, items, paymentMethod, discount, discountType, tax, notes } = createSaleSchema.parse(req.body);
   const userId = req.user!.id;
   const organizationId = req.user!.organizationId;
