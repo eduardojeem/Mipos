@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { useDebounce } from 'use-debounce';
-import { ShoppingCart } from 'lucide-react';
+import { ShoppingCart, Clock } from 'lucide-react';
 import { toast } from '@/lib/toast';
 import { usePOSStore } from '@/store';
 import { useCart } from '@/hooks/useCart';
@@ -87,8 +87,13 @@ export default function OptimizedPOSLayout() {
     setCartItems
   } = useCart({
     products,
-    discount
+    discount,
+    isWholesaleMode: false
   });
+
+  const handleUpdateQuantity = useCallback((productId: string, quantity: number) => {
+    updateQuantity(productId, quantity);
+  }, [updateQuantity]);
 
   // Cart calculations
   const cartCalculations = useMemo(() => {
@@ -107,7 +112,7 @@ export default function OptimizedPOSLayout() {
     // Filter by search
     if (debouncedSearchQuery) {
       const searchLower = debouncedSearchQuery.toLowerCase();
-      filtered = filtered.filter(product => 
+      filtered = filtered.filter(product =>
         product.name.toLowerCase().includes(searchLower) ||
         (product.sku && product.sku.toLowerCase().includes(searchLower)) ||
         (product.barcode && product.barcode.toLowerCase().includes(searchLower))
@@ -126,9 +131,9 @@ export default function OptimizedPOSLayout() {
 
     setIsSearching(true);
     const searchLower = query.toLowerCase();
-    
+
     // Simulate instant search results
-    const results = products.filter(product => 
+    const results = products.filter(product =>
       product.name.toLowerCase().includes(searchLower) ||
       (product.sku && product.sku.toLowerCase().includes(searchLower)) ||
       (product.barcode && product.barcode.toLowerCase().includes(searchLower))
@@ -233,73 +238,160 @@ export default function OptimizedPOSLayout() {
     }
   }, [cart, products, paymentMethod, handleClearCart, validateCashPayment]);
 
+  // Held sales state
+  const [heldSales, setHeldSales] = useState<{ id: string, items: any[], total: number, date: Date }[]>([]);
+
+  // Keyboard Shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if typing in an input (except for specific search triggers)
+      const isInput = ['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName);
+
+      if (isInput && e.key !== 'Enter' && e.key !== 'Escape') return;
+
+      if (e.key === 'Enter' && cart.length > 0 && !showSaleModal && !showReceiptModal) {
+        handleProcessSale();
+      }
+
+      if (e.key === 'Escape') {
+        if (showSaleModal) setShowSaleModal(false);
+        else if (showReceiptModal) setShowReceiptModal(false);
+        else if (cart.length > 0) handleClearCart();
+      }
+
+      if (e.key === '/' && !isInput) {
+        e.preventDefault();
+        document.querySelector<HTMLInputElement>('.pos-search-bar')?.focus();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [cart, showSaleModal, showReceiptModal, handleProcessSale, handleClearCart]);
+
+  // Held Sales Logics
+  const handleHoldSale = useCallback(() => {
+    if (cart.length === 0) return;
+    const newHeldSale = {
+      id: Math.random().toString(36).substr(2, 9),
+      items: [...cart],
+      total: cartCalculations.total,
+      date: new Date()
+    };
+    setHeldSales(prev => [newHeldSale, ...prev]);
+    clearCart();
+    toast.success('Venta puesta en espera');
+  }, [cart, cartCalculations.total, clearCart]);
+
+  const handleRestoreHeldSale = useCallback((heldSale: any) => {
+    // If current cart is not empty, ask or just merge? Let's replace for now.
+    setCartItems(heldSale.items);
+    setHeldSales(prev => prev.filter(s => s.id !== heldSale.id));
+    toast.success('Venta recuperada');
+  }, [setCartItems]);
+
   // Loading state
   if (loading) {
     return <LoadingFallback />;
   }
 
   return (
-    <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
-      {/* Compact Header */}
-      <CompactHeader />
+    <div className="flex flex-col h-screen bg-gray-50 dark:bg-slate-950 text-gray-900 dark:text-slate-100 transition-colors duration-500 overflow-hidden">
+      {/* Header optimizado */}
+      <header className="h-16 flex items-center justify-between px-6 bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border-b border-gray-100 dark:border-slate-800 z-50">
+        <div className="flex items-center space-x-6 flex-1">
+          <div className="hidden md:flex items-center space-x-2">
+            <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center text-white shadow-lg shadow-green-500/20">
+              <span className="font-black text-xs">POS</span>
+            </div>
+            <h1 className="text-lg font-black tracking-tighter uppercase italic">Premium</h1>
+          </div>
 
-      {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Panel - Products */}
-        <main className="flex-1 flex flex-col overflow-hidden">
-          {/* Search Bar */}
-          <div className="p-4 bg-white border-b border-gray-200">
+          <div className="flex-1 max-w-xl">
             <SearchBar
-              onSearch={handleSearch}
-              searchResults={searchResults}
-              isLoading={isSearching}
+              onSearch={setSearchQuery}
+              isLoading={loading}
+              searchResults={[]} // Podrías conectar con resultados reales del store si es necesario
             />
           </div>
+        </div>
 
-          {/* Category Navigation */}
-          <div className="bg-white border-b border-gray-200">
-            <CategoryNav
-              categories={categories}
-              selectedCategory={selectedCategory}
-              onSelectCategory={setSelectedCategory}
-            />
-          </div>
+        <div className="flex items-center space-x-3 ml-4">
+          {/* Botón de Venta en Espera */}
+          <button
+            onClick={handleHoldSale}
+            disabled={cart.length === 0}
+            className="flex items-center space-x-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl shadow-lg shadow-orange-500/20 active:scale-95 transition-all disabled:opacity-50 disabled:grayscale disabled:scale-100"
+            title="Poner venta en espera"
+          >
+            <Clock className="w-4 h-4" />
+            <span className="text-xs font-bold uppercase hidden sm:inline">Hold</span>
+          </button>
 
-          {/* Products Grid */}
-          <div className="flex-1 overflow-y-auto p-6">
+          {/* Ventas en Espera Guardadas */}
+          {heldSales.length > 0 && (
+            <div className="flex items-center space-x-1 border-l border-gray-200 dark:border-slate-800 pl-3">
+              {heldSales.slice(0, 3).map((sale, index) => (
+                <button
+                  key={sale.id}
+                  onClick={() => handleRestoreHeldSale(sale)}
+                  className="w-8 h-8 rounded-lg bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 text-[10px] font-black hover:bg-green-50 dark:hover:bg-green-900/20 hover:text-green-600 dark:hover:text-green-500 transition-all active:scale-90 flex items-center justify-center shadow-sm"
+                  title={`Restaurar Venta ${index + 1}`}
+                >
+                  {index + 1}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </header>
+
+      <main className="flex-1 flex overflow-hidden">
+        {/* Lado Izquierdo: Productos */}
+        <div className="flex-1 flex flex-col min-w-0 bg-gray-50 dark:bg-slate-950">
+          {/* Navegación de Categorías Header */}
+          <CategoryNav
+            categories={categories}
+            selectedCategory={selectedCategory}
+            onSelectCategory={setSelectedCategory}
+          />
+
+          <div className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar">
             <ProductGrid
-              products={filteredProducts}
-              onAddToCart={handleAddToCart}
-              searchQuery={debouncedSearchQuery}
+              products={products as any}
+              onAddToCart={addToCart as any}
+              isLoading={loading}
+              searchQuery={searchQuery}
               selectedCategory={selectedCategory}
             />
           </div>
-        </main>
+        </div>
 
-        {/* Right Panel - Cart (Desktop only) */}
-        {deviceType !== 'mobile' && (
+        {/* Lado Derecho: Carrito (Desktop) */}
+        <div className="hidden lg:block">
           <CartPanel
-            items={cart}
+            items={cart as any}
             total={cartCalculations.total}
-            onUpdateQuantity={updateQuantity}
+            onUpdateQuantity={handleUpdateQuantity}
             onRemoveItem={removeFromCart}
             onClearCart={handleClearCart}
             onProcessSale={handleProcessSale}
-            cashSessionOpen={hasOpenSession}
+            isProcessing={showSaleModal}
+            cashSessionOpen={hasOpenSession} // Ajustar segun permiso/estado real
           />
-        )}
-      </div>
+        </div>
+      </main>
 
-      {/* Mobile Cart Button */}
-      {deviceType === 'mobile' && cart.length > 0 && (
+      {/* Mobile Cart Floating Button */}
+      {cart.length > 0 && (
         <button
           onClick={() => setIsMobileCartOpen(true)}
-          className="fixed bottom-6 right-6 z-50 w-16 h-16 bg-green-500 text-white rounded-full shadow-lg flex items-center justify-center"
+          className="lg:hidden fixed bottom-6 right-6 w-16 h-16 bg-green-500 text-white rounded-full shadow-2xl shadow-green-500/40 flex items-center justify-center z-[60] active:scale-90 transition-transform animate-bounce-in"
         >
           <div className="relative">
-            <ShoppingCart className="w-6 h-6" />
-            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-              {cart.length > 99 ? '99+' : cart.length}
+            <ShoppingCart className="w-8 h-8" />
+            <span className="absolute -top-2 -right-2 bg-white text-green-600 text-[10px] font-black w-6 h-6 rounded-full flex items-center justify-center shadow-md">
+              {cart.length}
             </span>
           </div>
         </button>
@@ -310,9 +402,9 @@ export default function OptimizedPOSLayout() {
         <MobileCartSheet
           isOpen={isMobileCartOpen}
           onClose={() => setIsMobileCartOpen(false)}
-          items={cart}
+          items={cart as any}
           total={cartCalculations.total}
-          onUpdateQuantity={updateQuantity}
+          onUpdateQuantity={handleUpdateQuantity}
           onRemoveItem={removeFromCart}
           onClearCart={handleClearCart}
           onProcessSale={handleProcessSale}
@@ -351,6 +443,8 @@ export default function OptimizedPOSLayout() {
             logo: config.branding.logo
           }}
           thermalPrinter={true}
+          onPrint={() => toast.success('Imprimiendo comprobante...')}
+          onDownload={() => toast.success('Descargando comprobante...')}
         />
       )}
     </div>
