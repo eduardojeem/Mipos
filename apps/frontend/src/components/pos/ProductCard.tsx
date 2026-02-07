@@ -18,6 +18,12 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps) 
   const [isHovered, setIsHovered] = useState(false);
   const [imageError, setImageError] = useState(false);
 
+  const formatPrice = (val: unknown) => {
+    const num = typeof val === 'number' ? val : typeof val === 'string' ? Number(val) : 0;
+    if (!Number.isFinite(num)) return '0.00';
+    return num.toFixed(2);
+  };
+
   const handleImageError = () => {
     setImageError(true);
   };
@@ -72,7 +78,7 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps) 
         </h3>
         <div className="flex items-center justify-between">
           <span className="pos-product-price text-lg font-semibold text-green-600">
-            ${product.price.toFixed(2)}
+            ${formatPrice((product as any)?.price)}
           </span>
         </div>
       </div>

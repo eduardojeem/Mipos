@@ -264,25 +264,28 @@ model Customer {
 }
 
 model Sale {
-  id            String     @id @default(cuid())
-  userId        String     @map("user_id")
-  customerId    String?    @map("customer_id")
-  subtotal      Float
-  discount      Float      @default(0)
-  discountType  String     @default("PERCENTAGE") @map("discount_type")
-  tax           Float      @default(0)
-  total         Float
-  date          DateTime   @default(now())
-  paymentMethod String     @default("CASH") @map("payment_method")
-  notes         String?
-  createdAt     DateTime   @default(now()) @map("created_at")
-  updatedAt     DateTime   @updatedAt @map("updated_at")
-  returns       Return[]
-  saleItems     SaleItem[]
-  customer      Customer?  @relation(fields: [customerId], references: [id])
-  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  usedRewards   CustomerReward[]
+  id             String     @id @default(cuid())
+  organizationId String     @map("organization_id")
+  userId         String     @map("user_id")
+  customerId     String?    @map("customer_id")
+  subtotal       Float
+  discount       Float      @default(0)
+  discountType   String     @default("PERCENTAGE") @map("discount_type")
+  tax            Float      @default(0)
+  total          Float
+  date           DateTime   @default(now())
+  paymentMethod  String     @default("CASH") @map("payment_method")
+  notes          String?
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+  returns        Return[]
+  saleItems      SaleItem[]
+  customer       Customer?  @relation(fields: [customerId], references: [id])
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  usedRewards    CustomerReward[]
 
+  @@index([organizationId, date])
+  @@index([organizationId, userId])
   @@map("sales")
 }
 

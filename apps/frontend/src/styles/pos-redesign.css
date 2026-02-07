@@ -176,6 +176,107 @@
   cursor: not-allowed;
 }
 
+/* ==========================
+   Modo Oscuro (Dark Mode)
+   ========================== */
+.dark .pos-header {
+  background: #0F172A; /* slate-900 */
+  border-bottom-color: #1F2937; /* slate-800 */
+}
+
+.dark .pos-search-bar {
+  background: #0B1220; /* near slate-950 */
+  border-color: #1F2937; /* slate-800 */
+  color: #E5E7EB; /* slate-200 */
+}
+
+.dark .pos-search-bar::placeholder {
+  color: #94A3B8; /* slate-400 */
+}
+
+.dark .pos-search-bar:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.20);
+}
+
+.dark .pos-category-nav {
+  background: #0F172A; /* slate-900 */
+  border-bottom-color: #1F2937; /* slate-800 */
+}
+
+.dark .pos-category-chip {
+  background: #0B1220; /* near slate-950 */
+  border-color: #1F2937; /* slate-800 */
+  color: #9CA3AF; /* slate-400 */
+}
+
+.dark .pos-category-chip:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.dark .pos-category-chip.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
+}
+
+.dark .pos-product-card {
+  background: #0B1220; /* near slate-950 */
+  box-shadow: none;
+  border: 1px solid #1F2937; /* subtle border for separation */
+}
+
+.dark .pos-product-name {
+  color: #F3F4F6; /* slate-100 */
+}
+
+.dark .pos-product-price {
+  color: #34D399; /* emerald-400 for better contrast in dark */
+}
+
+.dark .pos-add-button {
+  background: var(--color-primary);
+  color: #0B1220;
+}
+
+.dark .pos-add-button:hover {
+  background: var(--color-primary-hover);
+}
+
+.dark .pos-cart-panel {
+  background: #0B1220; /* near slate-950 */
+  border-left-color: #1F2937; /* slate-800 */
+  box-shadow: none;
+}
+
+.dark .pos-cart-header {
+  background: #0F172A; /* slate-900 */
+  border-bottom-color: #1F2937; /* slate-800 */
+}
+
+.dark .pos-cart-item {
+  background: #0F172A; /* slate-900 */
+}
+
+.dark .pos-cart-total {
+  color: #F3F4F6; /* slate-100 */
+}
+
+.dark .pos-pay-button {
+  background: var(--color-primary);
+  color: #0B1220;
+}
+
+.dark .pos-pay-button:hover {
+  background: var(--color-primary-hover);
+}
+
+.dark .pos-pay-button:disabled {
+  background: #475569; /* slate-600 */
+  color: #CBD5E1; /* slate-300 */
+}
+
 /* Responsive breakpoints */
 @media (max-width: 768px) {
   .pos-cart-panel {

@@ -37,9 +37,13 @@ const querySchema = z.object({
 // Get recent sales (requires sales:read permission)
 router.get('/recent', requirePermission('sales', 'read'), asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
   const limit = parseInt(req.query.limit as string) || 5;
+  const organizationId = req.user!.organizationId;
   
   try {
     const recentSales = await prisma.sale.findMany({
+      where: {
+        organizationId
+      },
       take: limit,
       orderBy: { date: 'desc' },
       include: {
@@ -87,11 +91,14 @@ router.get('/recent', requirePermission('sales', 'read'), asyncHandler(async (re
 }));
 
 // Get all sales with pagination and filters (requires sales:read permission)
-router.get('/', requirePermission('sales', 'read'), asyncHandler(async (req, res) => {
+router.get('/', requirePermission('sales', 'read'), asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
   const { page, limit, startDate, endDate, customerId, paymentMethod } = querySchema.parse(req.query);
+  const organizationId = req.user!.organizationId;
   const skip = (page - 1) * limit;
 
-  const where: any = {};
+  const where: any = {
+    organizationId
+  };
 
   // Parse dates safely to avoid invalid Date causing Prisma errors
   const parseSafeDate = (val?: string) => {
@@ -168,11 +175,15 @@ router.get('/', requirePermission('sales', 'read'), asyncHandler(async (req, res
 }));
 
 // Get sale by ID (requires sales:read permission)
-router.get('/:id', requirePermission('sales', 'read'), asyncHandler(async (req, res) => {
+router.get('/:id', requirePermission('sales', 'read'), asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
   const { id } = req.params;
+  const organizationId = req.user!.organizationId;
 
-  const sale = await prisma.sale.findUnique({
-    where: { id },
+  const sale = await prisma.sale.findFirst({
+    where: { 
+      id,
+      organizationId
+    },
     include: {
       user: {
         select: {
@@ -215,12 +226,10 @@ router.get('/:id', requirePermission('sales', 'read'), asyncHandler(async (req, 
 router.post('/', criticalOperationsRateLimit, requirePermission('sales', 'create'), asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
   const { customerId, items, paymentMethod, discount, discountType, tax, notes } = createSaleSchema.parse(req.body);
   const userId = req.user!.id;
-  const organizationId = String(req.headers['x-organization-id'] || '').trim();
+  const organizationId = req.user!.organizationId;
 
+  // Validate cash session for cash payments
   if (paymentMethod === 'CASH') {
-    if (!organizationId) {
-      throw createError('Organization header required for cash operations', 400);
-    }
     const existingOpen = await prisma.cashSession.findFirst({
       where: { organizationId, status: 'OPEN' }
     });
@@ -234,18 +243,17 @@ router.post('/', criticalOperationsRateLimit, requirePermission('sales', 'create
     throw createError('Percentage discount cannot exceed 100%', 400);
   }
 
-  // Validate products and check stock
+  // Validate products belong to organization and check stock
   const productIds = items.map(item => item.productId);
   const products = await prisma.product.findMany({
     where: {
-      id: {
-        in: productIds
-      }
+      id: { in: productIds },
+      organizationId
     }
   });
 
   if (products.length !== productIds.length) {
-    throw createError('One or more products not found', 404);
+    throw createError('One or more products not found or do not belong to your organization', 404);
   }
 
   // Check stock availability
@@ -256,6 +264,19 @@ router.post('/', criticalOperationsRateLimit, requirePermission('sales', 'create
     }
     if (product.stockQuantity < item.quantity) {
       throw createError(`Insufficient stock for product ${product.name}. Available: ${product.stockQuantity}, Required: ${item.quantity}`, 400);
+    }
+  }
+
+  // Validate customer belongs to organization (if provided)
+  if (customerId) {
+    const customer = await prisma.customer.findFirst({
+      where: { 
+        id: customerId,
+        organizationId
+      }
+    });
+    if (!customer) {
+      throw createError('Customer not found or does not belong to your organization', 404);
     }
   }
 
@@ -296,9 +317,11 @@ router.post('/', criticalOperationsRateLimit, requirePermission('sales', 'create
         throw createError(`Insufficient stock for product ${item.productId}. Available: ${current}, Required: ${item.quantity}`, 400);
       }
     }
-    // Create sale
+    
+    // Create sale with organizationId
     const newSale = await tx.sale.create({
       data: {
+        organizationId,
         userId,
         customerId: customerId || null,
         subtotal,
@@ -361,9 +384,6 @@ router.post('/', criticalOperationsRateLimit, requirePermission('sales', 'create
 
     // Create cash movement for cash sales
     if (paymentMethod === 'CASH') {
-      if (!organizationId) {
-        throw createError('Organization header required for cash operations', 400);
-      }
       await createCashMovementForSale(tx, newSale.id, total, 'SALE', userId, organizationId);
     }
 
@@ -440,7 +460,7 @@ router.post('/', criticalOperationsRateLimit, requirePermission('sales', 'create
       totalQuantity: items.reduce((sum, item) => sum + item.quantity, 0)
     }
   });
-// Helper function to create cash movement for sales
+}));// Helper function to create cash movement for sales
 async function createCashMovementForSale(tx: any, saleId: string, amount: number, type: 'SALE' | 'RETURN', userId: string, organizationId: string) {
   const openSession = await tx.cashSession.findFirst({
     where: { status: 'OPEN', organizationId }
@@ -472,6 +492,7 @@ async function createCashMovementForSale(tx: any, saleId: string, amount: number
 
 // Get today's sales summary
 router.get('/summary/today', requirePermission('sales', 'read'), asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
+  const organizationId = req.user!.organizationId;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today);
@@ -480,6 +501,7 @@ router.get('/summary/today', requirePermission('sales', 'read'), asyncHandler(as
   const [salesCount, totalRevenue, salesByPaymentMethod] = await Promise.all([
     prisma.sale.count({
       where: {
+        organizationId,
         date: {
           gte: today,
           lt: tomorrow
@@ -488,6 +510,7 @@ router.get('/summary/today', requirePermission('sales', 'read'), asyncHandler(as
     }),
     prisma.sale.aggregate({
       where: {
+        organizationId,
         date: {
           gte: today,
           lt: tomorrow
@@ -500,6 +523,7 @@ router.get('/summary/today', requirePermission('sales', 'read'), asyncHandler(as
     prisma.sale.groupBy({
       by: ['paymentMethod'],
       where: {
+        organizationId,
         date: {
           gte: today,
           lt: tomorrow
@@ -523,7 +547,8 @@ router.get('/summary/today', requirePermission('sales', 'read'), asyncHandler(as
 }));
 
 // Get sales analytics
-router.get('/analytics/dashboard', asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
+router.get('/analytics/dashboard', requirePermission('sales', 'read'), asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
+  const organizationId = req.user!.organizationId;
   const today = new Date();
   const startOfWeek = new Date(today);
   startOfWeek.setDate(today.getDate() - today.getDay());
@@ -535,6 +560,7 @@ router.get('/analytics/dashboard', asyncHandler(async (req: EnhancedAuthenticate
     // Today's sales
     prisma.sale.aggregate({
       where: {
+        organizationId,
         date: {
           gte: new Date(today.setHours(0, 0, 0, 0))
         }
@@ -545,6 +571,7 @@ router.get('/analytics/dashboard', asyncHandler(async (req: EnhancedAuthenticate
     // This week's sales
     prisma.sale.aggregate({
       where: {
+        organizationId,
         date: {
           gte: startOfWeek
         }
@@ -555,6 +582,7 @@ router.get('/analytics/dashboard', asyncHandler(async (req: EnhancedAuthenticate
     // This month's sales
     prisma.sale.aggregate({
       where: {
+        organizationId,
         date: {
           gte: startOfMonth
         }
@@ -567,6 +595,7 @@ router.get('/analytics/dashboard', asyncHandler(async (req: EnhancedAuthenticate
       by: ['productId'],
       where: {
         sale: {
+          organizationId,
           date: {
             gte: startOfMonth
           }
