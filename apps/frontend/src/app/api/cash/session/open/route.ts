@@ -89,7 +89,13 @@ export async function POST(request: NextRequest) {
                 const msg = insertRes.error.message || 'Failed to create session';
                 const code = insertRes.error.code;
                 const lower = msg.toLowerCase();
-                if (code === '42501' || lower.includes('permission denied')) {
+                if (
+                    code === '42501' ||
+                    lower.includes('permission denied') ||
+                    lower.includes('row-level security') ||
+                    lower.includes('rls') ||
+                    lower.includes('policy')
+                ) {
                     return NextResponse.json(
                         { error: 'Permission denied by RLS', details: msg, code },
                         { status: 403 }
@@ -119,7 +125,13 @@ export async function POST(request: NextRequest) {
                 const msg = insertRes.error.message || 'Failed to create session';
                 const code = insertRes.error.code;
                 const lower = msg.toLowerCase();
-                if (code === '42501' || lower.includes('permission denied')) {
+                if (
+                    code === '42501' ||
+                    lower.includes('permission denied') ||
+                    lower.includes('row-level security') ||
+                    lower.includes('rls') ||
+                    lower.includes('policy')
+                ) {
                     return NextResponse.json(
                         { error: 'Permission denied by RLS', details: msg, code },
                         { status: 403 }

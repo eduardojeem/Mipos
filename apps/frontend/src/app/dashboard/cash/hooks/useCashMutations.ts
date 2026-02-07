@@ -114,8 +114,13 @@ export function useCashMutations(options: UseCashMutationsOptions): UseCashMutat
                 const error = e as any;
                 console.error('Error opening session:', error);
                 const status = error?.response?.status;
-                const msg = error?.response?.data?.error || error?.response?.data?.message || error?.message || 'Error abriendo sesión';
+                const srv = error?.response?.data || {};
+                const msg = srv?.error || srv?.message || error?.message || 'Error abriendo sesión';
+                const details = srv?.details;
 
+                if (status === 400 && (msg?.toLowerCase?.().includes('organization') || msg?.toLowerCase?.().includes('header'))) {
+                    toast({ description: 'Falta seleccionar organización. Ve al selector de organización y elige una antes de abrir caja.', variant: 'destructive' });
+                }
                 if (status === 403 && (msg?.toLowerCase?.().includes('rls') || msg?.toLowerCase?.().includes('permission'))) {
                     showConfirmation({
                         title: 'Permiso denegado por RLS',
@@ -126,7 +131,8 @@ export function useCashMutations(options: UseCashMutationsOptions): UseCashMutat
                         onConfirm: () => { },
                     });
                 } else {
-                    toast({ description: msg, variant: 'destructive' });
+                    const text = details ? `${msg}: ${details}` : msg;
+                    toast({ description: text, variant: 'destructive' });
                 }
             } finally {
                 setLoadingStates((prev) => ({ ...prev, openingSession: false }));

@@ -113,7 +113,7 @@ export default function OpenCashSessionModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
+        <div className="space-y-6 py-4 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
           {/* Quick Amount Buttons */}
           <div className="space-y-3">
             <Label className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">

@@ -1,7 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
     const canUseSupabase = typeof (supabase as any)?.from === 'function';
@@ -15,11 +15,19 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    // Get organization ID from header
+    const orgId = request.headers.get('x-organization-id');
+    if (!orgId) {
+      // Si no hay organización seleccionada, devolver null para mantener UI estable
+      return NextResponse.json({ session: null }, { status: 200 });
+    }
+
     // Try to find any open session considering both status column variants
     const { data, error } = await (supabase as any)
       .from('cash_sessions')
-      .select('id, user_id, opened_by, status, opening_amount, closing_amount, opening_time, closing_time, notes')
+      .select('id, user_id, opened_by, status, opening_amount, closing_amount, opening_time, closing_time, notes, organization_id')
       .or('status.eq.open,status.eq.OPEN')
+      .eq('organization_id', orgId)
       .limit(1);
 
     if (error) {

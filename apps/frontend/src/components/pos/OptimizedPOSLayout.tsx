@@ -10,12 +10,13 @@ import { usePOSData } from '@/hooks/use-optimized-data';
 import { calculateCartWithIva } from '@/lib/pos/calculations';
 import { useCashSessionValidation } from '@/hooks/useCashSessionValidation';
 import { useBusinessConfig } from '@/contexts/BusinessConfigContext';
-import { cn, formatCurrency } from '@/lib/utils';
-import type { Product, Customer } from '@/types';
+import { useAuth } from '@/hooks/use-auth';
+import { useUserOrganizations } from '@/hooks/use-user-organizations';
+import { OrganizationSelector } from '@/components/organizations/OrganizationSelector';
+import type { Product } from '@/types';
 import type { SaleResponse } from '@/lib/api';
 
 // Importar componentes del nuevo diseño
-import CompactHeader from './CompactHeader';
 import SearchBar from './SearchBar';
 import CategoryNav from './CategoryNav';
 import ProductGrid from './ProductGrid';
@@ -24,6 +25,7 @@ import MobileCartSheet from './MobileCartSheet';
 import ProcessSaleModal from './ProcessSaleModal';
 import { ReceiptModal } from './ReceiptModal';
 import OpenCashSessionModal from './OpenCashSessionModal';
+import CloseCashSessionModal from './CloseCashSessionModal';
 
 // Device detection hook
 import { useDeviceType } from '@/components/ui/responsive-layout';
@@ -46,6 +48,10 @@ export default function OptimizedPOSLayout() {
   // Business Config
   const { config } = useBusinessConfig();
 
+  // Auth & Organization
+  const { user } = useAuth();
+  const { selectedOrganization } = useUserOrganizations(user?.id);
+
   // State management
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery] = useDebounce(searchQuery, 300);
@@ -57,6 +63,7 @@ export default function OptimizedPOSLayout() {
   const [lastSale, setLastSale] = useState<SaleResponse | null>(null);
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
   const [showOpenCashModal, setShowOpenCashModal] = useState(false);
+  const [showCloseCashModal, setShowCloseCashModal] = useState(false);
 
   // Device detection
   const deviceType = useDeviceType();
@@ -67,21 +74,21 @@ export default function OptimizedPOSLayout() {
   const discount = usePOSStore((s) => s.discount);
   const setDiscount = usePOSStore((s) => s.setDiscount);
   const discountType = usePOSStore((s) => s.discountType);
-  const setDiscountType = usePOSStore((s) => s.setDiscountType);
-  const notes = usePOSStore((s) => s.notes);
+  const _setDiscountType = usePOSStore((s) => s.setDiscountType);
+  const _notes = usePOSStore((s) => s.notes);
   const setNotes = usePOSStore((s) => s.setNotes);
 
   // Data hooks
   const {
     products = [],
     categories = [],
-    customers = [],
+    customers: _customers = [],
     loading,
-    refetchAll
+    refetchAll: _refetchAll
   } = usePOSData();
 
   // Cash session management
-  const { session: cashSession, isLoading: cashSessionLoading, refetch: refetchCashSession } = useCashSession();
+  const { session: cashSession, isLoading: _cashSessionLoading, refetch: refetchCashSession } = useCashSession();
   const cashSessionSummary = useMemo(() => ({
     balance: 0,
     totalIn: 0,
@@ -94,7 +101,7 @@ export default function OptimizedPOSLayout() {
   }), []);
 
   const { 
-    handleOpenSession, 
+    requestCloseSession,
     loadingStates,
     ConfirmationDialog 
   } = useCashMutations({
@@ -103,11 +110,12 @@ export default function OptimizedPOSLayout() {
     onSuccess: () => {
       refetchCashSession();
       setShowOpenCashModal(false);
+      setShowCloseCashModal(false);
     }
   });
 
   // Cash session validation
-  const { validateCashPayment, hasOpenSession, session } = useCashSessionValidation();
+  const { validateCashPayment, hasOpenSession } = useCashSessionValidation();
 
   // Cart management
   const {
@@ -270,6 +278,57 @@ export default function OptimizedPOSLayout() {
     }
   }, [cart, products, paymentMethod, handleClearCart, validateCashPayment]);
 
+  // Handler para abrir sesión de caja (sin confirmación redundante)
+  const handleOpenCashSession = useCallback(async (amount: number, notes?: string) => {
+    try {
+      // Validar que hay organización seleccionada
+      if (!selectedOrganization) {
+        toast.error('Selecciona una organización antes de abrir caja');
+        return;
+      }
+
+      const res = await fetch('/api/cash/session/open', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-organization-id': selectedOrganization.id
+        },
+        body: JSON.stringify({
+          openingAmount: amount,
+          notes: notes || 'Apertura de caja'
+        })
+      });
+      
+      if (!res.ok) {
+        const error = await res.json();
+        const errorMsg = error.error || 'Error al abrir caja';
+        const details = error.details ? `\n${error.details}` : '';
+        const code = error.code ? ` (${error.code})` : '';
+        
+        console.error('Error opening cash session:', {
+          status: res.status,
+          error: errorMsg,
+          details: error.details,
+          code: error.code
+        });
+        
+        throw new Error(`${errorMsg}${code}${details}`);
+      }
+      
+      toast.success('Sesión de caja abierta exitosamente');
+      refetchCashSession();
+      setShowOpenCashModal(false);
+    } catch (error: any) {
+      console.error('Error opening cash session:', error);
+      toast.error(error.message || 'Error al abrir la caja');
+    }
+  }, [refetchCashSession, selectedOrganization]);
+
+  // Handler para cerrar sesión de caja
+  const handleCloseSession = useCallback((data: { closingAmount: number; notes?: string }) => {
+    requestCloseSession(data.closingAmount);
+  }, [requestCloseSession]);
+
   // Held sales state
   const [heldSales, setHeldSales] = useState<{ id: string, items: any[], total: number, date: Date }[]>([]);
 
@@ -346,26 +405,48 @@ export default function OptimizedPOSLayout() {
               searchResults={[]} // Podrías conectar con resultados reales del store si es necesario
             />
           </div>
+          {!selectedOrganization && (
+            <div className="hidden md:flex items-center ml-4">
+              <OrganizationSelector className="w-64 h-9" />
+            </div>
+          )}
         </div>
 
         <div className="flex items-center space-x-3 ml-4">
           {/* Indicador y Botón de Caja */}
           {!hasOpenSession ? (
             <button
-              onClick={() => setShowOpenCashModal(true)}
+              onClick={() => {
+                if (!selectedOrganization) {
+                  toast.error('Selecciona una organización antes de abrir caja');
+                  return;
+                }
+                setShowOpenCashModal(true);
+              }}
               className="flex items-center space-x-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-xl shadow-lg shadow-green-500/20 active:scale-95 transition-all"
               title="Abrir sesión de caja"
+              disabled={!selectedOrganization}
             >
               <Wallet className="w-4 h-4" />
               <span className="text-xs font-bold uppercase hidden sm:inline">Abrir Caja</span>
             </button>
           ) : (
-            <div className="flex items-center space-x-2 px-4 py-2 bg-green-50 dark:bg-green-950/30 border-2 border-green-500 rounded-xl">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <span className="text-xs font-bold text-green-700 dark:text-green-400 uppercase hidden sm:inline">
-                Caja Abierta
-              </span>
-            </div>
+            <>
+              <div className="flex items-center space-x-2 px-4 py-2 bg-green-50 dark:bg-green-950/30 border-2 border-green-500 rounded-xl">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <span className="text-xs font-bold text-green-700 dark:text-green-400 uppercase hidden sm:inline">
+                  Caja Abierta
+                </span>
+              </div>
+              <button
+                onClick={() => setShowCloseCashModal(true)}
+                className="flex items-center space-x-2 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-xl shadow-lg shadow-red-500/20 active:scale-95 transition-all"
+                title="Cerrar sesión de caja"
+              >
+                <Wallet className="w-4 h-4" />
+                <span className="text-xs font-bold uppercase hidden sm:inline">Cerrar Caja</span>
+              </button>
+            </>
           )}
 
           {/* Botón de Venta en Espera */}
@@ -458,7 +539,7 @@ export default function OptimizedPOSLayout() {
           onUpdateQuantity={handleUpdateQuantity}
           onRemoveItem={removeFromCart}
           onClearCart={handleClearCart}
-          onProcessSale={handleProcessSale}
+          onProcessPayment={handleProcessSale}
           cashSessionOpen={hasOpenSession}
         />
       )}
@@ -503,8 +584,21 @@ export default function OptimizedPOSLayout() {
       <OpenCashSessionModal
         isOpen={showOpenCashModal}
         onClose={() => setShowOpenCashModal(false)}
-        onConfirm={handleOpenSession}
-        isLoading={loadingStates.openingSession}
+        onConfirm={handleOpenCashSession}
+        isLoading={false}
+      />
+
+      {/* Close Cash Session Modal */}
+      <CloseCashSessionModal
+        isOpen={showCloseCashModal}
+        onClose={() => setShowCloseCashModal(false)}
+        onConfirm={handleCloseSession}
+        isLoading={loadingStates.closingSession}
+        sessionData={{
+          openingAmount: cashSession?.openingAmount || 0,
+          openedAt: cashSession?.openedAt || '',
+          expectedBalance: cashSession?.openingAmount || 0,
+        }}
       />
 
       {/* Confirmation Dialog */}
