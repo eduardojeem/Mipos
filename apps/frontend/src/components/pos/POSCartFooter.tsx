@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -66,6 +67,8 @@ interface POSCartFooterProps {
     // Payment Props
     paymentMethod: string;
     onPaymentMethodChange: (method: string) => void;
+    processDisabled?: boolean;
+    onRequestOpenCashSession?: () => void;
 }
 
 export function POSCartFooter({
@@ -84,6 +87,7 @@ export function POSCartFooter({
     setCustomerQuery,
     paymentMethod,
     onPaymentMethodChange
+    , processDisabled, onRequestOpenCashSession
 }: POSCartFooterProps) {
     const [isOpen, setIsOpen] = useState(false);
 
@@ -137,20 +141,56 @@ export function POSCartFooter({
                         </div>
 
                         {/* Process Button */}
-                        <Button
-                            className="flex-1 h-14 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white shadow-lg shadow-green-600/20 hover:shadow-xl hover:shadow-green-600/30 transition-all duration-200"
-                            onClick={onProcessSale}
-                        >
-                            <div className="flex flex-col items-center">
-                                <div className="flex items-center gap-2 font-bold text-lg">
-                                    <CheckCircle className="w-5 h-5" />
-                                    <span>COBRAR</span>
+                        {processDisabled ? (
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <span className="flex-1">
+                                            <Button
+                                                className="w-full h-14 bg-gradient-to-r from-green-600 to-green-700 text-white shadow-lg shadow-green-600/20 transition-all duration-200"
+                                                onClick={onProcessSale}
+                                                disabled
+                                            >
+                                                <div className="flex flex-col items-center">
+                                                    <div className="flex items-center gap-2 font-bold text-lg">
+                                                        <CheckCircle className="w-5 h-5" />
+                                                        <span>COBRAR</span>
+                                                    </div>
+                                                    <span className="text-[10px] opacity-90 font-medium tracking-wide">
+                                                        PROCESAR VENTA
+                                                    </span>
+                                                </div>
+                                            </Button>
+                                        </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        <div className="flex items-center gap-2">
+                                            <span>Caja cerrada: abre una sesión para cobrar en efectivo.</span>
+                                            {onRequestOpenCashSession && (
+                                                <Button variant="outline" size="sm" onClick={onRequestOpenCashSession}>
+                                                    Abrir caja
+                                                </Button>
+                                            )}
+                                        </div>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                        ) : (
+                            <Button
+                                className="flex-1 h-14 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white shadow-lg shadow-green-600/20 hover:shadow-xl hover:shadow-green-600/30 transition-all duration-200"
+                                onClick={onProcessSale}
+                            >
+                                <div className="flex flex-col items-center">
+                                    <div className="flex items-center gap-2 font-bold text-lg">
+                                        <CheckCircle className="w-5 h-5" />
+                                        <span>COBRAR</span>
+                                    </div>
+                                    <span className="text-[10px] opacity-90 font-medium tracking-wide">
+                                        PROCESAR VENTA
+                                    </span>
                                 </div>
-                                <span className="text-[10px] opacity-90 font-medium tracking-wide">
-                                    PROCESAR VENTA
-                                </span>
-                            </div>
-                        </Button>
+                            </Button>
+                        )}
 
                         {/* Expand Toggle (Desktop) */}
                         <CollapsibleTrigger asChild>

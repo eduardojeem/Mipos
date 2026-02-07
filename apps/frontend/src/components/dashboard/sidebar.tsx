@@ -23,7 +23,8 @@ import {
   LogOut,
   Sparkles,
   ShoppingBag,
-  Building2
+  Building2,
+  RotateCcw
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -113,6 +114,50 @@ export const navigation: NavItem[] = [
     borderColor: 'border-emerald-200 dark:border-emerald-800'
   },
   {
+    name: 'Clientes',
+    href: '/dashboard/customers',
+    icon: Users,
+    roles: ['ADMIN', 'CASHIER', 'SUPER_ADMIN', 'OWNER'],
+    category: 'management',
+    description: 'Gestión de base de clientes',
+    color: 'text-amber-600 dark:text-amber-400',
+    bgColor: 'bg-amber-50 dark:bg-amber-900/20',
+    borderColor: 'border-amber-200 dark:border-amber-800'
+  },
+  {
+    name: 'Caja',
+    href: '/dashboard/cash',
+    icon: DollarSign,
+    roles: ['ADMIN', 'CASHIER', 'SUPER_ADMIN', 'OWNER'],
+    category: 'management',
+    description: 'Estado, movimientos y arqueos de caja',
+    color: 'text-amber-600 dark:text-amber-400',
+    bgColor: 'bg-amber-50 dark:bg-amber-900/20',
+    borderColor: 'border-amber-200 dark:border-amber-800'
+  },
+  {
+    name: 'Devoluciones',
+    href: '/dashboard/returns',
+    icon: RotateCcw,
+    roles: ['ADMIN', 'CASHIER', 'SUPER_ADMIN', 'OWNER'],
+    category: 'management',
+    description: 'Gestiona devoluciones y reembolsos',
+    color: 'text-amber-600 dark:text-amber-400',
+    bgColor: 'bg-amber-50 dark:bg-amber-900/20',
+    borderColor: 'border-amber-200 dark:border-amber-800'
+  },
+  {
+    name: 'Lealtad',
+    href: '/dashboard/loyalty',
+    icon: Star,
+    roles: ['ADMIN', 'CASHIER', 'SUPER_ADMIN', 'OWNER'],
+    category: 'management',
+    description: 'Programas de fidelización',
+    color: 'text-amber-600 dark:text-amber-400',
+    bgColor: 'bg-amber-50 dark:bg-amber-900/20',
+    borderColor: 'border-amber-200 dark:border-amber-800'
+  },
+  {
     name: 'Productos',
     href: '/dashboard/products?tab=products',
     icon: Package,
@@ -146,39 +191,6 @@ export const navigation: NavItem[] = [
     borderColor: 'border-violet-200 dark:border-violet-800'
   },
   {
-    name: 'Clientes',
-    href: '/dashboard/customers',
-    icon: Users,
-    roles: ['ADMIN', 'CASHIER', 'SUPER_ADMIN', 'OWNER'],
-    category: 'management',
-    description: 'Gestión de base de clientes',
-    color: 'text-amber-600 dark:text-amber-400',
-    bgColor: 'bg-amber-50 dark:bg-amber-900/20',
-    borderColor: 'border-amber-200 dark:border-amber-800'
-  },
-  {
-    name: 'Caja',
-    href: '/dashboard/cash',
-    icon: DollarSign,
-    roles: ['ADMIN', 'CASHIER', 'SUPER_ADMIN', 'OWNER'],
-    category: 'management',
-    description: 'Estado, movimientos y arqueos de caja',
-    color: 'text-amber-600 dark:text-amber-400',
-    bgColor: 'bg-amber-50 dark:bg-amber-900/20',
-    borderColor: 'border-amber-200 dark:border-amber-800'
-  },
-  {
-    name: 'Lealtad',
-    href: '/dashboard/loyalty',
-    icon: Star,
-    roles: ['ADMIN', 'CASHIER', 'SUPER_ADMIN', 'OWNER'],
-    category: 'management',
-    description: 'Programas de fidelización',
-    color: 'text-amber-600 dark:text-amber-400',
-    bgColor: 'bg-amber-50 dark:bg-amber-900/20',
-    borderColor: 'border-amber-200 dark:border-amber-800'
-  },
-  {
     name: 'Reportes',
     href: '/dashboard/reports',
     icon: BarChart3,
@@ -190,12 +202,12 @@ export const navigation: NavItem[] = [
     borderColor: 'border-indigo-200 dark:border-indigo-800'
   },
   {
-    name: 'Panel SaaS',
-    href: '/superadmin',
-    icon: Building2,
-    roles: ['SUPER_ADMIN'],
+    name: 'Configuración',
+    href: '/dashboard/settings',
+    icon: Settings,
+    roles: ['ADMIN', 'CASHIER', 'SUPER_ADMIN', 'OWNER', 'MANAGER'],
     category: 'admin',
-    description: 'Gestión Global SaaS',
+    description: 'Configuración del sistema',
     color: 'text-red-600 dark:text-red-400',
     bgColor: 'bg-red-50 dark:bg-red-900/20',
     borderColor: 'border-red-200 dark:border-red-800'
@@ -212,12 +224,12 @@ export const navigation: NavItem[] = [
     borderColor: 'border-red-200 dark:border-red-800'
   },
   {
-    name: 'Configuración',
-    href: '/dashboard/settings',
-    icon: Settings,
-    roles: ['ADMIN', 'CASHIER', 'SUPER_ADMIN', 'OWNER', 'MANAGER'],
+    name: 'Panel SaaS',
+    href: '/superadmin',
+    icon: Building2,
+    roles: ['SUPER_ADMIN'],
     category: 'admin',
-    description: 'Configuración del sistema',
+    description: 'Gestión Global SaaS',
     color: 'text-red-600 dark:text-red-400',
     bgColor: 'bg-red-50 dark:bg-red-900/20',
     borderColor: 'border-red-200 dark:border-red-800'

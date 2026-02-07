@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { requirePOSPermissions } from '@/app/api/_utils/role-validation';
+import { getUserOrganizationId } from '@/app/api/_utils/organization';
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requirePOSPermissions(request, ['pos.access'])
+    if (!auth.ok) {
+      return NextResponse.json(auth.body, { status: auth.status })
+    }
+
     const { searchParams } = new URL(request.url);
     const limit = Math.min(parseInt(searchParams.get('limit') || '500'), 1000); // Max 1000 for POS
     const search = searchParams.get('search');
@@ -10,6 +17,12 @@ export async function GET(request: NextRequest) {
     const activeOnly = searchParams.get('activeOnly') !== 'false'; // Default true
 
     const supabase = await createClient();
+
+    const headerOrgId = request.headers.get('x-organization-id') || request.headers.get('X-Organization-Id')
+    const organizationId = headerOrgId || (auth.userId ? await getUserOrganizationId(auth.userId) : null)
+    if (!organizationId) {
+      return NextResponse.json({ error: 'Organization context is required' }, { status: 400 })
+    }
 
     // Optimized query for POS - only essential fields
     let query = supabase
@@ -37,6 +50,7 @@ export async function GET(request: NextRequest) {
       .order('name');
 
     // Apply filters
+    query = query.eq('organization_id', organizationId)
     if (activeOnly) {
       query = query.eq('is_active', true);
     }

@@ -1,6 +1,7 @@
 import './globals.css'
 import '@/app/premium.css'
 import '@/styles/touch-optimized.css'
+import '@/styles/pos-redesign.css'
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import { Providers } from '@/components/providers'

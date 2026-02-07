@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { requirePOSPermissions } from '@/app/api/_utils/role-validation';
+import { getUserOrganizationId } from '@/app/api/_utils/organization';
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requirePOSPermissions(request, ['pos.access'])
+    if (!auth.ok) {
+      return NextResponse.json(auth.body, { status: auth.status })
+    }
+
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search');
     const limit = Math.min(parseInt(searchParams.get('limit') || '100'), 500);
@@ -11,6 +18,11 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient();
 
     // Optimized query for POS - only essential customer fields
+    const headerOrgId = request.headers.get('x-organization-id') || request.headers.get('X-Organization-Id')
+    const organizationId = headerOrgId || (auth.userId ? await getUserOrganizationId(auth.userId) : null)
+    if (!organizationId) {
+      return NextResponse.json({ error: 'Organization context is required' }, { status: 400 })
+    }
     let query = supabase
       .from('customers')
       .select(`
@@ -27,6 +39,7 @@ export async function GET(request: NextRequest) {
       .order('name');
 
     // Apply filters
+    query = query.eq('organization_id', organizationId)
     if (activeOnly) {
       query = query.eq('is_active', true);
     }
@@ -120,6 +133,11 @@ export async function GET(request: NextRequest) {
 // POST /api/pos/customers - Quick customer creation for POS
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requirePOSPermissions(request, ['pos.access'])
+    if (!auth.ok) {
+      return NextResponse.json(auth.body, { status: auth.status })
+    }
+
     const body = await request.json();
     const { name, email, phone, customer_type = 'RETAIL' } = body;
 
@@ -131,10 +149,18 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = await createClient();
+    const headerOrgId = request.headers.get('x-organization-id') || request.headers.get('X-Organization-Id')
+    const organizationId = headerOrgId || (auth.userId ? await getUserOrganizationId(auth.userId) : null)
+    if (!organizationId) {
+      return NextResponse.json({ error: 'Organization context is required' }, { status: 400 })
+    }
 
     // Check for existing customer with same email or phone
     if (email || phone) {
       let duplicateQuery = supabase.from('customers').select('id');
+      if (organizationId) {
+        duplicateQuery = duplicateQuery.eq('organization_id', organizationId)
+      }
       
       if (email && phone) {
         duplicateQuery = duplicateQuery.or(`email.eq.${email},phone.eq.${phone}`);
@@ -160,7 +186,8 @@ export async function POST(request: NextRequest) {
       phone: phone || null,
       customer_type,
       is_active: true,
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
+      ...(organizationId ? { organization_id: organizationId } : {})
     };
 
     const { data: customer, error } = await supabase

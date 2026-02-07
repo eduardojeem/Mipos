@@ -215,6 +215,19 @@ router.get('/:id', requirePermission('sales', 'read'), asyncHandler(async (req, 
 router.post('/', criticalOperationsRateLimit, requirePermission('sales', 'create'), asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
   const { customerId, items, paymentMethod, discount, discountType, tax, notes } = createSaleSchema.parse(req.body);
   const userId = req.user!.id;
+  const organizationId = String(req.headers['x-organization-id'] || '').trim();
+
+  if (paymentMethod === 'CASH') {
+    if (!organizationId) {
+      throw createError('Organization header required for cash operations', 400);
+    }
+    const existingOpen = await prisma.cashSession.findFirst({
+      where: { organizationId, status: 'OPEN' }
+    });
+    if (!existingOpen) {
+      throw createError('La sesión de caja está cerrada en tu organización. Ábrela para aceptar efectivo.', 400);
+    }
+  }
 
   // Validate discount based on type
   if (discountType === 'PERCENTAGE' && discount > 100) {
@@ -348,7 +361,10 @@ router.post('/', criticalOperationsRateLimit, requirePermission('sales', 'create
 
     // Create cash movement for cash sales
     if (paymentMethod === 'CASH') {
-      await createCashMovementForSale(tx, newSale.id, total, 'SALE', userId);
+      if (!organizationId) {
+        throw createError('Organization header required for cash operations', 400);
+      }
+      await createCashMovementForSale(tx, newSale.id, total, 'SALE', userId, organizationId);
     }
 
     return newSale;
@@ -425,10 +441,9 @@ router.post('/', criticalOperationsRateLimit, requirePermission('sales', 'create
     }
   });
 // Helper function to create cash movement for sales
-async function createCashMovementForSale(tx: any, saleId: string, amount: number, type: 'SALE' | 'RETURN', userId: string) {
-  // Get current open cash session
+async function createCashMovementForSale(tx: any, saleId: string, amount: number, type: 'SALE' | 'RETURN', userId: string, organizationId: string) {
   const openSession = await tx.cashSession.findFirst({
-    where: { status: 'OPEN' }
+    where: { status: 'OPEN', organizationId }
   });
 
   if (!openSession) {
@@ -436,9 +451,9 @@ async function createCashMovementForSale(tx: any, saleId: string, amount: number
     return null;
   }
 
-  // Create cash movement
   const movement = await tx.cashMovement.create({
     data: {
+      organizationId,
       sessionId: openSession.id,
       type,
       amount,

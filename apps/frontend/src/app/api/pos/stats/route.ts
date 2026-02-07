@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { requirePOSPermissions } from '@/app/api/_utils/role-validation';
+import { getUserOrganizationId } from '@/app/api/_utils/organization';
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requirePOSPermissions(request, ['pos.access'])
+    if (!auth.ok) {
+      return NextResponse.json(auth.body, { status: auth.status })
+    }
+
     const supabase = await createClient();
+    const headerOrgId = request.headers.get('x-organization-id') || request.headers.get('X-Organization-Id')
+    const organizationId = headerOrgId || (auth.userId ? await getUserOrganizationId(auth.userId) : null)
 
     // Get current date ranges
     const now = new Date();
@@ -24,21 +33,24 @@ export async function GET(request: NextRequest) {
         .from('sales')
         .select('total_amount')
         .gte('created_at', today.toISOString())
-        .eq('status', 'completed'),
+        .eq('status', 'completed')
+        .eq('organization_id', organizationId || ''),
 
       // This week's sales
       supabase
         .from('sales')
         .select('total_amount')
         .gte('created_at', thisWeek.toISOString())
-        .eq('status', 'completed'),
+        .eq('status', 'completed')
+        .eq('organization_id', organizationId || ''),
 
       // This month's sales
       supabase
         .from('sales')
         .select('total_amount')
         .gte('created_at', thisMonth.toISOString())
-        .eq('status', 'completed'),
+        .eq('status', 'completed')
+        .eq('organization_id', organizationId || ''),
 
       // Top selling products (last 30 days)
       supabase
@@ -57,6 +69,8 @@ export async function GET(request: NextRequest) {
         `)
         .gte('sales.created_at', new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString())
         .eq('sales.status', 'completed')
+        .eq('sales.organization_id', organizationId || '')
+        .eq('products.organization_id', organizationId || '')
         .limit(100), // Limit for performance
 
       // Low stock products
@@ -65,6 +79,7 @@ export async function GET(request: NextRequest) {
         .select('id, name, stock_quantity, min_stock')
         .eq('is_active', true)
         .lte('stock_quantity', 10) // Products with 10 or fewer items
+        .eq('organization_id', organizationId || '')
         .order('stock_quantity')
         .limit(20)
     ]);

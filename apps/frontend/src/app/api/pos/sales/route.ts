@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { requirePOSPermissions } from '@/app/api/_utils/role-validation';
+import { getUserOrganizationId } from '@/app/api/_utils/organization';
 
 // POST /api/pos/sales - Process a new sale
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requirePOSPermissions(request, ['pos.access'])
+    if (!auth.ok) {
+      return NextResponse.json(auth.body, { status: auth.status })
+    }
+
     const body = await request.json();
     const {
       items,
@@ -36,154 +43,61 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = await createClient();
+    const headerOrgId = request.headers.get('x-organization-id') || request.headers.get('X-Organization-Id');
+    const organizationId = headerOrgId || (auth.userId ? await getUserOrganizationId(auth.userId) : null);
+    if (!organizationId) {
+      return NextResponse.json({ error: 'Organization context is required' }, { status: 400 });
+    }
 
-    // Start transaction by creating the sale first
-    const saleData = {
-      customer_id: customer_id || null,
-      total_amount: Number(total_amount),
-      discount_amount: Number(discount_amount),
-      tax_amount: Number(tax_amount),
-      discount_type,
-      payment_method,
-      sale_type,
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session?.access_token) {
+      return NextResponse.json({ error: 'Backend session is required' }, { status: 401 });
+    }
+
+    const origin = new URL(request.url).origin;
+    const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001/api';
+
+    const backendPayload = {
+      customerId: customer_id || undefined,
+      items: items.map((item: any) => ({
+        productId: item.product_id,
+        quantity: Number(item.quantity),
+        unitPrice: Number(item.unit_price),
+      })),
+      paymentMethod: payment_method,
+      discount: Number(discount_amount || 0),
+      discountType: discount_type,
+      tax: Number(tax_amount || 0),
       notes,
-      status: 'completed',
-      created_at: new Date().toISOString(),
-      // Add payment-specific fields
-      ...(transfer_reference && { transfer_reference }),
-      ...(cashReceived !== undefined && { cash_received: Number(cashReceived) }),
-      ...(change !== undefined && { change_amount: Number(change) })
+      cashReceived,
+      change,
+      transferReference: transfer_reference,
     };
 
-    const { data: sale, error: saleError } = await supabase
-      .from('sales')
-      .insert(saleData)
-      .select()
-      .single();
+    const backendResponse = await fetch(`${backendUrl}/sales`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+        'x-organization-id': organizationId,
+      },
+      body: JSON.stringify(backendPayload),
+    });
 
-    if (saleError) throw saleError;
-
-    // Prepare sale items with the sale ID
-    const saleItems = items.map((item: any) => ({
-      sale_id: sale.id,
-      product_id: item.product_id,
-      quantity: Number(item.quantity),
-      unit_price: Number(item.unit_price),
-      total_price: Number(item.unit_price) * Number(item.quantity),
-      discount_amount: Number(item.discount_amount || 0)
-    }));
-
-    // Insert sale items
-    const { error: itemsError } = await supabase
-      .from('sale_items')
-      .insert(saleItems);
-
-    if (itemsError) {
-      // Rollback: delete the sale if items insertion fails
-      await supabase.from('sales').delete().eq('id', sale.id);
-      throw itemsError;
+    if (!backendResponse.ok) {
+      const errorBody = await backendResponse.json().catch(() => ({}));
+      return NextResponse.json({
+        error: 'Failed to process sale in backend',
+        details: errorBody,
+      }, { status: backendResponse.status });
     }
 
-    // Update product stock quantities
-    const stockUpdates = items.map((item: any) => ({
-      id: item.product_id,
-      quantity: Number(item.quantity)
-    }));
-
-    // Batch update stock using RPC function (if available) or individual updates
-    for (const update of stockUpdates) {
-      const { error: stockError } = await supabase.rpc('update_product_stock', {
-        product_id: update.id,
-        quantity_sold: update.quantity
-      });
-
-      // If RPC fails, try direct update
-      if (stockError) {
-        console.warn('RPC stock update failed, using direct update:', stockError);
-        
-        const { data: product } = await supabase
-          .from('products')
-          .select('stock_quantity')
-          .eq('id', update.id)
-          .single();
-
-        if (product) {
-          const newStock = Math.max(0, (product.stock_quantity || 0) - update.quantity);
-          await supabase
-            .from('products')
-            .update({ 
-              stock_quantity: newStock,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', update.id);
-        }
-      }
-    }
-
-    // Generate sale number for display
-    const saleNumber = `POS-${sale.id.slice(-8).toUpperCase()}`;
-
-    // Sync to external SaaS (outbound)
-    try {
-      const origin = new URL(request.url).origin;
-      const salePayload = {
-        id: sale.id,
-        total: Number(total_amount),
-        discount: Number(discount_amount || 0),
-        tax: Number(tax_amount || 0),
-        payment_method,
-        sale_type,
-        customer_id: customer_id || null,
-        notes,
-        created_at: sale.created_at,
-        items: saleItems.map((si: any) => ({
-          product_id: si.product_id,
-          quantity: si.quantity,
-          unit_price: si.unit_price,
-          total_price: si.total_price,
-          discount_amount: si.discount_amount || 0
-        }))
-      };
-      await fetch(`${origin}/api/external-sync/sales`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ records: [salePayload] })
-      });
-    } catch {}
-
-    // Fetch complete sale data with items for response
-    const { data: completeSale } = await supabase
-      .from('sales')
-      .select(`
-        *,
-        sale_items (
-          *,
-          products (
-            id,
-            name,
-            sku
-          )
-        ),
-        customers (
-          id,
-          name,
-          email
-        )
-      `)
-      .eq('id', sale.id)
-      .single();
+    const backendSale = await backendResponse.json();
 
     return NextResponse.json({
       success: true,
-      sale: completeSale || sale,
-      saleNumber,
+      sale: backendSale?.sale || backendSale,
       message: 'Sale processed successfully',
-      metadata: {
-        itemsCount: items.length,
-        totalAmount: total_amount,
-        paymentMethod: payment_method,
-        processedAt: new Date().toISOString()
-      }
     });
 
   } catch (error) {
@@ -202,11 +116,20 @@ export async function POST(request: NextRequest) {
 // GET /api/pos/sales - Get recent sales for POS
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requirePOSPermissions(request, ['pos.access'])
+    if (!auth.ok) {
+      return NextResponse.json(auth.body, { status: auth.status })
+    }
     const { searchParams } = new URL(request.url);
     const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100);
     const status = searchParams.get('status') || 'completed';
 
     const supabase = await createClient();
+    const headerOrgId = request.headers.get('x-organization-id') || request.headers.get('X-Organization-Id')
+    const organizationId = headerOrgId || (auth.userId ? await getUserOrganizationId(auth.userId) : null)
+    if (!organizationId) {
+      return NextResponse.json({ error: 'Organization context is required' }, { status: 400 })
+    }
 
     const { data: sales, error } = await supabase
       .from('sales')
@@ -221,6 +144,7 @@ export async function GET(request: NextRequest) {
         )
       `)
       .eq('status', status)
+      .eq('organization_id', organizationId)
       .order('created_at', { ascending: false })
       .limit(limit);
 
