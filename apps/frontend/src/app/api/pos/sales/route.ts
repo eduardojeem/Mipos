@@ -6,9 +6,9 @@ import { getUserOrganizationId } from '@/app/api/_utils/organization';
 // POST /api/pos/sales - Process a new sale
 export async function POST(request: NextRequest) {
   try {
-    const auth = await requirePOSPermissions(request, ['pos.access'])
+    const auth = await requirePOSPermissions(request, ['pos.access']);
     if (!auth.ok) {
-      return NextResponse.json(auth.body, { status: auth.status })
+      return NextResponse.json(auth.body, { status: auth.status });
     }
 
     const body = await request.json();
@@ -54,7 +54,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Backend session is required' }, { status: 401 });
     }
 
-    const origin = new URL(request.url).origin;
     const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001/api';
 
     const backendPayload = {
@@ -116,19 +115,20 @@ export async function POST(request: NextRequest) {
 // GET /api/pos/sales - Get recent sales for POS
 export async function GET(request: NextRequest) {
   try {
-    const auth = await requirePOSPermissions(request, ['pos.access'])
+    const auth = await requirePOSPermissions(request, ['pos.access']);
     if (!auth.ok) {
-      return NextResponse.json(auth.body, { status: auth.status })
+      return NextResponse.json(auth.body, { status: auth.status });
     }
+    
     const { searchParams } = new URL(request.url);
     const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100);
     const status = searchParams.get('status') || 'completed';
 
     const supabase = await createClient();
-    const headerOrgId = request.headers.get('x-organization-id') || request.headers.get('X-Organization-Id')
-    const organizationId = headerOrgId || (auth.userId ? await getUserOrganizationId(auth.userId) : null)
+    const headerOrgId = request.headers.get('x-organization-id') || request.headers.get('X-Organization-Id');
+    const organizationId = headerOrgId || (auth.userId ? await getUserOrganizationId(auth.userId) : null);
     if (!organizationId) {
-      return NextResponse.json({ error: 'Organization context is required' }, { status: 400 })
+      return NextResponse.json({ error: 'Organization context is required' }, { status: 400 });
     }
 
     const { data: sales, error } = await supabase
