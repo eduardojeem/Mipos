@@ -5,7 +5,10 @@ import { cn, formatCurrency } from '@/lib/utils';
 interface Product {
   id: string;
   name: string;
-  price: number;
+  price?: number;
+  sale_price?: number;
+  offer_price?: number;
+  regular_price?: number;
   image_url?: string;
   stock?: number;
   sku?: string;
@@ -99,7 +102,7 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps) 
 
         <div className="mt-3 flex items-center justify-between">
           <span className="text-lg font-black text-gray-900 dark:text-white">
-            {formatCurrency(product.price)}
+            {formatCurrency(Number(((product as any).offer_price ?? (product as any).sale_price ?? product.price ?? (product as any).regular_price ?? 0)))}
           </span>
 
           <div className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-50 dark:bg-slate-800 text-gray-400 dark:text-slate-500 group-hover:bg-green-500 group-hover:text-white transition-all duration-300">

@@ -118,6 +118,22 @@ export async function POST(request: NextRequest) {
       closedByUser: { id: user.id }
     }
 
+    // Also close backend session for consistency
+    try {
+      const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL;
+      if (backendUrl) {
+        await fetch(`${backendUrl}/cash/session/close`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-organization-id': orgId,
+            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {})
+          },
+          body: JSON.stringify({ closingAmount, notes })
+        });
+      }
+    } catch {}
+
     return NextResponse.json({ session: formatted })
   } catch (error: any) {
     return NextResponse.json({ error: 'Failed to close cash session', message: error?.message || String(error) }, { status: 500 })

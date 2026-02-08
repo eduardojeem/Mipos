@@ -199,6 +199,23 @@ export async function POST(request: NextRequest) {
             openedByUser
         };
 
+        // Also open session in backend (Prisma) to keep systems in sync
+        try {
+          const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL;
+          if (backendUrl) {
+            const beResp = await fetch(`${backendUrl}/cash/session/open`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-organization-id': orgId,
+                ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {})
+              },
+              body: JSON.stringify({ openingAmount, notes })
+            });
+            // If already open or any non-OK, just proceed; frontend session is open
+          }
+        } catch {}
+
         return NextResponse.json({ session: formattedSession });
     } catch (error: any) {
         console.error('Error in cash session open:', error);

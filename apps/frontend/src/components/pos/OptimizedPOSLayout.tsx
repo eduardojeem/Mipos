@@ -255,6 +255,7 @@ export default function OptimizedPOSLayout() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(selectedOrganization?.id ? { 'x-organization-id': selectedOrganization.id } : {})
         },
         body: JSON.stringify(payload),
       });
@@ -277,7 +278,7 @@ export default function OptimizedPOSLayout() {
       toast.error(error.message || 'Error al procesar la venta');
       throw error;
     }
-  }, [cart, products, paymentMethod, handleClearCart, validateCashPayment]);
+  }, [cart, products, paymentMethod, handleClearCart, validateCashPayment, selectedOrganization]);
 
   // Handler para abrir sesión de caja (sin confirmación redundante)
   const handleOpenCashSession = useCallback(async (amount: number, notes?: string) => {
