@@ -181,7 +181,16 @@ export function useCashMutations(options: UseCashMutationsOptions): UseCashMutat
             } catch (e: unknown) {
                 const error = e as any;
                 console.error('Error closing session:', error);
-                toast({ description: error?.message || 'Error cerrando sesión', variant: 'destructive' });
+                const status = error?.response?.status;
+                const srv = error?.response?.data || {};
+                const msg = srv?.error || srv?.message || error?.message || 'Error cerrando sesión';
+                if (status === 400 && (msg?.toLowerCase?.().includes('organization') || msg?.toLowerCase?.().includes('header'))) {
+                    toast({ description: 'Falta seleccionar organización. Usa el selector de organización antes de cerrar caja.', variant: 'destructive' });
+                } else if (status === 404 && msg?.toLowerCase?.().includes('no open session')) {
+                    toast({ description: 'No hay sesión de caja abierta en tu organización. Ábrela primero.', variant: 'destructive' });
+                } else {
+                    toast({ description: msg, variant: 'destructive' });
+                }
             } finally {
                 setLoadingStates((prev) => ({ ...prev, closingSession: false }));
             }

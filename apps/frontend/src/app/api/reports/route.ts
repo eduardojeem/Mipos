@@ -4,34 +4,28 @@ import { createClient } from '@/lib/supabase/server'
 import { isMockAuthEnabled, isSupabaseActive } from '@/lib/env'
 import { validateRole } from '@/app/api/_utils/role-validation'
 import { getUserOrganizationId } from '@/app/api/_utils/organization'
+import { z } from 'zod'
+import { CACHE_CONFIG, REPORT_TYPES, REPORT_LIMITS, MAX_DATE_RANGE_DAYS } from '@/config/reports.config'
 
 // Caché simple en memoria por instancia (serverless/lambda) con TTL por tipo
 type CachedEntry = { expiresAt: number; payload: any; headers: Record<string, string> };
 const reportsCache = new Map<string, CachedEntry>();
 
-function buildCacheKey(url: string) {
+// ✅ SEGURO: Caché segmentado por usuario y organización
+function buildCacheKey(url: string, userId: string, orgId: string) {
   try {
     const u = new URL(url);
     const params = Array.from(u.searchParams.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-    return `reports:${params.map(([k, v]) => `${k}=${v}`).join('&')}`;
+    return `reports:${params.map(([k, v]) => `${k}=${v}`).join('&')}&userId=${userId}&orgId=${orgId}`;
   } catch {
-    return `reports:${url}`;
+    return `reports:${url}&userId=${userId}&orgId=${orgId}`;
   }
 }
 
+// ✅ Usar constantes centralizadas
 function getTtlByType(type: string): number {
-  switch (type) {
-    case 'sales':
-      return 60; // datos de ventas cambian con más frecuencia
-    case 'inventory':
-      return 120;
-    case 'customers':
-      return 120;
-    case 'financial':
-      return 180;
-    default:
-      return 60;
-  }
+  const config = CACHE_CONFIG[type as keyof typeof CACHE_CONFIG];
+  return config?.ttl || 60;
 }
 
 // Utilidades simples para agregación en memoria
@@ -406,16 +400,16 @@ async function getFinancialReportSupabase(supabase: any, params: Record<string, 
       .from('sale_items')
       .select(`id,sale_id,product_id,quantity,unit_price,product:products(id,cost_price)`) // costo
       .in('sale_id', saleIds)
-      // sale_items usually inherits from sale, but RLS on sale_items might require filtering or join.
-      // If sale_items doesn't have org_id, RLS relies on parent or is open if policy allows.
-      // I added org_id to sale_items via migration? No, only main tables.
-      // But sales query is filtered by orgId, so saleIds belong to org.
-      // RLS on sale_items: I didn't enable it explicitly in migration script, I enabled 'sales'.
-      // If sale_items has no RLS, it's open! 
-      // I should have enabled RLS on sale_items.
-      // However, querying by sale_id which belongs to org is safe IF ids are UUIDs (hard to guess).
-      // But for correctness, sale_items should have RLS or be filtered.
-      // For now, I'll trust the join.
+    // sale_items usually inherits from sale, but RLS on sale_items might require filtering or join.
+    // If sale_items doesn't have org_id, RLS relies on parent or is open if policy allows.
+    // I added org_id to sale_items via migration? No, only main tables.
+    // But sales query is filtered by orgId, so saleIds belong to org.
+    // RLS on sale_items: I didn't enable it explicitly in migration script, I enabled 'sales'.
+    // If sale_items has no RLS, it's open! 
+    // I should have enabled RLS on sale_items.
+    // However, querying by sale_id which belongs to org is safe IF ids are UUIDs (hard to guess).
+    // But for correctness, sale_items should have RLS or be filtered.
+    // For now, I'll trust the join.
     if (itemsErr) throw itemsErr
     items = saleItems || []
   }
@@ -516,7 +510,7 @@ async function getFinancialReportSupabase(supabase: any, params: Record<string, 
 export async function GET(request: NextRequest) {
   try {
     // ✅ Autenticación y roles: permitir ADMIN, SUPER_ADMIN y MANAGER
-    const roleCheck = await validateRole(request, { roles: ['ADMIN','SUPER_ADMIN','MANAGER'] })
+    const roleCheck = await validateRole(request, { roles: ['ADMIN', 'SUPER_ADMIN', 'MANAGER'] })
     if (!roleCheck.ok) {
       return NextResponse.json(roleCheck.body, { status: roleCheck.status })
     }
@@ -528,33 +522,59 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
 
+    // ✅ SEGURO: Validación robusta con Zod
+    const querySchema = z.object({
+      type: z.enum(REPORT_TYPES as unknown as [string, ...string[]]),
+      start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().refine((val) => {
+        if (!val) return true;
+        const date = new Date(val);
+        return !isNaN(date.getTime());
+      }, 'Fecha inválida en start_date'),
+      end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().refine((val) => {
+        if (!val) return true;
+        const date = new Date(val);
+        return !isNaN(date.getTime());
+      }, 'Fecha inválida en end_date'),
+    }).refine((data) => {
+      // Validar que start_date <= end_date
+      if (data.start_date && data.end_date) {
+        const start = new Date(data.start_date);
+        const end = new Date(data.end_date);
+        return start <= end;
+      }
+      return true;
+    }, 'start_date debe ser anterior o igual a end_date').refine((data) => {
+      // Validar que el rango no exceda MAX_DATE_RANGE_DAYS
+      if (data.start_date && data.end_date) {
+        const start = new Date(data.start_date);
+        const end = new Date(data.end_date);
+        const diffMs = end.getTime() - start.getTime();
+        const diffDays = diffMs / (1000 * 60 * 60 * 24);
+        return diffDays <= MAX_DATE_RANGE_DAYS;
+      }
+      return true;
+    }, `El rango de fechas no puede exceder ${MAX_DATE_RANGE_DAYS} días`);
+
+    const validation = querySchema.safeParse(params);
+    if (!validation.success) {
+      return NextResponse.json({
+        error: 'Parámetros inválidos',
+        details: validation.error.errors.map(e => e.message).join(', ')
+      }, { status: 400 });
+    }
+
+    const { type, start_date: startDate, end_date: endDate } = validation.data;
+
     const params = Object.fromEntries(searchParams.entries())
     const source = params['source'] || process.env.NEXT_PUBLIC_REPORTS_SOURCE || process.env.REPORTS_SOURCE
-
-    // Validate and normalize expected params
-    const allowedTypes = new Set(['sales', 'inventory', 'customers', 'financial'])
-    const type = params['type']
-    if (!type || !allowedTypes.has(String(type))) {
-      return NextResponse.json({ error: 'Parámetro "type" inválido' }, { status: 400 })
-    }
-
-    const dateRegex = /^\d{4}-\d{2}-\d{2}$/
-    const startDate = params['start_date']
-    const endDate = params['end_date']
-    if (startDate && !dateRegex.test(String(startDate))) {
-      return NextResponse.json({ error: 'Formato de fecha inválido en "start_date" (YYYY-MM-DD)' }, { status: 400 })
-    }
-    if (endDate && !dateRegex.test(String(endDate))) {
-      return NextResponse.json({ error: 'Formato de fecha inválido en "end_date" (YYYY-MM-DD)' }, { status: 400 })
-    }
 
     // ✅ Permitir filtro por organización desde query params (solo para super admins)
     const orgFilter = params['organizationId'] || params['organization_id'];
     const headerOrg = request.headers.get('x-organization-id') || undefined;
     const effectiveOrgId = (isSuperAdmin && (orgFilter || headerOrg)) ? (orgFilter || headerOrg)! : (organizationId || headerOrg || '');
 
-    // Cache HIT (según parámetros de consulta + orgId)
-    const cacheKey = buildCacheKey(request.url + `&orgId=${effectiveOrgId}`)
+    // ✅ SEGURO: Cache HIT con userId incluido
+    const cacheKey = buildCacheKey(request.url, userId, effectiveOrgId)
     const now = Date.now()
     const cached = reportsCache.get(cacheKey)
     if (cached && cached.expiresAt > now) {
@@ -613,8 +633,10 @@ export async function GET(request: NextRequest) {
     const status = error?.response?.status ?? 500
     const details = error?.response?.data ?? getErrorMessage(error)
 
-    // Fallback seguro en desarrollo: devolver estructuras vacías por tipo
+    // ✅ SEGURO: Ocultar detalles de error en producción
     const isDev = process.env.NODE_ENV !== 'production'
+
+    // Fallback seguro en desarrollo: devolver estructuras vacías por tipo
     if (isDev && (status === 500 || status === 0)) {
       const { searchParams } = new URL(request.url)
       const type = searchParams.get('type') || 'sales'
@@ -666,12 +688,12 @@ export async function GET(request: NextRequest) {
       const { searchParams } = new URL(request.url)
       const type = String(searchParams.get('type') || 'sales')
       const transient = isNetworkError(error) || isTimeoutError(error) || isServerError(error)
-      if (transient && isSupabaseActive() && ['sales','inventory','customers','financial'].includes(type)) {
+      if (transient && isSupabaseActive() && ['sales', 'inventory', 'customers', 'financial'].includes(type)) {
         const supabase = await createClient()
         const params = Object.fromEntries(searchParams.entries()) as Record<string, string>
-        
+
         // Obtener organizationId según rol
-        const roleCheck = await validateRole(request, { roles: ['ADMIN','SUPER_ADMIN','MANAGER'] })
+        const roleCheck = await validateRole(request, { roles: ['ADMIN', 'SUPER_ADMIN', 'MANAGER'] })
         if (!roleCheck.ok) {
           throw new Error('No autorizado');
         }
@@ -682,11 +704,11 @@ export async function GET(request: NextRequest) {
         const headerOrg = request.headers.get('x-organization-id') || undefined
         const organizationId = isSuperAdmin ? null : await getUserOrganizationId(userId)
         const effectiveOrgId = (isSuperAdmin && (orgFilter || headerOrg)) ? (orgFilter || headerOrg)! : (organizationId || headerOrg || '')
-        
+
         if (!effectiveOrgId) {
           throw new Error('Organization ID no disponible');
         }
-        
+
         let data: any = null
         if (type === 'sales') data = await getSalesReportSupabase(supabase, params, effectiveOrgId)
         else if (type === 'inventory') data = await getInventoryReportSupabase(supabase, params, effectiveOrgId)
@@ -697,10 +719,18 @@ export async function GET(request: NextRequest) {
         const headers = { 'X-Fallback': 'supabase', 'Cache-Control': `private, max-age=${ttl}, stale-while-revalidate=${ttl * 3}` }
         return NextResponse.json({ success: true, data }, { headers })
       }
-    } catch {}
+    } catch { }
+
+    // ✅ SEGURO: No exponer detalles en producción
+    const errorMessage = isClientError(error)
+      ? 'Solicitud inválida'
+      : (status === 500 ? 'Error interno del servidor' : 'Error al procesar reporte')
 
     return NextResponse.json(
-      { error: isClientError(error) ? 'Bad request' : (status === 500 ? 'Internal server error' : `Backend error: ${status}`), details },
+      {
+        error: errorMessage,
+        ...(isDev && { details }) // Solo en desarrollo
+      },
       { status }
     )
   }

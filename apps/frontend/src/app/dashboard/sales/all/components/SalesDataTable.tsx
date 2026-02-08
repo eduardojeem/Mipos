@@ -38,6 +38,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { formatStatus, formatPaymentMethod, formatSaleType, getStatusBadgeVariant } from '@/lib/sales-formatters';
 
 export interface Sale {
   id: string;
@@ -89,63 +90,7 @@ interface SalesDataTableProps {
   isLoading?: boolean;
 }
 
-const getStatusBadgeVariant = (status: string) => {
-  switch (status) {
-    case 'COMPLETED':
-      return 'default';
-    case 'PENDING':
-      return 'secondary';
-    case 'CANCELLED':
-      return 'destructive';
-    case 'REFUNDED':
-      return 'outline';
-    default:
-      return 'secondary';
-  }
-};
 
-const getStatusLabel = (status: string) => {
-  switch (status) {
-    case 'COMPLETED':
-      return 'Completada';
-    case 'PENDING':
-      return 'Pendiente';
-    case 'CANCELLED':
-      return 'Cancelada';
-    case 'REFUNDED':
-      return 'Reembolsada';
-    default:
-      return status;
-  }
-};
-
-const getPaymentMethodLabel = (method: string) => {
-  switch (method) {
-    case 'CASH':
-      return 'Efectivo';
-    case 'CARD':
-      return 'Tarjeta';
-    case 'TRANSFER':
-      return 'Transferencia';
-    case 'DIGITAL_WALLET':
-      return 'Billetera Digital';
-    case 'OTHER':
-      return 'Otro';
-    default:
-      return method;
-  }
-};
-
-const getSaleTypeLabel = (type: string) => {
-  switch (type) {
-    case 'RETAIL':
-      return 'Minorista';
-    case 'WHOLESALE':
-      return 'Mayorista';
-    default:
-      return type;
-  }
-};
 
 export function SalesDataTable({
   data,
@@ -217,7 +162,7 @@ export function SalesDataTable({
       header: 'Método de Pago',
       cell: ({ row }) => {
         const method = row.getValue('payment_method') as string;
-        return <span>{getPaymentMethodLabel(method)}</span>;
+        return <span>{formatPaymentMethod(method)}</span>;
       },
     },
     {
@@ -227,7 +172,7 @@ export function SalesDataTable({
         const status = row.getValue('status') as string;
         return (
           <Badge variant={getStatusBadgeVariant(status)}>
-            {getStatusLabel(status)}
+            {formatStatus(status)}
           </Badge>
         );
       },
@@ -237,7 +182,7 @@ export function SalesDataTable({
       header: 'Tipo',
       cell: ({ row }) => {
         const type = row.getValue('sale_type') as string;
-        return <span>{getSaleTypeLabel(type)}</span>;
+        return <span>{formatSaleType(type)}</span>;
       },
     },
     {
@@ -300,9 +245,9 @@ export function SalesDataTable({
                     {header.isPlaceholder
                       ? null
                       : flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
+                        header.column.columnDef.header,
+                        header.getContext()
+                      )}
                   </TableHead>
                 ))}
               </TableRow>

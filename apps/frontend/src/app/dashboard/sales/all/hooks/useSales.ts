@@ -4,6 +4,8 @@ import { format } from 'date-fns';
 import { SalesFilters } from '../components/SalesFilters';
 import { Sale } from '../components/SalesDataTable';
 import { createLogger } from '@/lib/logger';
+import { formatStatus, formatPaymentMethod, formatSaleType } from '@/lib/sales-formatters';
+import { CACHE_CONFIG } from '@/config/sales.config';
 
 interface SalesResponse {
   success: boolean;
@@ -99,7 +101,7 @@ export function useSales({ filters, page, limit, includeItems = true }: UseSales
       }
       return response.json();
     },
-    staleTime: 30000, // 30 seconds
+    staleTime: CACHE_CONFIG.LIST_STALE_TIME, // 30 segundos
     refetchOnWindowFocus: false,
   });
 
@@ -141,9 +143,9 @@ export function useSales({ filters, page, limit, includeItems = true }: UseSales
           sale.customer?.email || '',
           sale.customer?.phone || '',
           sale.total_amount.toFixed(2),
-          getPaymentMethodLabel(sale.payment_method),
-          getStatusLabel(sale.status),
-          getSaleTypeLabel(sale.sale_type),
+          formatPaymentMethod(sale.payment_method),
+          formatStatus(sale.status),
+          formatSaleType(sale.sale_type),
           sale.notes || ''
         ]);
 
@@ -172,9 +174,9 @@ export function useSales({ filters, page, limit, includeItems = true }: UseSales
           'Email': sale.customer?.email || '',
           'Teléfono': sale.customer?.phone || '',
           'Total': sale.total_amount,
-          'Método de Pago': getPaymentMethodLabel(sale.payment_method),
-          'Estado': getStatusLabel(sale.status),
-          'Tipo': getSaleTypeLabel(sale.sale_type),
+          'Método de Pago': formatPaymentMethod(sale.payment_method),
+          'Estado': formatStatus(sale.status),
+          'Tipo': formatSaleType(sale.sale_type),
           'Notas': sale.notes || '',
           'Cantidad de Productos': sale.items?.length || 0,
           'Subtotal': (sale.total_amount - (sale.tax_amount || 0) + (sale.discount_amount || 0)),
@@ -218,48 +220,4 @@ export function useSales({ filters, page, limit, includeItems = true }: UseSales
     refetch,
     exportSales,
   };
-}
-
-// Helper functions
-function getStatusLabel(status: string): string {
-  switch (status) {
-    case 'COMPLETED':
-      return 'Completada';
-    case 'PENDING':
-      return 'Pendiente';
-    case 'CANCELLED':
-      return 'Cancelada';
-    case 'REFUNDED':
-      return 'Reembolsada';
-    default:
-      return status;
-  }
-}
-
-function getPaymentMethodLabel(method: string): string {
-  switch (method) {
-    case 'CASH':
-      return 'Efectivo';
-    case 'CARD':
-      return 'Tarjeta';
-    case 'TRANSFER':
-      return 'Transferencia';
-    case 'DIGITAL_WALLET':
-      return 'Billetera Digital';
-    case 'OTHER':
-      return 'Otro';
-    default:
-      return method;
-  }
-}
-
-function getSaleTypeLabel(type: string): string {
-  switch (type) {
-    case 'RETAIL':
-      return 'Minorista';
-    case 'WHOLESALE':
-      return 'Mayorista';
-    default:
-      return type;
-  }
 }

@@ -3,6 +3,7 @@ import jsPDF from 'jspdf';
 const autoTable = require('jspdf-autotable');
 import * as XLSX from 'xlsx';
 import { logger } from '../middleware/logger';
+import { REPORT_LIMITS, DISTRIBUTED_CACHE_TTL } from '../config/reports.config';
 
 const prisma = new PrismaClient();
 
@@ -269,13 +270,22 @@ class ReportsService {
       const useMV = process.env.USE_MATERIALIZED_VIEWS === '1';
       const simpleDateOnly = !!filters.startDate && !!filters.endDate && !filters.customerId && !filters.userId && !filters.productId && !filters.categoryId && !filters.supplierId;
       if (useMV && simpleDateOnly) {
+        // ✅ SEGURO: Validar y sanitizar fechas antes de query
         const start = new Date(filters.startDate!);
         const end = new Date(filters.endDate!);
 
-        const daily = await prisma.$queryRawUnsafe<any[]>(
-          'SELECT day, orders, revenue, cost FROM mv_sales_daily_overall WHERE day BETWEEN $1 AND $2 ORDER BY day ASC',
-          start, end
-        );
+        // Validar que las fechas sean válidas
+        if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+          throw new Error('Invalid date range provided');
+        }
+
+        // ✅ SEGURO: Usar $queryRaw con template literals en lugar de $queryRawUnsafe
+        const daily = await prisma.$queryRaw<any[]>`
+          SELECT day, orders, revenue, cost 
+          FROM mv_sales_daily_overall 
+          WHERE day BETWEEN ${start} AND ${end} 
+          ORDER BY day ASC
+        `;
 
         const summaryTotalOrders = daily.reduce((acc, d) => acc + Number(d.orders || 0), 0);
         const summaryTotalRevenue = daily.reduce((acc, d) => acc + Number(d.revenue || 0), 0);
@@ -290,10 +300,14 @@ class ReportsService {
           profit: Number(r.revenue || 0) - Number(r.cost || 0),
         }));
 
-        const byCategory = await prisma.$queryRawUnsafe<any[]>(
-          'SELECT category_name AS category, SUM(revenue) AS revenue, SUM(cost) AS cost FROM mv_sales_daily_category WHERE day BETWEEN $1 AND $2 GROUP BY category_name ORDER BY SUM(revenue) DESC',
-          start, end
-        );
+        // ✅ SEGURO: Query con parámetros template literals
+        const byCategory = await prisma.$queryRaw<any[]>`
+          SELECT category_name AS category, SUM(revenue) AS revenue, SUM(cost) AS cost 
+          FROM mv_sales_daily_category 
+          WHERE day BETWEEN ${start} AND ${end} 
+          GROUP BY category_name 
+          ORDER BY SUM(revenue) DESC
+        `;
 
         const salesByCategory = byCategory.map(r => ({
           category: String(r.category),
@@ -302,10 +316,16 @@ class ReportsService {
           revenue: Number(r.revenue || 0),
         }));
 
-        const byProduct = await prisma.$queryRawUnsafe<any[]>(
-          'SELECT product_id AS id, product_name AS name, SUM(quantity) AS quantity, SUM(revenue) AS revenue, SUM(cost) AS cost FROM mv_sales_daily_product WHERE day BETWEEN $1 AND $2 GROUP BY product_id, product_name ORDER BY SUM(revenue) DESC LIMIT 10',
-          start, end
-        );
+        // ✅ SEGURO: Usar constante para límite
+        const byProduct = await prisma.$queryRaw<any[]>`
+          SELECT product_id AS id, product_name AS name, 
+                 SUM(quantity) AS quantity, SUM(revenue) AS revenue, SUM(cost) AS cost 
+          FROM mv_sales_daily_product 
+          WHERE day BETWEEN ${start} AND ${end} 
+          GROUP BY product_id, product_name 
+          ORDER BY SUM(revenue) DESC 
+          LIMIT ${REPORT_LIMITS.TOP_PRODUCTS}
+        `;
 
         const topProducts = byProduct.map(r => ({
           id: String(r.id),
@@ -343,30 +363,30 @@ class ReportsService {
         if (cached) {
           sales = cached as any[];
         }
-      } catch {}
+      } catch { }
 
       // Get sales data
       if (!sales) {
         sales = await prisma.sale.findMany({
-        where: whereClause,
-        include: {
-          saleItems: {
-            include: {
-              product: {
-                include: {
-                  category: true
+          where: whereClause,
+          include: {
+            saleItems: {
+              include: {
+                product: {
+                  include: {
+                    category: true
+                  }
                 }
               }
-            }
-          },
-          customer: true
-        }
+            },
+            customer: true
+          }
         });
         try {
           const { cacheSet } = await import('../lib/distributed-cache');
           const cacheKey = `sales-report:${JSON.stringify({ whereClause })}`;
           await cacheSet(cacheKey, sales, 5 * 60 * 1000);
-        } catch {}
+        } catch { }
       }
 
       // Calculate metrics
@@ -384,7 +404,7 @@ class ReportsService {
 
       // Top products
       const productSales = new Map<string, { name: string; quantity: number; revenue: number; profit: number }>();
-      
+
       sales.forEach(sale => {
         sale.saleItems.forEach(item => {
           const key = item.product.id;
@@ -400,11 +420,11 @@ class ReportsService {
       const topProducts = Array.from(productSales.entries())
         .map(([id, data]) => ({ id, ...data, sales: data.revenue }))
         .sort((a, b) => b.revenue - a.revenue)
-        .slice(0, 10);
+        .slice(0, REPORT_LIMITS.TOP_PRODUCTS);
 
       // Sales by date
       const salesByDate = new Map<string, { sales: number; revenue: number; profit: number }>();
-      
+
       sales.forEach(sale => {
         const date = sale.createdAt.toISOString().split('T')[0];
         const existing = salesByDate.get(date) || { sales: 0, revenue: 0, profit: 0 };
@@ -425,7 +445,7 @@ class ReportsService {
 
       // Sales by category
       const categoryRevenue = new Map<string, { quantity: number; revenue: number }>();
-      
+
       sales.forEach(sale => {
         sale.saleItems.forEach(item => {
           const category = item.product.category?.name || 'Uncategorized';
@@ -455,7 +475,7 @@ class ReportsService {
         customerName: d.name,
         sales: d.revenue,
         orders: d.orders,
-      })).sort((a, b) => b.sales - a.sales).slice(0, 50);
+      })).sort((a, b) => b.sales - a.sales).slice(0, REPORT_LIMITS.SALES_BY_CUSTOMER);
 
       return {
         // legacy
@@ -488,7 +508,7 @@ class ReportsService {
       logger.info('Generating inventory report', { filters });
 
       const whereClause: any = {};
-      
+
       if (filters.categoryId) {
         whereClause.categoryId = filters.categoryId;
       }
@@ -511,20 +531,20 @@ class ReportsService {
         if (cached) {
           products = cached as any[];
         }
-      } catch {}
+      } catch { }
 
       if (!products) {
         products = await prisma.product.findMany({
-        where: whereClause,
-        include: {
-          category: true
-        }
+          where: whereClause,
+          include: {
+            category: true
+          }
         });
         try {
           const { cacheSet } = await import('../lib/distributed-cache');
           const cacheKey = `inventory-report:${JSON.stringify({ whereClause })}`;
           await cacheSet(cacheKey, products, 5 * 60 * 1000);
-        } catch {}
+        } catch { }
       }
 
       const totalProducts = products.length;
@@ -580,7 +600,7 @@ class ReportsService {
 
       // Category breakdown
       const categoryBreakdown = new Map<string, { products: number; value: number; stockSum: number }>();
-      
+
       products.forEach(product => {
         const category = product.category?.name || 'Uncategorized';
         const existing = categoryBreakdown.get(category) || { products: 0, value: 0, stockSum: 0 };
@@ -592,12 +612,12 @@ class ReportsService {
       });
 
       const categoryBreakdownArray = Array.from(categoryBreakdown.entries())
-        .map(([category, data]) => ({ 
-          category, 
-          products: data.products, 
-          value: data.value, 
-          totalProducts: data.products, 
-          totalValue: data.value, 
+        .map(([category, data]) => ({
+          category,
+          products: data.products,
+          value: data.value,
+          totalProducts: data.products,
+          totalValue: data.value,
           averageStock: data.products > 0 ? data.stockSum / data.products : 0
         }))
         .sort((a, b) => b.value - a.value);
@@ -624,7 +644,7 @@ class ReportsService {
 
       const outOfStockItems = stockLevels.filter(p => p.status === 'out_of_stock').length;
       const lowStockItems = stockLevels.filter(p => p.status === 'low_stock').length;
-      const averageStockLevel = totalProducts > 0 
+      const averageStockLevel = totalProducts > 0
         ? (products.reduce((sum, p) => sum + (p.stockQuantity || 0), 0) / totalProducts)
         : 0;
 
@@ -656,7 +676,7 @@ class ReportsService {
       logger.info('Generating customer report', { filters });
 
       const whereClause: any = {};
-      
+
       if (filters.startDate && filters.endDate) {
         whereClause.createdAt = {
           gte: filters.startDate,
@@ -683,7 +703,7 @@ class ReportsService {
       // New customers (if date range provided)
       let newCustomers = 0;
       if (filters.startDate && filters.endDate) {
-        newCustomers = customers.filter(customer => 
+        newCustomers = customers.filter(customer =>
           customer.createdAt >= filters.startDate! && customer.createdAt <= filters.endDate!
         ).length;
       }
@@ -693,7 +713,7 @@ class ReportsService {
         .map(customer => {
           const totalPurchases = customer.sales.length;
           const totalSpent = customer.sales.reduce((sum, sale) => sum + sale.total, 0);
-          const lastPurchase = customer.sales.length > 0 
+          const lastPurchase = customer.sales.length > 0
             ? Math.max(...customer.sales.map(sale => sale.createdAt.getTime()))
             : 0;
 
@@ -710,7 +730,7 @@ class ReportsService {
         })
         .filter(customer => customer.totalPurchases > 0)
         .sort((a, b) => b.totalSpent - a.totalSpent)
-        .slice(0, 20);
+        .slice(0, REPORT_LIMITS.TOP_CUSTOMERS);
 
       // Customer segmentation
       const segments = {
@@ -806,7 +826,7 @@ class ReportsService {
       logger.info('Generating financial report', { filters });
 
       const whereClause: any = {};
-      
+
       if (filters.startDate && filters.endDate) {
         whereClause.createdAt = {
           gte: filters.startDate,
@@ -842,17 +862,17 @@ class ReportsService {
 
       // Revenue by month
       const monthlyData = new Map<string, { revenue: number; costs: number }>();
-      
+
       sales.forEach(sale => {
         const month = sale.createdAt.toISOString().substring(0, 7); // YYYY-MM
         const existing = monthlyData.get(month) || { revenue: 0, costs: 0 };
         existing.revenue += sale.total;
-        
+
         const saleCosts = sale.saleItems.reduce((sum, item) => {
           return sum + (item.product.costPrice * item.quantity);
         }, 0);
         existing.costs += saleCosts;
-        
+
         monthlyData.set(month, existing);
       });
 
@@ -948,7 +968,7 @@ class ReportsService {
         const { cacheGet } = await import('../lib/distributed-cache');
         const cached = await cacheGet<ComparisonReportData>(cacheKey);
         if (cached) return cached;
-      } catch {}
+      } catch { }
 
       // Use MV only when simple filters (date-only) or for overall aggregates
       const simpleFilters = !filtersA.productId && !filtersA.categoryId && !filtersA.customerId && !filtersA.supplierId && !filtersA.userId
@@ -1065,7 +1085,7 @@ class ReportsService {
         try {
           const { cacheSet } = await import('../lib/distributed-cache');
           await cacheSet(cacheKey, result, 5 * 60 * 1000);
-        } catch {}
+        } catch { }
 
         return result;
       }
@@ -1116,7 +1136,7 @@ class ReportsService {
       try {
         const { cacheSet } = await import('../lib/distributed-cache');
         await cacheSet(cacheKey, result, 5 * 60 * 1000);
-      } catch {}
+      } catch { }
 
       return result;
     } catch (error) {
@@ -1228,11 +1248,11 @@ class ReportsService {
 
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.width;
-      
+
       // Header
       doc.setFontSize(20);
       doc.text(`${reportType} Report`, pageWidth / 2, 20, { align: 'center' });
-      
+
       // Date range
       if (filters.startDate && filters.endDate) {
         doc.setFontSize(12);
@@ -1364,7 +1384,7 @@ class ReportsService {
 
           if (d.topProducts?.length) {
             lines.push('Top Products');
-            lines.push(this.toCSVRow(['id','name','quantity','revenue','profit']));
+            lines.push(this.toCSVRow(['id', 'name', 'quantity', 'revenue', 'profit']));
             for (const p of d.topProducts) {
               lines.push(this.toCSVRow([p.id, p.name, p.quantity, p.revenue, p.profit ?? '']));
             }
@@ -1373,7 +1393,7 @@ class ReportsService {
 
           if (d.salesByDate?.length) {
             lines.push('Sales By Date');
-            lines.push(this.toCSVRow(['date','sales','revenue','profit']));
+            lines.push(this.toCSVRow(['date', 'sales', 'revenue', 'profit']));
             for (const s of d.salesByDate) {
               lines.push(this.toCSVRow([s.date, s.sales, s.revenue, s.profit ?? '']));
             }
@@ -1382,7 +1402,7 @@ class ReportsService {
 
           if (d.salesByCategory?.length) {
             lines.push('Sales By Category');
-            lines.push(this.toCSVRow(['category','sales','quantity','revenue']));
+            lines.push(this.toCSVRow(['category', 'sales', 'quantity', 'revenue']));
             for (const c of d.salesByCategory) {
               lines.push(this.toCSVRow([c.category, c.sales, c.quantity ?? '', c.revenue ?? '']));
             }
@@ -1404,7 +1424,7 @@ class ReportsService {
 
           if (d.lowStockProducts?.length) {
             lines.push('Low Stock Products');
-            lines.push(this.toCSVRow(['id','name','currentStock','minStock','value']));
+            lines.push(this.toCSVRow(['id', 'name', 'currentStock', 'minStock', 'value']));
             for (const p of d.lowStockProducts) {
               lines.push(this.toCSVRow([p.id, p.name, p.currentStock, p.minStock, p.value]));
             }
@@ -1413,7 +1433,7 @@ class ReportsService {
 
           if (d.stockMovements?.length) {
             lines.push('Stock Movements');
-            lines.push(this.toCSVRow(['productId','productName','type','quantity','date','reason']));
+            lines.push(this.toCSVRow(['productId', 'productName', 'type', 'quantity', 'date', 'reason']));
             for (const m of d.stockMovements) {
               lines.push(this.toCSVRow([m.productId ?? '', m.productName, m.type, m.quantity, m.date, m.reason]));
             }
@@ -1422,7 +1442,7 @@ class ReportsService {
 
           if (d.categoryBreakdown?.length) {
             lines.push('Category Breakdown');
-            lines.push(this.toCSVRow(['category','products','value','totalProducts','totalValue','averageStock']));
+            lines.push(this.toCSVRow(['category', 'products', 'value', 'totalProducts', 'totalValue', 'averageStock']));
             for (const c of d.categoryBreakdown) {
               lines.push(this.toCSVRow([c.category, c.products, c.value, c.totalProducts ?? '', c.totalValue ?? '', c.averageStock ?? '']));
             }
@@ -1431,7 +1451,7 @@ class ReportsService {
 
           if (d.stockLevels?.length) {
             lines.push('Stock Levels');
-            lines.push(this.toCSVRow(['id','name','currentStock','minStock','maxStock','value','status']));
+            lines.push(this.toCSVRow(['id', 'name', 'currentStock', 'minStock', 'maxStock', 'value', 'status']));
             for (const s of d.stockLevels) {
               lines.push(this.toCSVRow([s.id, s.name, s.currentStock, s.minStock, s.maxStock, s.value, s.status]));
             }
@@ -1456,7 +1476,7 @@ class ReportsService {
 
           if (d.topCustomers?.length) {
             lines.push('Top Customers');
-            lines.push(this.toCSVRow(['id','name','email','totalPurchases','totalSpent','lastPurchase','orderCount','lastOrderDate']));
+            lines.push(this.toCSVRow(['id', 'name', 'email', 'totalPurchases', 'totalSpent', 'lastPurchase', 'orderCount', 'lastOrderDate']));
             for (const c of d.topCustomers) {
               lines.push(this.toCSVRow([c.id, c.name, c.email, c.totalPurchases, c.totalSpent, c.lastPurchase, c.orderCount ?? '', c.lastOrderDate ?? '']));
             }
@@ -1465,7 +1485,7 @@ class ReportsService {
 
           if (d.customersBySegment?.length) {
             lines.push('Customers By Segment');
-            lines.push(this.toCSVRow(['segment','count','averageSpent']));
+            lines.push(this.toCSVRow(['segment', 'count', 'averageSpent']));
             for (const s of d.customersBySegment) {
               lines.push(this.toCSVRow([s.segment, s.count, s.averageSpent]));
             }
@@ -1474,7 +1494,7 @@ class ReportsService {
 
           if (d.customerSegments?.length) {
             lines.push('Customer Segments');
-            lines.push(this.toCSVRow(['segment','count','totalSpent','averageOrderValue']));
+            lines.push(this.toCSVRow(['segment', 'count', 'totalSpent', 'averageOrderValue']));
             for (const s of d.customerSegments) {
               lines.push(this.toCSVRow([s.segment, s.count, s.totalSpent, s.averageOrderValue]));
             }
@@ -1483,7 +1503,7 @@ class ReportsService {
 
           if (d.acquisitionTrends?.length) {
             lines.push('Acquisition Trends');
-            lines.push(this.toCSVRow(['date','newCustomers','totalCustomers']));
+            lines.push(this.toCSVRow(['date', 'newCustomers', 'totalCustomers']));
             for (const a of d.acquisitionTrends) {
               lines.push(this.toCSVRow([a.date, a.newCustomers, a.totalCustomers]));
             }
@@ -1507,7 +1527,7 @@ class ReportsService {
 
           if (d.revenueByMonth?.length) {
             lines.push('Revenue By Month');
-            lines.push(this.toCSVRow(['month','revenue','costs','profit']));
+            lines.push(this.toCSVRow(['month', 'revenue', 'costs', 'profit']));
             for (const r of d.revenueByMonth) {
               lines.push(this.toCSVRow([r.month, r.revenue, r.costs, r.profit]));
             }
@@ -1516,7 +1536,7 @@ class ReportsService {
 
           if (d.expenseBreakdown?.length) {
             lines.push('Expense Breakdown');
-            lines.push(this.toCSVRow(['category','amount','percentage']));
+            lines.push(this.toCSVRow(['category', 'amount', 'percentage']));
             for (const e of d.expenseBreakdown) {
               lines.push(this.toCSVRow([e.category, e.amount, e.percentage]));
             }
@@ -1525,7 +1545,7 @@ class ReportsService {
 
           if (d.profitTrends?.length) {
             lines.push('Profit Trends');
-            lines.push(this.toCSVRow(['date','revenue','expenses','profit','margin']));
+            lines.push(this.toCSVRow(['date', 'revenue', 'expenses', 'profit', 'margin']));
             for (const p of d.profitTrends) {
               lines.push(this.toCSVRow([p.date, p.revenue, p.expenses, p.profit, p.margin]));
             }
@@ -1755,7 +1775,7 @@ class ReportsService {
       const customersData = [
         ['Customer ID', 'Name', 'Email', 'Total Purchases', 'Total Spent', 'Last Purchase'],
         ...data.topCustomers.map(customer => [
-          customer.id, customer.name, customer.email, 
+          customer.id, customer.name, customer.email,
           customer.totalPurchases, customer.totalSpent, customer.lastPurchase
         ])
       ];

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { createClient } from '@/lib/supabase';
+import { CACHE_CONFIG } from '@/config/sales.config';
 
 // Helper to get current organization ID
 const getOrganizationId = (): string | null => {
@@ -53,11 +54,11 @@ export function useSalesSummary() {
 
       const weekStart = new Date();
       weekStart.setDate(today.getDate() - 7);
-      weekStart.setHours(0,0,0,0);
+      weekStart.setHours(0, 0, 0, 0);
 
       const monthStart = new Date();
       monthStart.setDate(1);
-      monthStart.setHours(0,0,0,0);
+      monthStart.setHours(0, 0, 0, 0);
 
       const [
         { data: todayData },
@@ -73,7 +74,7 @@ export function useSalesSummary() {
 
       const todaySales = calculateTotal(todayData || []);
       const todayCount = todayData?.length || 0;
-      
+
       const weekSales = calculateTotal(weekData || []);
       const weekCount = weekData?.length || 0;
 
@@ -103,8 +104,8 @@ export function useSalesSummary() {
       };
     },
     enabled: !!getOrganizationId(),
-    staleTime: 2 * 60 * 1000,
-    refetchInterval: 5 * 60 * 1000
+    staleTime: CACHE_CONFIG.SUMMARY_STALE_TIME,
+    refetchInterval: CACHE_CONFIG.REFETCH_INTERVAL
   });
 }
 
@@ -148,7 +149,7 @@ export function useRecentSales(limit = 10) {
       };
     },
     enabled: !!getOrganizationId(),
-    staleTime: 1 * 60 * 1000,
-    refetchInterval: 2 * 60 * 1000
+    staleTime: CACHE_CONFIG.RECENT_STALE_TIME,
+    refetchInterval: CACHE_CONFIG.RECENT_REFETCH_INTERVAL
   });
 }

@@ -6,12 +6,13 @@ import { EnhancedAuthenticatedRequest, requirePermission, requireAnyPermission, 
 import { criticalOperationsRateLimit, apiRateLimit } from '../middleware/rate-limiter';
 import { loyaltyService } from '../services/loyalty';
 import { validateDiscountMiddleware } from '../middleware/validateDiscount';
+import { SALES_CONFIG, DISCOUNT_THRESHOLDS } from '../config/sales.config';
 
 const router = express.Router();
 
 // Validation schemas
 const saleItemSchema = z.object({
-  productId: z.string().min(1, 'Product ID is required'),
+  productId: z.string().uuid('Product ID must be a valid UUID'), // ✅ SEGURIDAD: Validar UUID
   quantity: z.number().int().min(1, 'Quantity must be at least 1'),
   // REMOVED: unitPrice - Backend will get this from the database
 });
@@ -23,7 +24,7 @@ const manualDiscountSchema = z.object({
 });
 
 const createSaleSchema = z.object({
-  customerId: z.string().optional(),
+  customerId: z.string().uuid().optional(), // ✅ SEGURIDAD: Validar UUID
   items: z.array(saleItemSchema).min(1, 'At least one item is required'),
   paymentMethod: z.enum(['CASH', 'CARD', 'TRANSFER', 'OTHER']).default('CASH'),
   // REMOVED: discount, discountType, tax - Backend will calculate these
@@ -38,16 +39,34 @@ const createSaleSchema = z.object({
 
 const querySchema = z.object({
   page: z.string().transform(val => parseInt(val) || 1),
-  limit: z.string().transform(val => Math.min(parseInt(val) || 10, 100)),
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
-  customerId: z.string().optional(),
+  limit: z.string().transform(val => Math.min(parseInt(val) || SALES_CONFIG.DEFAULT_LIMIT, SALES_CONFIG.MAX_LIMIT)),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'startDate must be in YYYY-MM-DD format').optional(), // ✅ SEGURIDAD: Validar formato
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'endDate must be in YYYY-MM-DD format').optional(),     // ✅ SEGURIDAD: Validar formato
+  customerId: z.string().uuid().optional(), // ✅ SEGURIDAD: Validar UUID
   paymentMethod: z.string().optional()
-});
+}).refine((data) => {
+  // ✅ SEGURIDAD: Validar que startDate <= endDate
+  if (data.startDate && data.endDate) {
+    const start = new Date(data.startDate);
+    const end = new Date(data.endDate);
+    return !isNaN(start.getTime()) && !isNaN(end.getTime()) && start <= end;
+  }
+  return true;
+}, 'startDate must be before or equal to endDate').refine((data) => {
+  // ✅ SEGURIDAD: Validar rango máximo de fechas (anti-DoS)
+  if (data.startDate && data.endDate) {
+    const start = new Date(data.startDate);
+    const end = new Date(data.endDate);
+    const diffMs = end.getTime() - start.getTime();
+    const diffDays = diffMs / (1000 * 60 * 60 * 24);
+    return diffDays <= SALES_CONFIG.MAX_DATE_RANGE_DAYS;
+  }
+  return true;
+}, `Date range cannot exceed ${SALES_CONFIG.MAX_DATE_RANGE_DAYS} days`);
 
 // Get recent sales (requires sales:read permission)
 router.get('/recent', requirePermission('sales', 'read'), asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
-  const limit = parseInt(req.query.limit as string) || 5;
+  const limit = parseInt(req.query.limit as string) || SALES_CONFIG.DEFAULT_LIMIT;
   const organizationId = req.user!.organizationId;
 
   try {
@@ -326,15 +345,15 @@ router.post('/', criticalOperationsRateLimit, requirePermission('sales', 'create
     const { type, value, reason } = manualDiscount;
 
     // Validate large discounts require explicit reason
-    if (type === 'PERCENTAGE' && value > 10 && !reason) {
-      throw createError('Discount reason is required for discounts over 10%', 400);
+    if (type === 'PERCENTAGE' && value > DISCOUNT_THRESHOLDS.REQUIRES_REASON && !reason) {
+      throw createError(`Discount reason is required for discounts over ${DISCOUNT_THRESHOLDS.REQUIRES_REASON}%`, 400);
     }
 
     // Check if user has permission for large discounts
-    if (type === 'PERCENTAGE' && value > 20) {
-      const hasPermission = await hasPermission(req.user!, 'sales', 'delete'); // Using delete as proxy for large discounts
+    if (type === 'PERCENTAGE' && value > DISCOUNT_THRESHOLDS.REQUIRES_APPROVAL) {
+      const hasPermission = await hasPermission(req.user!, 'sales', 'delete'); // TODO: Create specific permission
       if (!hasPermission) {
-        throw createError('You do not have permission to apply discounts over 20%', 403);
+        throw createError(`You do not have permission to apply discounts over ${DISCOUNT_THRESHOLDS.REQUIRES_APPROVAL}%`, 403);
       }
     }
 
@@ -677,40 +696,45 @@ router.get('/analytics/dashboard', requirePermission('sales', 'read'), asyncHand
           quantity: 'desc'
         }
       },
-      take: 5
+      take: SALES_CONFIG.TOP_PRODUCTS_COUNT
     })
   ]);
 
-  // Get product details for top products
-  const topProductsWithDetails = await Promise.all(
-    topProducts.map(async (item) => {
-      const product = await prisma.product.findUnique({
-        where: { id: item.productId },
-        select: {
-          id: true,
-          name: true,
-          sku: true,
-          salePrice: true
-        }
-      });
-      if (!product) {
-        return {
-          id: item.productId,
-          name: 'Unknown',
-          sku: undefined,
-          salePrice: undefined,
-          totalSold: item._sum.quantity
-        };
-      }
+  // ✅ RENDIMIENTO: Resolver N+1 query con bulk fetch
+  const productIds = topProducts.map(tp => tp.productId);
+  const products = await prisma.product.findMany({
+    where: { id: { in: productIds } },
+    select: {
+      id: true,
+      name: true,
+      sku: true,
+      salePrice: true
+    }
+  });
+
+  // Crear mapa para lookup O(1)
+  const productMap = new Map(products.map(p => [p.id, p]));
+
+  // Mapear productos con detalles
+  const topProductsWithDetails = topProducts.map((item) => {
+    const product = productMap.get(item.productId);
+    if (!product) {
       return {
-        id: (product as any).id,
-        name: (product as any).name,
-        sku: (product as any).sku,
-        salePrice: (product as any).salePrice,
+        id: item.productId,
+        name: 'Unknown',
+        sku: undefined,
+        salePrice: undefined,
         totalSold: item._sum.quantity
       };
-    })
-  );
+    }
+    return {
+      id: product.id,
+      name: product.name,
+      sku: product.sku,
+      salePrice: product.salePrice,
+      totalSold: item._sum.quantity
+    };
+  });
 
   res.json({
     today: {
