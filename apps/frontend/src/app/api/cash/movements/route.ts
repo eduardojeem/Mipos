@@ -18,7 +18,12 @@ export async function GET(request: NextRequest) {
         const referenceId = url.searchParams.get('referenceId');
         const createdByMe = url.searchParams.get('createdByMe');
 
-        const cookieStore = await cookies();
+    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    if (!orgId) {
+      return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
+    }
+
+    const cookieStore = await cookies();
         const supabase = await createServerClient(cookieStore);
 
         // Get current user
@@ -30,7 +35,7 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        let query = supabase.from('cash_movements').select('*');
+    let query = supabase.from('cash_movements').select('*').eq('organization_id', orgId);
 
         if (sessionId) {
             query = query.eq('session_id', sessionId);
@@ -60,6 +65,7 @@ export async function GET(request: NextRequest) {
                     .from('cash_sessions')
                     .select('closed_at')
                     .eq('id', sessionId)
+                    .eq('organization_id', orgId)
                     .single();
                 if (ses?.closed_at && new Date(ses.closed_at) < new Date(to)) {
                     to = ses.closed_at;
@@ -208,7 +214,12 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const cookieStore = await cookies();
+    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    if (!orgId) {
+      return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
+    }
+
+    const cookieStore = await cookies();
         const supabase = await createServerClient(cookieStore);
 
         // Get current user
@@ -221,10 +232,11 @@ export async function POST(request: NextRequest) {
         }
 
         // Verify session exists and is open
-        const { data: session, error: sessionError } = await supabase
+    const { data: session, error: sessionError } = await supabase
             .from('cash_sessions')
-            .select('id, status')
+            .select('id, status, organization_id')
             .eq('id', sessionId)
+            .eq('organization_id', orgId)
             .single();
 
         if (sessionError || !session) {
@@ -259,7 +271,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Create movement with user_id
-        const { data: movement, error: insertError } = await supabase
+    const { data: movement, error: insertError } = await supabase
             .from('cash_movements')
             .insert({
                 session_id: sessionId,
@@ -268,15 +280,31 @@ export async function POST(request: NextRequest) {
                 reason: (typeof reason === 'string' ? reason.slice(0, 200).replace(/[\u0000-\u001F\u007F]/g, '') : null),
                 reference_type: referenceType || null,
                 reference_id: referenceId || null,
-                created_by: user.id
+                created_by: user.id,
+                organization_id: orgId
             })
             .select()
             .single();
 
-        if (insertError) {
+    if (insertError) {
+            const msg = insertError.message || 'Failed to create movement';
+            const code = insertError.code;
+            const lower = msg.toLowerCase();
+            if (
+              code === '42501' ||
+              lower.includes('permission denied') ||
+              lower.includes('row-level security') ||
+              lower.includes('rls') ||
+              lower.includes('policy')
+            ) {
+              return NextResponse.json(
+                { error: 'Permission denied by RLS', details: msg, code },
+                { status: 403 }
+              );
+            }
             console.error('Error creating movement:', insertError);
             return NextResponse.json(
-                { error: 'Failed to create movement', details: insertError.message },
+                { error: 'Failed to create movement', details: msg, code },
                 { status: 500 }
             );
         }

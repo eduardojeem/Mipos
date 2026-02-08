@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
 
         // Get current user
         const { data: { user }, error: authError } = await (supabase as any).auth.getUser?.() || { data: { user: null }, error: new Error('No auth') };
+        const { data: { session } } = await (supabase as any).auth.getSession?.() || { data: { session: null } };
         if (authError || !user) {
             return NextResponse.json(
                 { error: 'Authentication required' },
@@ -70,16 +71,15 @@ export async function POST(request: NextRequest) {
         }
 
         // Insert new session, handling schema variants
-        let session: any = null;
+        let sessionRow: any = null;
         if (svc) {
             const insertRes = await svc
                 .from('cash_sessions')
                 .insert({
-                    user_id: user.id,
                     opened_by: user.id,
                     opening_amount: openingAmount,
                     status: 'OPEN',
-                    opening_time: new Date().toISOString(),
+                    opened_at: new Date().toISOString(),
                     notes: notes || null,
                     organization_id: orgId
                 })
@@ -106,16 +106,15 @@ export async function POST(request: NextRequest) {
                     { status: 500 }
                 );
             }
-            session = insertRes.data;
+            sessionRow = insertRes.data;
         } else {
             const insertRes = await (supabase as any)
                 .from('cash_sessions')
                 .insert({
-                    user_id: user.id,
                     opened_by: user.id,
                     opening_amount: openingAmount,
                     status: 'OPEN',
-                    opening_time: new Date().toISOString(),
+                    opened_at: new Date().toISOString(),
                     notes: notes || null,
                     organization_id: orgId
                 })
@@ -137,12 +136,42 @@ export async function POST(request: NextRequest) {
                         { status: 403 }
                     );
                 }
+                // Fallback: call backend service if table missing or Supabase schema not ready
+                const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL;
+                const shouldFallback = String(code).toUpperCase() === 'PGRST205' || lower.includes('could not find the table');
+                if (backendUrl && shouldFallback) {
+                    try {
+                        const resp = await fetch(`${backendUrl}/cash/session/open`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'x-organization-id': orgId,
+                                ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {})
+                            },
+                            body: JSON.stringify({ openingAmount, notes })
+                        });
+                        if (resp.ok) {
+                            const data = await resp.json();
+                            return NextResponse.json({ session: data.session || data });
+                        }
+                        const errTxt = await resp.text();
+                        return NextResponse.json(
+                          { error: 'Failed to create session (backend)', details: errTxt },
+                          { status: resp.status }
+                        );
+                    } catch (be) {
+                        return NextResponse.json(
+                          { error: 'Backend unavailable for session creation', details: (be as any)?.message || String(be) },
+                          { status: 502 }
+                        );
+                    }
+                }
                 return NextResponse.json(
                     { error: 'Failed to create session', details: msg, code },
                     { status: 500 }
                 );
             }
-            session = insertRes.data;
+            sessionRow = insertRes.data;
         }
 
         // Get user profile for response (profile table can vary; fallback to auth user)
@@ -160,13 +189,13 @@ export async function POST(request: NextRequest) {
 
         // Transform to camelCase for frontend
         const formattedSession = {
-            id: session.id,
-            status: session.status,
-            openingAmount: session.opening_amount,
-            closingAmount: session.closing_amount ?? null,
-            openedAt: session.opening_time,
-            closedAt: session.closed_at ?? null,
-            notes: session.notes,
+            id: sessionRow.id,
+            status: sessionRow.status,
+            openingAmount: sessionRow.opening_amount,
+            closingAmount: sessionRow.closing_amount ?? null,
+            openedAt: sessionRow.opened_at,
+            closedAt: sessionRow.closed_at ?? null,
+            notes: sessionRow.notes,
             openedByUser
         };
 

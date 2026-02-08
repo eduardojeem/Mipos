@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     // Try to find any open session considering both status column variants
     const { data, error } = await (supabase as any)
       .from('cash_sessions')
-      .select('id, user_id, opened_by, status, opening_amount, closing_amount, opening_time, closing_time, notes, organization_id')
+      .select('id, opened_by, status, opening_amount, closing_amount, opened_at, closed_at, notes, organization_id')
       .or('status.eq.open,status.eq.OPEN')
       .eq('organization_id', orgId)
       .limit(1);
@@ -45,8 +45,8 @@ export async function GET(request: NextRequest) {
       status: session.status ?? null,
       openingAmount: session.opening_amount ?? null,
       closingAmount: session.closing_amount ?? null,
-      openedAt: session.opening_time ?? null,
-      closedAt: session.closing_time ?? null,
+      openedAt: session.opened_at ?? null,
+      closedAt: session.closed_at ?? null,
       notes: session.notes ?? null,
     };
 

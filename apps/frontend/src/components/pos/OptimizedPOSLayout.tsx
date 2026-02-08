@@ -25,6 +25,7 @@ import MobileCartSheet from './MobileCartSheet';
 import ProcessSaleModal from './ProcessSaleModal';
 import { ReceiptModal } from './ReceiptModal';
 import OpenCashSessionModal from './OpenCashSessionModal';
+import { api } from '@/lib/api';
 import CloseCashSessionModal from './CloseCashSessionModal';
 
 // Device detection hook
@@ -300,26 +301,48 @@ export default function OptimizedPOSLayout() {
       });
       
       if (!res.ok) {
-        const error = await res.json();
-        const errorMsg = error.error || 'Error al abrir caja';
-        const details = error.details ? `\n${error.details}` : '';
-        const code = error.code ? ` (${error.code})` : '';
-        
+        let payload: any = null;
+        try { payload = await res.json(); } catch { try { const txt = await res.text(); payload = { error: txt }; } catch { payload = { error: '' }; } }
+        const errorMsg = payload?.error || 'Error al abrir caja';
+        const details = payload?.details ? `\n${payload.details}` : '';
+        const code = payload?.code ? ` (${payload.code})` : '';
         console.error('Error opening cash session:', {
           status: res.status,
+          organizationId: selectedOrganization.id,
           error: errorMsg,
-          details: error.details,
-          code: error.code
+          details: payload?.details,
+          code: payload?.code
         });
-        
-        throw new Error(`${errorMsg}${code}${details}`);
+        if (String(payload?.code).toUpperCase() === 'PGRST205' || String(errorMsg).toLowerCase().includes('could not find the table')) {
+          const backendUrl = process.env.NEXT_PUBLIC_API_URL || process.env.BACKEND_URL;
+          if (backendUrl) {
+            try {
+              const beResp = await fetch(`${backendUrl}/cash/session/open`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-organization-id': selectedOrganization.id,
+                },
+                body: JSON.stringify({ openingAmount: amount, notes: notes || 'Apertura de caja' })
+              });
+              if (beResp.ok) {
+                // success through backend
+                return;
+              }
+            } catch {}
+          }
+          throw new Error(`${errorMsg}${code}${details}`);
+        }
       }
       
       toast.success('Sesión de caja abierta exitosamente');
       refetchCashSession();
       setShowOpenCashModal(false);
     } catch (error: any) {
-      console.error('Error opening cash session:', error);
+      console.error('Error opening cash session:', {
+        message: error?.message,
+        organizationId: selectedOrganization?.id
+      });
       toast.error(error.message || 'Error al abrir la caja');
     }
   }, [refetchCashSession, selectedOrganization]);
