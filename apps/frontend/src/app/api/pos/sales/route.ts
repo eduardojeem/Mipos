@@ -16,12 +16,11 @@ export async function POST(request: NextRequest) {
       items,
       customer_id,
       discount_amount = 0,
-      tax_amount = 0,
       discount_type = 'FIXED_AMOUNT',
+      discount_reason,
+      coupon_code,
       payment_method = 'CASH',
-      sale_type = 'RETAIL',
       notes = '',
-      total_amount,
       transfer_reference,
       cashReceived,
       change
@@ -35,12 +34,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!total_amount || total_amount <= 0) {
-      return NextResponse.json(
-        { error: 'Total amount must be greater than 0' },
-        { status: 400 }
-      );
-    }
+    // REMOVED: total_amount validation - backend will calculate the total
 
     const supabase = await createClient();
     const headerOrgId = request.headers.get('x-organization-id') || request.headers.get('X-Organization-Id');
@@ -56,22 +50,34 @@ export async function POST(request: NextRequest) {
 
     const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001/api';
 
-    const backendPayload = {
+    // SECURITY FIX: Only send product IDs and quantities, NOT prices
+    const backendPayload: any = {
       customerId: customer_id || undefined,
+      // REMOVED: unitPrice from items - backend will get from DB
       items: items.map((item: any) => ({
         productId: item.product_id,
         quantity: Number(item.quantity),
-        unitPrice: Number(item.unit_price),
       })),
       paymentMethod: payment_method,
-      discount: Number(discount_amount || 0),
-      discountType: discount_type,
-      tax: Number(tax_amount || 0),
       notes,
-      cashReceived,
-      change,
+      cashReceived: cashReceived ? Number(cashReceived) : undefined,
+      change: change ? Number(change) : undefined,
       transferReference: transfer_reference,
     };
+
+    // Handle coupons
+    if (coupon_code) {
+      backendPayload.couponCode = coupon_code;
+    }
+
+    // Handle manual discounts
+    if (discount_amount && Number(discount_amount) > 0) {
+      backendPayload.manualDiscount = {
+        type: discount_type,
+        value: Number(discount_amount),
+        reason: discount_reason || 'Manual discount'
+      };
+    }
 
     const backendResponse = await fetch(`${backendUrl}/sales`, {
       method: 'POST',
@@ -101,9 +107,9 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Process sale error:', error);
-    
+
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to process sale',
         details: error instanceof Error ? error.message : 'Unknown error'
       },
@@ -119,7 +125,7 @@ export async function GET(request: NextRequest) {
     if (!auth.ok) {
       return NextResponse.json(auth.body, { status: auth.status });
     }
-    
+
     const { searchParams } = new URL(request.url);
     const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100);
     const status = searchParams.get('status') || 'completed';
@@ -168,7 +174,7 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Get POS sales error:', error);
-    
+
     return NextResponse.json({
       sales: [],
       total: 0,

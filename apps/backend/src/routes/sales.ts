@@ -13,17 +13,27 @@ const router = express.Router();
 const saleItemSchema = z.object({
   productId: z.string().min(1, 'Product ID is required'),
   quantity: z.number().int().min(1, 'Quantity must be at least 1'),
-  unitPrice: z.number().min(0, 'Unit price must be positive')
+  // REMOVED: unitPrice - Backend will get this from the database
+});
+
+const manualDiscountSchema = z.object({
+  type: z.enum(['PERCENTAGE', 'FIXED_AMOUNT']),
+  value: z.number().min(0),
+  reason: z.string().min(1, 'Discount reason is required')
 });
 
 const createSaleSchema = z.object({
   customerId: z.string().optional(),
   items: z.array(saleItemSchema).min(1, 'At least one item is required'),
   paymentMethod: z.enum(['CASH', 'CARD', 'TRANSFER', 'OTHER']).default('CASH'),
-  discount: z.number().min(0).default(0),
-  discountType: z.enum(['PERCENTAGE', 'FIXED_AMOUNT']).default('PERCENTAGE'),
-  tax: z.number().min(0).default(0),
-  notes: z.string().optional()
+  // REMOVED: discount, discountType, tax - Backend will calculate these
+  // NEW: Support for coupons and manual discounts
+  couponCode: z.string().optional(),
+  manualDiscount: manualDiscountSchema.optional(),
+  notes: z.string().optional(),
+  cashReceived: z.number().optional(),
+  change: z.number().optional(),
+  transferReference: z.string().optional()
 });
 
 const querySchema = z.object({
@@ -39,7 +49,7 @@ const querySchema = z.object({
 router.get('/recent', requirePermission('sales', 'read'), asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
   const limit = parseInt(req.query.limit as string) || 5;
   const organizationId = req.user!.organizationId;
-  
+
   try {
     const recentSales = await prisma.sale.findMany({
       where: {
@@ -181,7 +191,7 @@ router.get('/:id', requirePermission('sales', 'read'), asyncHandler(async (req: 
   const organizationId = req.user!.organizationId;
 
   const sale = await prisma.sale.findFirst({
-    where: { 
+    where: {
       id,
       organizationId
     },
@@ -225,7 +235,7 @@ router.get('/:id', requirePermission('sales', 'read'), asyncHandler(async (req: 
 
 // Create sale (requires sales:create permission) - Rate limited for critical operations
 router.post('/', criticalOperationsRateLimit, requirePermission('sales', 'create'), validateDiscountMiddleware, asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
-  const { customerId, items, paymentMethod, discount, discountType, tax, notes } = createSaleSchema.parse(req.body);
+  const { customerId, items, paymentMethod, couponCode, manualDiscount, notes, cashReceived, change, transferReference } = createSaleSchema.parse(req.body);
   const userId = req.user!.id;
   const organizationId = req.user!.organizationId;
 
@@ -237,11 +247,6 @@ router.post('/', criticalOperationsRateLimit, requirePermission('sales', 'create
     if (!existingOpen) {
       throw createError('La sesión de caja está cerrada en tu organización. Ábrela para aceptar efectivo.', 400);
     }
-  }
-
-  // Validate discount based on type
-  if (discountType === 'PERCENTAGE' && discount > 100) {
-    throw createError('Percentage discount cannot exceed 100%', 400);
   }
 
   // Validate products belong to organization and check stock
@@ -271,7 +276,7 @@ router.post('/', criticalOperationsRateLimit, requirePermission('sales', 'create
   // Validate customer belongs to organization (if provided)
   if (customerId) {
     const customer = await prisma.customer.findFirst({
-      where: { 
+      where: {
         id: customerId,
         organizationId
       }
@@ -281,17 +286,72 @@ router.post('/', criticalOperationsRateLimit, requirePermission('sales', 'create
     }
   }
 
-  // Calculate totals with improved discount logic
-  const subtotal = items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
-  
-  let discountAmount = 0;
-  if (discountType === 'PERCENTAGE') {
-    discountAmount = (subtotal * discount) / 100;
-  } else if (discountType === 'FIXED_AMOUNT') {
-    discountAmount = Math.min(discount, subtotal); // Cannot exceed subtotal
+  // SECURITY FIX: Calculate totals using prices from DATABASE, not from client
+  let subtotal = 0;
+  let taxAmount = 0;
+
+  // Calculate subtotal and tax using DB prices
+  for (const item of items) {
+    const product = products.find(p => p.id === item.productId);
+    if (!product) {
+      throw createError(`Product ${item.productId} not found`, 404);
+    }
+
+    // Use sale price from database (single source of truth)
+    const unitPrice = product.salePrice;
+    const itemSubtotal = unitPrice * item.quantity;
+    subtotal += itemSubtotal;
+
+    // Calculate tax based on product's tax configuration
+    if (product.taxRate && product.taxRate > 0) {
+      taxAmount += itemSubtotal * (product.taxRate / 100);
+    }
   }
-  
-  const taxAmount = tax || 0;
+
+  // Handle discounts (coupons or manual)
+  let discountAmount = 0;
+  let discountType: 'PERCENTAGE' | 'FIXED_AMOUNT' = 'FIXED_AMOUNT';
+  let appliedCouponCode: string | null = null;
+  let discountReason: string | null = null;
+
+  // Priority 1: Coupon code
+  if (couponCode) {
+    // TODO: Implement coupon validation service
+    // For now, throw error if coupon is provided
+    throw createError('Coupon functionality not yet implemented', 501);
+  }
+
+  // Priority 2: Manual discount
+  if (manualDiscount) {
+    const { type, value, reason } = manualDiscount;
+
+    // Validate large discounts require explicit reason
+    if (type === 'PERCENTAGE' && value > 10 && !reason) {
+      throw createError('Discount reason is required for discounts over 10%', 400);
+    }
+
+    // Check if user has permission for large discounts
+    if (type === 'PERCENTAGE' && value > 20) {
+      const hasPermission = await hasPermission(req.user!, 'sales', 'delete'); // Using delete as proxy for large discounts
+      if (!hasPermission) {
+        throw createError('You do not have permission to apply discounts over 20%', 403);
+      }
+    }
+
+    // Calculate discount amount
+    if (type === 'PERCENTAGE') {
+      if (value > 100) {
+        throw createError('Percentage discount cannot exceed 100%', 400);
+      }
+      discountAmount = (subtotal * value) / 100;
+    } else {
+      discountAmount = Math.min(value, subtotal); // Cannot exceed subtotal
+    }
+
+    discountType = type;
+    discountReason = reason;
+  }
+
   const total = subtotal - discountAmount + taxAmount;
 
   // Create sale transaction with explicit isolation level and row-level locking
@@ -318,7 +378,7 @@ router.post('/', criticalOperationsRateLimit, requirePermission('sales', 'create
         throw createError(`Insufficient stock for product ${item.productId}. Available: ${current}, Required: ${item.quantity}`, 400);
       }
     }
-    
+
     // Create sale with organizationId
     const newSale = await tx.sale.create({
       data: {
@@ -338,13 +398,19 @@ router.post('/', criticalOperationsRateLimit, requirePermission('sales', 'create
 
     // Create sale items and update stock
     for (const item of items) {
-      // Create sale item
+      // Get product price from database (already fetched earlier)
+      const product = products.find(p => p.id === item.productId);
+      if (!product) {
+        throw createError(`Product ${item.productId} not found`, 404);
+      }
+
+      // Create sale item using DB price
       await tx.saleItem.create({
         data: {
           saleId: newSale.id,
           productId: item.productId,
           quantity: item.quantity,
-          unitPrice: item.unitPrice
+          unitPrice: product.salePrice // SECURITY FIX: Use price from DB, not from client
         }
       });
 
@@ -399,7 +465,7 @@ router.post('/', criticalOperationsRateLimit, requirePermission('sales', 'create
       const programId = Array.isArray(customerLoyalty)
         ? customerLoyalty[0]?.programId
         : (customerLoyalty as any)?.programId;
-      
+
       if (programId) {
         // Add points for this purchase
         await loyaltyService.addPointsForPurchase(
@@ -449,7 +515,7 @@ router.post('/', criticalOperationsRateLimit, requirePermission('sales', 'create
     }
   });
 
-  res.status(201).json({ 
+  res.status(201).json({
     sale: completeSale,
     summary: {
       subtotal,
@@ -461,7 +527,9 @@ router.post('/', criticalOperationsRateLimit, requirePermission('sales', 'create
       totalQuantity: items.reduce((sum, item) => sum + item.quantity, 0)
     }
   });
-}));// Helper function to create cash movement for sales
+}));
+
+// Helper function to create cash movement for sales
 async function createCashMovementForSale(tx: any, saleId: string, amount: number, type: 'SALE' | 'RETURN', userId: string, organizationId: string) {
   const openSession = await tx.cashSession.findFirst({
     where: { status: 'OPEN', organizationId }
@@ -487,7 +555,6 @@ async function createCashMovementForSale(tx: any, saleId: string, amount: number
 
   return movement;
 }
-}));
 
 
 
@@ -554,7 +621,7 @@ router.get('/analytics/dashboard', requirePermission('sales', 'read'), asyncHand
   const startOfWeek = new Date(today);
   startOfWeek.setDate(today.getDate() - today.getDay());
   startOfWeek.setHours(0, 0, 0, 0);
-  
+
   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
   const [todaySales, weekSales, monthSales, topProducts] = await Promise.all([
