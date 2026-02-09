@@ -1,27 +1,40 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, UseQueryResult } from '@tanstack/react-query';
 import { useToast } from '@/components/ui/use-toast';
 import api from '@/lib/api';
+
+// ✅ Proper TypeScript interfaces (no 'any')
+interface ReturnItem {
+  id: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  reason?: string;
+  product?: {
+    id: string;
+    name: string;
+    sku: string;
+  };
+}
 
 interface Return {
   id: string;
   returnNumber: string;
   saleId: string;
-  customerId: string;
+  originalSaleId: string;
+  customerId: string | null;
   customerName: string;
-  items: Array<{
-    productId: string;
-    productName: string;
-    quantity: number;
-    unitPrice: number;
-    reason: string;
-  }>;
+  items: ReturnItem[];
   totalAmount: number;
+  total: number;
   reason: string;
-  status: 'pending' | 'approved' | 'processed' | 'rejected';
+  status: 'pending' | 'approved' | 'completed' | 'rejected';
+  refundMethod: string;
   createdAt: string;
+  updatedAt: string;
   processedAt?: string;
   processedBy?: string;
   notes?: string;
@@ -31,28 +44,79 @@ interface ReturnsStats {
   totalReturns: number;
   totalAmount: number;
   pendingReturns: number;
+  pendingAmount: number;
   approvedReturns: number;
+  approvedAmount: number;
   rejectedReturns: number;
+  rejectedAmount: number;
+  completedReturns: number;
+  completedAmount: number;
   avgProcessingTime: number;
   returnRate: number;
 }
 
-export function useReturns(filters: any) {
+interface PaginationInfo {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+interface ReturnsResponse {
+  returns: Return[];
+  pagination: PaginationInfo;
+}
+
+interface ReturnFilters {
+  search?: string;
+  status?: string;
+  customerId?: string;
+  startDate?: string;
+  endDate?: string;
+  originalSaleId?: string;
+}
+
+interface CreateReturnData {
+  saleId: string;
+  customerId?: string;
+  reason: string;
+  notes?: string;
+  items: Array<{
+    productId: string;
+    quantity: number;
+    reason?: string;
+  }>;
+}
+
+// ✅ Updated hook with pagination support
+export function useReturns(
+  filters: ReturnFilters = {},
+  page: number = 1,
+  limit: number = 25
+) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Fetch returns
-  const { data: returns, isLoading } = useQuery({
-    queryKey: ['returns', filters],
+  // Fetch returns with pagination
+  const {
+    data: returnsData,
+    isLoading,
+    error
+  }: UseQueryResult<ReturnsResponse> = useQuery({
+    queryKey: ['returns', filters, page, limit],
     queryFn: async () => {
-      const response = await api.get('/returns', { params: filters });
+      const response = await api.get('/returns', {
+        params: { ...filters, page, limit }
+      });
       return response.data;
     },
     staleTime: 30000, // 30 seconds
   });
 
   // Fetch stats
-  const { data: stats } = useQuery({
+  const {
+    data: stats
+  }: UseQueryResult<ReturnsStats> = useQuery({
     queryKey: ['returns-stats', filters],
     queryFn: async () => {
       const response = await api.get('/returns/stats', { params: filters });
@@ -63,7 +127,7 @@ export function useReturns(filters: any) {
 
   // Create return mutation
   const createReturnMutation = useMutation({
-    mutationFn: async (returnData: any) => {
+    mutationFn: async (returnData: CreateReturnData) => {
       const response = await api.post('/returns', returnData);
       return response.data;
     },
@@ -84,24 +148,24 @@ export function useReturns(filters: any) {
     },
   });
 
-  // Update return mutation
+  // Update return status mutation
   const updateReturnMutation = useMutation({
     mutationFn: async ({ id, status, notes }: { id: string; status: string; notes?: string }) => {
       const backendStatus = status === 'processed' ? 'COMPLETED' : String(status).toUpperCase();
-      const response = await api.patch(`/returns/${id}`, { status: backendStatus, notes });
+      const response = await api.patch(`/returns/${id}/status`, { status: backendStatus, notes });
       return response.data;
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['returns'] });
       queryClient.invalidateQueries({ queryKey: ['returns-stats'] });
-      
-      const statusMessages = {
+
+      const statusMessages: Record<string, string> = {
         approved: 'Devolución aprobada',
         rejected: 'Devolución rechazada',
         processed: 'Devolución procesada',
         COMPLETED: 'Devolución procesada'
-      } as Record<string, string>;
-      
+      };
+
       const msgKey = variables.status === 'processed' ? 'processed' : variables.status;
       toast({
         title: statusMessages[msgKey] || 'Estado actualizado',
@@ -117,7 +181,7 @@ export function useReturns(filters: any) {
     },
   });
 
-  // Process return mutation
+  // Process return mutation - uses new endpoint
   const processReturnMutation = useMutation({
     mutationFn: async (id: string) => {
       const response = await api.post(`/returns/${id}/process`);
@@ -142,11 +206,13 @@ export function useReturns(filters: any) {
   });
 
   return {
-    returns: returns || [],
+    returns: returnsData?.returns || [],
+    pagination: returnsData?.pagination,
     stats: stats || null,
     isLoading,
+    error,
     createReturn: createReturnMutation.mutate,
-    updateReturn: (id: string, status: string, notes?: string) => 
+    updateReturn: (id: string, status: string, notes?: string) =>
       updateReturnMutation.mutate({ id, status, notes }),
     processReturn: processReturnMutation.mutate,
     isCreating: createReturnMutation.isPending,
@@ -154,3 +220,6 @@ export function useReturns(filters: any) {
     isProcessing: processReturnMutation.isPending,
   };
 }
+
+// Export types for use in components
+export type { Return, ReturnItem, ReturnsStats, ReturnFilters, PaginationInfo, CreateReturnData };

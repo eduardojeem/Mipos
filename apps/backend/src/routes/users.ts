@@ -60,7 +60,7 @@ router.get('/', requirePermission('users', 'read'), asyncHandler(async (req, res
       select: {
         id: true,
         email: true,
-        name: true,
+        fullName: true,
         role: true,
         status: true,
         createdAt: true,
@@ -96,7 +96,7 @@ router.get('/:id', requirePermission('users', 'read'), asyncHandler(async (req, 
     select: {
       id: true,
       email: true,
-      name: true,
+      fullName: true,
       role: true,
       createdAt: true,
       sales: {
@@ -165,8 +165,8 @@ router.post('/', criticalOperationsRateLimit, requirePermission('users', 'create
         id: authData.user.id,
         email,
         fullName: name,
-        role: role as UserRole,
-        isActive: true
+        role: role as UserRole
+        // isActive field doesn't exist in schema
       }
     });
 

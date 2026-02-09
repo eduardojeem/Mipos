@@ -8,12 +8,12 @@ import { RotateCcw, Plus, Download } from 'lucide-react';
 import { PermissionGuard, PermissionProvider } from '@/components/ui/permission-guard';
 
 // Components
-import { 
-  ReturnsStats, 
-  ReturnsTable, 
-  ReturnsFilters, 
-  CreateReturnModal, 
-  ReturnDetailsModal 
+import {
+  ReturnsStats,
+  ReturnsTable,
+  ReturnsFilters,
+  CreateReturnModal,
+  ReturnDetailsModal
 } from './components';
 
 // Hooks
@@ -31,22 +31,32 @@ function ReturnsPageContent() {
   const [activeTab, setActiveTab] = useState('all');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedReturn, setSelectedReturn] = useState<any>(null);
+  // ✅ Pagination state
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   // Custom hooks
   const filters = useReturnFilters();
-  const { 
-    returns, 
-    stats, 
-    isLoading, 
-    createReturn, 
-    updateReturn, 
-    processReturn 
-  } = useReturns(filters);
 
+  // ✅ Updated to use pagination
+  const {
+    returns,
+    pagination,
+    stats,
+    isLoading,
+    createReturn,
+    updateReturn,
+    processReturn
+  } = useReturns(filters.filters, page, pageSize);
+
+  // ✅ Remove client-side filtering - backend handles it via status filter
   const filteredReturns = useMemo(() => {
-    if (activeTab === 'all') return returns;
-    return returns?.filter((ret: any) => ret.status === activeTab) || [];
-  }, [returns, activeTab]);
+    // If activeTab is not 'all', update the filter instead of client-side filtering
+    if (activeTab !== 'all') {
+      filters.setStatus(activeTab);
+    }
+    return returns;
+  }, [returns, activeTab, filters]);
 
   return (
     <div className="space-y-6">
@@ -61,7 +71,7 @@ function ReturnsPageContent() {
             Gestiona las devoluciones de productos y reembolsos
           </p>
         </div>
-        
+
         <div className="flex gap-2">
           <PermissionGuard permission="returns.export">
             <Button variant="outline" size="sm">
@@ -69,7 +79,7 @@ function ReturnsPageContent() {
               Exportar
             </Button>
           </PermissionGuard>
-          
+
           <PermissionGuard permission="returns.create">
             <Button onClick={() => setIsCreateModalOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
@@ -90,7 +100,7 @@ function ReturnsPageContent() {
             <ReturnsFilters filters={filters} />
           </div>
         </CardHeader>
-        
+
         <CardContent>
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
             <TabsList className="grid w-full grid-cols-5">
@@ -102,7 +112,7 @@ function ReturnsPageContent() {
             </TabsList>
 
             <TabsContent value={activeTab} className="space-y-4">
-              <ReturnsTable 
+              <ReturnsTable
                 returns={filteredReturns}
                 isLoading={isLoading}
                 onViewDetails={setSelectedReturn}
@@ -115,14 +125,14 @@ function ReturnsPageContent() {
       </Card>
 
       {/* Modals */}
-      <CreateReturnModal 
+      <CreateReturnModal
         open={isCreateModalOpen}
         onOpenChange={setIsCreateModalOpen}
         onSubmit={createReturn}
       />
-      
+
       {selectedReturn && (
-        <ReturnDetailsModal 
+        <ReturnDetailsModal
           return={selectedReturn}
           open={!!selectedReturn}
           onOpenChange={() => setSelectedReturn(null)}

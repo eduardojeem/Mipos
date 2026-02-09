@@ -322,11 +322,11 @@ export class CarouselService {
     }
 
     // Get current state for audit
-    const currentState = await this.getCarousel(orgId);
+    const currentState = await this.getCarousel(undefined); // No orgId for revert
 
     // Revert to the previous state from that log entry
     const previousIds = log.previous_state || [];
-    
+
     // Save the reverted state
     const result = await this.saveCarousel(previousIds, context);
 

@@ -21,23 +21,39 @@ const getOrganizationId = (): string | null => {
   }
 };
 
-export function useSuppliers(params?: { page?: number; limit?: number; search?: string }) {
-  const { page = 1, limit = 10, search = '' } = params || {};
+// ✅ Moved export outside function scope - Updated with server-side filtering support
+export interface SuppliersQueryParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: 'all' | 'active' | 'inactive';
+  category?: string;
+  sortBy?: 'name' | 'totalPurchases' | 'totalOrders' | 'lastPurchase' | 'createdAt';
+  sortOrder?: 'asc' | 'desc';
+}
+
+export function useSuppliers(params?: SuppliersQueryParams) {
+  const {
+    page = 1,
+    limit = 25,
+    search = '',
+    status = 'all',
+    category,
+    sortBy = 'name',
+    sortOrder = 'asc'
+  } = params || {};
 
   return useQuery({
-    queryKey: ['suppliers', page, limit, search],
+    queryKey: ['suppliers', page, limit, search, status, category, sortBy, sortOrder],
     queryFn: async () => {
       if (isSupabaseActive()) {
         const supabase = createClient();
         const orgId = getOrganizationId();
-        
+
         let query = supabase
           .from('suppliers')
-          .select('*, _count:purchase_orders(count)', { count: 'exact' }); // Mocking count logic via join if needed or separate
+          .select('*', { count: 'exact' });
 
-        // Note: _count for purchase_orders needs proper setup or separate query.
-        // For simplicity, we fetch basic supplier data.
-        
         if (orgId) {
           query = query.eq('organization_id', orgId);
         }
@@ -45,23 +61,28 @@ export function useSuppliers(params?: { page?: number; limit?: number; search?: 
         if (search) {
           query = query.ilike('name', `%${search}%`);
         }
-        
+
         const { data, count, error } = await query
           .range((page - 1) * limit, page * limit - 1)
-          .order('created_at', { ascending: false });
+          .order(sortBy === 'name' ? 'name' : 'created_at', { ascending: sortOrder === 'asc' });
 
         if (error) throw error;
-        
-        // Transform to match API structure
+
         return {
           suppliers: data,
-          total: count || 0,
-          page,
-          totalPages: Math.ceil((count || 0) / limit)
+          pagination: {
+            page,
+            limit,
+            total: count || 0,
+            pages: Math.ceil((count || 0) / limit)
+          }
         };
       }
-      
-      const { data } = await api.get('/suppliers', { params: { page, limit, search } });
+
+      // ✅ Pass all filter parameters to backend
+      const { data } = await api.get('/suppliers', {
+        params: { page, limit, search, status, category, sortBy, sortOrder }
+      });
       return data;
     },
     placeholderData: (prev: any) => prev,
@@ -76,7 +97,7 @@ export function useCreateSupplier() {
       if (isSupabaseActive()) {
         const supabase = createClient();
         const orgId = getOrganizationId();
-        
+
         if (!orgId) throw new Error('No hay organización seleccionada');
 
         const { data, error } = await supabase
@@ -84,7 +105,7 @@ export function useCreateSupplier() {
           .insert({ ...supplierData, organization_id: orgId })
           .select()
           .single();
-        
+
         if (error) throw error;
         return data;
       }
@@ -114,7 +135,7 @@ export function useUpdateSupplier() {
       if (isSupabaseActive()) {
         const supabase = createClient();
         const orgId = getOrganizationId();
-        
+
         if (!orgId) throw new Error('No hay organización seleccionada');
 
         const { data: updated, error } = await supabase
@@ -124,7 +145,7 @@ export function useUpdateSupplier() {
           .eq('organization_id', orgId) // Security check
           .select()
           .single();
-          
+
         if (error) throw error;
         return updated;
       }
@@ -154,7 +175,7 @@ export function useDeleteSupplier() {
       if (isSupabaseActive()) {
         const supabase = createClient();
         const orgId = getOrganizationId();
-        
+
         if (!orgId) throw new Error('No hay organización seleccionada');
 
         const { error } = await supabase
@@ -162,7 +183,7 @@ export function useDeleteSupplier() {
           .delete()
           .eq('id', id)
           .eq('organization_id', orgId);
-          
+
         if (error) throw error;
         return;
       }

@@ -1,19 +1,19 @@
 'use client';
 
 import { useState } from 'react';
-import { 
-  Table, TableBody, TableCell, TableHead, 
-  TableHeader, TableRow 
+import {
+  Table, TableBody, TableCell, TableHead,
+  TableHeader, TableRow
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { 
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, 
-  DropdownMenuTrigger 
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
-import { 
-  MoreHorizontal, Eye, CheckCircle, XCircle, 
-  Clock, Package, User 
+import {
+  MoreHorizontal, Eye, CheckCircle, XCircle,
+  Clock, Package, User
 } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -23,7 +23,7 @@ interface Return {
   id: string;
   returnNumber: string;
   saleId: string;
-  customerId: string;
+  customerId: string | null; // ✅ Can be null
   customerName: string;
   items: Array<{
     productId: string;
@@ -49,12 +49,12 @@ interface ReturnsTableProps {
   onProcess: (id: string) => void;
 }
 
-export function ReturnsTable({ 
-  returns, 
-  isLoading, 
-  onViewDetails, 
-  onUpdateStatus, 
-  onProcess 
+export function ReturnsTable({
+  returns,
+  isLoading,
+  onViewDetails,
+  onUpdateStatus,
+  onProcess
 }: ReturnsTableProps) {
   if (isLoading) {
     return (
@@ -73,14 +73,30 @@ export function ReturnsTable({
     );
   }
 
+
   if (!returns?.length) {
     return (
-      <div className="text-center py-12">
-        <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-        <h3 className="text-lg font-semibold mb-2">No hay devoluciones</h3>
-        <p className="text-muted-foreground">
-          No se encontraron devoluciones con los filtros aplicados.
+      <div className="text-center py-16 px-4">
+        <div className="flex justify-center mb-4">
+          <div className="rounded-full bg-muted p-3">
+            <Package className="h-10 w-10 text-muted-foreground" />
+          </div>
+        </div>
+        <h3 className="text-lg font-semibold mb-2">No se encontraron devoluciones</h3>
+        <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
+          No hay devoluciones que coincidan con los filtros seleccionados.
+          Intenta ajustar los filtros o crea una nueva devolución.
         </p>
+        <PermissionGuard permission="returns.create">
+          <Button onClick={() => {
+            // Trigger create modal - would need to lift this state up
+            const event = new CustomEvent('open-create-return-modal');
+            window.dispatchEvent(event);
+          }}>
+            <Package className="h-4 w-4 mr-2" />
+            Nueva Devolución
+          </Button>
+        </PermissionGuard>
       </div>
     );
   }
@@ -133,10 +149,10 @@ export function ReturnsTable({
                 </div>
               </TableCell>
               <TableCell>
-                <Button 
-                  variant="link" 
+                <Button
+                  variant="link"
                   className="p-0 h-auto font-normal"
-                  onClick={() => {/* Navigate to sale */}}
+                  onClick={() => {/* Navigate to sale */ }}
                 >
                   #{returnItem.saleId}
                 </Button>
@@ -167,16 +183,16 @@ export function ReturnsTable({
                       <Eye className="h-4 w-4 mr-2" />
                       Ver Detalles
                     </DropdownMenuItem>
-                    
+
                     {returnItem.status === 'pending' && (
                       <PermissionGuard permission="returns.approve">
-                        <DropdownMenuItem 
+                        <DropdownMenuItem
                           onClick={() => onUpdateStatus(returnItem.id, 'approved')}
                         >
                           <CheckCircle className="h-4 w-4 mr-2" />
                           Aprobar
                         </DropdownMenuItem>
-                        <DropdownMenuItem 
+                        <DropdownMenuItem
                           onClick={() => onUpdateStatus(returnItem.id, 'rejected')}
                         >
                           <XCircle className="h-4 w-4 mr-2" />
@@ -184,7 +200,7 @@ export function ReturnsTable({
                         </DropdownMenuItem>
                       </PermissionGuard>
                     )}
-                    
+
                     {returnItem.status === 'approved' && (
                       <PermissionGuard permission="returns.process">
                         <DropdownMenuItem onClick={() => onProcess(returnItem.id)}>
