@@ -18,10 +18,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   try {
     const base = backendBase()
     if (!base) return NextResponse.json({ error: 'BACKEND_URL no configurado' }, { status: 500 })
-    const res = await fetch(`${base}/returns/${params.id}/status`, {
-      method: 'PATCH',
-      headers: forwardHeaders(request),
-      body: JSON.stringify({ status: 'COMPLETED' })
+    const res = await fetch(`${base}/returns/${params.id}/process`, {
+      method: 'POST',
+      headers: forwardHeaders(request)
     })
     const text = await res.text()
     return new NextResponse(text, { status: res.status, headers: { 'Content-Type': res.headers.get('content-type') || 'application/json' } })
@@ -29,4 +28,3 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     return NextResponse.json({ error: e?.message || 'Failed to process return' }, { status: 500 })
   }
 }
-

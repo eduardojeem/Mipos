@@ -13,8 +13,7 @@ export function normalizeReturn(r: any) {
         customerId: r.customerId,
         customerName: r.customer?.name || 'Sin cliente',
         items: r.returnItems?.map(normalizeReturnItem) || [],
-        totalAmount: r.total,
-        total: r.total,
+        totalAmount: r.totalAmount,
         reason: r.reason,
         status: r.status.toLowerCase(),
         refundMethod: r.refundMethod,
@@ -84,14 +83,14 @@ export function buildReturnWhere(filters: {
     // Date range filter
     const toDate = (v: string) => new Date(v);
     if (filters.startDate && filters.endDate) {
-        where.date = {
+        where.createdAt = {
             gte: toDate(filters.startDate),
             lte: toDate(filters.endDate)
         };
     } else if (filters.startDate) {
-        where.date = { gte: toDate(filters.startDate) };
+        where.createdAt = { gte: toDate(filters.startDate) };
     } else if (filters.endDate) {
-        where.date = { lte: toDate(filters.endDate) };
+        where.createdAt = { lte: toDate(filters.endDate) };
     }
 
     // Direct filters
@@ -128,7 +127,7 @@ export async function calculateReturnStats(prisma: any, where: any = {}) {
             by: ['status'],
             where,
             _count: { id: true },
-            _sum: { total: true }
+            _sum: { totalAmount: true }
         }),
         prisma.return.count({ where })
     ]);
@@ -137,7 +136,7 @@ export async function calculateReturnStats(prisma: any, where: any = {}) {
         const stat = stats.find((s: any) => s.status === status);
         return {
             count: stat?._count.id || 0,
-            amount: stat?._sum.total || 0
+            amount: stat?._sum.totalAmount || 0
         };
     };
 
@@ -146,7 +145,7 @@ export async function calculateReturnStats(prisma: any, where: any = {}) {
     const rejected = getStatByStatus('REJECTED');
     const completed = getStatByStatus('COMPLETED');
 
-    const totalAmount = stats.reduce((sum: number, s: any) => sum + (s._sum.total || 0), 0);
+    const totalAmount = stats.reduce((sum: number, s: any) => sum + (s._sum.totalAmount || 0), 0);
 
     // Calculate total sales for return rate (if available)
     let returnRate = 0;

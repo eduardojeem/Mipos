@@ -22,7 +22,6 @@ import { SuppliersTable } from '@/components/suppliers/SuppliersTable';
 import { SuppliersStats } from '@/components/suppliers/SuppliersStats';
 import { SuppliersFilters } from '@/components/suppliers/SuppliersFilters';
 import { SupplierViewDialog } from '@/components/suppliers/SupplierViewDialog';
-import { NavigationGrid } from './components/NavigationGrid';
 
 // Utils
 import { exportSuppliersToCSV } from './utils/export';
@@ -203,9 +202,6 @@ const SuppliersPageContent = memo(function SuppliersPageContent() {
           </PermissionGuard>
         </div>
       </div>
-
-      {/* Quick Access Navigation */}
-      <NavigationGrid />
 
       {/* Statistics Cards */}
       <SuppliersStats

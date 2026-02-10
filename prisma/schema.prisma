@@ -317,6 +317,7 @@ model InventoryMovement {
 
 model Return {
   id             String       @id @default(cuid())
+  organizationId String       @map("organization_id")
   originalSaleId String       @map("original_sale_id")
   userId         String       @map("user_id")
   customerId     String?      @map("customer_id")
@@ -331,6 +332,7 @@ model Return {
   user           User         @relation(fields: [userId], references: [id])
   originalSale   Sale         @relation(fields: [originalSaleId], references: [id], onDelete: Cascade)
 
+  @@index([organizationId, createdAt])
   @@map("returns")
 }
 

@@ -12,7 +12,7 @@ import { RETURNS_CONFIG } from '../config/returns-config';
 const logger = console;
 
 // ✅ Improved helper function with proper error handling
-async function createCashMovementForReturn(tx: any, returnId: string, amount: number, refundMethod: string, userId: string) {
+async function createCashMovementForReturn(tx: any, returnId: string, amount: number, refundMethod: string, userId: string, organizationId: string) {
   // Only create cash movement for cash refunds
   if (refundMethod !== 'CASH') {
     logger.info('Skipping cash movement for non-cash refund', { refundMethod, returnId });
@@ -26,7 +26,7 @@ async function createCashMovementForReturn(tx: any, returnId: string, amount: nu
 
   // Get current open cash session
   const openSession = await tx.cashSession.findFirst({
-    where: { status: 'OPEN' }
+    where: { status: 'OPEN', organizationId }
   });
 
   if (!openSession) {
@@ -37,6 +37,7 @@ async function createCashMovementForReturn(tx: any, returnId: string, amount: nu
   // Create cash movement (negative amount for returns)
   const movement = await tx.cashMovement.create({
     data: {
+      organizationId,
       sessionId: openSession.id,
       type: 'RETURN',
       amount: -Math.abs(amount), // Negative for returns
@@ -148,25 +149,26 @@ router.get('/',
   requirePermission('returns', 'read'),
   validateQuery(enhancedQuerySchema),
   asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
+    const organizationId = req.user!.organizationId;
     const { page, limit, startDate, endDate, customerId, status, originalSaleId } = req.query;
     const pageNum = typeof page === 'number' ? page : (page ? parseInt(String(page), 10) : 1);
     const limitNum = typeof limit === 'number' ? limit : (limit ? parseInt(String(limit), 10) : 10);
     const skip = (pageNum - 1) * limitNum;
 
-    const where: any = {};
+    const where: any = { organizationId };
 
     const toDate = (v: unknown) => new Date(String(v));
     if (startDate && endDate) {
-      where.date = {
+      where.createdAt = {
         gte: toDate(startDate),
         lte: toDate(endDate)
       };
     } else if (startDate) {
-      where.date = {
+      where.createdAt = {
         gte: toDate(startDate)
       };
     } else if (endDate) {
-      where.date = {
+      where.createdAt = {
         lte: toDate(endDate)
       };
     }
@@ -257,9 +259,10 @@ router.get('/:id',
   validateParams(commonSchemas.id),
   asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
     const { id } = req.params;
+    const organizationId = req.user!.organizationId;
 
-    const returnRecord = await prisma.return.findUnique({
-      where: { id },
+    const returnRecord = await prisma.return.findFirst({
+      where: { id, organizationId },
       include: {
         originalSale: {
           include: {
@@ -327,10 +330,11 @@ router.post('/',
   asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
     const { originalSaleId, customerId, items, reason, refundMethod } = req.body;
     const userId = req.user!.id;
+    const organizationId = req.user!.organizationId;
 
     // Verify original sale exists
-    const originalSale = await prisma.sale.findUnique({
-      where: { id: originalSaleId },
+    const originalSale = await prisma.sale.findFirst({
+      where: { id: originalSaleId, organizationId },
       include: {
         saleItems: {
           include: {
@@ -374,10 +378,11 @@ router.post('/',
       // Create return record
       const returnRecord = await tx.return.create({
         data: {
+          organizationId,
           originalSale: { connect: { id: originalSaleId } },
           user: { connect: { id: userId } },
           ...(customerId ? { customer: { connect: { id: customerId } } } : {}),
-          // total is calculated from returnItems, not stored directly
+          totalAmount: total,
           reason,
           refundMethod: refundMethod as any,
           status: 'PENDING'
@@ -496,9 +501,10 @@ router.patch('/:id/status',
   asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
     const { id } = req.params;
     const { status, notes } = req.body;
+    const organizationId = req.user!.organizationId;
 
-    const returnRecord = await prisma.return.findUnique({
-      where: { id },
+    const returnRecord = await prisma.return.findFirst({
+      where: { id, organizationId },
       include: {
         returnItems: {
           include: {
@@ -512,6 +518,9 @@ router.patch('/:id/status',
       throw createError('Return not found', 404);
     }
 
+    if (!validateStatusTransition(returnRecord.status, status)) {
+      throw createError('Invalid status transition', 400);
+    }
     // Handle status transitions
     const updatedReturn = await prisma.$transaction(async (tx) => {
       // Update return status
@@ -555,7 +564,7 @@ router.patch('/:id/status',
         );
 
         // Create cash movement for cash refunds
-        await createCashMovementForReturn(tx, returnRecord.id, total, returnRecord.refundMethod, req.user!.id);
+        await createCashMovementForReturn(tx, returnRecord.id, total, returnRecord.refundMethod, req.user!.id, organizationId);
       }
 
       return updated;
@@ -662,9 +671,10 @@ router.post('/:id/process',
   validateParams(commonSchemas.id),
   asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
     const { id } = req.params;
+    const organizationId = req.user!.organizationId;
 
-    const returnRecord = await prisma.return.findUnique({
-      where: { id },
+    const returnRecord = await prisma.return.findFirst({
+      where: { id, organizationId },
       include: {
         returnItems: {
           include: {
@@ -730,7 +740,8 @@ router.post('/:id/process',
         returnRecord.id,
         total,
         returnRecord.refundMethod,
-        req.user!.id
+        req.user!.id,
+        organizationId
       );
 
       return updated;
