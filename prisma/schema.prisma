@@ -364,6 +364,7 @@ model AuditLog {
   changes    Json?
   oldData    Json?    @map("old_data")
   newData    Json?    @map("new_data")
+  metadata   String?  // ✅ Campo agregado para auditoría de returns
   timestamp  DateTime @default(now())
   createdAt  DateTime @default(now()) @map("created_at")
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -611,6 +612,10 @@ model CashMovement {
   @@index([type])
   @@index([createdAt])
   @@index([referenceType, referenceId])
+  // Índices compuestos optimizados para queries comunes
+  @@index([organizationId, createdBy, createdAt])  // Búsqueda por usuario
+  @@index([organizationId, sessionId, type])       // Filtros combinados
+  @@index([organizationId, type, createdAt])       // Reportes por tipo
   @@map("cash_movements")
 }
 
@@ -648,4 +653,25 @@ model CashDiscrepancy {
   @@index([type])
   @@index([createdAt])
   @@map("cash_discrepancies")
+}
+
+// =====================================================
+// Sync Failures - Para registro de fallos de sincronización externa
+// =====================================================
+model SyncFailure {
+  id           String    @id @default(cuid())
+  entityType   String    @map("entity_type")
+  entityId     String    @map("entity_id")
+  action       String
+  error        String
+  payload      String?
+  retryCount   Int       @default(0) @map("retry_count")
+  lastRetryAt  DateTime? @map("last_retry_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@index([entityType, entityId])
+  @@index([retryCount, createdAt])
+  @@index([createdAt])
+  @@map("sync_failures")
 }

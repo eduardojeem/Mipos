@@ -18,7 +18,8 @@ export const RETURNS_CONFIG = {
         maxNotesLength: 1000,
         maxItemsPerReturn: 50,
         maxQuantityPerItem: 10000,
-        minQuantityPerItem: 1
+        minQuantityPerItem: 1,
+        maxReturnDays: 30 // Ventana de tiempo máxima para devoluciones (días)
     },
 
     // Business rules

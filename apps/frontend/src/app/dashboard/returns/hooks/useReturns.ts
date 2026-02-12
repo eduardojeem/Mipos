@@ -105,12 +105,26 @@ export function useReturns(
   }: UseQueryResult<ReturnsResponse> = useQuery({
     queryKey: ['returns', filters, page, limit],
     queryFn: async () => {
-      const response = await api.get('/returns', {
-        params: { ...filters, page, limit }
-      });
-      return response.data;
+      console.log('🔍 [useReturns] Fetching returns with params:', { filters, page, limit });
+      try {
+        const response = await api.get('/returns', {
+          params: { ...filters, page, limit }
+        });
+        console.log('🔍 [useReturns] Response:', response.data);
+        return response.data;
+      } catch (err: any) {
+        console.error('🔍 [useReturns] Error fetching returns:', err);
+        console.error('🔍 [useReturns] Error details:', {
+          message: err.message,
+          response: err.response?.data,
+          status: err.response?.status,
+          url: err.config?.url
+        });
+        throw err;
+      }
     },
     staleTime: 30000, // 30 seconds
+    retry: false, // Disable retry to see errors immediately
   });
 
   // Fetch stats
@@ -119,10 +133,23 @@ export function useReturns(
   }: UseQueryResult<ReturnsStats> = useQuery({
     queryKey: ['returns-stats', filters],
     queryFn: async () => {
-      const response = await api.get('/returns/stats', { params: filters });
-      return response.data;
+      console.log('🔍 [useReturns] Fetching stats with filters:', filters);
+      try {
+        const response = await api.get('/returns/stats', { params: filters });
+        console.log('🔍 [useReturns] Stats response:', response.data);
+        return response.data;
+      } catch (err: any) {
+        console.error('🔍 [useReturns] Error fetching stats:', err);
+        console.error('🔍 [useReturns] Stats error details:', {
+          message: err.message,
+          response: err.response?.data,
+          status: err.response?.status
+        });
+        throw err;
+      }
     },
     staleTime: 60000, // 1 minute
+    retry: false,
   });
 
   // Create return mutation

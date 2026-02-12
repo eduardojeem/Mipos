@@ -105,25 +105,55 @@ export async function syncReturnToExternalSystem(
             action
         });
 
-        const response = await fetch(url, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(payload)
-        });
+        // ✅ MEJORA CRÍTICA: Agregar timeout y manejo robusto de errores
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
 
-        if (!response.ok) {
-            logger.error('External sync failed', {
-                status: response.status,
-                statusText: response.statusText,
-                returnId: returnData.id
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(payload),
+                signal: controller.signal
             });
-        } else {
-            logger.info('External sync successful', { returnId: returnData.id });
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+                const errorText = await response.text().catch(() => 'Unknown error');
+                logger.error('External sync failed', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    returnId: returnData.id,
+                    body: errorText
+                });
+
+                // ✅ Lanzar error para que el llamador pueda manejarlo
+                throw new Error(`External sync failed: HTTP ${response.status} - ${response.statusText}`);
+            } else {
+                logger.info('External sync successful', { returnId: returnData.id });
+            }
+        } catch (fetchError) {
+            clearTimeout(timeoutId);
+
+            if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+                logger.error('External sync timeout', {
+                    returnId: returnData.id,
+                    timeout: '5000ms'
+                });
+                throw new Error('External sync timeout after 5 seconds');
+            }
+
+            throw fetchError;
         }
     } catch (error) {
         logger.error('External sync error', {
             error: error instanceof Error ? error.message : 'Unknown error',
-            returnId: returnData.id
+            returnId: returnData.id,
+            stack: error instanceof Error ? error.stack : undefined
         });
+
+        // Re-lanzar el error para que el llamador pueda manejarlo
+        throw error;
     }
 }
