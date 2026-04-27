@@ -25,13 +25,16 @@
     }
   },
   "include": [
-    "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts",
-    "prisma/**/*.ts"
+    "lib/**/*.ts",
+    "lib/**/*.tsx",
+    "prisma/**/*.ts",
+    "scripts/**/*.ts"
   ],
-  "exclude": ["node_modules"],
+  "exclude": [
+    "node_modules",
+    "apps/frontend/**/*",
+    "apps/backend/**/*"
+  ],
   "ts-node": {
     "compilerOptions": {
       "module": "commonjs"

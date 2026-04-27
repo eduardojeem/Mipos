@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getValidatedOrganizationId } from '@/lib/organization';
 
 interface CustomerSale {
   id: string;
-  total_amount?: number;
-  created_at: string;
+  total?: number;
+  date?: string;
+  created_at?: string;
   status: string;
+  branch_id?: string;
+  pos_id?: string;
 }
 
 interface CustomerWithSales {
@@ -39,12 +43,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Start date and end date are required' }, { status: 400 });
     }
 
-    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    const orgId = ((await getValidatedOrganizationId(request)) || '').trim();
     if (!orgId) {
       return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
     }
 
     const supabase = await createClient();
+
+    const deliveredStatuses = ['DELIVERED', 'delivered', 'COMPLETED', 'completed'];
 
     // Get customers with their sales in the period
     let customersQuery = supabase
@@ -56,15 +62,27 @@ export async function GET(request: NextRequest) {
         created_at,
         sales!inner (
           id,
-          total_amount,
-          created_at,
-          status
+          total,
+          date,
+          status,
+          branch_id,
+          pos_id
         )
       `)
-      .eq('organization_id', orgId); // Filter by Organization
+      .eq('organization_id', orgId)
+      .in('sales.status', deliveredStatuses)
+      .gte('sales.date', startDate)
+      .lte('sales.date', endDate);
 
     if (customerId) {
       customersQuery = customersQuery.eq('id', customerId);
+    }
+
+    if (branchId) {
+      customersQuery = customersQuery.eq('sales.branch_id', branchId);
+    }
+    if (posId) {
+      customersQuery = customersQuery.eq('sales.pos_id', posId);
     }
 
     const { data: customersData, error: customersError } = await customersQuery;
@@ -76,14 +94,9 @@ export async function GET(request: NextRequest) {
     const endDateObj = new Date(endDate);
     
     const processedCustomers: ProcessedCustomer[] = (customersData || []).map((customer: CustomerWithSales) => {
-      const relevantSales = (customer.sales || []).filter((sale: CustomerSale) => {
-        const saleDate = new Date(sale.created_at);
-        return saleDate >= startDateObj && 
-               saleDate <= endDateObj && 
-               sale.status === 'completed';
-      });
+      const relevantSales = (customer.sales || []);
 
-      const totalSpent = relevantSales.reduce((sum: number, sale: CustomerSale) => sum + (sale.total_amount || 0), 0);
+      const totalSpent = relevantSales.reduce((sum: number, sale: CustomerSale) => sum + Number(sale.total || 0), 0);
       const orders = relevantSales.length;
 
       return {

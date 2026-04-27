@@ -41,7 +41,7 @@ class ProductService {
   private batchLoadTimer: NodeJS.Timeout | null = null;
   private batchLoadPromises = new Map<string, Promise<Product | null>>();
 
-  private normalizeProduct(raw: any): Product {
+  private normalizeProduct(raw: Record<string, unknown>): Product {
     return {
       id: String(raw.id),
       name: String(raw.name || ''),
@@ -79,8 +79,8 @@ class ProductService {
       expiration_date: raw.expiration_date ?? undefined,
       created_at: typeof raw.created_at === 'string' ? raw.created_at : (raw.createdAt ? new Date(raw.createdAt).toISOString() : new Date().toISOString()),
       updated_at: typeof raw.updated_at === 'string' ? raw.updated_at : (raw.updatedAt ? new Date(raw.updatedAt).toISOString() : new Date().toISOString()),
-      category: raw.category ? { id: String(raw.category.id), name: String(raw.category.name || '') } as any : undefined,
-      supplier: raw.supplier ? { id: String(raw.supplier.id), name: String(raw.supplier.name || '') } as any : undefined,
+      category: raw.category ? { id: String((raw.category as Record<string,unknown>).id), name: String((raw.category as Record<string,unknown>).name || '') } as Category : undefined,
+      supplier: raw.supplier ? { id: String((raw.supplier as Record<string,unknown>).id), name: String((raw.supplier as Record<string,unknown>).name || '') } as Product['supplier'] : undefined,
     };
   }
 
@@ -200,7 +200,7 @@ class ProductService {
     }
 
     return {
-      products: (data || []).map((p: any) => this.normalizeProduct(p)),
+      products: (data || []).map((p: Record<string, unknown>) => this.normalizeProduct(p)),
       pagination: {
         page,
         limit,
@@ -232,7 +232,7 @@ class ProductService {
     }
 
     return {
-      products: (response.data.products || []).map((p: any) => this.normalizeProduct(p)),
+      products: (response.data.products || []).map((p: Record<string, unknown>) => this.normalizeProduct(p)),
       pagination: response.data.pagination || {
         page: options.page || 1,
         limit: options.limit || 20,
@@ -328,7 +328,7 @@ class ProductService {
           .eq('organization_id', orgId)
           .lte('stock_quantity', threshold);
         
-        if (data && !error) return data.map(p => this.normalizeProduct(p));
+        if (data && !error) return data.map((p: Record<string, unknown>) => this.normalizeProduct(p));
       }
 
       const response = await api.get(`/products/low-stock?threshold=${threshold}`);
@@ -350,7 +350,7 @@ class ProductService {
           .ilike('name', `%${query}%`)
           .limit(limit);
         
-        if (data && !error) return data.map(p => this.normalizeProduct(p));
+        if (data && !error) return data.map((p: Record<string, unknown>) => this.normalizeProduct(p));
       }
 
       const response = await api.get(`/products?search=${encodeURIComponent(query)}&limit=${limit}`);

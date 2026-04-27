@@ -163,6 +163,14 @@ export function PaginationInfo({
   totalItems,
   className
 }: PaginationInfoProps) {
+  if (totalItems <= 0) {
+    return (
+      <div className={cn('text-sm text-muted-foreground', className)}>
+        Sin resultados
+      </div>
+    );
+  }
+
   const startItem = (currentPage - 1) * itemsPerPage + 1;
   const endItem = Math.min(currentPage * itemsPerPage, totalItems);
 

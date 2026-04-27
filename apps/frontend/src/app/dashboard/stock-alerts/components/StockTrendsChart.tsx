@@ -1,97 +1,123 @@
 'use client';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { TrendingDown, TrendingUp, Minus } from 'lucide-react';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip as RechartsTooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+import { Skeleton } from '@/components/ui/skeleton';
+import type { StockAlertTrendItem, StockAlertsStats } from '@/lib/stock-alerts';
 
-// Mock data for demonstration
-const mockTrendsData = [
-  { product: 'Base Líquida Premium', trend: 'down', change: -15, daysLeft: 3 },
-  { product: 'Máscara de Pestañas', trend: 'down', change: -8, daysLeft: 7 },
-  { product: 'Labial Mate', trend: 'stable', change: 0, daysLeft: 12 },
-  { product: 'Corrector Facial', trend: 'up', change: 5, daysLeft: 18 },
-  { product: 'Polvo Compacto', trend: 'down', change: -12, daysLeft: 5 },
-];
+interface StockTrendsChartProps {
+  trends: StockAlertTrendItem[];
+  stats: StockAlertsStats | null;
+  isLoading: boolean;
+}
 
-export function StockTrendsChart() {
-  const getTrendIcon = (trend: string) => {
-    switch (trend) {
-      case 'up':
-        return <TrendingUp className="h-4 w-4 text-green-600" />;
-      case 'down':
-        return <TrendingDown className="h-4 w-4 text-red-600" />;
-      default:
-        return <Minus className="h-4 w-4 text-gray-600" />;
-    }
-  };
+const severityColors: Record<string, string> = {
+  critical: '#dc2626',
+  low: '#ea580c',
+  warning: '#ca8a04',
+};
 
-  const getTrendColor = (trend: string) => {
-    switch (trend) {
-      case 'up':
-        return 'text-green-600';
-      case 'down':
-        return 'text-red-600';
-      default:
-        return 'text-gray-600';
-    }
-  };
+export function StockTrendsChart({ trends, stats, isLoading }: StockTrendsChartProps) {
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-60 w-full" />
+        <Skeleton className="h-24 w-full" />
+      </div>
+    );
+  }
+
+  if (!stats || trends.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+        No hay suficiente historial para construir tendencias de stock.
+      </div>
+    );
+  }
+
+  const chartData = trends.map((item) => ({
+    name: item.productName.length > 18 ? `${item.productName.slice(0, 18)}...` : item.productName,
+    fullName: item.productName,
+    gap: item.stockGap,
+    weeklyUnitsSold: item.weeklyUnitsSold,
+    severity: item.severity,
+    currentStock: item.currentStock,
+    minThreshold: item.minThreshold,
+    estimatedDaysLeft: item.estimatedDaysLeft,
+  }));
 
   return (
     <div className="space-y-4">
-      {/* Summary */}
       <div className="grid grid-cols-3 gap-2 text-center">
-        <div className="p-2 bg-red-50 dark:bg-red-950/20 rounded">
-          <div className="text-lg font-bold text-red-600">3</div>
-          <div className="text-xs text-red-600">Críticos</div>
+        <div className="rounded-lg bg-red-50 p-3 dark:bg-red-950/30">
+          <div className="text-lg font-semibold text-red-600">{stats.criticalAlerts}</div>
+          <div className="text-xs text-red-600">Criticas</div>
         </div>
-        <div className="p-2 bg-orange-50 dark:bg-orange-950/20 rounded">
-          <div className="text-lg font-bold text-orange-600">2</div>
-          <div className="text-xs text-orange-600">Bajos</div>
+        <div className="rounded-lg bg-orange-50 p-3 dark:bg-orange-950/30">
+          <div className="text-lg font-semibold text-orange-600">{stats.lowStockAlerts}</div>
+          <div className="text-xs text-orange-600">Bajo minimo</div>
         </div>
-        <div className="p-2 bg-yellow-50 dark:bg-yellow-950/20 rounded">
-          <div className="text-lg font-bold text-yellow-600">1</div>
-          <div className="text-xs text-yellow-600">Advertencia</div>
+        <div className="rounded-lg bg-amber-50 p-3 dark:bg-amber-950/30">
+          <div className="text-lg font-semibold text-amber-600">{stats.warningAlerts}</div>
+          <div className="text-xs text-amber-600">Advertencia</div>
         </div>
       </div>
 
-      {/* Trends List */}
+      <div className="h-[250px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+            <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-16} textAnchor="end" height={56} />
+            <YAxis tick={{ fontSize: 11 }} />
+            <RechartsTooltip
+              formatter={(value: number, key: string) => {
+                if (key === 'weeklyUnitsSold') {
+                  return [`${value} u/semana`, 'Salida semanal'];
+                }
+                return [`${value} u`, 'Brecha'];
+              }}
+            />
+            <Bar dataKey="gap" fill="#0f172a" radius={[4, 4, 0, 0]} name="Brecha" />
+            <Bar dataKey="weeklyUnitsSold" fill="#38bdf8" radius={[4, 4, 0, 0]} name="Salida semanal" />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
       <div className="space-y-2">
-        <h4 className="text-sm font-medium text-muted-foreground">
-          Productos con Mayor Riesgo
-        </h4>
-        {mockTrendsData.map((item, index) => (
-          <div key={index} className="flex items-center justify-between p-2 bg-muted/50 rounded">
-            <div className="flex items-center gap-2">
-              {getTrendIcon(item.trend)}
-              <div>
-                <div className="text-sm font-medium truncate max-w-[120px]">
-                  {item.product}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {item.daysLeft}d restantes
-                </div>
-              </div>
+        {trends.slice(0, 3).map((item) => (
+          <div
+            key={item.productId}
+            className="flex items-center justify-between gap-4 rounded-lg border border-border/60 p-3"
+          >
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{item.productName}</p>
+              <p className="text-xs text-muted-foreground">
+                {item.estimatedDaysLeft !== null
+                  ? `${item.estimatedDaysLeft} dias de cobertura`
+                  : 'Sin velocidad de salida'}
+              </p>
             </div>
-            <div className={`text-sm font-medium ${getTrendColor(item.trend)}`}>
-              {item.change > 0 ? '+' : ''}{item.change}%
+            <div className="text-right">
+              <p
+                className="text-sm font-semibold"
+                style={{ color: severityColors[item.severity] || '#0f172a' }}
+              >
+                {item.stockGap} u
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {item.weeklyUnitsSold} u/semana
+              </p>
             </div>
           </div>
         ))}
-      </div>
-
-      {/* Quick Actions */}
-      <div className="pt-2 border-t">
-        <div className="text-xs text-muted-foreground mb-2">Acciones Rápidas</div>
-        <div className="space-y-1">
-          <button className="w-full text-left text-xs p-2 hover:bg-muted/50 rounded">
-            📊 Ver reporte completo
-          </button>
-          <button className="w-full text-left text-xs p-2 hover:bg-muted/50 rounded">
-            🛒 Crear orden masiva
-          </button>
-          <button className="w-full text-left text-xs p-2 hover:bg-muted/50 rounded">
-            ⚙️ Ajustar umbrales
-          </button>
-        </div>
       </div>
     </div>
   );

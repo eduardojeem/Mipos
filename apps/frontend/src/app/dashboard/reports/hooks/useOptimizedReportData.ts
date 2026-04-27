@@ -1,31 +1,8 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-
-// Helper to get current organization ID
-const getOrganizationId = (): string | null => {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = window.localStorage.getItem('selected_organization');
-    if (!raw) return null;
-    if (raw.startsWith('{')) {
-      const parsed = JSON.parse(raw);
-      return parsed?.id || parsed?.organization_id || null;
-    }
-    return raw;
-  } catch {
-    return null;
-  }
-};
-
-const getHeaders = () => {
-  const headers: Record<string, string> = {};
-  const orgId = getOrganizationId();
-  if (orgId) {
-    headers['x-organization-id'] = orgId;
-  }
-  return headers;
-};
+import api from '@/lib/api';
+import { useCurrentOrganizationId } from '@/hooks/use-current-organization';
 
 export interface ReportFilters {
   startDate: Date;
@@ -37,6 +14,8 @@ export interface ReportFilters {
   branchId?: string;
   posId?: string;
   paymentMethod?: string;
+  inventoryOnlyLowStock?: boolean;
+  inventoryStockLimit?: number;
 }
 
 interface UseReportDataOptions {
@@ -44,32 +23,143 @@ interface UseReportDataOptions {
   refetchInterval?: number;
 }
 
+export interface SalesReportPoint {
+  date: string;
+  sales: number;
+}
+
+export interface SalesCategoryPoint {
+  category: string;
+  sales: number;
+}
+
+export interface SalesTopProduct {
+  name: string;
+  sales: number;
+  quantity: number;
+}
+
+export interface SalesData {
+  totalSales: number;
+  totalOrders: number;
+  averageOrderValue: number;
+  salesByDate: SalesReportPoint[];
+  salesByCategory: SalesCategoryPoint[];
+  topProducts: SalesTopProduct[];
+  trends?: {
+    salesPct?: number;
+    ordersPct?: number;
+    aovPct?: number;
+  };
+  previousPeriod?: {
+    totalSales: number;
+    totalOrders: number;
+    averageOrderValue: number;
+  };
+}
+
+export interface InventoryCategoryPoint {
+  category: string;
+  count: number;
+}
+
+export interface InventoryStockLevel {
+  name: string;
+  stock: number;
+  status: string;
+}
+
+export interface InventoryData {
+  totalProducts: number;
+  lowStockItems: number;
+  outOfStockItems: number;
+  totalValue: number;
+  categoryBreakdown: InventoryCategoryPoint[];
+  stockLevels: InventoryStockLevel[];
+}
+
+export interface CustomerSegmentPoint {
+  segment: string;
+  count: number;
+}
+
+export interface TopCustomer {
+  name: string;
+  totalSpent: number;
+  orders: number;
+}
+
+export interface CustomerData {
+  totalCustomers: number;
+  newCustomers: number;
+  activeCustomers: number;
+  customerLifetimeValue: number;
+  customerSegments: CustomerSegmentPoint[];
+  topCustomers: TopCustomer[];
+  trends?: {
+    newCustomersPct?: number;
+  };
+  previousPeriod?: {
+    newCustomers: number;
+  };
+}
+
+export interface RevenueByMonthPoint {
+  month: string;
+  revenue: number;
+  expenses: number;
+  profit: number;
+}
+
+export interface ExpenseBreakdownPoint {
+  category: string;
+  amount: number;
+}
+
+export interface FinancialData {
+  totalRevenue: number;
+  totalExpenses: number;
+  netProfit: number;
+  profitMargin: number;
+  revenueByMonth: RevenueByMonthPoint[];
+  expenseBreakdown: ExpenseBreakdownPoint[];
+  trends?: {
+    revenuePct?: number;
+    expensesPct?: number;
+    profitPct?: number;
+    marginPct?: number;
+  };
+  previousPeriod?: {
+    totalRevenue: number;
+    totalExpenses: number;
+    netProfit: number;
+    profitMargin: number;
+  };
+}
+
 // Optimized Sales Report Hook
 export function useOptimizedSalesReport(filters: ReportFilters, options: UseReportDataOptions = {}) {
   const { enabled = true, refetchInterval } = options;
+  const organizationId = useCurrentOrganizationId();
 
-  return useQuery({
-    queryKey: ['sales-report', filters],
+  return useQuery<SalesData>({
+    queryKey: ['sales-report', organizationId, filters],
     queryFn: async () => {
-      const params = new URLSearchParams({
+      const params: Record<string, string> = {
         startDate: filters.startDate.toISOString().split('T')[0],
         endDate: filters.endDate.toISOString().split('T')[0],
-      });
+      };
 
-      // Add optional filters
-      if (filters.status) params.append('status', filters.status);
-      if (filters.customerId) params.append('customerId', filters.customerId);
-      if (filters.branchId) params.append('branchId', filters.branchId);
-      if (filters.posId) params.append('posId', filters.posId);
-      if (filters.paymentMethod) params.append('paymentMethod', filters.paymentMethod);
+      if (filters.status) params.status = filters.status;
+      if (filters.customerId) params.customerId = filters.customerId;
+      if (filters.branchId) params.branchId = filters.branchId;
+      if (filters.posId) params.posId = filters.posId;
+      if (filters.paymentMethod) params.paymentMethod = filters.paymentMethod;
 
-      const response = await fetch(`/api/reports/sales?${params.toString()}`, {
-        headers: getHeaders()
-      });
-      if (!response.ok) throw new Error('Failed to fetch sales report');
-      return response.json();
+      const response = await api.get('/reports/sales', { params });
+      return response.data;
     },
-    enabled: enabled && !!getOrganizationId(),
+    enabled: enabled && !!organizationId,
     staleTime: 2 * 60 * 1000, // 2 minutes
     gcTime: 5 * 60 * 1000, // 5 minutes
     refetchInterval: refetchInterval || (enabled ? 10 * 60 * 1000 : undefined), // 10 minutes default
@@ -80,25 +170,23 @@ export function useOptimizedSalesReport(filters: ReportFilters, options: UseRepo
 // Optimized Inventory Report Hook
 export function useOptimizedInventoryReport(filters: ReportFilters, options: UseReportDataOptions = {}) {
   const { enabled = true, refetchInterval } = options;
+  const organizationId = useCurrentOrganizationId();
 
-  return useQuery({
-    queryKey: ['inventory-report', filters],
+  return useQuery<InventoryData>({
+    queryKey: ['inventory-report', organizationId, filters],
     queryFn: async () => {
-      const params = new URLSearchParams();
+      const params: Record<string, string> = {};
 
-      // Add optional filters
-      if (filters.category) params.append('category', filters.category);
-      if (filters.productId) params.append('productId', filters.productId);
-      if (filters.branchId) params.append('branchId', filters.branchId);
+      if (filters.category) params.category = filters.category;
+      if (filters.productId) params.productId = filters.productId;
+      if (filters.inventoryOnlyLowStock) params.onlyLowStock = 'true';
+      if (typeof filters.inventoryStockLimit === 'number') params.stockLimit = String(filters.inventoryStockLimit);
 
-      const response = await fetch(`/api/reports/inventory?${params.toString()}`, {
-        headers: getHeaders()
-      });
-      if (!response.ok) throw new Error('Failed to fetch inventory report');
-      return response.json();
+      const response = await api.get('/reports/inventory', { params });
+      return response.data;
     },
-    enabled: enabled && !!getOrganizationId(),
-    staleTime: 5 * 60 * 1000, // 5 minutes (inventory changes less frequently)
+    enabled: enabled && !!organizationId,
+    staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes
     refetchInterval: refetchInterval || (enabled ? 15 * 60 * 1000 : undefined), // 15 minutes default
     retry: 1,
@@ -108,27 +196,24 @@ export function useOptimizedInventoryReport(filters: ReportFilters, options: Use
 // Optimized Customer Report Hook
 export function useOptimizedCustomerReport(filters: ReportFilters, options: UseReportDataOptions = {}) {
   const { enabled = true, refetchInterval } = options;
+  const organizationId = useCurrentOrganizationId();
 
-  return useQuery({
-    queryKey: ['customer-report', filters],
+  return useQuery<CustomerData>({
+    queryKey: ['customer-report', organizationId, filters],
     queryFn: async () => {
-      const params = new URLSearchParams({
+      const params: Record<string, string> = {
         startDate: filters.startDate.toISOString().split('T')[0],
         endDate: filters.endDate.toISOString().split('T')[0],
-      });
+      };
 
-      // Add optional filters
-      if (filters.customerId) params.append('customerId', filters.customerId);
-      if (filters.branchId) params.append('branchId', filters.branchId);
-      if (filters.posId) params.append('posId', filters.posId);
+      if (filters.customerId) params.customerId = filters.customerId;
+      if (filters.branchId) params.branchId = filters.branchId;
+      if (filters.posId) params.posId = filters.posId;
 
-      const response = await fetch(`/api/reports/customers?${params.toString()}`, {
-        headers: getHeaders()
-      });
-      if (!response.ok) throw new Error('Failed to fetch customer report');
-      return response.json();
+      const response = await api.get('/reports/customers', { params });
+      return response.data;
     },
-    enabled: enabled && !!getOrganizationId(),
+    enabled: enabled && !!organizationId,
     staleTime: 3 * 60 * 1000, // 3 minutes
     gcTime: 8 * 60 * 1000, // 8 minutes
     refetchInterval: refetchInterval || (enabled ? 12 * 60 * 1000 : undefined), // 12 minutes default
@@ -139,26 +224,23 @@ export function useOptimizedCustomerReport(filters: ReportFilters, options: UseR
 // Optimized Financial Report Hook
 export function useOptimizedFinancialReport(filters: ReportFilters, options: UseReportDataOptions = {}) {
   const { enabled = true, refetchInterval } = options;
+  const organizationId = useCurrentOrganizationId();
 
-  return useQuery({
-    queryKey: ['financial-report', filters],
+  return useQuery<FinancialData>({
+    queryKey: ['financial-report', organizationId, filters],
     queryFn: async () => {
-      const params = new URLSearchParams({
+      const params: Record<string, string> = {
         startDate: filters.startDate.toISOString().split('T')[0],
         endDate: filters.endDate.toISOString().split('T')[0],
-      });
+      };
 
-      // Add optional filters
-      if (filters.branchId) params.append('branchId', filters.branchId);
-      if (filters.posId) params.append('posId', filters.posId);
+      if (filters.branchId) params.branchId = filters.branchId;
+      if (filters.posId) params.posId = filters.posId;
 
-      const response = await fetch(`/api/reports/financial?${params.toString()}`, {
-        headers: getHeaders()
-      });
-      if (!response.ok) throw new Error('Failed to fetch financial report');
-      return response.json();
+      const response = await api.get('/reports/financial', { params });
+      return response.data;
     },
-    enabled: enabled && !!getOrganizationId(),
+    enabled: enabled && !!organizationId,
     staleTime: 3 * 60 * 1000, // 3 minutes
     gcTime: 8 * 60 * 1000, // 8 minutes
     refetchInterval: refetchInterval || (enabled ? 12 * 60 * 1000 : undefined), // 12 minutes default

@@ -3,19 +3,29 @@ import type { Request } from 'express';
 
 let cachedClient: SupabaseClient | null = null;
 
+function readEnvValue(...keys: string[]): string | null {
+  for (const key of keys) {
+    const raw = process.env[key];
+    if (typeof raw !== 'string') continue;
+    const value = raw.trim().replace(/^['"]|['"]$/g, '');
+    if (value) return value;
+  }
+  return null;
+}
+
 export function isSupabaseConfigured(): boolean {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseUrl = readEnvValue('NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_URL');
+  const serviceKey = readEnvValue('SUPABASE_SERVICE_ROLE_KEY');
+  const anonKey = readEnvValue('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_ANON_KEY');
   return Boolean(supabaseUrl && (serviceKey || anonKey));
 }
 
 export function getSupabaseClient(): SupabaseClient | null {
   if (cachedClient) return cachedClient;
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseUrl = readEnvValue('NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_URL');
+  const serviceKey = readEnvValue('SUPABASE_SERVICE_ROLE_KEY');
+  const anonKey = readEnvValue('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'SUPABASE_ANON_KEY');
 
   if (!supabaseUrl || (!serviceKey && !anonKey)) {
     return null;

@@ -44,3 +44,5 @@ export {
   MovementType,
   ReferenceType
 } from './supabase';
+
+export * from './promotions';

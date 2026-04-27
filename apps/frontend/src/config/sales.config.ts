@@ -7,7 +7,7 @@ export const SALES_CONFIG = {
     /**
      * Límites de paginación
      */
-    DEFAULT_LIMIT: 5,
+    DEFAULT_LIMIT: 20,
     MAX_LIMIT: 100,
 
     /**

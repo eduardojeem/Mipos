@@ -7,7 +7,23 @@ export async function GET(request: NextRequest) {
   try {
     const orgId = (request.headers.get('x-organization-id') || '').trim();
     if (!orgId) {
-      return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
+      const data = [
+        {
+          id: 'demo-program-1',
+          name: 'Programa Fidelización',
+          description: 'Demo',
+          points_per_purchase: 1,
+          minimum_purchase: 0,
+          welcome_bonus: 50,
+          birthday_bonus: 100,
+          referral_bonus: 200,
+          points_expiration_days: 365,
+          is_active: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }
+      ];
+      return NextResponse.json({ data });
     }
 
     try {

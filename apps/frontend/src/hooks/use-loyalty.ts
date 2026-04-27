@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { api as axiosApi } from '@/lib/api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/lib/toast';
 
@@ -121,10 +122,10 @@ export interface LoyaltyAnalytics {
 const api = {
   // Programs
   getPrograms: async (): Promise<LoyaltyProgram[]> => {
-    const response = await fetch('/api/loyalty/programs');
-    if (!response.ok) throw new Error('Failed to fetch loyalty programs');
-    const data = await response.json();
-    return data.data;
+    const response = await axiosApi.get('/loyalty/programs');
+    const raw: any = response.data || {};
+    const programs = Array.isArray(raw?.data) ? raw.data : Array.isArray(raw) ? raw : [];
+    return programs;
   },
 
   createProgram: async (program: Omit<LoyaltyProgram, 'id' | 'createdAt' | 'updatedAt'>): Promise<LoyaltyProgram> => {

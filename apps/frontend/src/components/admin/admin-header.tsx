@@ -1,19 +1,18 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+  ArrowLeft,
+  ChevronRight,
+  Command,
+  LogOut,
+  Search,
+  Settings,
+  Shield,
+  User,
+} from 'lucide-react'
 import {
   CommandDialog,
   CommandEmpty,
@@ -23,602 +22,253 @@ import {
   CommandList,
   CommandSeparator,
 } from '@/components/ui/command'
-import { useAuth } from '@/hooks/use-auth'
-import { AdminMobileSidebar } from './admin-mobile-sidebar'
-import { adminNavItems } from './admin-sidebar'
-import { cn } from '@/lib/utils'
 import {
-  Search,
-  Bell,
-  Settings,
-  User,
-  LogOut,
-  Shield,
-  AlertTriangle,
-  CheckCircle,
-  LayoutDashboard,
-  ChevronRight,
-  Command,
-  Sparkles,
-  Clock,
-  Moon,
-  Sun,
-  Zap,
-  ShoppingCart,
-  Package,
-  Users,
-  FileText,
-  HelpCircle,
-  ExternalLink,
-  Keyboard,
-  TrendingUp,
-  Calendar,
-  RefreshCw
-} from 'lucide-react'
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { useAuth } from '@/hooks/use-auth'
+import { useAdminNavigation } from '@/hooks/use-admin-navigation'
+import { AdminMobileSidebar } from './admin-mobile-sidebar'
+import { cn } from '@/lib/utils'
 
 const breadcrumbLabels: Record<string, string> = {
-  'admin': 'Admin',
-  'users': 'Usuarios',
-  'roles': 'Roles y Permisos',
-  'audit': 'Auditoría',
-  'sessions': 'Sesiones',
-  'conflicts': 'Conflictos',
-  'reports': 'Reportes',
-  'settings': 'Configuración',
-  'business-config': 'Config. Negocio',
-
-  'backup': 'Respaldos',
-  'maintenance': 'Mantenimiento',
-  'security': 'Seguridad',
-
+  admin: 'Admin',
+  users: 'Usuarios',
+  roles: 'Roles',
+  audit: 'Auditoria',
+  sessions: 'Sesiones',
+  reports: 'Reportes',
+  security: 'Seguridad',
+  profile: 'Perfil',
+  'business-config': 'Empresa',
+  subscriptions: 'Plan y Suscripcion',
+  plans: 'Planes SaaS',
+  maintenance: 'Mantenimiento',
 }
-
-const quickActions = [
-  { label: 'Nueva Venta', href: '/dashboard/pos', icon: ShoppingCart, color: 'text-emerald-500' },
-  { label: 'Agregar Producto', href: '/dashboard/products/create', icon: Package, color: 'text-blue-500' },
-  { label: 'Ver Usuarios', href: '/admin/users', icon: Users, color: 'text-violet-500' },
-  { label: 'Reportes', href: '/admin/reports', icon: FileText, color: 'text-amber-500' },
-]
 
 export function AdminHeader({ compact = false }: { compact?: boolean }) {
   const [searchOpen, setSearchOpen] = useState(false)
-  const [currentTime, setCurrentTime] = useState<string>('')
-  const [isDark, setIsDark] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
   const { user, signOut } = useAuth()
+  const { role, currentItem, items, canAccessAdminPanel, canAccessReports } = useAdminNavigation()
 
-  // Update time every minute
   useEffect(() => {
-    const updateTime = () => {
-      const now = new Date()
-      setCurrentTime(now.toLocaleTimeString('es-ES', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false
-      }))
-    }
-    updateTime()
-    const interval = setInterval(updateTime, 60000)
-    return () => clearInterval(interval)
-  }, [])
-
-  // Check dark mode
-  useEffect(() => {
-    setIsDark(document.documentElement.classList.contains('dark'))
-  }, [])
-
-  // Toggle dark mode
-  const toggleDarkMode = () => {
-    document.documentElement.classList.toggle('dark')
-    setIsDark(!isDark)
-  }
-
-  // Keyboard shortcut for search
-  useEffect(() => {
-    const down = (e: KeyboardEvent) => {
-      if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault()
+    const down = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() === 'k' && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault()
         setSearchOpen((open) => !open)
       }
     }
+
     document.addEventListener('keydown', down)
     return () => document.removeEventListener('keydown', down)
   }, [])
 
   const breadcrumbs = useMemo(() => {
     const segments = pathname?.split('/').filter(Boolean) || []
+
     return segments.map((segment, index) => ({
       label: breadcrumbLabels[segment] || segment.charAt(0).toUpperCase() + segment.slice(1),
       href: '/' + segments.slice(0, index + 1).join('/'),
-      isLast: index === segments.length - 1
+      isLast: index === segments.length - 1,
     }))
   }, [pathname])
 
-  const notifications = [
-    {
-      id: 1,
-      type: 'warning',
-      title: 'Stock Bajo',
-      message: '8 productos requieren reabastecimiento',
-      time: '5 min',
-      unread: true,
-      action: '/dashboard/products?filter=low_stock'
-    },
-    {
-      id: 2,
-      type: 'info',
-      title: 'Actualización Disponible',
-      message: 'Nueva versión del sistema disponible',
-      time: '1 hora',
-      unread: true,
-      action: '/admin/system'
-    },
-
-  ]
-
-  const unreadCount = notifications.filter(n => n.unread).length
+  const quickLinks = useMemo(() => {
+    return items
+      .filter((item) => item.href !== pathname)
+      .slice(0, 4)
+  }, [items, pathname])
 
   return (
-    <TooltipProvider delayDuration={0}>
-      <header className={cn(
-        'sticky top-0 z-40 bg-background/80 backdrop-blur-2xl border-b border-border shadow-sm',
-        compact ? 'px-4 py-2' : 'px-6 py-3'
-      )}>
+    <>
+      <header
+        className={cn(
+          'border-b border-border bg-background/80 backdrop-blur-xl',
+          compact ? 'px-4 py-3 lg:px-6' : 'px-6 py-4'
+        )}
+      >
         <div className="flex items-center justify-between gap-4">
-          {/* Left Section */}
-          <div className="flex items-center gap-4 flex-1 min-w-0">
-            {/* Mobile Menu Button */}
+          <div className="flex min-w-0 flex-1 items-center gap-3">
             <AdminMobileSidebar />
 
-            {/* Breadcrumbs */}
-            <nav className="hidden sm:flex items-center gap-1 text-sm min-w-0">
-              <Link
-                href="/admin"
-                className="flex items-center gap-1.5 text-muted-foreground hover:text-primary transition-colors"
-              >
-                <div className="w-6 h-6 rounded-lg bg-primary flex items-center justify-center">
-                  <Zap className="h-3.5 w-3.5 text-primary-foreground" />
+            <div className="hidden min-w-0 sm:block">
+              <nav className="flex items-center gap-1 text-sm">
+                <Link href="/admin" className="font-medium text-muted-foreground transition-colors hover:text-foreground">
+                  Admin
+                </Link>
+                {breadcrumbs.slice(1).map((crumb) => (
+                  <div key={crumb.href} className="flex min-w-0 items-center gap-1">
+                    <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                    {crumb.isLast ? (
+                      <span className="truncate font-semibold text-foreground">{crumb.label}</span>
+                    ) : (
+                      <Link href={crumb.href} className="truncate text-muted-foreground transition-colors hover:text-foreground">
+                        {crumb.label}
+                      </Link>
+                    )}
+                  </div>
+                ))}
+              </nav>
+
+              {currentItem && (
+                <div className="mt-1">
+                  <h1 className="truncate text-lg font-semibold text-foreground">{currentItem.title}</h1>
+                  <p className="truncate text-sm text-muted-foreground">{currentItem.description}</p>
                 </div>
-              </Link>
-              {breadcrumbs.map((crumb, index) => (
-                <div key={crumb.href} className="flex items-center gap-1">
-                  <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                  {crumb.isLast ? (
-                    <span className="font-semibold text-foreground truncate max-w-[200px]">
-                      {crumb.label}
-                    </span>
-                  ) : (
-                    <Link
-                      href={crumb.href}
-                      className="text-muted-foreground hover:text-foreground transition-colors truncate"
-                    >
-                      {crumb.label}
-                    </Link>
-                  )}
-                </div>
-              ))}
-            </nav>
+              )}
+            </div>
           </div>
 
-          {/* Center Section - Search */}
-          <div className="hidden md:flex flex-1 max-w-md">
+          <div className="hidden max-w-md flex-1 md:flex">
             <Button
               variant="outline"
-              className="w-full justify-start gap-3 text-muted-foreground bg-muted/50 border-border hover:bg-background hover:border-muted-foreground/20 transition-all group"
+              className="w-full justify-start gap-3 bg-muted/40 text-muted-foreground"
               onClick={() => setSearchOpen(true)}
             >
-              <Search className="h-4 w-4 group-hover:text-primary transition-colors" />
-              <span className="flex-1 text-left text-sm">Buscar en el panel...</span>
-              <kbd className="hidden lg:inline-flex h-5 select-none items-center gap-1 rounded-md border border-border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground shadow-sm">
-                <Command className="h-3 w-3" />K
+              <Search className="h-4 w-4" />
+              <span className="flex-1 text-left text-sm">Buscar en administracion</span>
+              <kbd className="inline-flex h-5 items-center gap-1 rounded border border-border bg-background px-1.5 text-[10px] font-medium">
+                <Command className="h-3 w-3" />
+                K
               </kbd>
             </Button>
           </div>
 
-          {/* Right Section */}
-          <div className="flex items-center gap-1.5">
-            {/* Current Time */}
-            <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted text-muted-foreground">
-              <Clock className="h-3.5 w-3.5" />
-              <span className="text-xs font-medium tabular-nums">{currentTime}</span>
-            </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="hidden gap-1 lg:inline-flex">
+              <Shield className="h-3 w-3" />
+              {role}
+            </Badge>
 
-            {/* System Status */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20 cursor-default">
-                  <div className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                  </div>
-                  <span className="text-xs font-medium text-green-600 dark:text-green-400">Online</span>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p className="font-medium">Sistema Operativo</p>
-                <p className="text-xs text-muted-foreground">Base de datos conectada</p>
-              </TooltipContent>
-            </Tooltip>
+            <Badge variant={canAccessAdminPanel ? 'default' : 'secondary'} className="hidden lg:inline-flex">
+              {canAccessAdminPanel ? 'Admin habilitado' : 'Admin restringido'}
+            </Badge>
 
-            <Separator orientation="vertical" className="h-6 mx-1 hidden lg:block" />
+            <Badge variant={canAccessReports ? 'outline' : 'secondary'} className="hidden xl:inline-flex">
+              {canAccessReports ? 'Reportes activos' : 'Sin reportes'}
+            </Badge>
 
-            {/* Quick Actions Dropdown */}
+            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl" asChild>
+              <Link href="/dashboard">
+                <ArrowLeft className="h-4 w-4" />
+              </Link>
+            </Button>
+
+            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl" asChild>
+              <Link href="/dashboard/settings">
+                <Settings className="h-4 w-4" />
+              </Link>
+            </Button>
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9 rounded-lg hover:bg-violet-50 dark:hover:bg-violet-950/30"
-                >
-                  <Zap className="h-4 w-4 text-violet-500" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <div className="px-2 py-1.5">
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Acciones Rápidas</p>
-                </div>
-                {quickActions.map((action) => (
-                  <DropdownMenuItem key={action.href} asChild className="gap-3 cursor-pointer">
-                    <Link href={action.href}>
-                      <action.icon className={cn('h-4 w-4', action.color)} />
-                      <span>{action.label}</span>
-                    </Link>
-                  </DropdownMenuItem>
-                ))}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild className="gap-3 cursor-pointer">
-                  <Link href="/admin">
-                    <TrendingUp className="h-4 w-4 text-slate-500" />
-                    <span>Ver Dashboard Admin</span>
-                  </Link>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* Go to POS */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
-                  asChild
-                >
-                  <Link href="/dashboard/pos">
-                    <ShoppingCart className="h-4 w-4 text-emerald-600" />
-                  </Link>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Ir al POS</TooltipContent>
-            </Tooltip>
-
-            {/* Dashboard */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950/30"
-                  asChild
-                >
-                  <Link href="/dashboard">
-                    <LayoutDashboard className="h-4 w-4 text-blue-600" />
-                  </Link>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Dashboard Principal</TooltipContent>
-            </Tooltip>
-
-            <Separator orientation="vertical" className="h-6 mx-1" />
-
-            {/* Dark Mode Toggle */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9 rounded-lg"
-                  onClick={toggleDarkMode}
-                >
-                  {isDark ? (
-                    <Sun className="h-4 w-4 text-amber-500" />
-                  ) : (
-                    <Moon className="h-4 w-4 text-slate-500" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{isDark ? 'Modo Claro' : 'Modo Oscuro'}</TooltipContent>
-            </Tooltip>
-
-            {/* Notifications */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-lg">
-                  <Bell className="h-4 w-4 text-muted-foreground" />
-                  {unreadCount > 0 && (
-                    <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-destructive flex items-center justify-center animate-pulse">
-                      <span className="text-[10px] font-bold text-white">{unreadCount}</span>
-                    </span>
-                  )}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-96 p-0">
-                <div className="flex items-center justify-between p-4 bg-muted/30 border-b border-border">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                      <Bell className="h-4 w-4 text-primary-foreground" />
-                    </div>
-                    <div>
-                      <p className="font-semibold text-sm">Notificaciones</p>
-                      <p className="text-xs text-muted-foreground">{unreadCount} sin leer</p>
-                    </div>
+                <Button variant="ghost" className="h-10 rounded-xl px-2">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+                    <User className="h-4 w-4" />
                   </div>
-                  <Button variant="ghost" size="sm" className="text-xs text-primary hover:text-primary/80">
-                    Marcar todo leído
-                  </Button>
-                </div>
-
-                <div className="max-h-80 overflow-y-auto">
-                  {notifications.map((notification, index) => (
-                    <Link
-                      key={notification.id}
-                      href={notification.action}
-                      className={cn(
-                        'flex items-start gap-3 p-4 hover:bg-muted/50 transition-all cursor-pointer group',
-                        notification.unread && 'bg-primary/5',
-                        index !== notifications.length - 1 && 'border-b border-border'
-                      )}
-                    >
-                      <div className={cn(
-                        'flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-transform group-hover:scale-105',
-                        notification.type === 'warning' && 'bg-orange-500/10',
-                        notification.type === 'info' && 'bg-blue-500/10',
-                        notification.type === 'success' && 'bg-green-500/10'
-                      )}>
-                        {notification.type === 'warning' && <AlertTriangle className="h-5 w-5 text-orange-500" />}
-                        {notification.type === 'info' && <Sparkles className="h-5 w-5 text-blue-500" />}
-                        {notification.type === 'success' && <CheckCircle className="h-5 w-5 text-green-500" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="font-semibold text-sm text-foreground">{notification.title}</p>
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
-                            <Clock className="h-3 w-3" />
-                            {notification.time}
-                          </div>
-                        </div>
-                        <p className="text-sm text-muted-foreground mt-0.5 line-clamp-2">
-                          {notification.message}
-                        </p>
-                        <div className="flex items-center gap-2 mt-2">
-                          <span className="text-xs text-primary group-hover:underline">
-                            Ver detalles →
-                          </span>
-                        </div>
-                      </div>
-                      {notification.unread && (
-                        <div className="w-2.5 h-2.5 bg-primary rounded-full flex-shrink-0 mt-1 shadow-sm" />
-                      )}
-                    </Link>
-                  ))}
-                </div>
-
-                <div className="p-3 bg-muted/30 border-t border-border">
-                  <Button
-                    variant="outline"
-                    className="w-full text-sm gap-2 hover:bg-background border-border"
-                    asChild
-                  >
-                    <Link href="/admin/notifications">
-                      <Bell className="h-4 w-4" />
-                      Ver todas las notificaciones
-                      <ExternalLink className="h-3 w-3 ml-auto" />
-                    </Link>
-                  </Button>
-                </div>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* Settings */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg" asChild>
-                  <Link href="/dashboard/settings">
-                    <Settings className="h-4 w-4 text-muted-foreground hover:rotate-90 transition-transform duration-300" />
-                  </Link>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Configuración</TooltipContent>
-            </Tooltip>
-
-            <Separator orientation="vertical" className="h-6 mx-1" />
-
-            {/* User Menu */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="flex items-center gap-3 px-2 h-10 rounded-xl hover:bg-muted transition-colors">
-                  <div className="relative">
-                    <div className="w-9 h-9 bg-primary rounded-xl flex items-center justify-center shadow-md ring-2 ring-background">
-                      <User className="w-4 h-4 text-primary-foreground" />
-                    </div>
-                    <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-background shadow-sm" />
-                  </div>
-                  <div className="hidden lg:block text-left">
-                    <p className="text-sm font-semibold text-foreground">
-                      {user?.email?.split('@')[0] || 'Admin'}
+                  <div className="hidden text-left lg:block">
+                    <p className="max-w-[180px] truncate text-sm font-medium text-foreground">
+                      {user?.email || 'Administrador'}
                     </p>
-                    <div className="flex items-center gap-1">
-                      <Shield className="w-3 h-3 text-destructive" />
-                      <span className="text-[10px] font-medium text-destructive uppercase tracking-wide">Admin</span>
-                    </div>
+                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{role}</p>
                   </div>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64 p-2">
-                {/* User Card */}
-                <div className="p-3 mb-2 rounded-xl bg-primary/5 border border-primary/10">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center shadow-md">
-                      <User className="w-6 h-6 text-primary-foreground" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm truncate">{user?.email}</p>
-                      <Badge className="text-[10px] bg-destructive text-destructive-foreground border-0 mt-1 shadow-sm">
-                        <Shield className="w-2.5 h-2.5 mr-1" />
-                        ADMIN
-                      </Badge>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4 mt-3 pt-3 border-t border-border">
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Calendar className="w-3 h-3" />
-                      <span>Desde 2024</span>
-                    </div>
-                    <div className="flex items-center gap-1 text-xs text-green-600">
-                      <RefreshCw className="w-3 h-3" />
-                      <span>Activo</span>
-                    </div>
-                  </div>
+              <DropdownMenuContent align="end" className="w-64">
+                <div className="px-2 py-2">
+                  <p className="truncate text-sm font-medium text-foreground">{user?.email || 'Administrador'}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Acceso definido por rol y por plan de la empresa.
+                  </p>
                 </div>
-
-                <DropdownMenuItem asChild className="rounded-lg gap-3 py-2.5">
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
                   <Link href="/admin/profile">
-                    <User className="h-4 w-4 text-muted-foreground" />
-                    <span>Mi Perfil</span>
+                    <User className="mr-2 h-4 w-4" />
+                    Mi perfil
                   </Link>
                 </DropdownMenuItem>
-
-                <DropdownMenuItem asChild className="rounded-lg gap-3 py-2.5">
+                <DropdownMenuItem asChild>
                   <Link href="/dashboard/settings">
-                    <Settings className="h-4 w-4 text-muted-foreground" />
-                    <span>Configuración</span>
+                    <Settings className="mr-2 h-4 w-4" />
+                    Configuracion
                   </Link>
                 </DropdownMenuItem>
-
-                <DropdownMenuItem asChild className="rounded-lg gap-3 py-2.5">
-                  <Link href="/admin/security">
-                    <Shield className="h-4 w-4 text-muted-foreground" />
-                    <span>Seguridad</span>
-                  </Link>
-                </DropdownMenuItem>
-
-                <DropdownMenuItem className="rounded-lg gap-3 py-2.5" onClick={() => setSearchOpen(true)}>
-                  <Keyboard className="h-4 w-4 text-muted-foreground" />
-                  <span>Atajos de Teclado</span>
-                  <kbd className="ml-auto text-[10px] bg-muted px-1.5 py-0.5 rounded">⌘K</kbd>
-                </DropdownMenuItem>
-
-                <DropdownMenuSeparator className="my-2" />
-
-                <DropdownMenuItem asChild className="rounded-lg gap-3 py-2.5">
-                  <Link href="/dashboard">
-                    <LayoutDashboard className="h-4 w-4 text-blue-500" />
-                    <span>Dashboard Principal</span>
-                    <ExternalLink className="h-3 w-3 ml-auto text-muted-foreground" />
-                  </Link>
-                </DropdownMenuItem>
-
-                <DropdownMenuItem asChild className="rounded-lg gap-3 py-2.5">
-                  <Link href="/dashboard/pos">
-                    <ShoppingCart className="h-4 w-4 text-green-500" />
-                    <span>Punto de Venta</span>
-                    <ExternalLink className="h-3 w-3 ml-auto text-muted-foreground" />
-                  </Link>
-                </DropdownMenuItem>
-
-                <DropdownMenuSeparator className="my-2" />
-
-                <DropdownMenuItem asChild className="rounded-lg gap-3 py-2.5">
-                  <a href="https://docs.beautypos.com" target="_blank" rel="noopener noreferrer">
-                    <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                    <span>Centro de Ayuda</span>
-                    <ExternalLink className="h-3 w-3 ml-auto text-muted-foreground" />
-                  </a>
-                </DropdownMenuItem>
-
-                <DropdownMenuSeparator className="my-2" />
-
+                <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() => signOut()}
-                  className="rounded-lg gap-3 py-2.5 text-destructive focus:text-destructive focus:bg-destructive/10"
+                  className="text-destructive focus:bg-destructive/10 focus:text-destructive"
                 >
-                  <LogOut className="h-4 w-4" />
-                  <span>Cerrar Sesión</span>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Cerrar sesion
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
         </div>
 
-        {/* Mobile Search */}
         <div className={cn('mt-3 md:hidden', compact && 'mt-2')}>
-          <Button
-            variant="outline"
-            className="w-full justify-start gap-2 text-slate-400 bg-slate-50/80 dark:bg-slate-800/50"
-            onClick={() => setSearchOpen(true)}
-          >
+          <Button variant="outline" className="w-full justify-start gap-2 text-muted-foreground" onClick={() => setSearchOpen(true)}>
             <Search className="h-4 w-4" />
-            <span>Buscar en admin panel...</span>
+            <span>Buscar en administracion</span>
           </Button>
         </div>
       </header>
 
-      {/* Command Dialog for Search */}
       <CommandDialog open={searchOpen} onOpenChange={setSearchOpen}>
-        <CommandInput placeholder="Buscar páginas, acciones, configuraciones..." />
+        <CommandInput placeholder="Buscar modulos, rutas o configuraciones..." />
         <CommandList>
-          <CommandEmpty>
-            <div className="py-6 text-center">
-              <Search className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-600 mb-3" />
-              <p className="text-sm text-slate-500">No se encontraron resultados</p>
-              <p className="text-xs text-slate-400 mt-1">Intenta con otros términos de búsqueda</p>
-            </div>
-          </CommandEmpty>
+          <CommandEmpty>No se encontraron resultados.</CommandEmpty>
 
-          <CommandGroup heading="Acciones Rápidas">
-            {quickActions.map((action) => (
-              <CommandItem
-                key={action.href}
-                onSelect={() => {
-                  setSearchOpen(false)
-                  router.push(action.href)
-                }}
-                className="flex items-center gap-3 py-3"
-              >
-                <div className={cn('w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center', action.color)}>
-                  <action.icon className="h-4 w-4" />
-                </div>
-                <span className="font-medium">{action.label}</span>
-              </CommandItem>
-            ))}
-          </CommandGroup>
+          {quickLinks.length > 0 && (
+            <>
+              <CommandGroup heading="Siguiente paso">
+                {quickLinks.map((item) => (
+                  <CommandItem
+                    key={item.href}
+                    onSelect={() => {
+                      setSearchOpen(false)
+                      router.push(item.href)
+                    }}
+                  >
+                    <item.icon className="mr-2 h-4 w-4" />
+                    <span>{item.title}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+              <CommandSeparator />
+            </>
+          )}
 
-          <CommandSeparator />
-
-          <CommandGroup heading="Páginas del Admin">
-            {adminNavItems.map((item) => (
+          <CommandGroup heading="Secciones administrativas">
+            {items.map((item) => (
               <CommandItem
                 key={item.href}
                 onSelect={() => {
                   setSearchOpen(false)
                   router.push(item.href)
                 }}
-                className="flex items-center gap-3 py-3"
               >
-                <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-                  <item.icon className="h-4 w-4 text-slate-500" />
+                <item.icon className="mr-2 h-4 w-4" />
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate">{item.title}</p>
+                    <p className="truncate text-xs text-muted-foreground">{item.description}</p>
+                  </div>
+                  {item.superAdminOnly && <Badge variant="outline">SaaS</Badge>}
                 </div>
-                <div>
-                  <p className="font-medium">{item.title}</p>
-                  <p className="text-xs text-slate-500">{item.description}</p>
-                </div>
-                <Badge variant="outline" className="ml-auto text-[10px]">{item.category}</Badge>
               </CommandItem>
             ))}
           </CommandGroup>
         </CommandList>
       </CommandDialog>
-    </TooltipProvider>
+    </>
   )
 }

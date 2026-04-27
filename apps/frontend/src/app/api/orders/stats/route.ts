@@ -1,127 +1,123 @@
-import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { createAdminClient, createClient } from '@/lib/supabase/server';
+import { getValidatedOrganizationId } from '@/lib/organization';
 
-export async function GET() {
+function startOfTodayIso(): string {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  return now.toISOString();
+}
+
+export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient();
+    const authClient = await createClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await authClient.auth.getUser();
 
-    // Verificar si las tablas existen
-    const { data: tableCheck } = await supabase
-      .from('orders')
-      .select('id')
-      .limit(1)
-      .maybeSingle();
-
-    // Si no existen las tablas, devolver estadísticas vacías
-    if (tableCheck === null) {
-      return NextResponse.json({
-        success: true,
-        data: {
-          total: 0,
-          pending: 0,
-          confirmed: 0,
-          preparing: 0,
-          shipped: 0,
-          delivered: 0,
-          cancelled: 0,
-          todayRevenue: 0,
-          avgOrderValue: 0
-        }
-      });
+    if (authError || !user) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
-    // Obtener estadísticas en paralelo
-    const [
-      totalOrders,
-      statusCounts,
-      todayRevenue,
-      avgOrderValue
-    ] = await Promise.all([
-      // Total de pedidos
-      supabase
-        .from('orders')
-        .select('*', { count: 'exact', head: true }),
+    const organizationId = await getValidatedOrganizationId(request);
+    if (!organizationId) {
+      return NextResponse.json({ error: 'No se encontro una organizacion valida' }, { status: 400 });
+    }
 
-      // Conteo por estado
-      supabase
-        .from('orders')
-        .select('status')
-        .then(({ data }: { data: any[] | null }) => {
-          const counts = {
-            pending: 0,
-            confirmed: 0,
-            preparing: 0,
-            shipped: 0,
-            delivered: 0,
-            cancelled: 0
-          };
-          
-          data?.forEach((order: any) => {
-            const status = order.status.toLowerCase();
-            if (status in counts) {
-              counts[status as keyof typeof counts]++;
-            }
-          });
-          
-          return counts;
-        }),
+    const supabase = await createAdminClient();
+    const todayStart = startOfTodayIso();
 
-      // Ingresos de hoy
+    // Usamos una única RPC para contar por estado (GROUP BY en Postgres)
+    // evitando descargar todas las filas al servidor de Next.js.
+    const [totalOrders, statusCountsResult, todayRevenueRows, averageRows] = await Promise.all([
       supabase
-        .from('orders')
+        .from('sales')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', organizationId)
+        .is('deleted_at', null),
+      supabase.rpc('get_order_status_counts', { org_id: organizationId }),
+      supabase
+        .from('sales')
+        .select('id,total')
+        .eq('organization_id', organizationId)
+        .is('deleted_at', null)
+        .gte('created_at', todayStart)
+        .neq('status', 'CANCELLED'),
+      supabase
+        .from('sales')
         .select('total')
-        .gte('created_at', new Date().toISOString().split('T')[0])
-        .neq('status', 'CANCELLED')
-        .then(({ data }: { data: any[] | null }) => {
-          return data?.reduce((sum: number, order: any) => sum + (order.total || 0), 0) || 0;
-        }),
-
-      // Valor promedio de pedido
-      supabase
-        .from('orders')
-        .select('total')
-        .neq('status', 'CANCELLED')
-        .then(({ data }: { data: any[] | null }) => {
-          if (!data || data.length === 0) return 0;
-          const total = data.reduce((sum: number, order: any) => sum + (order.total || 0), 0);
-          return total / data.length;
-        })
+        .eq('organization_id', organizationId)
+        .is('deleted_at', null)
+        .neq('status', 'CANCELLED'),
     ]);
 
-    const stats = {
-      total: totalOrders.count || 0,
-      pending: statusCounts.pending,
-      confirmed: statusCounts.confirmed,
-      preparing: statusCounts.preparing,
-      shipped: statusCounts.shipped,
-      delivered: statusCounts.delivered,
-      cancelled: statusCounts.cancelled,
-      todayRevenue: todayRevenue,
-      avgOrderValue: avgOrderValue
+    if (todayRevenueRows.error || averageRows.error) {
+      console.error('Error fetching order stats:', todayRevenueRows.error || averageRows.error);
+      return NextResponse.json({ error: 'Error al obtener estadisticas' }, { status: 500 });
+    }
+
+    // Si la RPC aún no existe, fallback a descarga completa (degradación grácil)
+    const counts = {
+      pending: 0,
+      confirmed: 0,
+      preparing: 0,
+      shipped: 0,
+      delivered: 0,
+      cancelled: 0,
     };
 
-    return NextResponse.json({
-      success: true,
-      data: stats
-    });
+    if (statusCountsResult.error || !statusCountsResult.data) {
+      // Fallback: descargar y contar en memoria
+      const { data: allStatuses } = await supabase
+        .from('sales')
+        .select('status')
+        .eq('organization_id', organizationId)
+        .is('deleted_at', null);
+      for (const row of allStatuses || []) {
+        const s = String(row.status || '').toLowerCase();
+        if (s in counts) counts[s as keyof typeof counts] += 1;
+      }
+    } else {
+      for (const row of statusCountsResult.data as Array<{ status: string; count: number }>) {
+        const s = String(row.status || '').toLowerCase();
+        if (s in counts) counts[s as keyof typeof counts] = Number(row.count || 0);
+      }
+    }
 
-  } catch (error) {
-    console.error('Error fetching order stats:', error);
-    
-    // Fallback con estadísticas vacías
+    const todayOrders = (todayRevenueRows.data || []).length;
+    const todayRevenue = (todayRevenueRows.data || []).reduce(
+      (sum: number, order: { total: number | null }) => sum + Number(order.total || 0),
+      0
+    );
+    const allOrderTotals = averageRows.data || [];
+    const avgOrderValue = allOrderTotals.length
+      ? allOrderTotals.reduce(
+          (sum: number, order: { total: number | null }) => sum + Number(order.total || 0),
+          0
+        ) / allOrderTotals.length
+      : 0;
+
     return NextResponse.json({
       success: true,
       data: {
-        total: 0,
-        pending: 0,
-        confirmed: 0,
-        preparing: 0,
-        shipped: 0,
-        delivered: 0,
-        cancelled: 0,
-        todayRevenue: 0,
-        avgOrderValue: 0
-      }
+        total: totalOrders.count || 0,
+        pending: counts.pending,
+        confirmed: counts.confirmed,
+        preparing: counts.preparing,
+        shipped: counts.shipped,
+        delivered: counts.delivered,
+        cancelled: counts.cancelled,
+        todayRevenue,
+        todayOrders,
+        avgOrderValue,
+      },
     });
+  } catch (error) {
+    console.error('Error fetching order stats:', error);
+    return NextResponse.json(
+      { success: false, error: 'Error interno del servidor al obtener estadisticas' },
+      { status: 500 }
+    );
   }
 }

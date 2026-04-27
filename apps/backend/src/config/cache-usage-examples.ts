@@ -138,8 +138,9 @@ export async function createSaleHandler(req: any, res: any) {
     const sale = await prisma.$transaction(async (tx) => {
       const newSale = await tx.sale.create({
         data: {
-          userId,
-          customerId,
+          userId: String(userId),
+          customerId: String(customerId),
+          organizationId: 'default-org',
           subtotal,
           discount,
           tax,

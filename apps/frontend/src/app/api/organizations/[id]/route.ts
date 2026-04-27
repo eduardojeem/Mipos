@@ -22,13 +22,7 @@ export async function GET(
         id,
         name,
         slug,
-        subscription_plan,
-        saas_plans (
-          name,
-          slug,
-          limits,
-          features
-        )
+        subscription_plan
       `)
       .eq('id', id)
       .single()
@@ -42,20 +36,26 @@ export async function GET(
     }
 
     // Format response
+    const { data: plan } = await supabase
+      .from('saas_plans')
+      .select('name, slug, limits, features')
+      .eq('slug', (organization.subscription_plan || 'free').toLowerCase())
+      .single()
+
     const formattedOrg = {
       id: organization.id,
       name: organization.name,
       slug: organization.slug,
       plan: {
-        name: organization.saas_plans?.name || 'Free',
-        slug: organization.saas_plans?.slug || 'free',
-        limits: organization.saas_plans?.limits || {
+        name: plan?.name || 'Free',
+        slug: plan?.slug || 'free',
+        limits: plan?.limits || {
           maxUsers: 1,
           maxProducts: 100,
           maxStorage: 1,
           maxTransactions: 100
         },
-        features: organization.saas_plans?.features || []
+        features: plan?.features || []
       }
     }
 

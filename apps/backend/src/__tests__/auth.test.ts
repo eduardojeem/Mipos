@@ -41,7 +41,6 @@ describe('Auth Routes', () => {
       });
 
       const response = await request(app)
-      await request(app)
         .post('/auth/signup')
 
         .send({

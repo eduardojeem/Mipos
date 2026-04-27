@@ -5,13 +5,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { formatCurrency } from "@/lib/utils";
 import { 
   ArrowUpDown, 
   ExternalLink, 
   Eye,
-  MoreHorizontal,
   TrendingUp,
   TrendingDown,
   Minus,
@@ -22,12 +21,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import type { CashMovement } from "@/types/cash";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+
 import {
   Dialog,
   DialogContent,
@@ -141,7 +135,7 @@ const MovementAmount = memo(({ amount, type }: { amount: number; type: string })
 
 MovementAmount.displayName = "MovementAmount";
 
-const UserAvatar = memo(({ user }: { user?: CashMovement['createdByUser'] }) => {
+const UserAvatar = memo(({ user, createdBy }: { user?: CashMovement['createdByUser']; createdBy?: string | null }) => {
   if (!user) {
     return (
       <div className="flex items-center space-x-2">
@@ -150,7 +144,9 @@ const UserAvatar = memo(({ user }: { user?: CashMovement['createdByUser'] }) => 
             <User className="h-4 w-4" />
           </AvatarFallback>
         </Avatar>
-        <span className="text-sm text-muted-foreground">Sistema</span>
+        <span className="text-sm text-muted-foreground" title={createdBy || undefined}>
+          {createdBy ? `ID: ${createdBy.slice(0, 8)}…` : 'Sistema'}
+        </span>
       </div>
     );
   }
@@ -266,7 +262,7 @@ const MovementDetailsDialog = memo(({
             <div>
               <label className="text-sm font-medium text-muted-foreground">Usuario</label>
               <div className="mt-1">
-                <UserAvatar user={movement.createdByUser} />
+                <UserAvatar user={movement.createdByUser} createdBy={movement.createdBy} />
               </div>
             </div>
           </div>
@@ -289,12 +285,14 @@ const MovementDetailsDialog = memo(({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4 text-xs text-muted-foreground">
+          <div className="grid grid-cols-2 gap-4 rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
             <div>
-              <span className="font-medium">ID:</span> {movement.id}
+              <span className="font-medium">ID: </span>
+              <span title={movement.id}>{movement.id.slice(0, 12)}…</span>
             </div>
             <div>
-              <span className="font-medium">Sesión:</span> {movement.sessionId}
+              <span className="font-medium">Sesión: </span>
+              <span title={movement.sessionId || ''}>{movement.sessionId ? `${movement.sessionId.slice(0, 12)}…` : '-'}</span>
             </div>
           </div>
         </div>
@@ -309,7 +307,7 @@ export const ModernMovementsTable = memo<ModernMovementsTableProps>(({
   movements,
   isLoading = false,
   sortKey,
-  sortDir,
+  sortDir: _sortDir,
   onSort,
   onViewDetails
 }) => {
@@ -441,25 +439,21 @@ export const ModernMovementsTable = memo<ModernMovementsTableProps>(({
                           </span>
                         </TableCell>
                         <TableCell>
-                          <UserAvatar user={movement.createdByUser} />
+                          <UserAvatar user={movement.createdByUser} createdBy={movement.createdBy} />
                         </TableCell>
                         <TableCell>
                           <MovementReference movement={movement} />
                         </TableCell>
                         <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => handleViewDetails(movement)}>
-                                <Eye className="h-4 w-4 mr-2" />
-                                Ver detalles
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="gap-1.5 text-xs"
+                            onClick={() => handleViewDetails(movement)}
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            Ver
+                          </Button>
                         </TableCell>
                       </motion.tr>
                     ))

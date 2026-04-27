@@ -13,6 +13,17 @@ interface CloseCashSessionModalProps {
     openingAmount: number;
     openedAt: string;
     expectedBalance?: number;
+    soldTotal?: number;
+    manualIn?: number;
+    manualOut?: number;
+    returns?: number;
+    paymentMethods?: Array<{
+      method: string;
+      label: string;
+      amount: number;
+      count: number;
+      affectsCash: boolean;
+    }>;
   };
 }
 
@@ -36,7 +47,6 @@ export default function CloseCashSessionModal({
 
   const hasDifference = Math.abs(difference) > 0.01;
   const isShort = difference < 0;
-  const isOver = difference > 0;
 
   // Reset form when modal opens
   useEffect(() => {
@@ -123,7 +133,8 @@ export default function CloseCashSessionModal({
         <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
           {/* Session Info */}
           {sessionData && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="p-4 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl">
                 <div className="flex items-center space-x-2 mb-2">
                   <DollarSign className="w-4 h-4 text-blue-600 dark:text-blue-400" />
@@ -143,6 +154,45 @@ export default function CloseCashSessionModal({
                   <p className="text-2xl font-bold text-green-900 dark:text-green-100">
                     {formatCurrency(sessionData.expectedBalance)}
                   </p>
+                </div>
+              )}
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/40">
+                  <div className="text-xs uppercase text-muted-foreground">Ventas</div>
+                  <div className="mt-1 text-lg font-semibold">{formatCurrency(sessionData.soldTotal || 0)}</div>
+                </div>
+                <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/40">
+                  <div className="text-xs uppercase text-muted-foreground">Ingresos</div>
+                  <div className="mt-1 text-lg font-semibold">{formatCurrency(sessionData.manualIn || 0)}</div>
+                </div>
+                <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/40">
+                  <div className="text-xs uppercase text-muted-foreground">Egresos</div>
+                  <div className="mt-1 text-lg font-semibold">{formatCurrency(sessionData.manualOut || 0)}</div>
+                </div>
+                <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/40">
+                  <div className="text-xs uppercase text-muted-foreground">Devoluciones</div>
+                  <div className="mt-1 text-lg font-semibold">{formatCurrency(sessionData.returns || 0)}</div>
+                </div>
+              </div>
+
+              {Array.isArray(sessionData.paymentMethods) && sessionData.paymentMethods.length > 0 && (
+                <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-4">
+                  <div className="text-sm font-semibold mb-3">Resumen por método de pago</div>
+                  <div className="space-y-2">
+                    {sessionData.paymentMethods.map((method) => (
+                      <div key={method.method} className="flex items-center justify-between text-sm">
+                        <div>
+                          <div className="font-medium">{method.label}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {method.count} operaciones{method.affectsCash ? ' • impacta efectivo' : ''}
+                          </div>
+                        </div>
+                        <div className="font-semibold">{formatCurrency(method.amount)}</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

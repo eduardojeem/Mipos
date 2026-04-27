@@ -33,8 +33,8 @@ export const Pagination: React.FC<PaginationProps> = ({
   compact = false,
   maxVisiblePages = 7
 }) => {
-  const startItem = (currentPage - 1) * itemsPerPage + 1;
-  const endItem = Math.min(currentPage * itemsPerPage, totalItems);
+  const startItem = totalItems === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1;
+  const endItem = totalItems === 0 ? 0 : Math.min(currentPage * itemsPerPage, totalItems);
 
   const getPageNumbers = () => {
     const pages: (number | string)[] = [];

@@ -1,19 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase/server';
+import { validateRole } from '@/app/api/_utils/role-validation';
+import {
+  resolveCustomerOrganizationId,
+  transformCustomerRecord,
+} from '@/app/api/customers/_lib';
 
 /**
  * Customer List API - Phase 5 Optimization
- * 
+ *
  * Provides paginated customer list with server-side filtering, sorting, and search.
  * Optimized for performance with minimal data transfer and efficient queries.
  */
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient();
+    const auth = await validateRole(request, {
+      roles: ['OWNER', 'ADMIN', 'SUPER_ADMIN', 'MANAGER', 'EMPLOYEE', 'CASHIER']
+    });
+    if (!auth.ok) {
+      return NextResponse.json(auth.body, { status: auth.status });
+    }
+
+    const supabase = await createClient();
     const { searchParams } = new URL(request.url);
 
-    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    const orgId = await resolveCustomerOrganizationId(request, auth.userRole);
     console.log('[Customers List API] Organization ID:', orgId);
     if (!orgId) {
       console.error('[Customers List API] ❌ Organization ID header missing');
@@ -22,13 +34,13 @@ export async function GET(request: NextRequest) {
 
     // Parse query parameters
     const page = parseInt(searchParams.get('page') || '1');
-    const limit = Math.min(parseInt(searchParams.get('limit') || '30'), 100); // Max 100 items
+    const limit = Math.min(parseInt(searchParams.get('limit') || '30'), 100);
     const search = searchParams.get('search') || '';
-    const status = searchParams.get('status') || 'all'; // all, active, inactive
-    const type = searchParams.get('type') || 'all'; // all, regular, vip, wholesale
+    const status = searchParams.get('status') || 'all';
+    const type = searchParams.get('type') || 'all';
+    const hasRUC = searchParams.get('hasRUC') || 'all';
     const sortBy = searchParams.get('sortBy') || 'created_at';
     const sortOrder = searchParams.get('sortOrder') || 'desc';
-    console.log('[Customers List API] Query params:', { page, limit, search, status, type, sortBy, sortOrder });
 
     // Build base query with optimized field selection
     let query = supabase
@@ -39,6 +51,7 @@ export async function GET(request: NextRequest) {
         email,
         phone,
         address,
+        ruc,
         customer_code,
         customer_type,
         is_active,
@@ -48,7 +61,8 @@ export async function GET(request: NextRequest) {
         created_at,
         updated_at
       `, { count: 'exact' })
-      .eq('organization_id', orgId);
+      .eq('organization_id', orgId)
+      .is('deleted_at', null);
 
     // Apply filters
     if (status === 'active') {
@@ -63,14 +77,20 @@ export async function GET(request: NextRequest) {
 
     // Apply search across multiple fields
     if (search) {
-      query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,customer_code.ilike.%${search}%,phone.ilike.%${search}%`);
+      query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,customer_code.ilike.%${search}%,phone.ilike.%${search}%,ruc.ilike.%${search}%`);
+    }
+
+    // Filter by RUC presence
+    if (hasRUC === 'yes') {
+      query = query.not('ruc', 'is', null);
+    } else if (hasRUC === 'no') {
+      query = query.is('ruc', null);
     }
 
     // Apply sorting
     const validSortFields = ['name', 'email', 'created_at', 'updated_at', 'total_purchases', 'total_orders'];
     const sortField = validSortFields.includes(sortBy) ? sortBy : 'created_at';
     const ascending = sortOrder === 'asc';
-
     query = query.order(sortField, { ascending });
 
     // Apply pagination
@@ -79,7 +99,6 @@ export async function GET(request: NextRequest) {
     query = query.range(from, to);
 
     const { data: customers, error, count } = await query;
-    console.log('[Customers List API] Query results:', { count, customerCount: customers?.length, error: error?.message });
 
     if (error) {
       console.error('[Customers List API] ❌ Supabase error:', error);
@@ -87,27 +106,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Transform data to UI format
-    const transformedCustomers = customers?.map((customer: any) => ({
-      id: customer.id,
-      name: customer.name,
-      email: customer.email,
-      phone: customer.phone,
-      address: customer.address,
-      customer_code: customer.customer_code,
-      customer_type: customer.customer_type,
-      is_active: customer.is_active,
-      customerCode: customer.customer_code,
-      customerType: mapCustomerTypeToUI(customer.customer_type),
-      totalSpent: customer.total_purchases || 0,
-      totalOrders: customer.total_orders || 0,
-      lastPurchase: customer.last_purchase,
-      created_at: customer.created_at,
-      updated_at: customer.updated_at,
-      // Add computed fields
-      segment: determineCustomerSegment(customer.total_orders || 0, customer.total_purchases || 0),
-      riskScore: calculateRiskScore(customer.last_purchase, customer.total_orders || 0),
-      lifetimeValue: calculateLifetimeValue(customer.total_purchases || 0, customer.total_orders || 0, customer.created_at)
-    })) || [];
+    const transformedCustomers = customers?.map((customer: any) => transformCustomerRecord(customer)) || [];
 
     // Get total count for pagination (if not already provided)
     let totalCount = count;
@@ -115,11 +114,12 @@ export async function GET(request: NextRequest) {
       const { count: totalCountQuery } = await supabase
         .from('customers')
         .select('*', { count: 'exact', head: true })
-        .eq('organization_id', orgId); // Fixed: Filter by orgId
+        .eq('organization_id', orgId)
+        .is('deleted_at', null);
       totalCount = totalCountQuery || 0;
     }
 
-    const response = {
+    return NextResponse.json({
       success: true,
       data: {
         customers: transformedCustomers,
@@ -131,75 +131,19 @@ export async function GET(request: NextRequest) {
           hasNext: (page * limit) < (totalCount || 0),
           hasPrev: page > 1
         },
-        filters: {
-          search,
-          status,
-          type,
-          sortBy: sortField,
-          sortOrder
-        }
+        filters: { search, status, type, sortBy: sortField, sortOrder }
       }
-    };
-
-    return NextResponse.json(response);
+    });
 
   } catch (error) {
     console.error('Error fetching customer list:', error);
     return NextResponse.json(
       {
         success: false,
-        error: 'Failed to fetch customer list',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        error: 'Error al obtener la lista de clientes',
+        details: error instanceof Error ? error.message : 'Error desconocido'
       },
       { status: 500 }
     );
   }
-}
-
-// Helper functions
-function mapCustomerTypeToUI(dbType: string): 'regular' | 'vip' | 'wholesale' {
-  const normalized = dbType?.toUpperCase();
-  if (normalized === 'WHOLESALE') return 'wholesale';
-  if (normalized === 'VIP') return 'vip';
-  return 'regular';
-}
-
-function determineCustomerSegment(totalOrders: number, totalSpent: number): 'new' | 'regular' | 'frequent' | 'vip' | 'at_risk' | 'dormant' {
-  if (totalOrders <= 2) return 'new';
-  if (totalOrders >= 25 || totalSpent > 50000) return 'vip';
-  if (totalOrders >= 11) return 'frequent';
-  return 'regular';
-}
-
-function calculateRiskScore(lastPurchase: string | null, totalOrders: number): number {
-  let riskScore = 0;
-
-  const daysSinceLastPurchase = lastPurchase
-    ? Math.floor((Date.now() - new Date(lastPurchase).getTime()) / (1000 * 60 * 60 * 24))
-    : 999;
-
-  // Risk by inactivity
-  if (daysSinceLastPurchase > 180) riskScore += 50;
-  else if (daysSinceLastPurchase > 90) riskScore += 30;
-  else if (daysSinceLastPurchase > 30) riskScore += 15;
-
-  // Risk by low purchase frequency
-  if (totalOrders < 3) riskScore += 20;
-  else if (totalOrders < 10) riskScore += 10;
-
-  return Math.min(riskScore, 100);
-}
-
-function calculateLifetimeValue(totalSpent: number, totalOrders: number, createdAt: string): number {
-  if (totalOrders === 0) return 0;
-
-  const avgOrderValue = totalSpent / totalOrders;
-  const daysSinceFirstPurchase = Math.floor((Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60 * 24));
-  const purchaseFrequency = daysSinceFirstPurchase > 0 ? totalOrders / (daysSinceFirstPurchase / 30) : 0;
-
-  // CLV = Average Order Value × Purchase Frequency × Profit Margin × Expected Lifetime
-  const profitMargin = 0.3; // 30% estimated margin
-  const expectedLifetime = 24; // 24 months expected
-
-  return Math.round(avgOrderValue * purchaseFrequency * profitMargin * expectedLifetime * 100) / 100;
 }

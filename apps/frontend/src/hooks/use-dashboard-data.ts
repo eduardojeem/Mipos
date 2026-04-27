@@ -71,6 +71,26 @@ interface CacheEntry {
 const dashboardCache = new Map<string, CacheEntry>()
 const inflightRequests = new Map<string, Promise<DashboardData>>()
 
+/**
+ * Helper: extrae el organizationId de localStorage de forma segura.
+ * Centralizado para evitar duplicación en cada función.
+ */
+function getOrganizationId(): string | null {
+  try {
+    if (typeof window === 'undefined') return null
+    const raw = window.localStorage.getItem('selected_organization')
+    if (!raw) return null
+    try {
+      const parsed = JSON.parse(raw)
+      return parsed?.id || parsed?.organization_id || null
+    } catch {
+      return raw
+    }
+  } catch {
+    return null
+  }
+}
+
 export function useDashboardData(options: UseDashboardDataOptions = {}) {
   const {
     refreshInterval = 30000, // 30 segundos
@@ -132,14 +152,7 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
       const supabase = createClient()
       const now = new Date()
       const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
-      const orgId = (() => {
-        try {
-          if (typeof window === 'undefined') return null
-          const raw = window.localStorage.getItem('selected_organization')
-          if (!raw) return null
-          try { const p = JSON.parse(raw); return p?.id || p?.organization_id || null } catch { return raw }
-        } catch { return null }
-      })()
+      const orgId = getOrganizationId()
 
       const [{ data: today }, { data: counts }] = await Promise.all([
         supabase.rpc('get_today_sales_summary', { date_start: startOfDay, org_id: orgId }).single(),
@@ -208,19 +221,12 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
       const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString()
       const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0).toISOString()
 
-      const orgId = (() => {
-        try {
-          if (typeof window === 'undefined') return null
-          const raw = window.localStorage.getItem('selected_organization')
-          if (!raw) return null
-          try { const p = JSON.parse(raw); return p?.id || p?.organization_id || null } catch { return raw }
-        } catch { return null }
-      })()
+      const orgId = getOrganizationId()
 
       const todayQuery = supabase.from('sales').select('total, created_at').gte('created_at', startOfDay).lte('created_at', endOfDay)
       const monthQuery = supabase.from('sales').select('total, created_at').gte('created_at', startOfMonth)
       const lastMonthQuery = supabase.from('sales').select('total, created_at').gte('created_at', startOfLastMonth).lte('created_at', endOfLastMonth)
-      const lowStockQuery = supabase.from('products').select('id, stock, min_stock').lt('stock', 'min_stock')
+      const lowStockQuery = supabase.from('products').select('id, stock_quantity, min_stock')
       const activeSalesQuery = supabase.from('sales').select('customer_name, created_at').gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
       const totalProductsQuery = supabase.from('products').select('id', { count: 'exact', head: true })
 
@@ -243,11 +249,17 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
       const activeCustomers = new Set((activeSales || []).map((v: any) => v.customer_name).filter(Boolean)).size
       const todayCount = (todaySales || []).length
       const averageTicket = todayCount ? todayTotal / todayCount : 0
+      // Filter low stock in memory since PostgREST can't do column-to-column comparison
+      const lowStockFiltered = (lowStock || []).filter((p: any) => {
+        const stock = p.stock_quantity ?? 0
+        const min = p.min_stock ?? 0
+        return stock <= min
+      })
 
       return {
         todaySales: todayTotal,
         monthSales: monthTotal,
-        lowStockCount: (lowStock || []).length,
+        lowStockCount: lowStockFiltered.length,
         activeCustomers,
         averageTicket,
         efficiency: 0,
@@ -306,12 +318,8 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
         .limit(limit)
 
       try {
-        if (typeof window !== 'undefined') {
-          const raw = window.localStorage.getItem('selected_organization')
-          if (raw) {
-            try { const p = JSON.parse(raw); const orgId = p?.id || p?.organization_id || raw; if (orgId) query = query.eq('organization_id', orgId) } catch { const orgId = raw; if (orgId) query = query.eq('organization_id', orgId) }
-          }
-        }
+        const orgId = getOrganizationId()
+        if (orgId) query = query.eq('organization_id', orgId)
       } catch {}
 
       const { data } = await query
@@ -348,14 +356,7 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
   const loadTopProducts = useCallback(async (limit: number = 5): Promise<TopProduct[]> => {
     if (isSupabaseActive()) {
       const supabase = createClient()
-      const orgId = (() => {
-        try {
-          if (typeof window === 'undefined') return null
-          const raw = window.localStorage.getItem('selected_organization')
-          if (!raw) return null
-          try { const p = JSON.parse(raw); return p?.id || p?.organization_id || null } catch { return raw }
-        } catch { return null }
-      })()
+      const orgId = getOrganizationId()
 
       const canQuery = typeof (supabase as any)?.from === 'function'
       if (!canQuery) {
@@ -384,12 +385,8 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
       
       let query = (supabase as any)
         .from('sale_items')
-        .select('product_id, quantity, unit_price, products!inner(name, organization_id)') // Join with products to check org? 
-        // Or if sale_items doesn't have org_id, we must filter via sale or product.
-        // Assuming products has organization_id, we can filter on inner join.
-        // .eq('products.organization_id', orgId) works if using PostgREST syntax properly.
-        // But simpler if sale_items is joined with sales.
-        .limit(500);
+        .select('product_id, quantity, unit_price, products!inner(name, organization_id)')
+        .limit(100);
       
       if (orgId) {
         // Filter by organization via product relation
@@ -461,28 +458,16 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
   const loadLowStockProducts = useCallback(async (limit: number = 10): Promise<LowStockProduct[]> => {
     if (isSupabaseActive()) {
       const supabase = createClient()
-      const orgId = (() => {
-        try {
-          if (typeof window === 'undefined') return null
-          const raw = window.localStorage.getItem('selected_organization')
-          if (!raw) return null
-          try { const p = JSON.parse(raw); return p?.id || p?.organization_id || null } catch { return raw }
-        } catch { return null }
-      })()
+      const orgId = getOrganizationId()
 
+      // Fetch products with stock info — filter in memory since PostgREST
+      // doesn't support column-to-column comparison (stock_quantity <= min_stock)
       let query = supabase
         .from('products')
         .select('id, name, stock_quantity, min_stock, category_id, category:categories(name)')
-        .lt('stock_quantity', 'min_stock') // Assuming raw filter or correct column comparison
-        // Note: .lt('stock_quantity', 'min_stock') compares col to string literal usually in Supabase JS client unless using .filter
-        // Better to use .filter or check if Supabase supports col-to-col comparison easily.
-        // Actually, Supabase postgrest-js doesn't support col-to-col comparison in simple filters easily without RPC or raw filter.
-        // Let's assume for now we just fetch and filter in memory if needed, or use a view.
-        // But for 'low stock' typically we compare stock <= min_stock.
-        // Using .lte('stock_quantity', 10) is safer if we can't do col-to-col. 
-        // But the previous code was .lt('stock', 'min_stock'). I will stick to what might work or just fetch all and filter.
+        .eq('is_active', true)
         .order('stock_quantity', { ascending: true })
-        .limit(limit)
+        .limit(50) // Fetch more than needed, filter in memory
       
       if (orgId) {
         query = query.eq('organization_id', orgId)
@@ -490,25 +475,26 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
 
       const { data } = await query
       
-      // Since col-to-col comparison might not work as expected in simple client without raw filter,
-      // let's verify if 'lt' works with column name. It usually treats second arg as value.
-      // So 'min_stock' string is NaN. 
-      // I will rely on the previous implementation assuming it was working or I should fix it.
-      // Previous: .lt('stock', 'min_stock')
-      
-      return (data || []).map((p: any) => {
-        const current = p.stock_quantity ?? p.stock ?? 0
-        const min = p.min_stock ?? 0
-        const ratio = min > 0 ? current / min : 1
-        return {
-          id: p.id,
-          name: p.name,
-          current_stock: current,
-          min_stock: min,
-          category: p.category?.name || 'Sin categoría',
-          urgency: ratio < 0.3 ? 'high' : ratio < 0.6 ? 'medium' : 'low'
-        }
-      })
+      return (data || [])
+        .filter((p: any) => {
+          const stock = p.stock_quantity ?? 0
+          const min = p.min_stock ?? 0
+          return min > 0 && stock <= min
+        })
+        .slice(0, limit)
+        .map((p: any) => {
+          const current = p.stock_quantity ?? 0
+          const min = p.min_stock ?? 0
+          const ratio = min > 0 ? current / min : 1
+          return {
+            id: p.id,
+            name: p.name,
+            current_stock: current,
+            min_stock: min,
+            category: p.category?.name || 'Sin categoría',
+            urgency: ratio < 0.3 ? 'high' as const : ratio < 0.6 ? 'medium' as const : 'low' as const
+          }
+        })
     }
     try {
       const { data } = await api.get('/products/low-stock')
@@ -619,15 +605,41 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
     if (!enableRealtime || !user) return
     if (isSupabaseActive()) {
       const supabase = createClient()
-      const channel = supabase
-        .channel('dashboard-sync')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, () => {
-          loadDashboardData(true)
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
-          loadDashboardData(true)
-        })
-        .subscribe()
+      const orgId = getOrganizationId()
+      
+      // Build realtime channel with organization filter to avoid
+      // receiving changes from other tenants
+      const channelBuilder = supabase.channel('dashboard-sync')
+      
+      if (orgId) {
+        channelBuilder
+          .on('postgres_changes', {
+            event: '*',
+            schema: 'public',
+            table: 'sales',
+            filter: `organization_id=eq.${orgId}`
+          }, () => {
+            loadDashboardData(true)
+          })
+          .on('postgres_changes', {
+            event: '*',
+            schema: 'public',
+            table: 'products',
+            filter: `organization_id=eq.${orgId}`
+          }, () => {
+            loadDashboardData(true)
+          })
+      } else {
+        channelBuilder
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, () => {
+            loadDashboardData(true)
+          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
+            loadDashboardData(true)
+          })
+      }
+      
+      const channel = channelBuilder.subscribe()
       return () => {
         supabase.removeChannel(channel)
       }

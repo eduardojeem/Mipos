@@ -28,14 +28,17 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAuth } from '@/hooks/use-auth';
+import { useAuth, useResolvedRole, useIsAuthenticated } from '@/hooks/use-auth';
 import { usePlanPermissions } from '@/hooks/use-plan-permissions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { NavCategory } from './NavCategory';
+import { useBusinessConfig } from '@/contexts/BusinessConfigContext';
+import { useSystemSettings } from '@/app/dashboard/settings/hooks/useOptimizedSettings';
 
 export type NavItem = {
   name: string;
@@ -81,6 +84,17 @@ export const navigation: NavItem[] = [
     badge: 'Activo'
   },
   {
+    name: 'Caja',
+    href: '/dashboard/cash',
+    icon: DollarSign,
+    roles: ['ADMIN', 'CASHIER', 'SUPER_ADMIN', 'OWNER'],
+    category: 'sales',
+    description: 'Estado, movimientos y arqueos de caja',
+    color: 'text-emerald-600 dark:text-emerald-400',
+    bgColor: 'bg-emerald-50 dark:bg-emerald-900/20',
+    borderColor: 'border-emerald-200 dark:border-emerald-800'
+  },
+  {
     name: 'Historial de Ventas',
     href: '/dashboard/sales',
     icon: FileText,
@@ -120,17 +134,6 @@ export const navigation: NavItem[] = [
     roles: ['ADMIN', 'CASHIER', 'SUPER_ADMIN', 'OWNER'],
     category: 'management',
     description: 'Gestión de base de clientes',
-    color: 'text-amber-600 dark:text-amber-400',
-    bgColor: 'bg-amber-50 dark:bg-amber-900/20',
-    borderColor: 'border-amber-200 dark:border-amber-800'
-  },
-  {
-    name: 'Caja',
-    href: '/dashboard/cash',
-    icon: DollarSign,
-    roles: ['ADMIN', 'CASHIER', 'SUPER_ADMIN', 'OWNER'],
-    category: 'management',
-    description: 'Estado, movimientos y arqueos de caja',
     color: 'text-amber-600 dark:text-amber-400',
     bgColor: 'bg-amber-50 dark:bg-amber-900/20',
     borderColor: 'border-amber-200 dark:border-amber-800'
@@ -295,10 +298,15 @@ export function Sidebar() {
   const [searchQuery, setSearchQuery] = useState('');
   const pathname = usePathname();
   const { user, signOut } = useAuth();
-  const { permissions } = usePlanPermissions();
+  const resolvedRole = useResolvedRole();
+  const { loading } = useIsAuthenticated();
+  const { permissions, isPlanResolved } = usePlanPermissions();
+  const { config } = useBusinessConfig();
+  const { data: systemSettings } = useSystemSettings();
+  const businessName = config.businessName?.trim() || systemSettings?.business_name?.trim() || 'Mi empresa';
 
   const filteredNavigation = useMemo(() => {
-    const userRole = user?.role || 'CASHIER';
+    const userRole = resolvedRole || 'CASHIER';
     
     return navigation.filter(item => {
       // Check role access
@@ -306,8 +314,8 @@ export function Sidebar() {
       if (!hasRole) return false;
 
       // Check plan permissions
-      if (item.href === '/dashboard/analytics' && !permissions.can_access_analytics) return false;
-      if (item.category === 'admin' && !permissions.can_access_admin_panel && userRole !== 'SUPER_ADMIN') {
+      if (isPlanResolved && item.href === '/dashboard/reports' && !permissions.can_access_analytics) return false;
+      if (isPlanResolved && item.category === 'admin' && !permissions.can_access_admin_panel && userRole !== 'SUPER_ADMIN') {
         // Permitir siempre acceder a Configuración aunque el plan no tenga admin panel
         if (item.href === '/dashboard/settings') {
           return true;
@@ -329,7 +337,7 @@ export function Sidebar() {
       
       return true;
     });
-  }, [user, searchQuery]);
+  }, [resolvedRole, permissions.can_access_analytics, permissions.can_access_admin_panel, isPlanResolved, searchQuery]);
 
   const groupedNavigation = useMemo(() => filteredNavigation.reduce((acc, item) => {
     const category = item.category || 'other';
@@ -396,7 +404,7 @@ export function Sidebar() {
               </div>
               <div>
                 <h2 className="font-bold text-lg bg-gradient-to-r from-blue-600 via-violet-600 to-purple-600 bg-clip-text text-transparent">
-                  BeautyPOS
+                  {businessName}
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400">Sistema de Ventas</p>
               </div>
@@ -440,12 +448,12 @@ export function Sidebar() {
                 <Badge
                   className={cn(
                     "text-[10px]",
-                    user.role === 'ADMIN' || user.role === 'SUPER_ADMIN'
+                    resolvedRole === 'ADMIN' || resolvedRole === 'SUPER_ADMIN'
                       ? "bg-gradient-to-r from-red-500 to-rose-500 text-white border-0"
                       : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
                   )}
                 >
-                  {user.role}
+                  {resolvedRole}
                 </Badge>
               </div>
             </div>
@@ -477,6 +485,15 @@ export function Sidebar() {
 
         {/* Navigation */}
         <ScrollArea className="flex-1 px-3 py-4">
+          {loading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-6 w-40" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+          ) : (
           <nav className="space-y-4" role="navigation" aria-label="Menú principal">
             {Object.entries(groupedNavigation).map(([categoryKey, items]) => {
               const category = categories[categoryKey as keyof typeof categories];
@@ -496,6 +513,7 @@ export function Sidebar() {
               );
             })}
           </nav>
+          )}
         </ScrollArea>
 
         {/* Footer */}
@@ -539,7 +557,7 @@ export function Sidebar() {
                 </TooltipTrigger>
                 <TooltipContent side="right">
                   <p className="font-medium">{user?.email}</p>
-                  <p className="text-xs text-muted-foreground">{user?.role}</p>
+                  <p className="text-xs text-muted-foreground">{resolvedRole}</p>
                 </TooltipContent>
               </Tooltip>
               

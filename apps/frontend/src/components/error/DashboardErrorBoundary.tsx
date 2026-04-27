@@ -37,11 +37,6 @@ export class DashboardErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    this.setState({
-      error,
-      errorInfo,
-    });
-
     // Log error to monitoring service
     this.logErrorToService(error, errorInfo);
   }
@@ -136,91 +131,34 @@ Please describe what you were doing when this error occurred:
 
       // Default error UI
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-800 p-4">
-          <Card className="w-full max-w-2xl">
-            <CardHeader className="text-center">
-              <div className="mx-auto mb-4 p-3 bg-red-100 dark:bg-red-900/20 rounded-full w-fit">
-                <AlertTriangle className="h-8 w-8 text-red-600 dark:text-red-400" />
-              </div>
-              <CardTitle className="text-2xl font-bold text-red-600 dark:text-red-400">
-                ¡Oops! Algo salió mal
-              </CardTitle>
-            </CardHeader>
-            
-            <CardContent className="space-y-6">
-              <div className="text-center space-y-2">
-                <p className="text-muted-foreground">
-                  Se produjo un error inesperado en el dashboard. Nuestro equipo ha sido notificado automáticamente.
-                </p>
-                
-                {process.env.NODE_ENV === 'development' && this.state.error && (
-                  <details className="mt-4 p-4 bg-red-50 dark:bg-red-900/10 rounded-lg text-left">
-                    <summary className="cursor-pointer font-medium text-red-700 dark:text-red-300 mb-2">
-                      Detalles del Error (Solo en Desarrollo)
-                    </summary>
-                    <div className="space-y-2 text-sm">
-                      <div>
-                        <strong>Error:</strong> {this.state.error.message}
-                      </div>
-                      {this.state.error.stack && (
-                        <div>
-                          <strong>Stack Trace:</strong>
-                          <pre className="mt-1 p-2 bg-red-100 dark:bg-red-900/20 rounded text-xs overflow-auto">
-                            {this.state.error.stack}
-                          </pre>
-                        </div>
-                      )}
-                      {this.state.errorInfo?.componentStack && (
-                        <div>
-                          <strong>Component Stack:</strong>
-                          <pre className="mt-1 p-2 bg-red-100 dark:bg-red-900/20 rounded text-xs overflow-auto">
-                            {this.state.errorInfo.componentStack}
-                          </pre>
-                        </div>
-                      )}
-                    </div>
-                  </details>
-                )}
-              </div>
+        <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ maxWidth: 640, width: '100%', border: '1px solid rgba(0,0,0,0.1)', borderRadius: 8, padding: 16 }}>
+            <div style={{ textAlign: 'center', marginBottom: 12 }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#DC2626' }}>¡Oops! Algo salió mal</div>
+              <p style={{ color: 'rgba(0,0,0,0.6)' }}>Se produjo un error inesperado en el dashboard.</p>
+            </div>
 
-              <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                <Button onClick={this.handleRetry} className="flex items-center gap-2">
-                  <RefreshCw className="h-4 w-4" />
-                  Intentar de Nuevo
-                </Button>
-                
-                <Button 
-                  variant="outline" 
-                  onClick={this.handleGoHome}
-                  className="flex items-center gap-2"
-                >
-                  <Home className="h-4 w-4" />
-                  Ir al Dashboard
-                </Button>
-                
-                <Button 
-                  variant="outline" 
-                  onClick={this.handleReportBug}
-                  className="flex items-center gap-2"
-                >
-                  <Bug className="h-4 w-4" />
-                  Reportar Error
-                </Button>
-              </div>
+            {process.env.NODE_ENV === 'development' && this.state.error && (
+              <details style={{ marginTop: 12 }}>
+                <summary>Detalles del Error (Solo en Desarrollo)</summary>
+                <div style={{ marginTop: 8 }}>
+                  <div><strong>Error:</strong> {this.state.error.message}</div>
+                  {this.state.error.stack && (
+                    <pre style={{ marginTop: 8, fontSize: 12, overflow: 'auto' }}>{this.state.error.stack}</pre>
+                  )}
+                  {this.state.errorInfo?.componentStack && (
+                    <pre style={{ marginTop: 8, fontSize: 12, overflow: 'auto' }}>{this.state.errorInfo.componentStack}</pre>
+                  )}
+                </div>
+              </details>
+            )}
 
-              <div className="text-center text-sm text-muted-foreground">
-                <p>
-                  Si el problema persiste, contacta a soporte técnico en{' '}
-                  <a 
-                    href="mailto:support@beautypos.com" 
-                    className="text-blue-600 hover:underline"
-                  >
-                    support@beautypos.com
-                  </a>
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 16 }}>
+              <button onClick={this.handleRetry} style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid rgba(0,0,0,0.2)', background: '#fff' }}>Intentar de Nuevo</button>
+              <button onClick={this.handleGoHome} style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid rgba(0,0,0,0.2)', background: '#fff' }}>Ir al Dashboard</button>
+              <button onClick={this.handleReportBug} style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid rgba(0,0,0,0.2)', background: '#fff' }}>Reportar Error</button>
+            </div>
+          </div>
         </div>
       );
     }

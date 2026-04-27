@@ -1,50 +1,10 @@
-// Simple in-memory store for promotions during development
-// This is a temporary data layer to unblock UI while backend integrates.
-
-export type DiscountType = 'PERCENTAGE' | 'FIXED_AMOUNT';
-
-export interface ProductRef {
-  id: string;
-  name?: string;
-  price?: number;
-  category?: string;
-}
-
-export interface Promotion {
-  id: string;
-  name: string;
-  description: string;
-  discountType: DiscountType;
-  discountValue: number;
-  startDate: string; // ISO date
-  endDate: string;   // ISO date
-  isActive: boolean;
-  approvalStatus?: 'pending' | 'approved' | 'rejected';
-  approvalComment?: string;
-  approvedBy?: string;
-  approvedAt?: string; // ISO timestamp
-  minPurchaseAmount?: number;
-  maxDiscountAmount?: number;
-  usageLimit?: number;
-  usageCount: number;
-  applicableProducts: ProductRef[];
-  createdAt: string; // ISO timestamp
-}
-
-export interface PromotionCreateInput {
-  name: string;
-  description: string;
-  discountType: DiscountType;
-  discountValue: number;
-  startDate: string;
-  endDate: string;
-  minPurchaseAmount?: number;
-  maxDiscountAmount?: number;
-  usageLimit?: number;
-  applicableProductIds?: string[];
-}
-
-export interface PromotionUpdateInput extends PromotionCreateInput {}
+import { 
+  Promotion, 
+  PromotionCreateInput, 
+  PromotionUpdateInput, 
+  ApplicableProduct,
+  DiscountType 
+} from '@/types/promotions'
 
 const store: Promotion[] = [];
 // Simple carousel config: ordered list of Promotion IDs featured in the carousel
@@ -55,20 +15,17 @@ function isValidDateString(value: string): boolean {
   return !Number.isNaN(d.getTime());
 }
 
-function validateInput(input: PromotionCreateInput) {
+function validateInput(input: Partial<PromotionCreateInput>) {
   if (!input.name || input.name.trim().length < 2) {
     throw new Error('El nombre es requerido y debe tener al menos 2 caracteres');
   }
-  if (!input.description || input.description.trim().length < 2) {
-    throw new Error('La descripción es requerida y debe tener al menos 2 caracteres');
-  }
-  if (!['PERCENTAGE', 'FIXED_AMOUNT'].includes(input.discountType)) {
+  if (!input.discountType || !['PERCENTAGE', 'FIXED_AMOUNT'].includes(input.discountType)) {
     throw new Error('Tipo de descuento inválido');
   }
   if (typeof input.discountValue !== 'number' || input.discountValue < 0) {
     throw new Error('El valor del descuento debe ser un número mayor o igual a cero');
   }
-  if (!isValidDateString(input.startDate) || !isValidDateString(input.endDate)) {
+  if (!input.startDate || !input.endDate || !isValidDateString(input.startDate) || !isValidDateString(input.endDate)) {
     throw new Error('Fechas inválidas');
   }
   if (new Date(input.endDate) < new Date(input.startDate)) {
@@ -84,7 +41,7 @@ export interface PromotionQuery {
   page?: number;
   limit?: number;
   search?: string; // by name or id
-  status?: 'active' | 'inactive' | 'all';
+  status?: 'active' | 'inactive' | 'all' | 'scheduled' | 'expired';
   category?: string; // matches any applicableProducts.category
   dateFrom?: string; // ISO date string
   dateTo?: string;   // ISO date string
@@ -104,13 +61,9 @@ function intersectsRange(promoStartISO: string, promoEndISO: string, fromISO?: s
   const from = fromISO ? new Date(fromISO).getTime() : undefined;
   const to = toISO ? new Date(toISO).getTime() : undefined;
 
-  // If no filter dates provided, always intersects
   if (from === undefined && to === undefined) return true;
-  // If only from provided, include if promo ends on/after from
   if (from !== undefined && to === undefined) return promoEnd >= from;
-  // If only to provided, include if promo starts on/before to
   if (from === undefined && to !== undefined) return promoStart <= to;
-  // Both provided: ranges intersect if start <= to && end >= from
   return promoStart <= (to as number) && promoEnd >= (from as number);
 }
 
@@ -130,7 +83,6 @@ export function queryPromotions(query: PromotionQuery = {}): PaginatedPromotions
 
   let filtered = listPromotions();
 
-  // Text search by name or id
   if (normalizedSearch) {
     filtered = filtered.filter(p =>
       p.name.toLowerCase().includes(normalizedSearch) ||
@@ -138,20 +90,25 @@ export function queryPromotions(query: PromotionQuery = {}): PaginatedPromotions
     );
   }
 
-  // Status filter
   if (status !== 'all') {
-    const desiredActive = status === 'active';
-    filtered = filtered.filter(p => p.isActive === desiredActive);
+    const now = Date.now();
+    filtered = filtered.filter((promotion) => {
+      const start = new Date(promotion.startDate).getTime();
+      const end = new Date(promotion.endDate).getTime();
+
+      if (status === 'inactive') return !promotion.isActive;
+      if (status === 'scheduled') return promotion.isActive && start > now;
+      if (status === 'expired') return promotion.isActive && end < now;
+      return promotion.isActive && start <= now && end >= now;
+    });
   }
 
-  // Category filter (any applicable product matches category)
   if (normalizedCategory) {
     filtered = filtered.filter(p =>
       p.applicableProducts?.some(ap => (ap.category || '').toLowerCase() === normalizedCategory)
     );
   }
 
-  // Date range filter (by promo validity window)
   if (dateFrom || dateTo) {
     filtered = filtered.filter(p => intersectsRange(p.startDate, p.endDate, dateFrom, dateTo));
   }
@@ -169,12 +126,13 @@ export function createPromotion(input: PromotionCreateInput): Promotion {
   validateInput(input);
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
-  const applicableProducts: ProductRef[] = (input.applicableProductIds || []).map(id => ({ id }));
+  const applicableProducts: ApplicableProduct[] = (input.applicableProductIds || []).map(pid => ({ id: pid }));
   const promotion: Promotion = {
+    ...input,
     id,
     name: input.name.trim(),
-    description: input.description.trim(),
-    discountType: input.discountType,
+    description: input.description?.trim() || '',
+    discountType: input.discountType as DiscountType,
     discountValue: input.discountValue,
     startDate: new Date(input.startDate).toISOString(),
     endDate: new Date(input.endDate).toISOString(),
@@ -185,33 +143,38 @@ export function createPromotion(input: PromotionCreateInput): Promotion {
     usageLimit: input.usageLimit || 0,
     usageCount: 0,
     applicableProducts,
-    createdAt: now,
+    created_at: now,
   };
   store.push(promotion);
   return promotion;
 }
 
 export function updatePromotion(id: string, input: PromotionUpdateInput): Promotion {
-  validateInput(input);
   const idx = store.findIndex(p => p.id === id);
   if (idx === -1) {
     throw new Error('Promoción no encontrada');
   }
+  
   const existing = store[idx];
-  const applicableProducts: ProductRef[] = (input.applicableProductIds || []).map(id => ({ id }));
+  const applicableProducts: ApplicableProduct[] = input.applicableProductIds 
+    ? input.applicableProductIds.map(pid => ({ id: pid }))
+    : (existing.applicableProducts || []);
+
   const updated: Promotion = {
     ...existing,
-    name: input.name.trim(),
-    description: input.description.trim(),
-    discountType: input.discountType,
-    discountValue: input.discountValue,
-    startDate: new Date(input.startDate).toISOString(),
-    endDate: new Date(input.endDate).toISOString(),
-    minPurchaseAmount: input.minPurchaseAmount || 0,
-    maxDiscountAmount: input.maxDiscountAmount || 0,
-    usageLimit: input.usageLimit || 0,
+    ...input,
+    name: input.name?.trim() || existing.name,
+    description: input.description?.trim() || existing.description,
+    discountType: (input.discountType as DiscountType) || existing.discountType,
+    discountValue: input.discountValue ?? existing.discountValue,
+    startDate: input.startDate ? new Date(input.startDate).toISOString() : existing.startDate,
+    endDate: input.endDate ? new Date(input.endDate).toISOString() : existing.endDate,
+    minPurchaseAmount: input.minPurchaseAmount ?? existing.minPurchaseAmount,
+    maxDiscountAmount: input.maxDiscountAmount ?? existing.maxDiscountAmount,
+    usageLimit: input.usageLimit ?? existing.usageLimit,
     applicableProducts,
   };
+  
   store[idx] = updated;
   return updated;
 }
@@ -245,7 +208,6 @@ export function getCarouselPromotions(): Promotion[] {
 }
 
 export function setCarousel(ids: string[]): { ids: string[]; items: Promotion[] } {
-  // Normalize: drop duplicates, ensure existence
   const unique: string[] = [];
   const seen = new Set<string>();
   for (const id of ids) {
@@ -277,7 +239,6 @@ export function setPromotionApproval(
   return store[idx];
 }
 
-// Test-only utility to reset in-memory store
 export function __clearPromotionsForTests() {
   store.splice(0, store.length);
   carouselIds = [];

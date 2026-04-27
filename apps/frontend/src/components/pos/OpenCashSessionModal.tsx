@@ -9,6 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { Wallet, DollarSign, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useCurrencyFormatter } from '@/contexts/BusinessConfigContext';
+import { MAX_CASH_OPENING_AMOUNT } from '@/lib/cash/constants';
 import { cn } from '@/lib/utils';
 
 interface OpenCashSessionModalProps {
@@ -58,7 +59,7 @@ export default function OpenCashSessionModal({
       errs.push('El monto debe ser un número válido');
     } else if (numAmount < 0) {
       errs.push('El monto debe ser positivo');
-    } else if (numAmount > 10000000) {
+    } else if (numAmount > MAX_CASH_OPENING_AMOUNT) {
       errs.push('El monto de apertura es demasiado alto');
     }
 

@@ -1,0 +1,29 @@
+apps/backend/src/__tests__/auth.test.ts(54,23): error TS2339: Property 'status' does not exist on type 'TestAgent<Test>'.
+apps/backend/src/__tests__/auth.test.ts(55,23): error TS2339: Property 'body' does not exist on type 'TestAgent<Test>'.
+apps/backend/src/__tests__/users-multi-tenant.test.ts(2,10): error TS2614: Module '"../index"' has no exported member 'app'. Did you mean to use 'import app from "../index"' instead?
+apps/backend/src/__tests__/users-multi-tenant.test.ts(3,10): error TS2305: Module '"../config/database"' has no exported member 'prisma'.
+apps/backend/src/config/cache-usage-examples.ts(140,9): error TS2322: Type '{ userId: string; customerId: string; subtotal: any; discount: any; tax: any; total: any; paymentMethod: any; }' is not assignable to type '(Without<SaleCreateInput, SaleUncheckedCreateInput> & SaleUncheckedCreateInput) | (Without<...> & SaleCreateInput)'.
+  Type '{ userId: string; customerId: string; subtotal: any; discount: any; tax: any; total: any; paymentMethod: any; }' is not assignable to type 'Without<SaleUncheckedCreateInput, SaleCreateInput> & SaleCreateInput'.
+    Type '{ userId: string; customerId: string; subtotal: any; discount: any; tax: any; total: any; paymentMethod: any; }' is not assignable to type 'Without<SaleUncheckedCreateInput, SaleCreateInput>'.
+      Types of property 'customerId' are incompatible.
+        Type 'string' is not assignable to type 'never'.
+apps/backend/src/routes/returns.ts(704,31): error TS2551: Property 'role' does not exist on type '{ id: string; email: string; fullName: string; organizationId?: string; roles: { id: number; name: string; permissions: { id: number; name: string; resource: string; action: string; }[]; }[]; permissions: { id: number; name: string; resource: string; action: string; }[]; }'. Did you mean 'roles'?
+apps/backend/src/routes/returns.ts(984,31): error TS2551: Property 'role' does not exist on type '{ id: string; email: string; fullName: string; organizationId?: string; roles: { id: number; name: string; permissions: { id: number; name: string; resource: string; action: string; }[]; }[]; permissions: { id: number; name: string; resource: string; action: string; }[]; }'. Did you mean 'roles'?
+apps/backend/src/services/queue.service.ts(12,3): error TS2322: Type 'Redis' is not assignable to type 'ConnectionOptions'.
+  Type 'Redis' is not assignable to type 'ClusterOptions | Redis | Cluster'.
+    Type 'import("E:/mipos/Mipos-main/apps/backend/node_modules/ioredis/built/Redis").default' is not assignable to type 'import("E:/mipos/Mipos-main/apps/backend/node_modules/bullmq/node_modules/ioredis/built/Redis").default'.
+      Types of property 'options' are incompatible.
+        Type 'import("E:/mipos/Mipos-main/apps/backend/node_modules/ioredis/built/redis/RedisOptions").RedisOptions' is not assignable to type 'import("E:/mipos/Mipos-main/apps/backend/node_modules/bullmq/node_modules/ioredis/built/redis/RedisOptions").RedisOptions'.
+          Type 'RedisOptions' is not assignable to type 'CommonRedisOptions'.
+            The types returned by 'new Connector(...)' are incompatible between these types.
+              Type 'import("E:/mipos/Mipos-main/apps/backend/node_modules/ioredis/built/connectors/AbstractConnector").default' is not assignable to type 'import("E:/mipos/Mipos-main/apps/backend/node_modules/bullmq/node_modules/ioredis/built/connectors/AbstractConnector").default'.
+                Property 'connecting' is protected but type 'AbstractConnector' is not a class derived from 'AbstractConnector'.
+apps/backend/src/services/queue.service.ts(120,9): error TS2322: Type 'Redis' is not assignable to type 'ConnectionOptions'.
+  Type 'Redis' is not assignable to type 'ClusterOptions | Redis | Cluster'.
+    Type 'import("E:/mipos/Mipos-main/apps/backend/node_modules/ioredis/built/Redis").default' is not assignable to type 'import("E:/mipos/Mipos-main/apps/backend/node_modules/bullmq/node_modules/ioredis/built/Redis").default'.
+      Types of property 'options' are incompatible.
+        Type 'import("E:/mipos/Mipos-main/apps/backend/node_modules/ioredis/built/redis/RedisOptions").RedisOptions' is not assignable to type 'import("E:/mipos/Mipos-main/apps/backend/node_modules/bullmq/node_modules/ioredis/built/redis/RedisOptions").RedisOptions'.
+          Type 'RedisOptions' is not assignable to type 'CommonRedisOptions'.
+            The types returned by 'new Connector(...)' are incompatible between these types.
+              Type 'import("E:/mipos/Mipos-main/apps/backend/node_modules/ioredis/built/connectors/AbstractConnector").default' is not assignable to type 'import("E:/mipos/Mipos-main/apps/backend/node_modules/bullmq/node_modules/ioredis/built/connectors/AbstractConnector").default'.
+                Property 'connecting' is protected but type 'AbstractConnector' is not a class derived from 'AbstractConnector'.

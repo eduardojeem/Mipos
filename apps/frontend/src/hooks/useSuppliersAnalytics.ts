@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase'
+import { useCurrentOrganizationId } from '@/hooks/use-current-organization'
 
 type AnalyticsMetrics = {
   totalSuppliers: number
@@ -15,19 +16,37 @@ type AnalyticsMetrics = {
 export function useSuppliersAnalytics(params?: { months?: number }) {
   const months = Math.max(1, Math.min(24, params?.months ?? 12))
   const supabase = createClient()
+  const orgId = useCurrentOrganizationId()
 
   return useQuery({
-    queryKey: ['suppliers-analytics', months],
+    queryKey: ['suppliers-analytics', orgId, months],
     queryFn: async (): Promise<{ analytics: AnalyticsMetrics }> => {
+      if (!orgId) {
+        return {
+          analytics: {
+            totalSuppliers: 0,
+            activeSuppliers: 0,
+            totalSpent: 0,
+            averageOrderValue: 0,
+            topPerformers: [],
+            categoryDistribution: [],
+            monthlyTrends: [],
+            performanceMetrics: { excellent: 0, good: 0, average: 0, poor: 0 }
+          }
+        }
+      }
+
       // Count suppliers
       const { count: totalSuppliers } = await supabase
         .from('suppliers')
         .select('id', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
 
       const { count: activeSuppliers } = await supabase
         .from('suppliers')
         .select('id', { count: 'exact', head: true })
         .eq('is_active', true)
+        .eq('organization_id', orgId)
 
       // Fetch recent suppliers for monthly trends
       const since = new Date()
@@ -36,6 +55,7 @@ export function useSuppliersAnalytics(params?: { months?: number }) {
         .from('suppliers')
         .select('id,name,created_at')
         .gte('created_at', since.toISOString())
+        .eq('organization_id', orgId)
 
       const monthLabels = Array.from({ length: months }, (_, i) => {
         const d = new Date()
@@ -55,6 +75,7 @@ export function useSuppliersAnalytics(params?: { months?: number }) {
         .from('products')
         .select('id,name,supplier_id')
         .not('supplier_id', 'is', null)
+        .eq('organization_id', orgId)
 
       const bySupplier: Record<string, number> = {}
       ;(products || []).forEach((p: any) => {
@@ -69,6 +90,7 @@ export function useSuppliersAnalytics(params?: { months?: number }) {
           .from('suppliers')
           .select('id,name')
           .in('id', supplierIds)
+          .eq('organization_id', orgId)
         const supRows = supQuery.data || []
         supRows.forEach((s: any) => { namesMap[s.id] = s.name })
       }
@@ -82,6 +104,7 @@ export function useSuppliersAnalytics(params?: { months?: number }) {
         .from('products')
         .select('category_id')
         .not('category_id', 'is', null)
+        .eq('organization_id', orgId)
       const catCounts: { [key: string]: number } = Object.create(null)
       (catRows || []).forEach((r: any) => {
         const key = String(r.category_id)

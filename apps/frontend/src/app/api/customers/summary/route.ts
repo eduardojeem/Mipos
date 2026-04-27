@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase/server';
+import { validateRole } from '@/app/api/_utils/role-validation';
+import {
+  buildCustomerSummary,
+  resolveCustomerOrganizationId,
+} from '@/app/api/customers/_lib';
 
 /**
  * Customer Summary API - Phase 5 Optimization
@@ -10,91 +15,33 @@ import { createClient } from '@/lib/supabase';
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient();
+    const auth = await validateRole(request, {
+      roles: ['OWNER', 'ADMIN', 'SUPER_ADMIN', 'MANAGER', 'EMPLOYEE', 'CASHIER']
+    });
+    if (!auth.ok) {
+      return NextResponse.json(auth.body, { status: auth.status });
+    }
 
-    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    const supabase = await createClient();
+
+    const orgId = await resolveCustomerOrganizationId(request, auth.userRole);
     console.log('[Customers Summary API] Organization ID:', orgId);
     if (!orgId) {
       console.error('[Customers Summary API] ❌ Organization ID header missing');
-      return NextResponse.json({ success: false, error: 'Organization header missing' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Encabezado de organización faltante' }, { status: 400 });
     }
 
-    // Get basic customer counts with parallel queries
-    const [
-      { count: totalCount },
-      { count: activeCount },
-      { count: inactiveCount },
-      { count: vipCount },
-      { count: wholesaleCount },
-      { count: regularCount }
-    ] = await Promise.all([
-      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('organization_id', orgId),
-      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('is_active', true).eq('organization_id', orgId),
-      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('is_active', false).eq('organization_id', orgId),
-      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('customer_type', 'VIP').eq('organization_id', orgId),
-      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('customer_type', 'WHOLESALE').eq('organization_id', orgId),
-      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('customer_type', 'REGULAR').eq('organization_id', orgId)
-    ]);
-
-    // Get recent customer activity (last 30 days)
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-    const { count: newCustomersCount } = await supabase
+    const { data: customerMetrics, error } = await supabase
       .from('customers')
-      .select('*', { count: 'exact', head: true })
+      .select('customer_type, is_active, total_purchases, total_orders, created_at')
       .eq('organization_id', orgId)
-      .gte('created_at', thirtyDaysAgo.toISOString());
+      .is('deleted_at', null);
 
-    // Get customer value metrics
-    const { data: valueMetrics } = await supabase
-      .from('customers')
-      .select('total_purchases, total_orders')
-      .eq('organization_id', orgId)
-      .not('total_purchases', 'is', null);
+    if (error) {
+      throw new Error(error.message);
+    }
 
-    // Calculate aggregated metrics
-    const totalRevenue = valueMetrics?.reduce((sum: number, customer: any) => sum + (customer.total_purchases || 0), 0) || 0;
-    const totalOrders = valueMetrics?.reduce((sum: number, customer: any) => sum + (customer.total_orders || 0), 0) || 0;
-    const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
-
-    // Customer segmentation based on purchase behavior
-    const highValueCustomers = valueMetrics?.filter((c: any) => (c.total_purchases || 0) > 10000).length || 0;
-    const frequentCustomers = valueMetrics?.filter((c: any) => (c.total_orders || 0) > 10).length || 0;
-    console.log('[Customers Summary API] Stats calculated:', { totalCount, activeCount, newCustomersCount, totalRevenue, totalOrders });
-
-    const summary = {
-      // Basic counts
-      total: totalCount || 0,
-      active: activeCount || 0,
-      inactive: inactiveCount || 0,
-
-      // Customer types
-      vip: vipCount || 0,
-      wholesale: wholesaleCount || 0,
-      regular: regularCount || 0,
-
-      // Activity metrics
-      newThisMonth: newCustomersCount || 0,
-
-      // Value metrics
-      totalRevenue: Math.round(totalRevenue * 100) / 100,
-      totalOrders: totalOrders,
-      avgOrderValue: Math.round(avgOrderValue * 100) / 100,
-
-      // Segmentation
-      highValue: highValueCustomers,
-      frequent: frequentCustomers,
-
-      // Growth metrics
-      growthRate: totalCount ? Math.round(((newCustomersCount || 0) / totalCount) * 100 * 100) / 100 : 0,
-
-      // Engagement metrics
-      activeRate: totalCount ? Math.round(((activeCount || 0) / totalCount) * 100 * 100) / 100 : 0,
-
-      // Generated timestamp
-      generatedAt: new Date().toISOString()
-    };
+    const summary = buildCustomerSummary(customerMetrics || []);
 
     return NextResponse.json({
       success: true,
@@ -106,8 +53,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: 'Failed to fetch customer summary',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        error: 'Error al obtener el resumen de clientes',
+        details: error instanceof Error ? error.message : 'Error desconocido'
       },
       { status: 500 }
     );

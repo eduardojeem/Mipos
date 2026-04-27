@@ -56,7 +56,7 @@ interface OrganizationFormData {
   postalCode: string;
   
   // Configuración (sincronizado con DB)
-  subscriptionPlan: 'FREE' | 'STARTER' | 'PROFESSIONAL' | 'ENTERPRISE';
+  subscriptionPlan: 'FREE' | 'STARTER' | 'PROFESSIONAL';
   subscriptionStatus: 'ACTIVE' | 'PAST_DUE' | 'CANCELED' | 'TRIAL';
   maxUsers: number;
   features: string[];
@@ -96,7 +96,6 @@ const plans = [
   { value: 'FREE', label: 'Gratuito', color: 'from-gray-500 to-slate-500', description: 'Funcionalidades básicas' },
   { value: 'STARTER', label: 'Starter', color: 'from-blue-500 to-indigo-500', description: 'Para pequeños negocios' },
   { value: 'PROFESSIONAL', label: 'Professional', color: 'from-purple-500 to-pink-500', description: 'Para negocios en crecimiento' },
-  { value: 'ENTERPRISE', label: 'Enterprise', color: 'from-orange-500 to-red-500', description: 'Solución empresarial completa' },
 ];
 
 const availableFeatures = [
@@ -789,3 +788,4 @@ export default function CreateOrganizationPage() {
     </SuperAdminGuard>
   );
 }
+

@@ -1,42 +1,55 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useState, useEffect, useRef, useMemo, useCallback, Suspense } from 'react';
+import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import NavBar from '@/app/home/components/NavBar';
-import CatalogFiltersOptimized, { ViewMode, SortMode } from './components/CatalogFiltersOptimized';
+import CatalogFiltersOptimized, { type ViewMode } from './components/CatalogFiltersOptimized';
 import ProductGridOptimized from './components/ProductGridOptimized';
 import QuickViewModal from './components/QuickViewModal';
-import { AdvancedFilters } from './components/FilterDrawer';
+import { type AdvancedFilters } from './components/FilterDrawer';
+import {
+  buildCatalogSearchParams,
+  CATALOG_DEFAULT_PAGE_SIZE,
+  type CatalogQueryState,
+  type CatalogSortMode,
+} from './catalog-query';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import Breadcrumbs from '@/components/ui/breadcrumbs';
 import Pagination from '@/components/catalog/Pagination';
 import { useCatalogCart } from '@/hooks/useCatalogCart';
 import { useFavorites } from '@/hooks/useFavorites';
+import { useTenantPublicRouting } from '@/hooks/useTenantPublicRouting';
 import { useCatalogAudit } from '@/hooks/useCatalogAudit';
 import { useBusinessConfig } from '@/contexts/BusinessConfigContext';
-import { createClient } from '@/lib/supabase/client';
-import { 
-  AlertCircle, 
-  Loader2, 
-  RefreshCw, 
-  Search, 
-  ShoppingCart, 
+import {
+  AlertCircle,
+  Loader2,
+  RefreshCw,
+  ShoppingCart,
   Sparkles,
-  X
 } from 'lucide-react';
 import type { Product, Category } from '@/types';
 
-// Lazy load modals with proper typing
+type OrderConfirmationData = {
+  orderId: string;
+  customerName: string;
+  customerEmail: string;
+  total: number;
+  paymentMethod: string;
+  orderDate: string;
+};
+
 type CheckoutModalProps = {
   isOpen: boolean;
   onClose: () => void;
   cartItems: { id: string; name: string; price: number; quantity: number; image?: string }[];
   cartTotal?: number;
-  onOrderSuccess: (orderData: any) => void;
+  onRemoveItem?: (productId: string) => void;
+  onUpdateItemQuantity?: (productId: string, quantity: number) => void;
+  onOrderSuccess: (orderData: OrderConfirmationData) => void;
 };
 
 type OrderConfirmationModalProps = {
@@ -50,37 +63,70 @@ type OrderConfirmationModalProps = {
   orderDate: string;
 };
 
+type CatalogProductsPayload = {
+  products: Product[];
+  totalProducts: number;
+  maxPrice: number;
+};
+
 const CheckoutModal = dynamic<CheckoutModalProps>(
-  () => import('@/components/catalog/CheckoutModal').then(m => m.default),
+  () => import('@/components/catalog/CheckoutModal').then((module) => module.default),
   { loading: () => null }
 );
 
 const OrderConfirmationModal = dynamic<OrderConfirmationModalProps>(
-  () => import('@/components/catalog/OrderConfirmationModal').then(m => m.default),
+  () => import('@/components/catalog/OrderConfirmationModal').then((module) => module.default),
   { loading: () => null }
 );
 
 interface CatalogClientOptimizedProps {
   initialProducts: Product[];
   initialCategories: Category[];
+  initialTotalProducts: number;
+  initialMaxPrice: number;
+  initialQueryState: CatalogQueryState;
+}
+
+function buildInitialFilters(
+  initialQueryState: CatalogQueryState,
+  initialMaxPrice: number
+): AdvancedFilters {
+  const upperBound =
+    initialQueryState.maxPrice !== null
+      ? Math.min(initialQueryState.maxPrice, initialMaxPrice)
+      : initialMaxPrice;
+
+  return {
+    categories: initialQueryState.categories,
+    priceRange: [Math.max(initialQueryState.minPrice, 0), Math.max(upperBound, 1)],
+    rating: initialQueryState.rating,
+    inStock: initialQueryState.inStock,
+    onSale: initialQueryState.onSale,
+    brands: [],
+    tags: [],
+  };
 }
 
 export default function CatalogClientOptimized({
   initialProducts,
   initialCategories,
+  initialTotalProducts,
+  initialMaxPrice,
+  initialQueryState,
 }: CatalogClientOptimizedProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { config } = useBusinessConfig();
-  const supabase = createClient();
-  const PAGE_SIZE = 36;
+  const { tenantHref, tenantApiPath } = useTenantPublicRouting();
+  const categories = initialCategories;
+  const initialAdvancedFilters = useMemo(
+    () => buildInitialFilters(initialQueryState, initialMaxPrice),
+    [initialMaxPrice, initialQueryState]
+  );
 
-  // Custom hooks
   const {
     cart,
     cartTotal,
     cartItemsCount,
-    isHydrated: cartHydrated,
     addToCart,
     removeFromCart,
     updateQuantity,
@@ -89,7 +135,6 @@ export default function CatalogClientOptimized({
 
   const {
     favorites,
-    isHydrated: favoritesHydrated,
     toggleFavorite,
   } = useFavorites();
 
@@ -99,84 +144,56 @@ export default function CatalogClientOptimized({
     logSearch,
     logCategoryFilter,
     logAddToCart,
-    logRemoveFromCart,
     logCheckoutStart,
     logCheckoutComplete,
     logOrderCreated,
     logFilterApplied,
     logSortChanged,
     logViewModeChanged,
-    logLoadMore,
   } = useCatalogAudit();
 
-  // State
   const [products, setProducts] = useState<Product[]>(initialProducts);
-  const [categories] = useState<Category[]>(initialCategories);
   const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [totalProducts, setTotalProducts] = useState(initialProducts.length);
+  const [retryNonce, setRetryNonce] = useState(0);
+  const [totalProducts, setTotalProducts] = useState(initialTotalProducts);
+  const [maxPrice, setMaxPrice] = useState(Math.max(initialMaxPrice, 1));
 
-  // Pagination
-  const [page, setPage] = useState(() => {
-    const p = parseInt(searchParams?.get('page') || '1', 10);
-    return Number.isFinite(p) && p > 0 ? p : 1;
-  });
-  const [hasMore, setHasMore] = useState(initialProducts.length >= PAGE_SIZE);
-  const [itemsPerPage, setItemsPerPage] = useState(PAGE_SIZE);
-
-  // Filters
-  const [searchQuery, setSearchQuery] = useState(searchParams?.get('search') || '');
-  const [debouncedSearch, setDebouncedSearch] = useState(searchQuery);
-  const [selectedCategories, setSelectedCategories] = useState<string[]>(
-    searchParams?.get('category') ? [searchParams.get('category')!] : []
-  );
-  const [sortBy, setSortBy] = useState<SortMode>(
-    (searchParams?.get('sort') as SortMode) || 'popular'
-  );
+  const [page, setPage] = useState(initialQueryState.page);
+  const [itemsPerPage, setItemsPerPage] = useState(initialQueryState.itemsPerPage);
+  const [searchQuery, setSearchQuery] = useState(initialQueryState.search);
+  const [debouncedSearch, setDebouncedSearch] = useState(initialQueryState.search);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(initialQueryState.categories);
+  const [sortBy, setSortBy] = useState<CatalogSortMode>(initialQueryState.sortBy);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
-  const [showOnlyInStock, setShowOnlyInStock] = useState(true);
-  const [showOnlyOnSale, setShowOnlyOnSale] = useState(
-    searchParams?.get('onSale') === 'true'
-  );
-  const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilters>({
-    categories: selectedCategories,
-    priceRange: [0, 1000],
-    rating: null,
-    inStock: true,
-    onSale: false,
-    brands: [],
-    tags: [],
-  });
+  const [showOnlyInStock, setShowOnlyInStock] = useState(initialQueryState.inStock);
+  const [showOnlyOnSale, setShowOnlyOnSale] = useState(initialQueryState.onSale);
+  const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilters>(initialAdvancedFilters);
 
-  // UI State
   const [showCheckout, setShowCheckout] = useState(false);
   const [showOrderConfirmation, setShowOrderConfirmation] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  const [orderConfirmationData, setOrderConfirmationData] = useState<any>(null);
+  const [orderConfirmationData, setOrderConfirmationData] = useState<OrderConfirmationData | null>(null);
 
-  // Max price for filters
-  const maxPrice = useMemo(() => {
-    return Math.max(...products.map(p => p.sale_price), 1000);
-  }, [products]);
+  const skipInitialFetchRef = useRef(true);
+  const previousMaxPriceRef = useRef(Math.max(initialMaxPrice, 1));
 
-  // Debounce search
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(searchQuery);
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(searchQuery.trim());
     }, 400);
-    return () => clearTimeout(timer);
+
+    return () => window.clearTimeout(timer);
   }, [searchQuery]);
 
-  // Log page view on mount
   useEffect(() => {
     logPageView('/catalog', {
-      search: searchParams?.get('search'),
-      category: searchParams?.get('category'),
+      search: initialQueryState.search || null,
+      categories: initialQueryState.categories,
+      onSale: initialQueryState.onSale,
     });
-  }, []); // eslint-disable-line
+  }, [initialQueryState.categories, initialQueryState.onSale, initialQueryState.search, logPageView]);
 
-  // Restore preferences from localStorage
   useEffect(() => {
     try {
       const savedView = localStorage.getItem('catalog.viewMode');
@@ -186,290 +203,172 @@ export default function CatalogClientOptimized({
     } catch {}
   }, []);
 
-  // Persist preferences
   useEffect(() => {
     try {
       localStorage.setItem('catalog.viewMode', viewMode);
     } catch {}
   }, [viewMode]);
 
-  // Sync filters with URL
   useEffect(() => {
-    const params = new URLSearchParams();
-    if (debouncedSearch) params.set('search', debouncedSearch);
-    if (selectedCategories.length === 1) params.set('category', selectedCategories[0]);
-    if (sortBy !== 'popular') params.set('sort', sortBy);
-    if (showOnlyOnSale) params.set('onSale', 'true');
-    if (page && page > 1) params.set('page', String(page));
+    const previousMaxPrice = previousMaxPriceRef.current;
+    setAdvancedFilters((previous) => {
+      const shouldSyncUpperBound =
+        previous.priceRange[1] === previousMaxPrice || previous.priceRange[1] > maxPrice;
+      const nextUpperBound = shouldSyncUpperBound ? maxPrice : previous.priceRange[1];
+      const nextLowerBound = Math.min(previous.priceRange[0], nextUpperBound);
 
+      if (
+        nextUpperBound === previous.priceRange[1] &&
+        nextLowerBound === previous.priceRange[0]
+      ) {
+        return previous;
+      }
+
+      return {
+        ...previous,
+        priceRange: [nextLowerBound, nextUpperBound],
+      };
+    });
+    previousMaxPriceRef.current = maxPrice;
+  }, [maxPrice]);
+
+  const requestState = useMemo<CatalogQueryState>(() => {
+    const normalizedMaxPrice =
+      advancedFilters.priceRange[1] < maxPrice ? advancedFilters.priceRange[1] : null;
+
+    return {
+      search: debouncedSearch,
+      categories: selectedCategories,
+      sortBy,
+      inStock: showOnlyInStock,
+      onSale: showOnlyOnSale,
+      page,
+      itemsPerPage,
+      minPrice: advancedFilters.priceRange[0],
+      maxPrice: normalizedMaxPrice,
+      rating: advancedFilters.rating,
+    };
+  }, [
+    advancedFilters.priceRange,
+    advancedFilters.rating,
+    debouncedSearch,
+    itemsPerPage,
+    maxPrice,
+    page,
+    selectedCategories,
+    showOnlyInStock,
+    showOnlyOnSale,
+    sortBy,
+  ]);
+
+  const requestQueryString = useMemo(
+    () =>
+      buildCatalogSearchParams(requestState, {
+        defaultItemsPerPage: CATALOG_DEFAULT_PAGE_SIZE,
+        maxPriceCeiling: maxPrice,
+      }).toString(),
+    [maxPrice, requestState]
+  );
+
+  useEffect(() => {
+    const params = buildCatalogSearchParams(requestState, {
+      defaultItemsPerPage: CATALOG_DEFAULT_PAGE_SIZE,
+      maxPriceCeiling: maxPrice,
+    });
     const query = params.toString();
-    router.replace(query ? `/catalog?${query}` : '/catalog', { scroll: false });
-  }, [debouncedSearch, selectedCategories, sortBy, showOnlyOnSale, page, router]);
+    router.replace(query ? tenantHref(`/catalog?${query}`) : tenantHref('/catalog'), { scroll: false });
+  }, [maxPrice, requestState, router, tenantHref]);
 
-  // Reset page when filters change
   useEffect(() => {
-    setPage(1);
-  }, [debouncedSearch, selectedCategories, showOnlyInStock, showOnlyOnSale, sortBy]);
+    if (skipInitialFetchRef.current) {
+      skipInitialFetchRef.current = false;
+      return;
+    }
 
-  // Load products
-  useEffect(() => {
+    const controller = new AbortController();
+    const target = requestQueryString
+      ? tenantApiPath(`/api/catalog/products?${requestQueryString}`)
+      : tenantApiPath('/api/catalog/products');
+
     const loadProducts = async () => {
       setLoading(true);
       setError(null);
 
       try {
-        let query = supabase
-          .from('products')
-          .select('*', { count: 'exact' })
-          .eq('is_active', true);
+        const response = await fetch(target, {
+          method: 'GET',
+          cache: 'no-store',
+          signal: controller.signal,
+        });
 
-        // Apply search
+        const payload = (await response.json().catch(() => null)) as
+          | (CatalogProductsPayload & { error?: string })
+          | null;
+
+        if (!response.ok || !payload) {
+          throw new Error(payload?.error || 'No pudimos cargar los productos.');
+        }
+
+        setProducts(payload.products || []);
+        setTotalProducts(payload.totalProducts || 0);
+        setMaxPrice(Math.max(payload.maxPrice || 0, 1));
+
         if (debouncedSearch) {
-          query = query.or(`name.ilike.%${debouncedSearch}%,description.ilike.%${debouncedSearch}%`);
+          logSearch(debouncedSearch, payload.totalProducts || 0);
         }
-
-        // Apply category filter
-        if (selectedCategories.length > 0) {
-          query = query.in('category_id', selectedCategories);
-        }
-
-        // Apply stock filter
-        if (showOnlyInStock) {
-          query = query.gt('stock_quantity', 0);
-        }
-
-        // Apply sale filter
-        if (showOnlyOnSale) {
-          query = query.gt('discount_percentage', 0);
-        }
-
-        // Apply price range
-        if (advancedFilters.priceRange[0] > 0) {
-          query = query.gte('sale_price', advancedFilters.priceRange[0]);
-        }
-        if (advancedFilters.priceRange[1] < maxPrice) {
-          query = query.lte('sale_price', advancedFilters.priceRange[1]);
-        }
-
-        // Apply rating filter
-        if (advancedFilters.rating) {
-          query = query.gte('rating', advancedFilters.rating);
-        }
-
-        // Apply sorting
-        switch (sortBy) {
-          case 'price-low':
-            query = query.order('sale_price', { ascending: true });
-            break;
-          case 'price-high':
-            query = query.order('sale_price', { ascending: false });
-            break;
-          case 'rating':
-            query = query.order('rating', { ascending: false, nullsFirst: false });
-            break;
-          case 'newest':
-            query = query.order('created_at', { ascending: false });
-            break;
-          case 'name':
-            query = query.order('name', { ascending: true });
-            break;
-          default: // popular
-            query = query.order('stock_quantity', { ascending: false });
-        }
-
-        const start = (page - 1) * itemsPerPage;
-        const { data, error: queryError, count } = await query.range(start, start + itemsPerPage - 1);
-
-        if (queryError) {
-          console.error('Error loading products:', queryError);
-          setError('No pudimos cargar los productos. Verifica tu conexión.');
-          setProducts([]);
-          setHasMore(false);
+      } catch (fetchError) {
+        if ((fetchError as Error).name === 'AbortError') {
           return;
         }
 
-        if (data) {
-          setProducts(data);
-          setTotalProducts(count || data.length);
-          const total = count || data.length;
-          const totalPages = Math.max(1, Math.ceil(total / itemsPerPage));
-          setHasMore(page < totalPages);
-
-          if (debouncedSearch) {
-            logSearch(debouncedSearch, data.length);
-          }
-        }
-      } catch (err) {
-        console.error('Unexpected error:', err);
-        setError('Ocurrió un error inesperado.');
-        setProducts([]);
+        console.error('[Catalog] Error loading products:', fetchError);
+        setError('No pudimos cargar los productos. Intenta nuevamente.');
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
       }
     };
 
     loadProducts();
-  }, [page, debouncedSearch, selectedCategories, showOnlyInStock, showOnlyOnSale, sortBy, advancedFilters, supabase, maxPrice, logSearch]);
 
-  // Load more products
-  const loadMore = useCallback(async () => {
-    if (loadingMore || !hasMore) return;
+    return () => controller.abort();
+  }, [debouncedSearch, logSearch, requestQueryString, retryNonce, tenantApiPath]);
 
-    setLoadingMore(true);
-    try {
-      const nextPage = page + 1;
-      const start = (nextPage - 1) * itemsPerPage;
+  const handleRetry = useCallback(() => {
+    setRetryNonce((previous) => previous + 1);
+  }, []);
 
-      let query = supabase
-        .from('products')
-        .select('*')
-        .eq('is_active', true);
+  const handleSearchChange = useCallback((value: string) => {
+    setSearchQuery(value);
+    setPage(1);
+  }, []);
 
-      if (debouncedSearch) {
-        query = query.or(`name.ilike.%${debouncedSearch}%,description.ilike.%${debouncedSearch}%`);
-      }
-      if (selectedCategories.length > 0) {
-        query = query.in('category_id', selectedCategories);
-      }
-      if (showOnlyInStock) {
-        query = query.gt('stock_quantity', 0);
-      }
-      if (showOnlyOnSale) {
-        query = query.gt('discount_percentage', 0);
-      }
+  const handleCategorySelect = useCallback((categoryId: string) => {
+    const nextCategories = categoryId === 'all' ? [] : [categoryId];
+    setSelectedCategories(nextCategories);
+    setAdvancedFilters((previous) => ({ ...previous, categories: nextCategories }));
+    setPage(1);
 
-      // Same sorting as main query
-      switch (sortBy) {
-        case 'price-low':
-          query = query.order('sale_price', { ascending: true });
-          break;
-        case 'price-high':
-          query = query.order('sale_price', { ascending: false });
-          break;
-        case 'rating':
-          query = query.order('rating', { ascending: false, nullsFirst: false });
-          break;
-        case 'newest':
-          query = query.order('created_at', { ascending: false });
-          break;
-        case 'name':
-          query = query.order('name', { ascending: true });
-          break;
-        default:
-          query = query.order('stock_quantity', { ascending: false });
-      }
-
-      const { data, error: queryError } = await query.range(start, start + itemsPerPage - 1);
-
-      if (queryError) {
-        setError('Error al cargar más productos.');
-        return;
-      }
-
-      if (data) {
-        setProducts(prev => {
-          const merged = [...prev, ...data];
-          setPage(nextPage);
-          setHasMore(merged.length < totalProducts);
-          logLoadMore(nextPage, data.length);
-          return merged;
-        });
-      }
-    } finally {
-      setLoadingMore(false);
+    if (categoryId !== 'all') {
+      const category = categories.find((item) => item.id === categoryId);
+      logCategoryFilter(categoryId, category?.name);
     }
-  }, [page, loadingMore, hasMore, debouncedSearch, selectedCategories, showOnlyInStock, showOnlyOnSale, sortBy, supabase, logLoadMore, itemsPerPage, totalProducts]);
-
-  const goToPage = useCallback(async (p: number) => {
-    if (p === page) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const clamped = Math.max(1, p);
-      const start = (clamped - 1) * itemsPerPage;
-      let query = supabase
-        .from('products')
-        .select('*', { count: 'exact' })
-        .eq('is_active', true);
-
-      if (debouncedSearch) {
-        query = query.or(`name.ilike.%${debouncedSearch}%,description.ilike.%${debouncedSearch}%`);
-      }
-      if (selectedCategories.length > 0) {
-        query = query.in('category_id', selectedCategories);
-      }
-      if (showOnlyInStock) {
-        query = query.gt('stock_quantity', 0);
-      }
-      if (showOnlyOnSale) {
-        query = query.gt('discount_percentage', 0);
-      }
-
-      switch (sortBy) {
-        case 'price-low':
-          query = query.order('sale_price', { ascending: true });
-          break;
-        case 'price-high':
-          query = query.order('sale_price', { ascending: false });
-          break;
-        case 'rating':
-          query = query.order('rating', { ascending: false, nullsFirst: false });
-          break;
-        case 'newest':
-          query = query.order('created_at', { ascending: false });
-          break;
-        case 'name':
-          query = query.order('name', { ascending: true });
-          break;
-        default:
-          query = query.order('stock_quantity', { ascending: false });
-      }
-
-      const { data, error: queryError, count } = await query.range(start, start + itemsPerPage - 1);
-
-      if (queryError) {
-        setError('No pudimos cargar los productos. Verifica tu conexión.');
-        return;
-      }
-
-      if (data) {
-        setProducts(data);
-        setTotalProducts(count || data.length);
-        const total = count || data.length;
-        const totalPages = Math.max(1, Math.ceil(total / itemsPerPage));
-        const nextPage = Math.min(clamped, totalPages);
-        setPage(nextPage);
-        setHasMore(nextPage < totalPages);
-        const params = new URLSearchParams();
-        if (debouncedSearch) params.set('search', debouncedSearch);
-        if (selectedCategories.length === 1) params.set('category', selectedCategories[0]);
-        if (sortBy !== 'popular') params.set('sort', sortBy);
-        if (showOnlyOnSale) params.set('onSale', 'true');
-        if (nextPage > 1) params.set('page', String(nextPage));
-        const query = params.toString();
-        router.replace(query ? `/catalog?${query}` : '/catalog', { scroll: false });
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [page, itemsPerPage, debouncedSearch, selectedCategories, showOnlyInStock, showOnlyOnSale, sortBy, supabase, router]);
-
-  // Handlers
-  const handleCategoryChange = useCallback((categoryId: string) => {
-    setSelectedCategories(prev => {
-      if (categoryId === 'all') return [];
-      return prev.includes(categoryId)
-        ? prev.filter(c => c !== categoryId)
-        : [...prev, categoryId];
-    });
-    const category = categories.find(c => c.id === categoryId);
-    logCategoryFilter(categoryId, category?.name);
   }, [categories, logCategoryFilter]);
 
-  const handleSortChange = useCallback((sort: SortMode) => {
-    setSortBy(sort);
-    logSortChanged(sort);
+  const handleCategoryRemove = useCallback((categoryId: string) => {
+    setSelectedCategories((previous) => {
+      const nextCategories = previous.filter((value) => value !== categoryId);
+      setAdvancedFilters((current) => ({ ...current, categories: nextCategories }));
+      return nextCategories;
+    });
+    setPage(1);
+  }, []);
+
+  const handleSortChange = useCallback((value: CatalogSortMode) => {
+    setSortBy(value);
+    setPage(1);
+    logSortChanged(value);
   }, [logSortChanged]);
 
   const handleViewModeChange = useCallback((mode: ViewMode) => {
@@ -477,16 +376,33 @@ export default function CatalogClientOptimized({
     logViewModeChanged(mode);
   }, [logViewModeChanged]);
 
+  const handleInStockChange = useCallback((value: boolean) => {
+    setShowOnlyInStock(value);
+    setAdvancedFilters((previous) => ({ ...previous, inStock: value }));
+    setPage(1);
+  }, []);
+
+  const handleToggleOnSale = useCallback(() => {
+    setShowOnlyOnSale((previous) => {
+      const nextValue = !previous;
+      setAdvancedFilters((current) => ({ ...current, onSale: nextValue }));
+      return nextValue;
+    });
+    setPage(1);
+  }, []);
+
   const handleAdvancedFiltersChange = useCallback((filters: AdvancedFilters) => {
     setAdvancedFilters(filters);
     setSelectedCategories(filters.categories);
     setShowOnlyInStock(filters.inStock);
     setShowOnlyOnSale(filters.onSale);
+    setPage(1);
     logFilterApplied('advanced', filters);
   }, [logFilterApplied]);
 
   const handleClearFilters = useCallback(() => {
     setSearchQuery('');
+    setDebouncedSearch('');
     setSelectedCategories([]);
     setSortBy('popular');
     setShowOnlyInStock(true);
@@ -500,6 +416,7 @@ export default function CatalogClientOptimized({
       brands: [],
       tags: [],
     });
+    setPage(1);
   }, [maxPrice]);
 
   const handleQuickView = useCallback((product: Product) => {
@@ -507,68 +424,92 @@ export default function CatalogClientOptimized({
     logProductView(product.id, product.name);
   }, [logProductView]);
 
-  const handleAddToCart = useCallback((product: Product, quantity: number = 1) => {
+  const handleAddToCart = useCallback((product: Product, quantity = 1) => {
     addToCart(product, quantity);
-    logAddToCart(product.id, quantity, product.name, product.sale_price);
+    logAddToCart(product.id, quantity, product.name, Number(product.offer_price ?? product.sale_price));
   }, [addToCart, logAddToCart]);
-
-  const handleRemoveFromCart = useCallback((productId: string) => {
-    removeFromCart(productId);
-    logRemoveFromCart(productId);
-  }, [removeFromCart, logRemoveFromCart]);
 
   const handleToggleFavorite = useCallback((productId: string) => {
     toggleFavorite(productId);
   }, [toggleFavorite]);
 
   const handleCheckout = useCallback(() => {
+    if (cartItemsCount <= 0) {
+      return;
+    }
+
     setShowCheckout(true);
     logCheckoutStart(cartTotal, cartItemsCount);
-  }, [cartTotal, cartItemsCount, logCheckoutStart]);
+  }, [cartItemsCount, cartTotal, logCheckoutStart]);
 
-  const handleOrderSuccess = useCallback((orderData: any) => {
+  const handleOrderSuccess = useCallback((orderData: OrderConfirmationData) => {
     setShowCheckout(false);
     setShowOrderConfirmation(true);
     setOrderConfirmationData(orderData);
-    logOrderCreated(orderData.orderId, orderData.customerEmail, orderData.total, cart.length);
+    logOrderCreated(orderData.orderId, orderData.customerEmail, orderData.total, cartItemsCount);
     logCheckoutComplete(orderData.orderId, orderData.total, orderData.paymentMethod);
     clearCart();
-  }, [clearCart, cart.length, logOrderCreated, logCheckoutComplete]);
+  }, [cartItemsCount, clearCart, logCheckoutComplete, logOrderCreated]);
+
+  const goToPage = useCallback((nextPage: number) => {
+    if (nextPage === page) {
+      return;
+    }
+
+    setPage(nextPage);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [page]);
+
+  const handleItemsPerPageChange = useCallback((nextItemsPerPage: number) => {
+    setItemsPerPage(nextItemsPerPage);
+    setPage(1);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  const totalPages = Math.max(1, Math.ceil(totalProducts / itemsPerPage));
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
-      {/* Navigation */}
+    <div className="min-h-screen bg-[#fafafa] dark:bg-[#0b0f1a] transition-colors duration-500">
+      <div className="fixed inset-0 overflow-hidden pointer-events-none opacity-40 dark:opacity-20 z-0">
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-purple-500/20 blur-[120px] animate-pulse" />
+        <div
+          className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-blue-500/20 blur-[120px] animate-pulse"
+          style={{ animationDelay: '2s' }}
+        />
+      </div>
+
       <NavBar
         config={config}
         activeSection="explorar"
-        onNavigate={(section) => router.push(`/home#${section}`)}
+        onNavigate={(section) => router.push(tenantHref(`/home#${section}`))}
+        showCartButton={false}
       />
 
-      {/* Header con Carrito */}
-      <header className="sticky top-16 z-40 border-b bg-background/80 backdrop-blur-xl">
+      <header className="sticky top-16 z-40 border-b border-slate-200/50 dark:border-white/5 bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl transition-all duration-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between gap-4 h-16">
-            {/* Logo/Title */}
             <div className="flex items-center gap-3">
               <div className="p-2 bg-gradient-to-br from-primary/20 to-purple-500/20 rounded-xl">
                 <Sparkles className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <h1 className="font-bold text-foreground">Catálogo</h1>
-                <p className="text-xs text-muted-foreground hidden sm:block">{config.businessName}</p>
+                <h1 className="font-bold text-foreground text-lg tracking-tight">Catalogo</h1>
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground/70 font-semibold hidden sm:block">
+                  {config.businessName}
+                </p>
               </div>
             </div>
 
-            {/* Cart Button */}
             <Button
               size="sm"
-              className="relative h-10 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white shadow-md transition-all duration-200 hover:shadow-lg hover:scale-105 gap-2"
-              onClick={() => setShowCheckout(true)}
+              disabled={cartItemsCount === 0}
+              className="relative h-10 px-6 rounded-xl bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-700 hover:to-blue-700 text-white shadow-lg shadow-blue-500/20 transition-all duration-300 hover:shadow-blue-500/30 hover:scale-105 active:scale-95 gap-2 border-0 disabled:opacity-60 disabled:hover:scale-100"
+              onClick={handleCheckout}
             >
               <ShoppingCart className="w-4 h-4" />
-              <span className="hidden sm:inline">Carrito</span>
+              <span className="hidden sm:inline font-semibold">Carrito</span>
               {cartItemsCount > 0 && (
-                <Badge className="absolute -top-2 -right-2 h-5 w-5 p-0 flex items-center justify-center text-xs bg-black text-white">
+                <Badge className="absolute -top-2 -right-2 h-5 min-w-[20px] px-1.5 flex items-center justify-center text-[10px] font-bold bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-2 border-white dark:border-slate-900 rounded-full animate-bounce">
                   {cartItemsCount}
                 </Badge>
               )}
@@ -577,25 +518,28 @@ export default function CatalogClientOptimized({
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Breadcrumbs */}
         <Breadcrumbs
           items={[
-            { label: 'Inicio', href: '/home' },
-            { label: 'Catálogo', href: '/catalog' },
+            { label: 'Inicio', href: tenantHref('/home') },
+            { label: 'Catalogo', href: tenantHref('/catalog') },
             ...(selectedCategories.length === 1
               ? [{
-                  label: categories.find(c => c.id === selectedCategories[0])?.name || 'Categoría',
-                  href: `/catalog?category=${selectedCategories[0]}`
+                  label: categories.find((item) => item.id === selectedCategories[0])?.name || 'Categoria',
+                  href: tenantHref(`/catalog?${buildCatalogSearchParams({
+                    ...requestState,
+                    page: 1,
+                    categories: selectedCategories,
+                  }, {
+                    defaultItemsPerPage: CATALOG_DEFAULT_PAGE_SIZE,
+                    maxPriceCeiling: maxPrice,
+                  }).toString()}`),
                 }]
-              : []
-            )
+              : []),
           ]}
           className="mb-6"
         />
 
-        {/* Filters */}
         <CatalogFiltersOptimized
           selectedCategories={selectedCategories}
           sortBy={sortBy}
@@ -608,24 +552,24 @@ export default function CatalogClientOptimized({
           maxPrice={maxPrice}
           advancedFilters={advancedFilters}
           searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          onCategoryChange={handleCategoryChange}
+          onSearchChange={handleSearchChange}
+          onCategorySelect={handleCategorySelect}
+          onCategoryRemove={handleCategoryRemove}
           onSortChange={handleSortChange}
           onViewModeChange={handleViewModeChange}
           onAdvancedFiltersChange={handleAdvancedFiltersChange}
           onClearFilters={handleClearFilters}
-          onToggleInStock={() => setShowOnlyInStock(!showOnlyInStock)}
-          onToggleOnSale={() => setShowOnlyOnSale(!showOnlyOnSale)}
+          onInStockChange={handleInStockChange}
+          onToggleOnSale={handleToggleOnSale}
           config={config}
         />
 
-        {/* Error Alert */}
         {error && (
           <Alert variant="destructive" className="mt-6">
             <AlertCircle className="h-4 w-4" />
-            <AlertDescription className="flex items-center justify-between">
+            <AlertDescription className="flex items-center justify-between gap-3">
               <span>{error}</span>
-              <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+              <Button variant="outline" size="sm" onClick={handleRetry}>
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Reintentar
               </Button>
@@ -633,7 +577,6 @@ export default function CatalogClientOptimized({
           </Alert>
         )}
 
-        {/* Loading Overlay */}
         {loading && products.length > 0 && (
           <div className="flex justify-center py-8">
             <div className="flex items-center gap-3 px-6 py-3 rounded-full bg-muted/50 backdrop-blur-sm">
@@ -643,7 +586,6 @@ export default function CatalogClientOptimized({
           </div>
         )}
 
-        {/* Product Grid */}
         <div className="mt-6">
           <ProductGridOptimized
             products={products}
@@ -656,13 +598,14 @@ export default function CatalogClientOptimized({
             onClearFilters={handleClearFilters}
             config={config}
           />
+
           <Pagination
             currentPage={page}
-            totalPages={Math.max(1, Math.ceil(totalProducts / itemsPerPage))}
+            totalPages={totalPages}
             totalItems={totalProducts}
             itemsPerPage={itemsPerPage}
-            onPageChange={(p) => goToPage(p)}
-            onItemsPerPageChange={(n) => { setItemsPerPage(n); goToPage(1); }}
+            onPageChange={goToPage}
+            onItemsPerPageChange={handleItemsPerPageChange}
             className="pt-8"
             showItemsPerPage
             showInfo
@@ -671,39 +614,41 @@ export default function CatalogClientOptimized({
         </div>
       </main>
 
-      {/* Cart Sidebar eliminado: usamos Checkout directo */}
-
-      {/* Quick View Modal */}
       <QuickViewModal
         product={selectedProduct}
-        isOpen={!!selectedProduct}
+        isOpen={Boolean(selectedProduct)}
         onClose={() => setSelectedProduct(null)}
         onAddToCart={handleAddToCart}
         onToggleFavorite={handleToggleFavorite}
         isFavorite={selectedProduct ? favorites.includes(selectedProduct.id) : false}
         config={config}
+        categoryName={
+          selectedProduct?.category_id
+            ? categories.find((item) => item.id === selectedProduct.category_id)?.name || null
+            : null
+        }
       />
 
-      {/* Checkout Modal */}
       <Suspense fallback={null}>
         {showCheckout && (
           <CheckoutModal
             isOpen={showCheckout}
             onClose={() => setShowCheckout(false)}
-            cartItems={cart.map(item => ({
+            cartItems={cart.map((item) => ({
               id: item.product.id,
               name: item.product.name,
-              price: item.product.sale_price,
+              price: Number(item.product.offer_price ?? item.product.sale_price),
               quantity: item.quantity,
               image: item.product.image_url || undefined,
             }))}
             cartTotal={cartTotal}
+            onRemoveItem={removeFromCart}
+            onUpdateItemQuantity={updateQuantity}
             onOrderSuccess={handleOrderSuccess}
           />
         )}
       </Suspense>
 
-      {/* Order Confirmation Modal */}
       <Suspense fallback={null}>
         {showOrderConfirmation && orderConfirmationData && (
           <OrderConfirmationModal

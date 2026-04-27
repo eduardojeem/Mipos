@@ -13,13 +13,7 @@ import {
   Bell, 
   Settings, 
   User, 
-  Menu, 
-  X, 
-  ShoppingCart,
   Clock,
-  AlertTriangle,
-  CheckCircle,
-  Sparkles,
   LogOut,
   Shield,
   ExternalLink,
@@ -51,18 +45,18 @@ import { SyncStatusIndicator } from '@/components/sync/SyncStatusIndicator';
 import { cn } from '@/lib/utils';
 import { OrganizationSwitcher } from './OrganizationSwitcher';
 import { useUserOrganizations } from '@/hooks/use-user-organizations';
+import { useSystemSettings } from '@/app/dashboard/settings/hooks/useOptimizedSettings';
 
 interface HeaderProps {
-  onMenuClick: () => void;
-  isMobileMenuOpen: boolean;
   compact?: boolean;
 }
 
-export function Header({ onMenuClick, isMobileMenuOpen, compact = false }: HeaderProps) {
+export function Header({ compact = false }: HeaderProps) {
   const router = useRouter();
   const { user, signOut } = useAuth();
   const { config } = useBusinessConfig();
   const { selectedOrganization } = useUserOrganizations(user?.id);
+  const { data: systemSettings } = useSystemSettings();
   const deviceType = useDeviceType();
   const isMobile = deviceType === 'mobile';
   const [searchQuery, setSearchQuery] = useState('');
@@ -165,9 +159,42 @@ export function Header({ onMenuClick, isMobileMenuOpen, compact = false }: Heade
     setSelectedIndex(0);
   }, []);
 
+  // Prefetch rutas pesadas (admin y POS) en idle para mejorar latencia percibida
+  useEffect(() => {
+    let idleId: any = null;
+    const prefetch = () => {
+      try {
+        router.prefetch('/admin');
+        router.prefetch('/dashboard/pos');
+      } catch {}
+    };
+    const w: any = window as any;
+    if (typeof w?.requestIdleCallback === 'function') {
+      idleId = w.requestIdleCallback(prefetch, { timeout: 2000 });
+    } else {
+      idleId = setTimeout(prefetch, 1500);
+    }
+    return () => {
+      if (typeof w?.cancelIdleCallback === 'function' && idleId) w.cancelIdleCallback(idleId);
+      if (idleId && typeof idleId === 'number') clearTimeout(idleId);
+    };
+  }, [router]);
+
+  const businessName =
+    config.businessName?.trim() ||
+    systemSettings?.business_name?.trim() ||
+    selectedOrganization?.name?.trim() ||
+    'Mi empresa';
+
+  const organizationLabel =
+    selectedOrganization?.name?.trim() &&
+    selectedOrganization.name.trim() !== businessName
+      ? selectedOrganization.name.trim()
+      : null;
+
   return (
     <TooltipProvider delayDuration={0}>
-      <header className="sticky top-0 z-40 w-full bg-white/70 dark:bg-slate-900/70 backdrop-blur-2xl border-b border-slate-200/50 dark:border-slate-800/50 shadow-sm">
+      <header className="w-full bg-white/70 dark:bg-slate-900/70 backdrop-blur-2xl">
         <a 
           href="#main-content" 
           className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:bg-violet-600 focus:text-white focus:px-3 focus:py-2 focus:rounded-lg focus:shadow-lg focus:z-50"
@@ -213,11 +240,11 @@ export function Header({ onMenuClick, isMobileMenuOpen, compact = false }: Heade
               </div>
               <span className="flex flex-col leading-tight">
                 <span className="text-sm font-bold bg-gradient-to-r from-slate-900 to-slate-600 dark:from-white dark:to-slate-300 bg-clip-text text-transparent">
-                  {config.businessName || 'BeautyPOS'}
+                  {businessName}
                 </span>
-                {selectedOrganization?.name && (
+                {organizationLabel && (
                   <span className="text-[11px] font-medium text-slate-600 dark:text-slate-400">
-                    {selectedOrganization.name}
+                    {organizationLabel}
                   </span>
                 )}
               </span>
@@ -292,25 +319,6 @@ export function Header({ onMenuClick, isMobileMenuOpen, compact = false }: Heade
               </div>
             )}
 
-            {/* System Status */}
-            {!isMobile && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/50 dark:border-emerald-800/50 cursor-default">
-                    <div className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                    </div>
-                    <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">Online</span>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="font-medium">Sistema Operativo</p>
-                  <p className="text-xs text-muted-foreground">Base de datos conectada</p>
-                </TooltipContent>
-              </Tooltip>
-            )}
-
             <Separator orientation="vertical" className="h-6 mx-1 hidden lg:block" />
 
             {/* Theme toggle */}
@@ -383,7 +391,7 @@ export function Header({ onMenuClick, isMobileMenuOpen, compact = false }: Heade
                     <div className="relative">
                       <Avatar className="h-8 w-8 ring-2 ring-white dark:ring-slate-800 shadow-md">
                         <AvatarImage
-                          src={user?.avatar || '/avatars/default.png'}
+                          src={user?.avatar || '/avatars/default.svg'}
                           alt={`Foto de perfil de ${user?.name || user?.email || 'Usuario'}`}
                           loading="lazy"
                         />
@@ -451,7 +459,7 @@ export function Header({ onMenuClick, isMobileMenuOpen, compact = false }: Heade
                   <>
                     <DropdownMenuSeparator className="my-2" />
                     <DropdownMenuItem asChild className="rounded-lg gap-3 py-2.5">
-                      <Link href="/admin">
+                    <Link href="/admin" prefetch onMouseEnter={() => router.prefetch('/admin')}>
                         <Shield className="h-4 w-4 text-red-500" />
                         <span>Panel de Admin</span>
                         <ExternalLink className="h-3 w-3 ml-auto text-slate-400" />

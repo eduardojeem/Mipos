@@ -1,20 +1,21 @@
 'use client';
 
-import React, { memo, useState } from 'react';
+import React, { memo, useMemo } from 'react';
 import Image from 'next/image';
-import { 
-  Package, 
-  Edit, 
-  Trash2, 
-  Eye, 
+import {
+  Package,
+  Edit,
+  Trash2,
+  Eye,
   AlertTriangle,
   ArrowUpDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
   TableBody,
@@ -55,46 +56,68 @@ const SortableHeader = memo(function SortableHeader({
   sortField,
   sortOrder,
   onSort,
-  className
+  className,
 }: SortableHeaderProps) {
   const isActive = sortField === field;
-  
+
   const handleSort = () => {
     if (!onSort) return;
-    
-    if (isActive) {
-      // Toggle order if same field
-      onSort(field, sortOrder === 'asc' ? 'desc' : 'asc');
-    } else {
-      // Default to asc for new field
-      onSort(field, 'asc');
-    }
+    onSort(field, isActive ? (sortOrder === 'asc' ? 'desc' : 'asc') : 'asc');
   };
 
   return (
-    <TableHead className={cn('cursor-pointer select-none', className)}>
-      <div 
-        className="flex items-center space-x-1 hover:text-foreground transition-colors"
-        onClick={handleSort}
-      >
+    <TableHead
+      className={cn('cursor-pointer select-none', className)}
+      onClick={handleSort}
+    >
+      <div className="flex items-center gap-1 hover:text-foreground transition-colors">
         <span>{label}</span>
         {onSort && (
-          <div className="flex flex-col">
+          <span className="text-muted-foreground">
             {isActive ? (
               sortOrder === 'asc' ? (
-                <ArrowUp className="h-3 w-3" />
+                <ArrowUp className="h-3 w-3 text-primary" />
               ) : (
-                <ArrowDown className="h-3 w-3" />
+                <ArrowDown className="h-3 w-3 text-primary" />
               )
             ) : (
-              <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
+              <ArrowUpDown className="h-3 w-3" />
             )}
-          </div>
+          </span>
         )}
       </div>
     </TableHead>
   );
 });
+
+function TableLoadingSkeleton() {
+  return (
+    <div className="space-y-1 p-1">
+      {Array.from({ length: 8 }).map((_, i) => (
+        <div
+          key={i}
+          className="flex items-center gap-3 rounded-lg px-4 py-2"
+        >
+          <Skeleton className="h-4 w-4 rounded" />
+          <Skeleton className="h-10 w-10 rounded-md flex-shrink-0" />
+          <div className="flex-1 space-y-1.5">
+            <Skeleton className="h-3.5 w-48" />
+            <Skeleton className="h-3 w-24" />
+          </div>
+          <Skeleton className="h-5 w-24 rounded-full" />
+          <Skeleton className="h-4 w-20" />
+          <Skeleton className="h-5 w-16 rounded-full" />
+          <Skeleton className="h-5 w-14 rounded-full" />
+          <div className="flex gap-1">
+            <Skeleton className="h-7 w-7 rounded-md" />
+            <Skeleton className="h-7 w-7 rounded-md" />
+            <Skeleton className="h-7 w-7 rounded-md" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 const ProductRow = memo(function ProductRow({
   product,
@@ -102,7 +125,7 @@ const ProductRow = memo(function ProductRow({
   onDelete,
   onView,
   isSelected,
-  onSelect
+  onSelect,
 }: {
   product: Product;
   onEdit?: (product: Product) => void;
@@ -115,132 +138,145 @@ const ProductRow = memo(function ProductRow({
   const minStock = product.min_stock || 5;
   const isLowStock = stock > 0 && stock <= minStock;
   const isOutOfStock = stock === 0;
-  
-  const getStockBadge = () => {
-    if (isOutOfStock) {
-      return <Badge variant="destructive" className="gap-1">
-        <AlertTriangle className="h-3 w-3" />
-        Sin stock
-      </Badge>;
-    }
-    if (isLowStock) {
-      return <Badge variant="secondary" className="gap-1">
-        <AlertTriangle className="h-3 w-3" />
-        Stock bajo
-      </Badge>;
-    }
-    return <Badge variant="default">{stock}</Badge>;
-  };
 
-  const categoryName = typeof product.category === 'object' 
-    ? product.category?.name 
-    : 'Sin categoría';
+  const categoryName =
+    typeof product.category === 'object'
+      ? product.category?.name
+      : 'Sin categoría';
 
   return (
-    <TableRow className={cn(
-      'hover:bg-muted/50 transition-colors',
-      isSelected && 'bg-muted/30'
-    )}>
-      {/* Checkbox */}
-      <TableCell className="w-12">
+    <TableRow
+      className={cn(
+        'group transition-colors duration-100',
+        isSelected
+          ? 'bg-primary/5 hover:bg-primary/8'
+          : 'hover:bg-muted/40'
+      )}
+    >
+      <TableCell className="w-10">
         {onSelect && (
           <Checkbox
             checked={isSelected}
             onCheckedChange={() => onSelect(product.id)}
+            aria-label={`Seleccionar ${product.name}`}
           />
         )}
       </TableCell>
 
-      {/* Imagen */}
-      <TableCell className="w-16">
-        <div className="relative w-12 h-12 rounded overflow-hidden bg-muted">
+      <TableCell className="w-14">
+        <div className="relative h-10 w-10 overflow-hidden rounded-md bg-muted">
           {product.image_url ? (
             <Image
               src={product.image_url}
-              alt={product.name || 'Product'}
+              alt={product.name || 'Producto'}
               fill
               className="object-cover"
-              sizes="48px"
+              sizes="40px"
             />
           ) : (
-            <div className="flex items-center justify-center h-full">
-              <Package className="h-6 w-6 text-muted-foreground/50" />
+            <div className="flex h-full items-center justify-center">
+              <Package className="h-5 w-5 text-muted-foreground/40" />
             </div>
           )}
         </div>
       </TableCell>
 
-      {/* Nombre y SKU */}
       <TableCell>
-        <div className="space-y-1">
-          <div className="font-medium text-sm line-clamp-1">
+        <div className="space-y-0.5">
+          <div className="max-w-[220px] truncate text-sm font-medium">
             {product.name || 'Sin nombre'}
           </div>
-          <div className="text-xs text-muted-foreground font-mono">
-            SKU: {product.sku || 'N/A'}
+          <div className="font-mono text-xs text-muted-foreground">
+            {product.sku || '—'}
           </div>
         </div>
       </TableCell>
 
-      {/* Categoría */}
       <TableCell>
         <Badge variant="outline" className="text-xs">
-          {categoryName}
+          {categoryName || 'Sin categoría'}
         </Badge>
       </TableCell>
 
-      {/* Precio */}
       <TableCell className="text-right">
-        <div className="space-y-1">
-          <div className="font-semibold">
+        <div className="space-y-0.5">
+          <div className="text-sm font-semibold tabular-nums">
             Gs {(product.sale_price || 0).toLocaleString('es-PY')}
           </div>
-          {product.cost_price && (
-            <div className="text-xs text-muted-foreground">
+          {product.cost_price ? (
+            <div className="text-xs tabular-nums text-muted-foreground">
               Costo: Gs {product.cost_price.toLocaleString('es-PY')}
             </div>
-          )}
+          ) : null}
         </div>
       </TableCell>
 
-      {/* Stock */}
       <TableCell>
-        {getStockBadge()}
+        {isOutOfStock ? (
+          <Badge variant="destructive" className="gap-1 text-xs">
+            <AlertTriangle className="h-3 w-3" />
+            Sin stock
+          </Badge>
+        ) : isLowStock ? (
+          <Badge
+            variant="secondary"
+            className="gap-1 border-amber-200 bg-amber-50 text-amber-700 text-xs dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400"
+          >
+            <AlertTriangle className="h-3 w-3" />
+            {stock} uds bajo
+          </Badge>
+        ) : (
+          <Badge
+            variant="secondary"
+            className="border-emerald-200 bg-emerald-50 text-emerald-700 text-xs dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400"
+          >
+            {stock} uds
+          </Badge>
+        )}
       </TableCell>
 
-      {/* Estado */}
       <TableCell>
-        <Badge variant={product.is_active ? 'default' : 'secondary'}>
+        <Badge
+          variant={product.is_active ? 'default' : 'secondary'}
+          className={cn(
+            'text-xs',
+            product.is_active
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400'
+              : ''
+          )}
+        >
           {product.is_active ? 'Activo' : 'Inactivo'}
         </Badge>
       </TableCell>
 
-      {/* Acciones */}
       <TableCell>
-        <div className="flex items-center space-x-1">
+        <div className="flex items-center gap-1 opacity-0 transition-opacity duration-100 group-hover:opacity-100">
           <Button
             variant="ghost"
-            size="sm"
+            size="icon"
             onClick={() => onView?.(product)}
-            className="h-8 w-8 p-0"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            title="Ver detalles"
           >
-            <Eye className="h-4 w-4" />
+            <Eye className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
-            size="sm"
+            size="icon"
             onClick={() => onEdit?.(product)}
-            className="h-8 w-8 p-0"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            title="Editar"
           >
-            <Edit className="h-4 w-4" />
+            <Edit className="h-3.5 w-3.5" />
           </Button>
           <Button
             variant="ghost"
-            size="sm"
+            size="icon"
             onClick={() => onDelete?.(product.id)}
-            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+            className="h-7 w-7 text-destructive/70 hover:text-destructive"
+            title="Eliminar"
           >
-            <Trash2 className="h-4 w-4" />
+            <Trash2 className="h-3.5 w-3.5" />
           </Button>
         </div>
       </TableCell>
@@ -259,32 +295,24 @@ export const ProductsTableView = memo(function ProductsTableView({
   loading = false,
   selectedIds = new Set(),
   onSelectProduct,
-  onSelectAll
+  onSelectAll,
 }: ProductsTableViewProps) {
-  const [selectAll, setSelectAll] = useState(false);
+  const allVisibleSelected = useMemo(() => {
+    if (!products.length) return false;
+    return products.every((p) => selectedIds.has(p.id));
+  }, [products, selectedIds]);
 
   const handleSelectAll = (checked: boolean) => {
-    setSelectAll(checked);
-    if (onSelectAll) {
-      onSelectAll(checked ? products.map(p => p.id) : []);
-    }
+    onSelectAll?.(checked ? products.map((p) => p.id) : []);
   };
 
-  if (loading) {
-    return (
-      <div className="space-y-3">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="h-16 bg-muted animate-pulse rounded" />
-        ))}
-      </div>
-    );
-  }
+  if (loading) return <TableLoadingSkeleton />;
 
   if (products.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 text-center">
-        <Package className="h-12 w-12 text-muted-foreground/30 mb-4" />
-        <h3 className="text-lg font-semibold mb-2">No hay productos</h3>
+      <div className="flex h-64 flex-col items-center justify-center text-center">
+        <Package className="mb-4 h-12 w-12 text-muted-foreground/30" />
+        <h3 className="mb-1 text-lg font-semibold">No hay productos</h3>
         <p className="text-sm text-muted-foreground">
           No se encontraron productos para mostrar
         </p>
@@ -293,19 +321,20 @@ export const ProductsTableView = memo(function ProductsTableView({
   }
 
   return (
-    <div className="rounded-md border">
+    <div className="rounded-md border border-border/50">
       <Table>
         <TableHeader>
-          <TableRow>
-            <TableHead className="w-12">
-              {onSelectAll && (
+          <TableRow className="bg-muted/30 hover:bg-muted/30">
+            <TableHead className="w-10">
+              {onSelectAll ? (
                 <Checkbox
-                  checked={selectAll}
+                  checked={allVisibleSelected}
                   onCheckedChange={handleSelectAll}
+                  aria-label="Seleccionar todos"
                 />
-              )}
+              ) : null}
             </TableHead>
-            <TableHead className="w-16">Imagen</TableHead>
+            <TableHead className="w-14">Img.</TableHead>
             <SortableHeader
               field="name"
               label="Producto"
@@ -313,13 +342,7 @@ export const ProductsTableView = memo(function ProductsTableView({
               sortOrder={sortOrder}
               onSort={onSort}
             />
-            <SortableHeader
-              field="category"
-              label="Categoría"
-              sortField={sortField}
-              sortOrder={sortOrder}
-              onSort={onSort}
-            />
+            <TableHead>Categoría</TableHead>
             <SortableHeader
               field="sale_price"
               label="Precio"
@@ -336,7 +359,7 @@ export const ProductsTableView = memo(function ProductsTableView({
               onSort={onSort}
             />
             <TableHead>Estado</TableHead>
-            <TableHead className="w-32">Acciones</TableHead>
+            <TableHead className="w-28">Acciones</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>

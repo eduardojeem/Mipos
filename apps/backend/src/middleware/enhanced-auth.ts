@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { extractTokenFromHeaders, isDevMockMode, verifySupabaseToken, buildMockUserFromHeaders, mapSupabaseUserToAuth, getSupabaseClient } from '../config/supabase';
 import { createError } from './errorHandler';
-import { RoleManager } from '../lib/auth/role-manager';
 import { securityLogger, SecurityEventType } from './security-logger';
 import { UserRole_New } from '@prisma/client';
 import { prisma } from '../index';
@@ -11,6 +10,7 @@ export interface EnhancedAuthenticatedRequest extends Request {
     id: string;
     email: string;
     fullName: string;
+    organizationId?: string;  // NUEVO: Multi-tenant support
     roles: Array<{
       id: number;
       name: string;
@@ -307,10 +307,24 @@ export const enhancedAuthMiddleware = async (
           }
         }
         const mappedUser = mapSupabaseUserToAuth(user);
+        
+        // NUEVO: Cargar organizationId del usuario desde Prisma
+        let userOrgId: string | undefined;
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: mappedUser.id },
+            select: { organizationId: true }
+          });
+          userOrgId = dbUser?.organizationId || undefined;
+        } catch (error) {
+          console.warn('⚠️ No se pudo cargar organizationId del usuario:', error);
+        }
+        
         req.user = {
           id: mappedUser.id,
           email: mappedUser.email || '',
           fullName: mappedUser.fullName || mappedUser.email || 'Usuario',
+          organizationId: userOrgId,  // NUEVO
           roles: transformedRoles as any,
           permissions: finalPermissions as any
         } as any;

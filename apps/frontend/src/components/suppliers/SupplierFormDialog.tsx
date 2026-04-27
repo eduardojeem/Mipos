@@ -16,7 +16,7 @@ import { Separator } from '@/components/ui/separator';
 interface SupplierFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (data: any) => void;
+  onSubmit: (data: CreateSupplierFormData | Record<string, unknown>) => void;
   initialData?: SupplierWithStats | null;
   isSubmitting?: boolean;
 }
@@ -64,8 +64,8 @@ export function SupplierFormDialog({
         paymentTerms: initialData.commercialConditions?.paymentTerms?.toString() || '30',
         creditLimit: initialData.commercialConditions?.creditLimit || 0,
         discount: initialData.commercialConditions?.discount || 0,
-        categoriesInput: Array.isArray((initialData.contactInfo as any)?.categories)
-          ? ((initialData.contactInfo as any).categories as string[]).join(', ')
+        categoriesInput: Array.isArray((initialData.contactInfo as Record<string, unknown>)?.categories)
+          ? ((initialData.contactInfo as Record<string, unknown>).categories as string[]).join(', ')
           : ''
       });
     } else {
@@ -120,9 +120,10 @@ export function SupplierFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col p-0 gap-0">
+      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+        <div className="h-2 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 w-full" />
         <DialogHeader className="p-6 pb-2">
-          <DialogTitle>{initialData ? 'Editar Proveedor' : 'Nuevo Proveedor'}</DialogTitle>
+          <DialogTitle className="text-xl">{initialData ? 'Editar Proveedor' : 'Nuevo Proveedor'}</DialogTitle>
           <DialogDescription>
             {initialData 
               ? 'Modifica la información del proveedor existente.' 

@@ -19,6 +19,7 @@ export interface ReportFilter {
   supplierId?: string;
   userId?: string;
   status?: string;
+  organizationId?: string;
 }
 
 export interface SalesReportData {
@@ -249,6 +250,10 @@ class ReportsService {
 
       const whereClause: any = {};
 
+      if (filters.organizationId) {
+        whereClause.organizationId = filters.organizationId;
+      }
+
       // Apply date range and delta 'since'
       if (filters.startDate && filters.endDate) {
         const gteDate = filters.since && filters.startDate
@@ -284,6 +289,7 @@ class ReportsService {
           SELECT day, orders, revenue, cost 
           FROM mv_sales_daily_overall 
           WHERE day BETWEEN ${start} AND ${end} 
+          AND (organization_id = ${filters.organizationId}::uuid OR ${!filters.organizationId})
           ORDER BY day ASC
         `;
 
@@ -305,6 +311,7 @@ class ReportsService {
           SELECT category_name AS category, SUM(revenue) AS revenue, SUM(cost) AS cost 
           FROM mv_sales_daily_category 
           WHERE day BETWEEN ${start} AND ${end} 
+          AND (organization_id = ${filters.organizationId}::uuid OR ${!filters.organizationId})
           GROUP BY category_name 
           ORDER BY SUM(revenue) DESC
         `;
@@ -322,6 +329,7 @@ class ReportsService {
                  SUM(quantity) AS quantity, SUM(revenue) AS revenue, SUM(cost) AS cost 
           FROM mv_sales_daily_product 
           WHERE day BETWEEN ${start} AND ${end} 
+          AND (organization_id = ${filters.organizationId}::uuid OR ${!filters.organizationId})
           GROUP BY product_id, product_name 
           ORDER BY SUM(revenue) DESC 
           LIMIT ${REPORT_LIMITS.TOP_PRODUCTS}
@@ -509,6 +517,10 @@ class ReportsService {
 
       const whereClause: any = {};
 
+      if (filters.organizationId) {
+        whereClause.organizationId = filters.organizationId;
+      }
+
       if (filters.categoryId) {
         whereClause.categoryId = filters.categoryId;
       }
@@ -578,7 +590,8 @@ class ReportsService {
         where: {
           createdAt: {
             gte: thirtyDaysAgo
-          }
+          },
+          ...(filters.organizationId ? { organizationId: filters.organizationId } : {})
         },
         include: {
           product: true
@@ -686,14 +699,18 @@ class ReportsService {
 
       // Get customers with sales data
       const customers = await prisma.customer.findMany({
+        where: whereClause,
         include: {
           sales: {
-            where: filters.startDate && filters.endDate ? {
-              createdAt: {
-                gte: filters.startDate,
-                lte: filters.endDate
-              }
-            } : undefined
+            where: {
+              ...(filters.startDate && filters.endDate ? {
+                createdAt: {
+                  gte: filters.startDate,
+                  lte: filters.endDate
+                }
+              } : {}),
+              ...(filters.organizationId ? { organizationId: filters.organizationId } : {})
+            }
           }
         }
       });
@@ -826,6 +843,10 @@ class ReportsService {
       logger.info('Generating financial report', { filters });
 
       const whereClause: any = {};
+
+      if (filters.organizationId) {
+        whereClause.organizationId = filters.organizationId;
+      }
 
       if (filters.startDate && filters.endDate) {
         whereClause.createdAt = {
@@ -981,12 +1002,12 @@ class ReportsService {
         const endB = filtersB.endDate ? new Date(filtersB.endDate) : undefined;
 
         const dailyA = await prisma.$queryRawUnsafe<any[]>(
-          'SELECT day, orders, revenue, cost FROM mv_sales_daily_overall WHERE day BETWEEN $1 AND $2 ORDER BY day ASC',
-          startA, endA
+          'SELECT day, orders, revenue, cost FROM mv_sales_daily_overall WHERE day BETWEEN $1 AND $2 AND (organization_id = $3::uuid OR $4) ORDER BY day ASC',
+          startA, endA, filtersA.organizationId, !filtersA.organizationId
         );
         const dailyB = await prisma.$queryRawUnsafe<any[]>(
-          'SELECT day, orders, revenue, cost FROM mv_sales_daily_overall WHERE day BETWEEN $1 AND $2 ORDER BY day ASC',
-          startB, endB
+          'SELECT day, orders, revenue, cost FROM mv_sales_daily_overall WHERE day BETWEEN $1 AND $2 AND (organization_id = $3::uuid OR $4) ORDER BY day ASC',
+          startB, endB, filtersB.organizationId, !filtersB.organizationId
         );
 
         const summaryA: ComparisonSummary = {
@@ -1048,23 +1069,23 @@ class ReportsService {
 
         if (details && options.dimension === 'category') {
           const catA = await prisma.$queryRawUnsafe<any[]>(
-            'SELECT category_name AS category, SUM(revenue) AS revenue, SUM(cost) AS cost FROM mv_sales_daily_category WHERE day BETWEEN $1 AND $2 GROUP BY category_name ORDER BY SUM(revenue) DESC',
-            startA, endA
+            'SELECT category_name AS category, SUM(revenue) AS revenue, SUM(cost) AS cost FROM mv_sales_daily_category WHERE day BETWEEN $1 AND $2 AND (organization_id = $3::uuid OR $4) GROUP BY category_name ORDER BY SUM(revenue) DESC',
+            startA, endA, filtersA.organizationId, !filtersA.organizationId
           );
           const catB = await prisma.$queryRawUnsafe<any[]>(
-            'SELECT category_name AS category, SUM(revenue) AS revenue, SUM(cost) AS cost FROM mv_sales_daily_category WHERE day BETWEEN $1 AND $2 GROUP BY category_name ORDER BY SUM(revenue) DESC',
-            startB, endB
+            'SELECT category_name AS category, SUM(revenue) AS revenue, SUM(cost) AS cost FROM mv_sales_daily_category WHERE day BETWEEN $1 AND $2 AND (organization_id = $3::uuid OR $4) GROUP BY category_name ORDER BY SUM(revenue) DESC',
+            startB, endB, filtersB.organizationId, !filtersB.organizationId
           );
           byCategoryA = catA.map(r => ({ category: String(r.category), revenue: Number(r.revenue || 0), profit: Number(r.revenue || 0) - Number(r.cost || 0) }));
           byCategoryB = catB.map(r => ({ category: String(r.category), revenue: Number(r.revenue || 0), profit: Number(r.revenue || 0) - Number(r.cost || 0) }));
         } else if (details && options.dimension === 'product') {
           const prodA = await prisma.$queryRawUnsafe<any[]>(
-            'SELECT product_id AS id, product_name AS name, SUM(quantity) AS quantity, SUM(revenue) AS revenue, SUM(cost) AS cost FROM mv_sales_daily_product WHERE day BETWEEN $1 AND $2 GROUP BY product_id, product_name ORDER BY SUM(revenue) DESC LIMIT 50',
-            startA, endA
+            'SELECT product_id AS id, product_name AS name, SUM(quantity) AS quantity, SUM(revenue) AS revenue, SUM(cost) AS cost FROM mv_sales_daily_product WHERE day BETWEEN $1 AND $2 AND (organization_id = $3::uuid OR $4) GROUP BY product_id, product_name ORDER BY SUM(revenue) DESC LIMIT 50',
+            startA, endA, filtersA.organizationId, !filtersA.organizationId
           );
           const prodB = await prisma.$queryRawUnsafe<any[]>(
-            'SELECT product_id AS id, product_name AS name, SUM(quantity) AS quantity, SUM(revenue) AS revenue, SUM(cost) AS cost FROM mv_sales_daily_product WHERE day BETWEEN $1 AND $2 GROUP BY product_id, product_name ORDER BY SUM(revenue) DESC LIMIT 50',
-            startB, endB
+            'SELECT product_id AS id, product_name AS name, SUM(quantity) AS quantity, SUM(revenue) AS revenue, SUM(cost) AS cost FROM mv_sales_daily_product WHERE day BETWEEN $1 AND $2 AND (organization_id = $3::uuid OR $4) GROUP BY product_id, product_name ORDER BY SUM(revenue) DESC LIMIT 50',
+            startB, endB, filtersB.organizationId, !filtersB.organizationId
           );
           byProductA = prodA.map(r => ({ id: String(r.id), name: String(r.name), quantity: Number(r.quantity || 0), revenue: Number(r.revenue || 0), profit: Number(r.revenue || 0) - Number(r.cost || 0) }));
           byProductB = prodB.map(r => ({ id: String(r.id), name: String(r.name), quantity: Number(r.quantity || 0), revenue: Number(r.revenue || 0), profit: Number(r.revenue || 0) - Number(r.cost || 0) }));

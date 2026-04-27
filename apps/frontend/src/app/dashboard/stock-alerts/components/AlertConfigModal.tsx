@@ -1,244 +1,270 @@
 'use client';
 
-import { useState } from 'react';
-import { 
-  Dialog, DialogContent, DialogDescription, 
-  DialogFooter, DialogHeader, DialogTitle 
+import { useEffect, useState } from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { 
-  Select, SelectContent, SelectItem, 
-  SelectTrigger, SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
-
-interface AlertConfig {
-  globalMinThreshold: number;
-  globalMaxThreshold: number;
-  criticalThreshold: number;
-  warningThreshold: number;
-  enableEmailAlerts: boolean;
-  enablePushNotifications: boolean;
-  autoCreateOrders: boolean;
-  checkFrequency: 'hourly' | 'daily' | 'weekly';
-}
+import {
+  DEFAULT_STOCK_ALERT_CONFIG,
+  normalizeStockAlertConfig,
+  type StockAlertConfig,
+} from '@/lib/stock-alerts';
 
 interface AlertConfigModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  config: AlertConfig | null;
-  onSave: (config: AlertConfig) => void;
+  config: StockAlertConfig | null;
+  onSave: (config: StockAlertConfig) => Promise<unknown>;
+  isSaving?: boolean;
 }
 
-export function AlertConfigModal({ 
-  open, 
-  onOpenChange, 
+export function AlertConfigModal({
+  open,
+  onOpenChange,
   config,
-  onSave 
+  onSave,
+  isSaving = false,
 }: AlertConfigModalProps) {
   const { toast } = useToast();
-  const [formData, setFormData] = useState<AlertConfig>(
-    config || {
-      globalMinThreshold: 10,
-      globalMaxThreshold: 100,
-      criticalThreshold: 5,
-      warningThreshold: 20,
-      enableEmailAlerts: true,
-      enablePushNotifications: true,
-      autoCreateOrders: false,
-      checkFrequency: 'daily'
+  const [formData, setFormData] = useState<StockAlertConfig>(DEFAULT_STOCK_ALERT_CONFIG);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      return;
     }
-  );
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
+    setFormData(normalizeStockAlertConfig(config || DEFAULT_STOCK_ALERT_CONFIG));
+  }, [config, open]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (formData.criticalThreshold >= formData.warningThreshold) {
+  const busy = submitting || isSaving;
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (formData.globalMaxThreshold < formData.globalMinThreshold) {
       toast({
-        title: 'Error de configuración',
-        description: 'El umbral crítico debe ser menor que el umbral de advertencia.',
+        title: 'Configuracion invalida',
+        description: 'El maximo global no puede ser menor que el minimo global.',
         variant: 'destructive',
       });
       return;
     }
 
-    setIsSubmitting(true);
-    try {
-      await onSave(formData);
+    if (formData.criticalThreshold > formData.globalMinThreshold) {
       toast({
-        title: 'Configuración guardada',
-        description: 'La configuración de alertas ha sido actualizada.',
+        title: 'Configuracion invalida',
+        description: 'El umbral critico debe ser menor o igual al minimo global.',
+        variant: 'destructive',
       });
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await onSave(normalizeStockAlertConfig(formData, formData.globalMinThreshold));
       onOpenChange(false);
-    } catch (error) {
+    } catch {
       toast({
         title: 'Error',
-        description: 'No se pudo guardar la configuración.',
+        description: 'No se pudo guardar la configuracion.',
         variant: 'destructive',
       });
     } finally {
-      setIsSubmitting(false);
+      setSubmitting(false);
     }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
-          <DialogTitle>Configuración de Alertas</DialogTitle>
+          <DialogTitle>Configuracion de alertas</DialogTitle>
           <DialogDescription>
-            Configura los umbrales y notificaciones para las alertas de stock.
+            Estos parametros se guardan por organizacion y se reflejan en el sistema de inventario.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="space-y-4">
-            {/* Thresholds */}
-            <div className="space-y-3">
-              <h4 className="font-medium">Umbrales de Stock</h4>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="criticalThreshold">Umbral Crítico</Label>
-                  <Input
-                    id="criticalThreshold"
-                    type="number"
-                    min="1"
-                    value={formData.criticalThreshold}
-                    onChange={(e) => setFormData({ 
-                      ...formData, 
-                      criticalThreshold: parseInt(e.target.value) || 0 
-                    })}
-                    required
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="warningThreshold">Umbral de Advertencia</Label>
-                  <Input
-                    id="warningThreshold"
-                    type="number"
-                    min="1"
-                    value={formData.warningThreshold}
-                    onChange={(e) => setFormData({ 
-                      ...formData, 
-                      warningThreshold: parseInt(e.target.value) || 0 
-                    })}
-                    required
-                  />
-                </div>
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="space-y-4 rounded-lg border p-4">
+              <div>
+                <h4 className="text-sm font-semibold">Politica base</h4>
+                <p className="text-xs text-muted-foreground">
+                  Define los limites por defecto para productos sin minimo propio.
+                </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="globalMinThreshold">Mínimo Global</Label>
-                  <Input
-                    id="globalMinThreshold"
-                    type="number"
-                    min="1"
-                    value={formData.globalMinThreshold}
-                    onChange={(e) => setFormData({ 
-                      ...formData, 
-                      globalMinThreshold: parseInt(e.target.value) || 0 
-                    })}
-                    required
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="globalMaxThreshold">Máximo Global</Label>
-                  <Input
-                    id="globalMaxThreshold"
-                    type="number"
-                    min="1"
-                    value={formData.globalMaxThreshold}
-                    onChange={(e) => setFormData({ 
-                      ...formData, 
-                      globalMaxThreshold: parseInt(e.target.value) || 0 
-                    })}
-                    required
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="globalMinThreshold">Minimo global</Label>
+                <Input
+                  id="globalMinThreshold"
+                  type="number"
+                  min={0}
+                  value={formData.globalMinThreshold}
+                  onChange={(event) =>
+                    setFormData((current) => ({
+                      ...current,
+                      globalMinThreshold: Math.max(0, Number(event.target.value || 0)),
+                    }))
+                  }
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="globalMaxThreshold">Maximo global</Label>
+                <Input
+                  id="globalMaxThreshold"
+                  type="number"
+                  min={0}
+                  value={formData.globalMaxThreshold}
+                  onChange={(event) =>
+                    setFormData((current) => ({
+                      ...current,
+                      globalMaxThreshold: Math.max(0, Number(event.target.value || 0)),
+                    }))
+                  }
+                />
               </div>
             </div>
 
-            {/* Notifications */}
-            <div className="space-y-3">
-              <h4 className="font-medium">Notificaciones</h4>
-              
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="emailAlerts">Alertas por Email</Label>
-                  <Switch
-                    id="emailAlerts"
-                    checked={formData.enableEmailAlerts}
-                    onCheckedChange={(checked) => 
-                      setFormData({ ...formData, enableEmailAlerts: checked })
-                    }
-                  />
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="pushNotifications">Notificaciones Push</Label>
-                  <Switch
-                    id="pushNotifications"
-                    checked={formData.enablePushNotifications}
-                    onCheckedChange={(checked) => 
-                      setFormData({ ...formData, enablePushNotifications: checked })
-                    }
-                  />
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="autoCreateOrders">Crear Órdenes Automáticamente</Label>
-                  <Switch
-                    id="autoCreateOrders"
-                    checked={formData.autoCreateOrders}
-                    onCheckedChange={(checked) => 
-                      setFormData({ ...formData, autoCreateOrders: checked })
-                    }
-                  />
-                </div>
+            <div className="space-y-4 rounded-lg border p-4">
+              <div>
+                <h4 className="text-sm font-semibold">Sensibilidad</h4>
+                <p className="text-xs text-muted-foreground">
+                  Ajusta el nivel critico y el margen previo al minimo.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="criticalThreshold">Umbral critico</Label>
+                <Input
+                  id="criticalThreshold"
+                  type="number"
+                  min={0}
+                  value={formData.criticalThreshold}
+                  onChange={(event) =>
+                    setFormData((current) => ({
+                      ...current,
+                      criticalThreshold: Math.max(0, Number(event.target.value || 0)),
+                    }))
+                  }
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="warningThreshold">Margen de advertencia</Label>
+                <Input
+                  id="warningThreshold"
+                  type="number"
+                  min={0}
+                  value={formData.warningThreshold}
+                  onChange={(event) =>
+                    setFormData((current) => ({
+                      ...current,
+                      warningThreshold: Math.max(0, Number(event.target.value || 0)),
+                    }))
+                  }
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="checkFrequency">Frecuencia de revision</Label>
+                <Select
+                  value={formData.checkFrequency}
+                  onValueChange={(value: StockAlertConfig['checkFrequency']) =>
+                    setFormData((current) => ({ ...current, checkFrequency: value }))
+                  }
+                >
+                  <SelectTrigger id="checkFrequency">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="hourly">Cada hora</SelectItem>
+                    <SelectItem value="daily">Diaria</SelectItem>
+                    <SelectItem value="weekly">Semanal</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
+          </div>
 
-            {/* Check Frequency */}
-            <div className="space-y-2">
-              <Label htmlFor="checkFrequency">Frecuencia de Verificación</Label>
-              <Select 
-                value={formData.checkFrequency} 
-                onValueChange={(value: 'hourly' | 'daily' | 'weekly') => 
-                  setFormData({ ...formData, checkFrequency: value })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="hourly">Cada hora</SelectItem>
-                  <SelectItem value="daily">Diariamente</SelectItem>
-                  <SelectItem value="weekly">Semanalmente</SelectItem>
-                </SelectContent>
-              </Select>
+          <div className="space-y-4 rounded-lg border p-4">
+            <div>
+              <h4 className="text-sm font-semibold">Automatizacion</h4>
+              <p className="text-xs text-muted-foreground">
+                Controla que canales se habilitan para cada organizacion.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <Label htmlFor="emailAlerts">Alertas por email</Label>
+                  <p className="text-xs text-muted-foreground">Prepara el canal de notificacion por correo.</p>
+                </div>
+                <Switch
+                  id="emailAlerts"
+                  checked={formData.enableEmailAlerts}
+                  onCheckedChange={(checked) =>
+                    setFormData((current) => ({ ...current, enableEmailAlerts: checked }))
+                  }
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <Label htmlFor="pushAlerts">Notificaciones push</Label>
+                  <p className="text-xs text-muted-foreground">Mantiene el flag de notificacion en dashboard.</p>
+                </div>
+                <Switch
+                  id="pushAlerts"
+                  checked={formData.enablePushNotifications}
+                  onCheckedChange={(checked) =>
+                    setFormData((current) => ({ ...current, enablePushNotifications: checked }))
+                  }
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <Label htmlFor="autoOrders">Auto reposicion</Label>
+                  <p className="text-xs text-muted-foreground">Reserva la bandera para flujos de compras futuras.</p>
+                </div>
+                <Switch
+                  id="autoOrders"
+                  checked={formData.autoCreateOrders}
+                  onCheckedChange={(checked) =>
+                    setFormData((current) => ({ ...current, autoCreateOrders: checked }))
+                  }
+                />
+              </div>
             </div>
           </div>
 
           <DialogFooter>
-            <Button 
-              type="button" 
-              variant="outline" 
-              onClick={() => onOpenChange(false)}
-              disabled={isSubmitting}
-            >
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Guardando...' : 'Guardar Configuración'}
+            <Button type="submit" disabled={busy}>
+              {busy ? 'Guardando...' : 'Guardar configuracion'}
             </Button>
           </DialogFooter>
         </form>

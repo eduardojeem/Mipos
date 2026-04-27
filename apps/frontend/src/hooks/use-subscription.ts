@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useCurrentOrganizationId } from '@/hooks/use-current-organization';
 
 export interface PlanLimits {
     maxUsers?: number;
@@ -25,7 +26,7 @@ export interface Subscription {
     id: string;
     organizationId: string;
     plan: Plan;
-    status: 'active' | 'cancelled' | 'past_due' | 'trialing';
+    status: 'active' | 'cancelled' | 'past_due' | 'trialing' | 'suspended';
     billingCycle: 'monthly' | 'yearly';
     currentPeriodStart: string;
     currentPeriodEnd: string;
@@ -40,11 +41,16 @@ interface UseSubscriptionReturn {
     isLoading: boolean;
     error: string | null;
     refetch: () => Promise<void>;
-    changePlan: (newPlanId: string, billingCycle: 'monthly' | 'yearly') => Promise<boolean>;
+    changePlan: (
+        newPlanId: string,
+        billingCycle: 'monthly' | 'yearly',
+        options?: { primaryBranchId?: string | null }
+    ) => Promise<{ ok: boolean; message?: string; branchPolicy?: { primaryBranchId: string | null; deactivatedBranchIds: string[] } | null }>;
     isChangingPlan: boolean;
 }
 
 export function useSubscription(): UseSubscriptionReturn {
+    const organizationId = useCurrentOrganizationId();
     const [subscription, setSubscription] = useState<Subscription | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -55,10 +61,18 @@ export function useSubscription(): UseSubscriptionReturn {
             setIsLoading(true);
             setError(null);
 
-            const response = await fetch('/api/subscription');
+            const response = await fetch(`/api/subscription${organizationId ? `?organizationId=${organizationId}` : ''}`, {
+                headers: organizationId ? { 'x-organization-id': organizationId } : undefined,
+                cache: 'no-store',
+            });
             const data = await response.json();
 
             if (!response.ok) {
+                if (response.status === 401 || response.status === 403) {
+                    setSubscription(null);
+                    setError(data.error || 'Acceso denegado');
+                    return;
+                }
                 // Si el error es por falta de organización, no es un error crítico
                 if (data.error?.includes('organización') || data.error?.includes('organization')) {
                     console.warn('Usuario sin organización asignada');
@@ -77,22 +91,28 @@ export function useSubscription(): UseSubscriptionReturn {
         } finally {
             setIsLoading(false);
         }
-    }, []);
+    }, [organizationId]);
 
     const changePlan = useCallback(async (
         newPlanId: string,
-        billingCycle: 'monthly' | 'yearly'
-    ): Promise<boolean> => {
+        billingCycle: 'monthly' | 'yearly',
+        options?: { primaryBranchId?: string | null }
+    ): Promise<{ ok: boolean; message?: string; branchPolicy?: { primaryBranchId: string | null; deactivatedBranchIds: string[] } | null }> => {
         try {
             setIsChangingPlan(true);
             setError(null);
-
             const response = await fetch('/api/subscription/change-plan', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    ...(organizationId ? { 'x-organization-id': organizationId } : {}),
                 },
-                body: JSON.stringify({ newPlanId, billingCycle }),
+                body: JSON.stringify({
+                    newPlanId,
+                    billingCycle,
+                    organizationId,
+                    primaryBranchId: options?.primaryBranchId ?? null,
+                }),
             });
 
             const data = await response.json();
@@ -104,19 +124,23 @@ export function useSubscription(): UseSubscriptionReturn {
             // Actualizar la suscripción con los nuevos datos
             setSubscription(data.subscription);
 
-            return true;
+            return {
+                ok: true,
+                message: typeof data?.message === 'string' ? data.message : undefined,
+                branchPolicy: (data?.branchPolicy ?? null) as any,
+            };
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'Error desconocido';
             setError(errorMessage);
             console.error('Error changing plan:', err);
-            return false;
+            return { ok: false, message: errorMessage };
         } finally {
             setIsChangingPlan(false);
         }
-    }, []);
+    }, [organizationId]);
 
     useEffect(() => {
-        fetchSubscription();
+        void fetchSubscription();
     }, [fetchSubscription]);
 
     return {

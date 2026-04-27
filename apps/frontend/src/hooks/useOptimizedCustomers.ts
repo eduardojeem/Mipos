@@ -1,45 +1,12 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useToast } from '@/components/ui/use-toast';
-import { createClient } from '@/lib/supabase';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
+import { useToast } from '@/components/ui/use-toast';
+import { useCurrentOrganizationId } from '@/hooks/use-current-organization';
+import type { CustomerSortField, UICustomer } from '@/types/customer-page';
 
-// Helper to get current organization ID
-const getOrganizationId = (): string | null => {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = window.localStorage.getItem('selected_organization');
-    if (!raw) return null;
-    if (raw.startsWith('{')) {
-      const parsed = JSON.parse(raw);
-      return parsed?.id || parsed?.organization_id || null;
-    }
-    return raw;
-  } catch {
-    return null;
-  }
-};
+const NO_ORGANIZATION_KEY = 'no-organization';
 
-// Helper to create headers with org ID (Keep for mutations that still use API)
-const getHeaders = () => {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  const orgId = getOrganizationId();
-  if (orgId) {
-    headers['x-organization-id'] = orgId;
-  }
-  return headers;
-};
-
-/**
- * Optimized Customer Management Hooks - Phase 5 Optimization
- * 
- * React Query hooks for customer management with optimized caching,
- * background updates, and intelligent cache invalidation.
- */
-
-// Types
-interface CustomerSummary {
+export interface CustomerSummary {
   total: number;
   active: number;
   inactive: number;
@@ -57,505 +24,516 @@ interface CustomerSummary {
   generatedAt: string;
 }
 
-interface CustomerListParams {
+export interface CustomerListParams {
   page?: number;
   limit?: number;
   search?: string;
   status?: 'all' | 'active' | 'inactive';
   type?: 'all' | 'regular' | 'vip' | 'wholesale';
-  sortBy?: string;
+  hasRUC?: 'all' | 'yes' | 'no';
+  sortBy?: CustomerSortField;
   sortOrder?: 'asc' | 'desc';
 }
 
-interface CustomerAnalytics {
-  overview: any;
-  segmentation?: any;
-  trends?: any;
-  riskAnalysis: any;
-  valueAnalysis: any;
+export interface CustomerListPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrev: boolean;
+}
+
+export interface CustomerListResponse {
+  customers: UICustomer[];
+  pagination: CustomerListPagination;
+  filters?: {
+    search: string;
+    status: string;
+    type: string;
+    sortBy: string;
+    sortOrder: string;
+  };
+}
+
+export interface CustomerAnalytics {
+  overview: Record<string, unknown>;
+  segmentation?: Record<string, { count: number; percentage: number }>;
+  trends?: Array<Record<string, unknown>>;
+  riskAnalysis: Record<string, unknown>;
+  valueAnalysis: Record<string, unknown>;
   generatedAt: string;
 }
 
-interface CustomerSearchParams {
+export interface CustomerSearchParams {
   q: string;
   limit?: number;
   suggestions?: boolean;
   stats?: boolean;
 }
 
-// Query Keys
-export const customerKeys = {
-  all: ['customers'] as const,
-  summary: () => [...customerKeys.all, 'summary'] as const,
-  lists: () => [...customerKeys.all, 'list'] as const,
-  list: (params: CustomerListParams) => [...customerKeys.lists(), params] as const,
-  analytics: (period?: string) => [...customerKeys.all, 'analytics', period] as const,
-  search: (params: CustomerSearchParams) => [...customerKeys.all, 'search', params] as const,
-  detail: (id: string) => [...customerKeys.all, 'detail', id] as const,
+export interface CustomerSearchResponse {
+  results: UICustomer[];
+  suggestions: string[];
+  stats: Record<string, unknown>;
+  query?: string;
+}
+
+export interface CustomerCreateInput {
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  ruc?: string | null;
+  customerType?: UICustomer['customerType'];
+  birthDate?: string | null;
+  notes?: string | null;
+  is_active?: boolean;
+}
+
+export interface CustomerUpdateInput {
+  id: string;
+  data: {
+    name?: string;
+    email?: string | null;
+    phone?: string | null;
+    address?: string | null;
+    tax_id?: string | null;
+    ruc?: string | null;
+    customerType?: UICustomer['customerType'];
+    birthDate?: string | null;
+    notes?: string | null;
+    is_active?: boolean;
+  };
+}
+
+export interface CustomerBulkOperationResponse {
+  success: boolean;
+  message?: string;
+  error?: string;
+  data: {
+    action: string;
+    processedCount: number;
+    requestedCount: number;
+    csvContent?: string;
+    filename?: string;
+    contentType?: string;
+    deleted?: number;
+    deactivated?: number;
+    errors?: string[];
+  };
+}
+
+type CustomerApiEnvelope<T> = {
+  success: boolean;
+  data: T;
+  error?: string;
+  message?: string;
+  details?: string;
 };
 
-// Customer Summary Hook - Client Side Direct Query
+export const customerKeys = {
+  root: ['customers'] as const,
+  all: (organizationId?: string | null) =>
+    [...customerKeys.root, organizationId || NO_ORGANIZATION_KEY] as const,
+  summary: (organizationId?: string | null) =>
+    [...customerKeys.all(organizationId), 'summary'] as const,
+  lists: (organizationId?: string | null) =>
+    [...customerKeys.all(organizationId), 'list'] as const,
+  list: (organizationId: string | null | undefined, params: CustomerListParams) =>
+    [...customerKeys.lists(organizationId), params] as const,
+  analytics: (
+    organizationId?: string | null,
+    params: { period?: string; segmentation?: boolean; trends?: boolean } = {}
+  ) => [...customerKeys.all(organizationId), 'analytics', params] as const,
+  search: (organizationId: string | null | undefined, params: CustomerSearchParams) =>
+    [...customerKeys.all(organizationId), 'search', params] as const,
+  detail: (organizationId: string | null | undefined, id: string) =>
+    [...customerKeys.all(organizationId), 'detail', id] as const,
+};
+
+function buildHeaders(
+  organizationId: string,
+  init?: RequestInit,
+  includeJsonContentType: boolean = false
+): Headers {
+  const headers = new Headers(init?.headers);
+  headers.set('x-organization-id', organizationId);
+
+  if (includeJsonContentType && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  return headers;
+}
+
+async function parseJsonResponse<T>(response: Response, fallbackMessage: string): Promise<T> {
+  let payload: CustomerApiEnvelope<T> | null = null;
+
+  try {
+    payload = (await response.json()) as CustomerApiEnvelope<T>;
+  } catch {
+    throw new Error(fallbackMessage);
+  }
+
+  if (!response.ok || !payload?.success) {
+    throw new Error(payload?.error || payload?.details || fallbackMessage);
+  }
+
+  return payload.data;
+}
+
+async function fetchCustomerData<T>(
+  input: string,
+  organizationId: string,
+  init?: RequestInit,
+  fallbackMessage: string = 'No se pudo cargar la informacion de clientes'
+): Promise<T> {
+  const response = await fetch(input, {
+    ...init,
+    headers: buildHeaders(organizationId, init, false),
+    credentials: 'same-origin',
+  });
+
+  return parseJsonResponse<T>(response, fallbackMessage);
+}
+
+function normalizeCustomerListParams(params: CustomerListParams): Required<CustomerListParams> {
+  return {
+    page: params.page || 1,
+    limit: params.limit || 10,
+    search: params.search || '',
+    status: params.status || 'all',
+    type: params.type || 'all',
+    hasRUC: params.hasRUC || 'all',
+    sortBy: params.sortBy || 'created_at',
+    sortOrder: params.sortOrder || 'desc',
+  };
+}
+
+function getErrorMessage(error: unknown, fallbackMessage: string): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return fallbackMessage;
+}
+
 export function useCustomerSummary() {
-  const supabase = createClient();
-  
+  const organizationId = useCurrentOrganizationId();
+
   return useQuery({
-    queryKey: customerKeys.summary(),
-    queryFn: async (): Promise<CustomerSummary> => {
-      const orgId = getOrganizationId();
-      
-      // Basic counts
-      const [
-        { count: total },
-        { count: active },
-        { count: inactive },
-        { count: vip },
-        { count: wholesale },
-        { count: regular }
-      ] = await Promise.all([
-        supabase.from('customers').select('*', { count: 'exact', head: true }).eq('organization_id', orgId!),
-        supabase.from('customers').select('*', { count: 'exact', head: true }).eq('is_active', true).eq('organization_id', orgId!),
-        supabase.from('customers').select('*', { count: 'exact', head: true }).eq('is_active', false).eq('organization_id', orgId!),
-        supabase.from('customers').select('*', { count: 'exact', head: true }).eq('customer_type', 'VIP').eq('organization_id', orgId!),
-        supabase.from('customers').select('*', { count: 'exact', head: true }).eq('customer_type', 'WHOLESALE').eq('organization_id', orgId!),
-        supabase.from('customers').select('*', { count: 'exact', head: true }).eq('customer_type', 'REGULAR').eq('organization_id', orgId!)
-      ]);
-
-      // Recent activity
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      
-      const { count: newThisMonth } = await supabase
-        .from('customers')
-        .select('*', { count: 'exact', head: true })
-        .eq('organization_id', orgId!)
-        .gte('created_at', thirtyDaysAgo.toISOString());
-
-      // Note: Advanced aggregations like revenue usually require backend or complex queries.
-      // For now we return 0 for revenue metrics to keep it simple on client, 
-      // or we could fetch data. Let's keep it simple as user mainly cares about list visibility.
-      
-      return {
-        total: total || 0,
-        active: active || 0,
-        inactive: inactive || 0,
-        vip: vip || 0,
-        wholesale: wholesale || 0,
-        regular: regular || 0,
-        newThisMonth: newThisMonth || 0,
-        totalRevenue: 0,
-        totalOrders: 0,
-        avgOrderValue: 0,
-        highValue: 0,
-        frequent: 0,
-        growthRate: 0,
-        activeRate: total ? ((active || 0) / total) * 100 : 0,
-        generatedAt: new Date().toISOString()
-      };
-    },
-    enabled: !!getOrganizationId(),
+    queryKey: customerKeys.summary(organizationId),
+    queryFn: () =>
+      fetchCustomerData<CustomerSummary>(
+        '/api/customers/summary',
+        organizationId!,
+        undefined,
+        'No se pudo cargar el resumen de clientes'
+      ),
+    enabled: Boolean(organizationId),
     staleTime: 2 * 60 * 1000,
     gcTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 }
 
-// Customer List Hook - Client Side Direct Query
 export function useCustomerList(params: CustomerListParams = {}) {
-  const supabase = createClient();
+  const organizationId = useCurrentOrganizationId();
 
-  const memoizedParams = useMemo(() => ({
-    page: params.page || 1,
-    limit: params.limit || 10,
-    search: params.search || '',
-    status: params.status || 'all',
-    type: params.type || 'all',
-    sortBy: params.sortBy || 'created_at',
-    sortOrder: params.sortOrder || 'desc'
-  }), [params.page, params.limit, params.search, params.status, params.type, params.sortBy, params.sortOrder]);
+  const memoizedParams = useMemo(() => normalizeCustomerListParams(params), [params]);
 
   return useQuery({
-    queryKey: customerKeys.list(memoizedParams),
+    queryKey: customerKeys.list(organizationId, memoizedParams),
     queryFn: async () => {
-      const orgId = getOrganizationId();
-      if (!orgId) return { customers: [], pagination: { total: 0, page: 1, limit: 10, totalPages: 0 } };
+      const searchParams = new URLSearchParams({
+        page: String(memoizedParams.page),
+        limit: String(memoizedParams.limit),
+        status: memoizedParams.status,
+        type: memoizedParams.type,
+        hasRUC: memoizedParams.hasRUC,
+        sortBy: memoizedParams.sortBy,
+        sortOrder: memoizedParams.sortOrder,
+      });
 
-      let query = supabase
-        .from('customers')
-        .select('*', { count: 'exact' })
-        .eq('organization_id', orgId);
-
-      // Filters
-      if (memoizedParams.status === 'active') query = query.eq('is_active', true);
-      else if (memoizedParams.status === 'inactive') query = query.eq('is_active', false);
-
-      if (memoizedParams.type && memoizedParams.type !== 'all') {
-        query = query.eq('customer_type', memoizedParams.type.toUpperCase());
+      if (memoizedParams.search.trim()) {
+        searchParams.set('search', memoizedParams.search.trim());
       }
 
-      if (memoizedParams.search) {
-        query = query.or(`name.ilike.%${memoizedParams.search}%,email.ilike.%${memoizedParams.search}%,customer_code.ilike.%${memoizedParams.search}%,phone.ilike.%${memoizedParams.search}%`);
-      }
-
-      // Sorting
-      query = query.order(memoizedParams.sortBy, { ascending: memoizedParams.sortOrder === 'asc' });
-
-      // Pagination
-      const from = (memoizedParams.page - 1) * memoizedParams.limit;
-      const to = from + memoizedParams.limit - 1;
-      query = query.range(from, to);
-
-      const { data, count, error } = await query;
-
-      if (error) throw new Error(error.message);
-
-      // Transform data to match UI expected format (camelCase vs snake_case)
-      const transformedCustomers = (data || []).map((c: any) => ({
-        ...c,
-        customerCode: c.customer_code,
-        customerType: (c.customer_type || 'regular').toLowerCase(),
-        totalSpent: c.total_purchases || 0,
-        totalOrders: c.total_orders || 0,
-        lastPurchase: c.last_purchase,
-      }));
-
-      return {
-        customers: transformedCustomers,
-        pagination: {
-          page: memoizedParams.page,
-          limit: memoizedParams.limit,
-          total: count || 0,
-          totalPages: Math.ceil((count || 0) / memoizedParams.limit),
-          hasNext: (count || 0) > to,
-          hasPrev: from > 0
-        }
-      };
+      return fetchCustomerData<CustomerListResponse>(
+        `/api/customers/list?${searchParams.toString()}`,
+        organizationId!,
+        undefined,
+        'No se pudo cargar la lista de clientes'
+      );
     },
-    enabled: !!getOrganizationId(),
-    staleTime: 1 * 60 * 1000,
+    enabled: Boolean(organizationId),
+    staleTime: 60 * 1000,
     gcTime: 3 * 60 * 1000,
     refetchOnWindowFocus: false,
-    keepPreviousData: true
+    placeholderData: keepPreviousData,
   });
 }
 
-// Customer Analytics Hook - Client Side (Simplified) or API
-export function useCustomerAnalytics(period: string = '30', options: { segmentation?: boolean; trends?: boolean } = {}) {
-  // Keeping API for analytics as it might be heavy for client side
+export function useCustomerAnalytics(
+  period: string = '30',
+  options: { segmentation?: boolean; trends?: boolean } = {}
+) {
+  const organizationId = useCurrentOrganizationId();
+  const analyticsParams = useMemo(
+    () => ({
+      period,
+      segmentation: Boolean(options.segmentation),
+      trends: Boolean(options.trends),
+    }),
+    [options.segmentation, options.trends, period]
+  );
+
   return useQuery({
-    queryKey: customerKeys.analytics(period),
+    queryKey: customerKeys.analytics(organizationId, analyticsParams),
     queryFn: async (): Promise<CustomerAnalytics> => {
       const searchParams = new URLSearchParams({
-        period,
-        segmentation: options.segmentation ? 'true' : 'false',
-        trends: options.trends ? 'true' : 'false'
+        period: analyticsParams.period,
+        segmentation: analyticsParams.segmentation ? 'true' : 'false',
+        trends: analyticsParams.trends ? 'true' : 'false',
       });
 
-      const response = await fetch(`/api/customers/analytics?${searchParams}`, {
-        headers: getHeaders()
-      });
-      if (!response.ok) {
-        throw new Error('Failed to fetch customer analytics');
-      }
-      const data = await response.json();
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to fetch customer analytics');
-      }
-      return data.data;
+      return fetchCustomerData<CustomerAnalytics>(
+        `/api/customers/analytics?${searchParams.toString()}`,
+        organizationId!,
+        undefined,
+        'No se pudo cargar la analitica de clientes'
+      );
     },
+    enabled: Boolean(organizationId),
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 }
 
-// Customer Search Hook - Client Side Direct
 export function useCustomerSearch(params: CustomerSearchParams) {
-  const supabase = createClient();
-  
+  const organizationId = useCurrentOrganizationId();
+  const normalizedQuery = params.q.trim();
+
   return useQuery({
-    queryKey: customerKeys.search(params),
-    queryFn: async () => {
-      const orgId = getOrganizationId();
-      if (!orgId || !params.q.trim()) return { results: [], suggestions: [], stats: {} };
+    queryKey: customerKeys.search(organizationId, params),
+    queryFn: async (): Promise<CustomerSearchResponse> => {
+      const searchParams = new URLSearchParams({
+        q: normalizedQuery,
+        limit: String(params.limit || 10),
+        suggestions: params.suggestions ? 'true' : 'false',
+        stats: params.stats ? 'true' : 'false',
+      });
 
-      const { data, error } = await supabase
-        .from('customers')
-        .select('*')
-        .eq('organization_id', orgId)
-        .or(`name.ilike.%${params.q}%,email.ilike.%${params.q}%`)
-        .limit(params.limit || 10);
-
-      if (error) throw error;
-      return { results: data || [], suggestions: [], stats: {} };
+      return fetchCustomerData<CustomerSearchResponse>(
+        `/api/customers/search?${searchParams.toString()}`,
+        organizationId!,
+        undefined,
+        'No se pudo buscar clientes'
+      );
     },
-    enabled: !!params.q && params.q.trim().length > 0 && !!getOrganizationId(),
+    enabled: Boolean(organizationId) && normalizedQuery.length > 0,
     staleTime: 30 * 1000,
     gcTime: 2 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 }
 
-// Customer Detail Hook - Client Side Direct
-export function useCustomerDetail(id: string) {
-  const supabase = createClient();
-  
+export function useCustomerDetail(id: string, options: { enabled?: boolean } = {}) {
+  const organizationId = useCurrentOrganizationId();
+
   return useQuery({
-    queryKey: customerKeys.detail(id),
-    queryFn: async () => {
-      const orgId = getOrganizationId();
-      if (!orgId) throw new Error('No organization selected');
-
-      const { data, error } = await supabase
-        .from('customers')
-        .select('*')
-        .eq('id', id)
-        .eq('organization_id', orgId)
-        .single();
-
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!id && !!getOrganizationId(),
+    queryKey: customerKeys.detail(organizationId, id),
+    queryFn: () =>
+      fetchCustomerData<UICustomer>(
+        `/api/customers/${id}`,
+        organizationId!,
+        undefined,
+        'No se pudo cargar el cliente'
+      ),
+    enabled: (options.enabled ?? true) && Boolean(organizationId) && Boolean(id),
     staleTime: 2 * 60 * 1000,
     gcTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 }
 
-// Customer Creation Mutation
 export function useCreateCustomer() {
+  const organizationId = useCurrentOrganizationId();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async (customerData: any) => {
+    mutationFn: async (customerData: CustomerCreateInput) => {
+      if (!organizationId) {
+        throw new Error('No hay una organizacion seleccionada');
+      }
+
       const response = await fetch('/api/customers', {
         method: 'POST',
-        headers: getHeaders(),
+        headers: buildHeaders(organizationId, undefined, true),
         body: JSON.stringify(customerData),
       });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to create customer');
-      }
-      
-      const data = await response.json();
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to create customer');
-      }
-      
-      return data.data;
+
+      return parseJsonResponse<UICustomer>(response, 'No se pudo crear el cliente');
     },
-    onSuccess: (newCustomer) => {
-      // Invalidate and refetch customer queries
-      queryClient.invalidateQueries({ queryKey: customerKeys.summary() });
-      queryClient.invalidateQueries({ queryKey: customerKeys.lists() });
-      queryClient.invalidateQueries({ queryKey: customerKeys.analytics() });
-      
-      // Optimistically add to cache if we have list data
-      queryClient.setQueriesData(
-        { queryKey: customerKeys.lists() },
-        (oldData: any) => {
-          if (oldData?.customers) {
-            return {
-              ...oldData,
-              customers: [newCustomer, ...oldData.customers.slice(0, -1)],
-              pagination: {
-                ...oldData.pagination,
-                total: oldData.pagination.total + 1
-              }
-            };
-          }
-          return oldData;
-        }
-      );
+    onSuccess: async (newCustomer) => {
+      await queryClient.invalidateQueries({ queryKey: customerKeys.all(organizationId) });
 
       toast({
-        title: 'Customer Created',
-        description: `${newCustomer.name} has been created successfully.`,
+        title: 'Cliente creado',
+        description: `${newCustomer.name} se creo correctamente.`,
       });
     },
     onError: (error) => {
       toast({
         title: 'Error',
-        description: error.message,
+        description: getErrorMessage(error, 'No se pudo crear el cliente'),
         variant: 'destructive',
       });
     },
   });
 }
 
-// Customer Update Mutation
 export function useUpdateCustomer() {
+  const organizationId = useCurrentOrganizationId();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+    mutationFn: async ({ id, data }: CustomerUpdateInput) => {
+      if (!organizationId) {
+        throw new Error('No hay una organizacion seleccionada');
+      }
+
       const response = await fetch(`/api/customers/${id}`, {
         method: 'PUT',
-        headers: getHeaders(),
+        headers: buildHeaders(organizationId, undefined, true),
         body: JSON.stringify(data),
       });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to update customer');
-      }
-      
-      const responseData = await response.json();
-      if (!responseData.success) {
-        throw new Error(responseData.error || 'Failed to update customer');
-      }
-      
-      return responseData.data;
+
+      return parseJsonResponse<UICustomer>(response, 'No se pudo actualizar el cliente');
     },
-    onSuccess: (updatedCustomer) => {
-      // Update specific customer in cache
-      queryClient.setQueryData(
-        customerKeys.detail(updatedCustomer.id),
-        updatedCustomer
-      );
-
-      // Update customer in list caches
-      queryClient.setQueriesData(
-        { queryKey: customerKeys.lists() },
-        (oldData: any) => {
-          if (oldData?.customers) {
-            return {
-              ...oldData,
-              customers: oldData.customers.map((customer: any) =>
-                customer.id === updatedCustomer.id ? updatedCustomer : customer
-              )
-            };
-          }
-          return oldData;
-        }
-      );
-
-      // Invalidate summary and analytics
-      queryClient.invalidateQueries({ queryKey: customerKeys.summary() });
-      queryClient.invalidateQueries({ queryKey: customerKeys.analytics() });
+    onSuccess: async (updatedCustomer) => {
+      queryClient.setQueryData(customerKeys.detail(organizationId, updatedCustomer.id), updatedCustomer);
+      await queryClient.invalidateQueries({ queryKey: customerKeys.all(organizationId) });
 
       toast({
-        title: 'Customer Updated',
-        description: `${updatedCustomer.name} has been updated successfully.`,
+        title: 'Cliente actualizado',
+        description: `${updatedCustomer.name} se actualizo correctamente.`,
       });
     },
     onError: (error) => {
       toast({
         title: 'Error',
-        description: error.message,
+        description: getErrorMessage(error, 'No se pudo actualizar el cliente'),
         variant: 'destructive',
       });
     },
   });
 }
 
-// Customer Delete Mutation
 export function useDeleteCustomer() {
+  const organizationId = useCurrentOrganizationId();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
     mutationFn: async (id: string) => {
+      if (!organizationId) {
+        throw new Error('No hay una organizacion seleccionada');
+      }
+
       const response = await fetch(`/api/customers/${id}`, {
         method: 'DELETE',
-        headers: getHeaders()
+        headers: buildHeaders(organizationId),
       });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to delete customer');
+
+      let payload: { success: boolean; message?: string; error?: string } | null = null;
+
+      try {
+        payload = (await response.json()) as { success: boolean; message?: string; error?: string };
+      } catch {
+        throw new Error('No se pudo eliminar el cliente');
       }
-      
-      const data = await response.json();
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to delete customer');
+
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || 'No se pudo eliminar el cliente');
       }
-      
-      return { id, ...data };
+
+      return { id, message: payload.message };
     },
-    onSuccess: (result) => {
-      // Remove from detail cache
-      queryClient.removeQueries({ queryKey: customerKeys.detail(result.id) });
-
-      // Remove from list caches
-      queryClient.setQueriesData(
-        { queryKey: customerKeys.lists() },
-        (oldData: any) => {
-          if (oldData?.customers) {
-            return {
-              ...oldData,
-              customers: oldData.customers.filter((customer: any) => customer.id !== result.id),
-              pagination: {
-                ...oldData.pagination,
-                total: Math.max(0, oldData.pagination.total - 1)
-              }
-            };
-          }
-          return oldData;
-        }
-      );
-
-      // Invalidate summary and analytics
-      queryClient.invalidateQueries({ queryKey: customerKeys.summary() });
-      queryClient.invalidateQueries({ queryKey: customerKeys.analytics() });
+    onSuccess: async (result) => {
+      queryClient.removeQueries({ queryKey: customerKeys.detail(organizationId, result.id) });
+      await queryClient.invalidateQueries({ queryKey: customerKeys.all(organizationId) });
 
       toast({
-        title: 'Customer Removed',
-        description: result.message || 'Customer has been removed successfully.',
+        title: 'Cliente removido',
+        description: result.message || 'El cliente se removio correctamente.',
       });
     },
     onError: (error) => {
       toast({
         title: 'Error',
-        description: error.message,
+        description: getErrorMessage(error, 'No se pudo eliminar el cliente'),
         variant: 'destructive',
       });
     },
   });
 }
 
-// Bulk Operations Mutation
 export function useBulkCustomerOperation() {
+  const organizationId = useCurrentOrganizationId();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ action, customerIds }: { action: string; customerIds: string[] }) => {
+    mutationFn: async ({
+      action,
+      customerIds,
+    }: {
+      action: 'activate' | 'deactivate' | 'delete' | 'export';
+      customerIds: string[];
+    }) => {
+      if (!organizationId) {
+        throw new Error('No hay una organizacion seleccionada');
+      }
+
       const response = await fetch('/api/customers/bulk', {
         method: 'POST',
-        headers: getHeaders(),
+        headers: buildHeaders(organizationId, undefined, true),
         body: JSON.stringify({ action, customerIds }),
       });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to perform bulk operation');
+
+      let payload: CustomerBulkOperationResponse | null = null;
+
+      try {
+        payload = (await response.json()) as CustomerBulkOperationResponse;
+      } catch {
+        throw new Error('No se pudo ejecutar la operacion masiva');
       }
-      
-      const data = await response.json();
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to perform bulk operation');
+
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || 'No se pudo ejecutar la operacion masiva');
       }
-      
-      return data;
+
+      return payload;
     },
-    onSuccess: (result) => {
-      // Invalidate all customer queries for bulk operations
-      queryClient.invalidateQueries({ queryKey: customerKeys.all });
+    onSuccess: async (result) => {
+      if (result.data.action !== 'export') {
+        await queryClient.invalidateQueries({ queryKey: customerKeys.all(organizationId) });
+      }
 
       toast({
-        title: 'Bulk Operation Complete',
-        description: result.message || 'Bulk operation completed successfully.',
+        title: 'Operacion completada',
+        description: result.message || 'La operacion masiva finalizo correctamente.',
       });
     },
     onError: (error) => {
       toast({
         title: 'Error',
-        description: error.message,
+        description: getErrorMessage(error, 'No se pudo ejecutar la operacion masiva'),
         variant: 'destructive',
       });
     },

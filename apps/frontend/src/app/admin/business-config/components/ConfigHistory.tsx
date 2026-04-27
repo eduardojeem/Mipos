@@ -60,15 +60,41 @@ export function ConfigHistory({ organizationId, onRestore }: ConfigHistoryProps)
     try {
       const { data, error: fetchError } = await supabase
         .from('audit_logs')
-        .select('*')
-        .eq('entity_type', 'BUSINESS_CONFIG')
-        .eq('entity_id', organizationId)
+        .select('id, action, table_name, record_id, changes, changed_by, organization_id, created_at')
+        .eq('table_name', 'settings')
+        .eq('organization_id', organizationId)
         .order('created_at', { ascending: false })
         .limit(50);
 
       if (fetchError) throw fetchError;
 
-      setHistory(data || []);
+      const rows = (data || []) as any[];
+      const userIds = Array.from(new Set(rows.map(r => r.changed_by).filter(Boolean)));
+      let usersMap = new Map<string, { email?: string; role?: string }>();
+      if (userIds.length > 0) {
+        const { data: usersData } = await supabase
+          .from('users')
+          .select('id, email, role')
+          .in('id', userIds);
+        (usersData || []).forEach((u: any) => {
+          usersMap.set(u.id, { email: u.email, role: u.role });
+        });
+      }
+
+      const mapped: AuditLog[] = rows.map(r => ({
+        id: r.id,
+        action: String(r.action || 'UPDATE'),
+        entity_type: 'BUSINESS_CONFIG',
+        entity_id: r.organization_id,
+        old_data: null,
+        new_data: r.changes || null,
+        user_id: r.changed_by || '',
+        user_email: usersMap.get(r.changed_by || '')?.email || 'unknown',
+        user_role: usersMap.get(r.changed_by || '')?.role || 'UNKNOWN',
+        created_at: r.created_at
+      }));
+
+      setHistory(mapped);
     } catch (err: any) {
       console.error('Error loading config history:', err);
       setError(err.message || 'Error al cargar historial');

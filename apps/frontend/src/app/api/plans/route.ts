@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { dedupeCanonicalPlans, getCanonicalPlanAliases, getCanonicalPlanDisplayName, normalizePlanSlug } from '@/lib/plan-catalog';
 
 interface SaasPlanRow {
     id: string;
@@ -8,6 +9,10 @@ interface SaasPlanRow {
     price_monthly: number;
     price_yearly: number;
     features: string[];
+    max_users?: number | null;
+    max_products?: number | null;
+    max_transactions_per_month?: number | null;
+    max_locations?: number | null;
     limits?: Record<string, number>;
     description?: string;
     currency?: string;
@@ -32,21 +37,33 @@ export async function GET() {
             return NextResponse.json({ error: error.message }, { status: 500 });
         }
 
-        // Formatear planes
-        const formattedPlans = (plans || []).map((plan: SaasPlanRow) => ({
+        const canonicalPlans = dedupeCanonicalPlans((plans || []) as SaasPlanRow[], (current, candidate) => {
+            if (!current) return candidate;
+            const aliases = getCanonicalPlanAliases(candidate.slug);
+            const currentIndex = aliases.indexOf(String(current.slug || '').toLowerCase());
+            const candidateIndex = aliases.indexOf(String(candidate.slug || '').toLowerCase());
+            return candidateIndex !== -1 && (currentIndex === -1 || candidateIndex < currentIndex) ? candidate : current;
+        });
+
+        const formattedPlans = canonicalPlans.map((plan: SaasPlanRow) => ({
             id: plan.id,
-            name: plan.name,
-            slug: plan.slug,
-            priceMonthly: plan.price_monthly,
-            priceYearly: plan.price_yearly,
+            name: getCanonicalPlanDisplayName(plan.slug),
+            slug: normalizePlanSlug(plan.slug),
+            priceMonthly: Number(plan.price_monthly || 0),
+            priceYearly: Number(plan.price_yearly || 0),
             features: plan.features || [],
-            limits: plan.limits || {},
+            limits: plan.limits || {
+                maxUsers: Number(plan.max_users || 0) || 1,
+                maxProducts: Number(plan.max_products || 0) || 20,
+                maxTransactionsPerMonth: Number(plan.max_transactions_per_month || 0) || 50,
+                maxLocations: Number(plan.max_locations || 0) || 1,
+            },
             description: plan.description,
-            currency: plan.currency || 'USD',
+            currency: plan.currency || 'PYG',
             trialDays: plan.trial_days || 0,
             // Calcular ahorro anual
             yearlyDiscount: plan.price_yearly && plan.price_monthly
-                ? Math.round((1 - (plan.price_yearly / 12) / plan.price_monthly) * 100)
+                ? Math.round((1 - (Number(plan.price_yearly) / 12) / Number(plan.price_monthly)) * 100)
                 : 0,
         }));
 

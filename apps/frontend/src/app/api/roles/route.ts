@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
-import { assertAdmin } from '@/app/api/_utils/auth'
+import { assertAdminAllowWithoutOrg } from '@/app/api/_utils/auth'
 
 export async function GET(request: NextRequest) {
-  const auth = await assertAdmin(request)
+  const auth = await assertAdminAllowWithoutOrg(request)
   if (!('ok' in auth) || auth.ok === false) {
     return NextResponse.json(auth.body, { status: auth.status })
   }
@@ -103,6 +103,7 @@ export async function GET(request: NextRequest) {
         userCount: userCountMap.get(r.id) || 0,
         isActive: r.is_active,
         isSystem: r.name === 'ADMIN' || r.name === 'admin',
+        isSystemRole: r.name === 'ADMIN' || r.name === 'admin',
         priority: 0,
         createdAt: r.created_at,
         updatedAt: r.updated_at,

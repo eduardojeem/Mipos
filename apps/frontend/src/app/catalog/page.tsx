@@ -1,45 +1,43 @@
-import { createClient } from "@/lib/supabase/server";
-import CatalogClient from "./CatalogClient";
-import type { Product, Category } from "@/types";
-import { Metadata } from "next";
-import { getCurrentOrganization } from "@/lib/organization/get-current-organization";
+import { Metadata } from 'next';
+import { notFound } from 'next/navigation';
+import CatalogClientOptimized from './CatalogClientOptimized';
+import { normalizeCatalogQuery, type CatalogQueryRecord } from './catalog-query';
+import { maybeGetCurrentOrganization } from '@/lib/organization/get-current-organization';
+import { StaticBusinessConfigProvider } from '@/contexts/BusinessConfigContext';
+import { getPublicBusinessConfig } from '@/lib/public-site/data';
+import { fetchPublicCatalogSnapshot } from '@/lib/public-site/catalog-data';
+import SectionDisabledState from '@/components/public-tenant/SectionDisabledState';
 
 interface CatalogPageProps {
-  searchParams: Promise<{
-    search?: string;
-    category?: string;
-    sort?: string;
-    inStock?: string;
-    onSale?: string;
-    page?: string;
-  }>;
+  searchParams: Promise<CatalogQueryRecord>;
 }
 
-// ✅ Metadata simplificado - solo lo esencial para SEO
 export async function generateMetadata({ searchParams }: CatalogPageProps): Promise<Metadata> {
-  const { search = '', category = '' } = await searchParams;
-  const organization = await getCurrentOrganization();
-  const supabase = await createClient();
+  const query = normalizeCatalogQuery(await searchParams);
+  const organization = await maybeGetCurrentOrganization();
 
-  // ✅ Obtener config de la organización específica
-  const { data: configData } = await supabase
-    .from('settings')
-    .select('value')
-    .eq('key', 'business_config')
-    .eq('organization_id', organization.id)
-    .single();
+  if (!organization) {
+    return {
+      title: 'Catalogo',
+      description: 'Explora el catalogo publico.',
+    };
+  }
 
-  const config = configData?.value;
-  const businessName = config?.business_name || organization.name || 'Nuestra Tienda';
+  const config = await getPublicBusinessConfig(organization);
+  const businessName = config.businessName || organization.name || 'Nuestra Tienda';
 
-  // Título dinámico simple
-  const title = search
-    ? `${search} - Búsqueda | ${businessName}`
-    : category && category !== 'all'
-      ? `Productos - Categoría | ${businessName}`
-      : `Catálogo de Productos | ${businessName}`;
+  let title = `Catalogo de Productos | ${businessName}`;
+  if (query.search) {
+    title = `${query.search} - Busqueda | ${businessName}`;
+  } else if (query.categories.length === 1) {
+    title = `Catalogo por Categoria | ${businessName}`;
+  } else if (query.onSale) {
+    title = `Catalogo en Oferta | ${businessName}`;
+  }
 
-  const description = `Explora nuestro catálogo de productos. ${search ? `Resultados para "${search}".` : ''} Compra online con envío rápido.`;
+  const description = query.search
+    ? `Explora los resultados para "${query.search}" en ${businessName}.`
+    : `Explora el catalogo publico de ${businessName}. Compra online con envio rapido.`;
 
   return {
     title,
@@ -49,57 +47,47 @@ export async function generateMetadata({ searchParams }: CatalogPageProps): Prom
 }
 
 export default async function CatalogPage({ searchParams }: CatalogPageProps) {
-  const params = await searchParams;
-  const organization = await getCurrentOrganization();
-  const supabase = await createClient();
-
-  // ✅ Construir query de productos con filtro de organización
-  let query = supabase
-    .from('products')
-    .select('id, name, sku, sale_price, offer_price, stock_quantity, image_url, images, category_id, is_active')
-    .eq('organization_id', organization.id)
-    .eq('is_active', true);
-
-  // Aplicar filtros
-  if (params.search) {
-    query = query.or(`name.ilike.%${params.search}%,sku.ilike.%${params.search}%`);
+  const organization = await maybeGetCurrentOrganization();
+  if (!organization) {
+    notFound();
   }
 
-  if (params.category && params.category !== 'all') {
-    query = query.eq('category_id', params.category);
+  const config = await getPublicBusinessConfig(organization);
+  if (!config.publicSite?.sections?.showCatalog) {
+    return (
+      <StaticBusinessConfigProvider
+        config={config}
+        organizationId={organization.id}
+        organizationName={organization.name}
+      >
+        <SectionDisabledState
+          config={config}
+          title="Catalogo no disponible"
+          description="El catalogo publico de este negocio esta oculto en este momento desde Business Config."
+        />
+      </StaticBusinessConfigProvider>
+    );
   }
 
-  if (params.inStock !== 'false') {
-    query = query.gt('stock_quantity', 0);
-  }
-
-  if (params.onSale === 'true') {
-    query = query.not('offer_price', 'is', null);
-  }
-
-  // Ordenamiento
-  const sortOption = params.sort || 'popular';
-  if (sortOption === 'price-asc') query = query.order('sale_price', { ascending: true });
-  else if (sortOption === 'price-desc') query = query.order('sale_price', { ascending: false });
-  else if (sortOption === 'name') query = query.order('name', { ascending: true });
-  else query = query.order('created_at', { ascending: false }); // Por defecto: más recientes
-
-  // Límite para mejor performance
-  query = query.limit(100);
-
-  const { data: products } = await query;
-
-  // ✅ Obtener categorías de la organización
-  const { data: categories } = await supabase
-    .from('categories')
-    .select('id, name')
-    .eq('organization_id', organization.id)
-    .order('name');
+  const initialQueryState = normalizeCatalogQuery(await searchParams);
+  const snapshot = await fetchPublicCatalogSnapshot({
+    organizationId: organization.id,
+    ...initialQueryState,
+  });
 
   return (
-    <CatalogClient
-      initialProducts={(products || []) as Product[]}
-      initialCategories={(categories || []) as Category[]}
-    />
+    <StaticBusinessConfigProvider
+      config={config}
+      organizationId={organization.id}
+      organizationName={organization.name}
+    >
+      <CatalogClientOptimized
+        initialProducts={snapshot.products}
+        initialCategories={snapshot.categories}
+        initialTotalProducts={snapshot.totalProducts}
+        initialMaxPrice={snapshot.maxPrice}
+        initialQueryState={initialQueryState}
+      />
+    </StaticBusinessConfigProvider>
   );
 }

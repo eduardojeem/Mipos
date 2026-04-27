@@ -1,67 +1,51 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { PricingCard } from './PricingCard';
 import { Loader2 } from 'lucide-react';
-
-interface Plan {
-    id: string;
-    name: string;
-    slug: string;
-    priceMonthly: number;
-    priceYearly: number;
-    features: string[];
-    yearlyDiscount: number;
-    description?: string;
-}
+import { usePlans } from '@/hooks/use-plans';
+import type { Plan } from '@/hooks/use-subscription';
 
 interface PricingSectionProps {
     onPlanSelect: (plan: Plan) => void;
     selectedPlanId?: string;
 }
 
+function getRecommendedPlan(plans: Plan[]) {
+    const paidPlans = plans.filter((plan) => plan.priceMonthly > 0);
+    if (!paidPlans.length) {
+        return plans[0] || null;
+    }
+
+    return [...paidPlans].sort((a, b) => {
+        if ((b.yearlyDiscount || 0) !== (a.yearlyDiscount || 0)) {
+            return (b.yearlyDiscount || 0) - (a.yearlyDiscount || 0);
+        }
+
+        return a.priceMonthly - b.priceMonthly;
+    })[0];
+}
+
 export function PricingSection({ onPlanSelect, selectedPlanId }: PricingSectionProps) {
-    const [plans, setPlans] = useState<Plan[]>([]);
-    const [loading, setLoading] = useState(true);
+    const { plans, isLoading: loading } = usePlans();
     const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
 
-    useEffect(() => {
-        fetchPlans();
-    }, []);
+    const recommendedPlan = useMemo(() => getRecommendedPlan(plans), [plans]);
+    const billingBadgeDiscount = useMemo(() => {
+        const discounts = plans
+            .map((plan) => plan.yearlyDiscount || 0)
+            .filter((value) => value > 0);
 
-    const fetchPlans = async () => {
-        setLoading(true);
-        try {
-            const response = await fetch('/api/plans');
-            const data = await response.json();
-
-            if (data.success && data.plans) {
-                setPlans(data.plans);
-            }
-        } catch (error) {
-            console.error('Error fetching plans:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const getPopularPlan = () => {
-        const professionalPlan = plans.find(p => p.slug === 'professional');
-        if (professionalPlan) return professionalPlan.id;
-
-        const middleIndex = Math.floor(plans.length / 2);
-        return plans[middleIndex]?.id;
-    };
+        return discounts.length ? Math.max(...discounts) : 0;
+    }, [plans]);
 
     return (
         <section id="planes" className="py-20 lg:py-32 bg-[#0a0a0a] relative overflow-hidden">
-            {/* Background gradient */}
             <div className="absolute inset-0">
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 radial-gradient-purple opacity-20" />
             </div>
 
             <div className="container mx-auto px-4 relative z-10">
-                {/* Header */}
                 <div className="text-center max-w-3xl mx-auto mb-12">
                     <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4">
                         Planes y Precios
@@ -70,10 +54,11 @@ export function PricingSection({ onPlanSelect, selectedPlanId }: PricingSectionP
                         Elige el plan perfecto para tu negocio
                     </p>
 
-                    {/* Billing Toggle */}
                     <div className="inline-flex items-center gap-3 p-1 glass-card rounded-full">
                         <button
+                            type="button"
                             onClick={() => setBillingCycle('monthly')}
+                            aria-pressed={billingCycle === 'monthly'}
                             className={`px-6 py-2 rounded-full font-medium transition-all ${billingCycle === 'monthly'
                                 ? 'gradient-primary text-white'
                                 : 'text-gray-400 hover:text-white'
@@ -82,21 +67,24 @@ export function PricingSection({ onPlanSelect, selectedPlanId }: PricingSectionP
                             Mensual
                         </button>
                         <button
+                            type="button"
                             onClick={() => setBillingCycle('yearly')}
+                            aria-pressed={billingCycle === 'yearly'}
                             className={`px-6 py-2 rounded-full font-medium transition-all ${billingCycle === 'yearly'
                                 ? 'gradient-primary text-white'
                                 : 'text-gray-400 hover:text-white'
                                 }`}
                         >
                             Anual
-                            <span className="ml-2 text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full">
-                                -20%
-                            </span>
+                            {billingBadgeDiscount > 0 && (
+                                <span className="ml-2 text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full">
+                                    Hasta -{billingBadgeDiscount}%
+                                </span>
+                            )}
                         </button>
                     </div>
                 </div>
 
-                {/* Plans Grid */}
                 {loading ? (
                     <div className="flex items-center justify-center py-20">
                         <Loader2 className="h-10 w-10 animate-spin text-purple-500" />
@@ -114,16 +102,15 @@ export function PricingSection({ onPlanSelect, selectedPlanId }: PricingSectionP
                                 billingCycle={billingCycle}
                                 onSelect={() => onPlanSelect(plan)}
                                 isSelected={selectedPlanId === plan.id}
-                                isPopular={plan.id === getPopularPlan()}
+                                isPopular={Boolean(recommendedPlan && recommendedPlan.id === plan.id)}
                             />
                         ))}
                     </div>
                 )}
 
-                {/* Trust indicators */}
                 <div className="mt-16 text-center">
                     <p className="text-sm text-gray-500">
-                        ✓ Sin permanencia • ✓ Cancela cuando quieras • ✓ Soporte incluido
+                        Precios transparentes y beneficios segun el plan activo.
                     </p>
                 </div>
             </div>

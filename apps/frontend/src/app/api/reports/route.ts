@@ -1,14 +1,102 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { api, getErrorMessage, isNetworkError, isTimeoutError, isServerError, isClientError } from '@/lib/api'
 import { createClient } from '@/lib/supabase/server'
-import { isMockAuthEnabled, isSupabaseActive } from '@/lib/env'
-import { validateRole } from '@/app/api/_utils/role-validation'
-import { getUserOrganizationId } from '@/app/api/_utils/organization'
+import { isSupabaseActive } from '@/lib/env'
+import {
+  COMPANY_FEATURE_KEYS,
+  COMPANY_PERMISSIONS,
+  requireCompanyAccess,
+} from '@/app/api/_utils/company-authorization'
 import { z } from 'zod'
-import { CACHE_CONFIG, REPORT_TYPES, REPORT_LIMITS, MAX_DATE_RANGE_DAYS } from '@/config/reports.config'
+import { CACHE_CONFIG, REPORT_TYPES, MAX_DATE_RANGE_DAYS } from '@/config/reports.config'
+import type { SupabaseClient } from '@supabase/supabase-js'
+
+// Type definitions for Supabase responses
+interface Sale {
+  id: string;
+  total_amount: number;
+  tax_amount?: number;
+  discount_amount?: number;
+  status: string;
+  created_at: string;
+  customer_id?: string;
+}
+
+interface SaleItemRaw {
+  id: string;
+  sale_id: string;
+  product_id: string;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+  sale?: Array<{ id: string; created_at: string }>;
+  product?: Array<{ id: string; name: string; cost_price: number; category_id?: string }>;
+}
+
+interface Product {
+  id: string;
+  name: string;
+  stock_quantity: number;
+  min_stock: number;
+  max_stock: number;
+  cost_price: number;
+  is_active: boolean;
+  category_id?: string;
+}
+
+interface Category {
+  id: string;
+  name: string;
+}
+
+interface CustomerRaw {
+  id: string;
+  name: string;
+  email?: string;
+  created_at?: string;
+}
+
+interface Customer {
+  id: string;
+  name: string;
+  email?: string;
+  created_at: string;
+}
+
+interface InventoryMovementRaw {
+  created_at: string;
+  product_id: string;
+  quantity: number;
+  movement_type: string;
+  notes?: string;
+  product?: Array<{ id: string; name: string }>;
+}
+
+interface BankTransaction {
+  id: string;
+  txn_date: string;
+  amount: number;
+  type: string;
+  source?: string;
+  status: string;
+  description?: string;
+}
+
+interface FinancialSaleItemRaw {
+  id: string;
+  sale_id: string;
+  product_id: string;
+  quantity: number;
+  unit_price: number;
+  product?: Array<{ id: string; cost_price: number }>;
+}
+
+interface ReportParams {
+  [key: string]: string;
+}
 
 // Caché simple en memoria por instancia (serverless/lambda) con TTL por tipo
-type CachedEntry = { expiresAt: number; payload: any; headers: Record<string, string> };
+type CachedEntry = { expiresAt: number; payload: unknown; headers: Record<string, string> };
 const reportsCache = new Map<string, CachedEntry>();
 
 // ✅ SEGURO: Caché segmentado por usuario y organización
@@ -34,9 +122,10 @@ function toISODate(date: string | Date): string {
   return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString().slice(0, 10)
 }
 
-function safeNumber(n: any): number { return typeof n === 'number' && isFinite(n) ? n : 0 }
+function safeNumber(n: unknown): number { return typeof n === 'number' && isFinite(n) ? n : 0 }
 
-async function getSalesReportSupabase(supabase: any, params: Record<string, string>, orgId: string) {
+
+async function getSalesReportSupabase(supabase: SupabaseClient, params: ReportParams, orgId: string) {
   const startDate = params['start_date'] || params['startDate']
   const endDate = params['end_date'] || params['endDate']
 
@@ -53,12 +142,12 @@ async function getSalesReportSupabase(supabase: any, params: Record<string, stri
   if (salesErr) throw salesErr
 
   const totalOrders = (sales?.length) || 0
-  const totalSales = (sales || []).reduce((sum: number, s: any) => sum + safeNumber(s.total_amount), 0)
+  const totalSales = (sales || []).reduce((sum: number, s: Sale) => sum + safeNumber(s.total_amount), 0)
   const averageOrderValue = totalOrders > 0 ? totalSales / totalOrders : 0
 
   // Items de venta con join de producto para calcular utilidad
-  const saleIds = (sales || []).map((s: any) => s.id)
-  let items: any[] = []
+  const saleIds = (sales || []).map((s: Sale) => s.id)
+  let items: SaleItemRaw[] = []
   if (saleIds.length > 0) {
     const { data: saleItems, error: itemsErr } = await supabase
       .from('sale_items')
@@ -72,8 +161,8 @@ async function getSalesReportSupabase(supabase: any, params: Record<string, stri
     items = saleItems || []
   }
 
-  const totalProfit = items.reduce((sum: number, it: any) => {
-    const cost = safeNumber(it.product?.cost_price)
+  const totalProfit = items.reduce((sum: number, it: SaleItemRaw) => {
+    const cost = safeNumber(it.product?.[0]?.cost_price)
     return sum + safeNumber(it.quantity) * (safeNumber(it.unit_price) - cost)
   }, 0)
   const profitMargin = totalSales > 0 ? totalProfit / totalSales : 0
@@ -88,9 +177,9 @@ async function getSalesReportSupabase(supabase: any, params: Record<string, stri
     byDateMap.set(key, entry)
   }
   for (const it of items) {
-    const key = toISODate(it.sale?.created_at || new Date())
+    const key = toISODate(it.sale?.[0]?.created_at || new Date())
     const entry = byDateMap.get(key) || { sales: 0, orders: 0, profit: 0 }
-    const cost = safeNumber(it.product?.cost_price)
+    const cost = safeNumber(it.product?.[0]?.cost_price)
     entry.profit += safeNumber(it.quantity) * (safeNumber(it.unit_price) - cost)
     byDateMap.set(key, entry)
   }
@@ -103,11 +192,11 @@ async function getSalesReportSupabase(supabase: any, params: Record<string, stri
   const prodMap = new Map<string, { id: string; name: string; sales: number; quantity: number; profit: number }>()
   for (const it of items) {
     const id = String(it.product_id)
-    const name = String(it.product?.name || id)
+    const name = String(it.product?.[0]?.name || id)
     const entry = prodMap.get(id) || { id, name, sales: 0, quantity: 0, profit: 0 }
     entry.sales += safeNumber(it.total_price)
     entry.quantity += safeNumber(it.quantity)
-    const cost = safeNumber(it.product?.cost_price)
+    const cost = safeNumber(it.product?.[0]?.cost_price)
     entry.profit += safeNumber(it.quantity) * (safeNumber(it.unit_price) - cost)
     prodMap.set(id, entry)
   }
@@ -116,13 +205,13 @@ async function getSalesReportSupabase(supabase: any, params: Record<string, stri
   // Por categoría
   const catMap = new Map<string, { category: string; sales: number; quantity: number }>()
   // Resolver nombres de categorías
-  const catIds = Array.from(new Set(items.map((it: any) => it.product?.category_id).filter(Boolean)))
+  const catIds = Array.from(new Set(items.map((it: SaleItemRaw) => it.product?.[0]?.category_id).filter(Boolean)))
   const { data: categories } = catIds.length > 0
     ? await supabase.from('categories').select('id,name').in('id', catIds as string[]).eq('organization_id', orgId)
-    : { data: [] as any[] }
-  const catNameById = new Map<string, string>((categories || []).map((c: any) => [String(c.id), String(c.name)]))
+    : { data: [] as Category[] }
+  const catNameById = new Map<string, string>((categories || []).map((c: Category) => [String(c.id), String(c.name)]))
   for (const it of items) {
-    const catId = it.product?.category_id ? String(it.product.category_id) : 'Unknown'
+    const catId = it.product?.[0]?.category_id ? String(it.product[0].category_id) : 'Unknown'
     const category = catNameById.get(catId) || 'Sin categoría'
     const entry = catMap.get(category) || { category, sales: 0, quantity: 0 }
     entry.sales += safeNumber(it.total_price)
@@ -133,11 +222,11 @@ async function getSalesReportSupabase(supabase: any, params: Record<string, stri
 
   // Por cliente
   const custMap = new Map<string, { customerId: string; customerName: string; sales: number; orders: number }>()
-  const custIds = Array.from(new Set((sales || []).map((s: any) => s.customer_id).filter(Boolean)))
+  const custIds = Array.from(new Set((sales || []).map((s: Sale) => s.customer_id).filter(Boolean)))
   const { data: customers } = custIds.length > 0
     ? await supabase.from('customers').select('id,name').in('id', custIds as string[]).eq('organization_id', orgId)
-    : { data: [] as any[] }
-  const custNameById = new Map<string, string>((customers || []).map((c: any) => [String(c.id), String(c.name)]))
+    : { data: [] as Array<{ id: string; name: string }> }
+  const custNameById = new Map<string, string>((customers || []).map((c) => [String(c.id), String(c.name)]))
   for (const s of (sales || [])) {
     const cid = s.customer_id ? String(s.customer_id) : 'N/A'
     const customerName = custNameById.get(cid) || (cid === 'N/A' ? 'Sin cliente' : cid)
@@ -163,7 +252,7 @@ async function getSalesReportSupabase(supabase: any, params: Record<string, stri
   }
 }
 
-async function getInventoryReportSupabase(supabase: any, params: Record<string, string>, orgId: string) {
+async function getInventoryReportSupabase(supabase: SupabaseClient, params: ReportParams, orgId: string) {
   const startDate = params['start_date'] || params['startDate']
   const endDate = params['end_date'] || params['endDate']
 
@@ -175,12 +264,12 @@ async function getInventoryReportSupabase(supabase: any, params: Record<string, 
   if (prodErr) throw prodErr
 
   const totalProducts = (products || []).length
-  const totalValue = (products || []).reduce((sum: number, p: any) => sum + safeNumber(p.stock_quantity) * safeNumber(p.cost_price), 0)
-  const lowStockItems = (products || []).filter((p: any) => safeNumber(p.stock_quantity) <= safeNumber(p.min_stock)).length
-  const outOfStockItems = (products || []).filter((p: any) => safeNumber(p.stock_quantity) === 0).length
-  const averageStockLevel = totalProducts > 0 ? (products || []).reduce((sum: number, p: any) => sum + safeNumber(p.stock_quantity), 0) / totalProducts : 0
+  const totalValue = (products || []).reduce((sum: number, p: Product) => sum + safeNumber(p.stock_quantity) * safeNumber(p.cost_price), 0)
+  const lowStockItems = (products || []).filter((p: Product) => safeNumber(p.stock_quantity) <= safeNumber(p.min_stock)).length
+  const outOfStockItems = (products || []).filter((p: Product) => safeNumber(p.stock_quantity) === 0).length
+  const averageStockLevel = totalProducts > 0 ? (products || []).reduce((sum: number, p: Product) => sum + safeNumber(p.stock_quantity), 0) / totalProducts : 0
 
-  const stockLevels = (products || []).slice(0, 200).map((p: any) => ({
+  const stockLevels = (products || []).slice(0, 200).map((p: Product) => ({
     id: String(p.id),
     name: String(p.name),
     currentStock: safeNumber(p.stock_quantity),
@@ -192,11 +281,11 @@ async function getInventoryReportSupabase(supabase: any, params: Record<string, 
 
   // Breakdown por categoría
   const catMap = new Map<string, { category: string; totalProducts: number; totalValue: number; averageStock: number }>()
-  const catIds = Array.from(new Set((products || []).map((p: any) => p.category_id).filter(Boolean)))
+  const catIds = Array.from(new Set((products || []).map((p: Product) => p.category_id).filter(Boolean)))
   const { data: categories } = catIds.length > 0
     ? await supabase.from('categories').select('id,name').in('id', catIds as string[]).eq('organization_id', orgId)
-    : { data: [] as any[] }
-  const catNameById = new Map<string, string>((categories || []).map((c: any) => [String(c.id), String(c.name)]))
+    : { data: [] as Category[] }
+  const catNameById = new Map<string, string>((categories || []).map((c: Category) => [String(c.id), String(c.name)]))
   for (const p of (products || [])) {
     const catId = p.category_id ? String(p.category_id) : 'Unknown'
     const category = catNameById.get(catId) || 'Sin categoría'
@@ -221,10 +310,10 @@ async function getInventoryReportSupabase(supabase: any, params: Record<string, 
   if (startDate) movQuery = movQuery.gte('created_at', startDate)
   if (endDate) movQuery = movQuery.lte('created_at', endDate)
   const { data: movements } = await movQuery
-  const stockMovements = (movements || []).map((m: any) => ({
+  const stockMovements = (movements || []).map((m: InventoryMovementRaw) => ({
     date: toISODate(m.created_at),
     productId: String(m.product_id),
-    productName: String(m.product?.name || m.product_id),
+    productName: String(m.product?.[0]?.name || m.product_id),
     type: String(m.movement_type).toLowerCase() === 'in' ? 'in' : 'out',
     quantity: safeNumber(m.quantity),
     reason: String(m.notes || '')
@@ -244,16 +333,23 @@ async function getInventoryReportSupabase(supabase: any, params: Record<string, 
   }
 }
 
-async function getCustomerReportSupabase(supabase: any, params: Record<string, string>, orgId: string) {
+async function getCustomerReportSupabase(supabase: SupabaseClient, params: ReportParams, orgId: string) {
   const startDate = params['start_date'] || params['startDate']
   const endDate = params['end_date'] || params['endDate']
 
   // Clientes base (para nombres y correos)
-  const { data: customers, error: custErr } = await supabase
+  const { data: customersRaw, error: custErr } = await supabase
     .from('customers')
     .select('id,name,email,created_at')
     .eq('organization_id', orgId)
   if (custErr) throw custErr
+  
+  const customers: Customer[] = (customersRaw || []).map((c: CustomerRaw) => ({
+    id: c.id,
+    name: c.name,
+    email: c.email,
+    created_at: c.created_at || new Date().toISOString()
+  }))
 
   // Ventas completadas en rango para actividad y ticket promedio
   let salesQuery = supabase
@@ -268,19 +364,19 @@ async function getCustomerReportSupabase(supabase: any, params: Record<string, s
 
   const totalCustomers = (customers || []).length
   const totalOrders = (sales || []).length
-  const totalRevenue = (sales || []).reduce((sum: number, s: any) => sum + safeNumber(s.total_amount), 0)
+  const totalRevenue = (sales || []).reduce((sum: number, s: Sale) => sum + safeNumber(s.total_amount), 0)
   const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0
 
   const activeCustomerIds = new Set<string>((sales || [])
-    .map((s: any) => s.customer_id)
+    .map((s: Sale) => s.customer_id)
     .filter(Boolean)
-    .map((id: any) => String(id)))
+    .map((id: string | undefined) => String(id)))
   const activeCustomers = activeCustomerIds.size
 
   // Nuevos clientes en el rango
   let newCustomers = 0
   if (startDate || endDate) {
-    const inRange = (customers || []).filter((c: any) => {
+    const inRange = (customers || []).filter((c: Customer) => {
       if (!c.created_at) return false
       const d = new Date(c.created_at)
       if (startDate && d < new Date(startDate)) return false
@@ -291,7 +387,7 @@ async function getCustomerReportSupabase(supabase: any, params: Record<string, s
   }
 
   // Aggregados por cliente
-  const customerInfo = new Map<string, { id: string; name: string; email: string }>((customers || []).map((c: any) => [
+  const customerInfo = new Map<string, { id: string; name: string; email: string }>((customers || []).map((c: Customer) => [
     String(c.id),
     { id: String(c.id), name: String(c.name || String(c.id)), email: String(c.email || '') }
   ]))
@@ -319,7 +415,7 @@ async function getCustomerReportSupabase(supabase: any, params: Record<string, s
 
   // Segmentación simple por gasto relativo al promedio
   const avgSpent = topCustomers.length > 0
-    ? (Array.from(custAgg.values()).reduce((sum: number, c: any) => sum + c.totalSpent, 0) / Math.max(1, custAgg.size))
+    ? (Array.from(custAgg.values()).reduce((sum: number, c) => sum + c.totalSpent, 0) / Math.max(1, custAgg.size))
     : 0
   const segments = {
     High: { segment: 'High', count: 0, totalSpent: 0, averageOrderValue: 0 },
@@ -375,7 +471,7 @@ async function getCustomerReportSupabase(supabase: any, params: Record<string, s
   }
 }
 
-async function getFinancialReportSupabase(supabase: any, params: Record<string, string>, orgId: string) {
+async function getFinancialReportSupabase(supabase: SupabaseClient, params: ReportParams, orgId: string) {
   const startDate = params['start_date'] || params['startDate']
   const endDate = params['end_date'] || params['endDate']
 
@@ -390,11 +486,11 @@ async function getFinancialReportSupabase(supabase: any, params: Record<string, 
   const { data: sales, error: salesErr } = await salesQuery
   if (salesErr) throw salesErr
 
-  const totalRevenue = (sales || []).reduce((sum: number, s: any) => sum + safeNumber(s.total_amount), 0)
+  const totalRevenue = (sales || []).reduce((sum: number, s: Sale) => sum + safeNumber(s.total_amount), 0)
 
   // COGS desde items y costo de productos (para margen bruto)
-  const saleIds = (sales || []).map((s: any) => s.id)
-  let items: any[] = []
+  const saleIds = (sales || []).map((s: Sale) => s.id)
+  let items: FinancialSaleItemRaw[] = []
   if (saleIds.length > 0) {
     const { data: saleItems, error: itemsErr } = await supabase
       .from('sale_items')
@@ -413,7 +509,7 @@ async function getFinancialReportSupabase(supabase: any, params: Record<string, 
     if (itemsErr) throw itemsErr
     items = saleItems || []
   }
-  const cogs = items.reduce((sum: number, it: any) => sum + safeNumber(it.quantity) * safeNumber(it.product?.cost_price), 0)
+  const cogs = items.reduce((sum: number, it: FinancialSaleItemRaw) => sum + safeNumber(it.quantity) * safeNumber(it.product?.[0]?.cost_price), 0)
 
   // Gastos desde transacciones bancarias (DEBIT)
   // Check if bank_transactions has org_id. Assuming yes or I need to add it.
@@ -428,7 +524,7 @@ async function getFinancialReportSupabase(supabase: any, params: Record<string, 
   if (endDate) txnQuery = txnQuery.lte('txn_date', endDate)
   const { data: txns, error: txnErr } = await txnQuery
   if (txnErr) throw txnErr
-  const totalExpenses = (txns || []).reduce((sum: number, t: any) => sum + safeNumber(t.amount), 0)
+  const totalExpenses = (txns || []).reduce((sum: number, t: BankTransaction) => sum + safeNumber(t.amount), 0)
 
   const netProfit = totalRevenue - totalExpenses
   const profitMargin = totalRevenue > 0 ? netProfit / totalRevenue : 0
@@ -510,17 +606,27 @@ async function getFinancialReportSupabase(supabase: any, params: Record<string, 
 export async function GET(request: NextRequest) {
   try {
     // ✅ Autenticación y roles: permitir ADMIN, SUPER_ADMIN y MANAGER
-    const roleCheck = await validateRole(request, { roles: ['ADMIN', 'SUPER_ADMIN', 'MANAGER'] })
-    if (!roleCheck.ok) {
-      return NextResponse.json(roleCheck.body, { status: roleCheck.status })
+    const { searchParams } = new URL(request.url)
+    const requestedCompanyId =
+      searchParams.get('organizationId') ||
+      searchParams.get('organization_id') ||
+      request.headers.get('x-organization-id') ||
+      undefined
+
+    const access = await requireCompanyAccess(request, {
+      companyId: requestedCompanyId,
+      permission: COMPANY_PERMISSIONS.VIEW_REPORTS,
+      feature: COMPANY_FEATURE_KEYS.BASIC_REPORTS,
+      allowedRoles: ['OWNER', 'ADMIN'],
+    })
+    if (!access.ok) {
+      return NextResponse.json(access.body, { status: access.status })
     }
 
-    const userId = roleCheck.userId as string
-    const userRole = (roleCheck.userRole || '').toUpperCase()
-    const isSuperAdmin = userRole === 'SUPER_ADMIN'
-    const organizationId = isSuperAdmin ? null : await getUserOrganizationId(userId)
-
-    const { searchParams } = new URL(request.url)
+    const userId = access.context.userId
+    const isSuperAdmin = access.context.isSuperAdmin
+    const organizationId = access.context.companyId
+    const params = Object.fromEntries(searchParams.entries())
 
     // ✅ SEGURO: Validación robusta con Zod
     const querySchema = z.object({
@@ -563,9 +669,7 @@ export async function GET(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const { type, start_date: startDate, end_date: endDate } = validation.data;
-
-    const params = Object.fromEntries(searchParams.entries())
+    const { type } = validation.data;
     const source = params['source'] || process.env.NEXT_PUBLIC_REPORTS_SOURCE || process.env.REPORTS_SOURCE
 
     // ✅ Permitir filtro por organización desde query params (solo para super admins)
@@ -623,15 +727,27 @@ export async function GET(request: NextRequest) {
       // Para otros tipos no implementados, continuar con backend
     }
 
-    const { data } = await api.get('/reports', { params })
+    // Obtener sesión para autenticar con el backend
+    const supabase = await createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+    
+    const requestHeaders: Record<string, string> = {}
+    if (session?.access_token) {
+      requestHeaders['Authorization'] = `Bearer ${session.access_token}`
+    }
+    if (effectiveOrgId) {
+      requestHeaders['x-organization-id'] = effectiveOrgId
+    }
+
+    const { data } = await api.get('/reports', { params, headers: requestHeaders })
     const dur = Date.now() - t0
     const ttl = getTtlByType(String(type))
     const headers = { 'Server-Timing': `total;dur=${dur}`, 'Cache-Control': `private, max-age=${ttl}, stale-while-revalidate=${ttl * 3}` }
     reportsCache.set(cacheKey, { expiresAt: Date.now() + ttl * 1000, payload: data, headers })
     return NextResponse.json(data, { headers: { ...headers, 'X-Cache': 'MISS' } })
-  } catch (error: any) {
-    const status = error?.response?.status ?? 500
-    const details = error?.response?.data ?? getErrorMessage(error)
+  } catch (error: unknown) {
+    const status = (error as { response?: { status?: number } })?.response?.status ?? 500
+    const details = (error as { response?: { data?: unknown } })?.response?.data ?? getErrorMessage(error)
 
     // ✅ SEGURO: Ocultar detalles de error en producción
     const isDev = process.env.NODE_ENV !== 'production'
@@ -693,23 +809,27 @@ export async function GET(request: NextRequest) {
         const params = Object.fromEntries(searchParams.entries()) as Record<string, string>
 
         // Obtener organizationId según rol
-        const roleCheck = await validateRole(request, { roles: ['ADMIN', 'SUPER_ADMIN', 'MANAGER'] })
-        if (!roleCheck.ok) {
-          throw new Error('No autorizado');
-        }
-        const userId = roleCheck.userId as string
-        const userRole = (roleCheck.userRole || '').toUpperCase()
-        const isSuperAdmin = userRole === 'SUPER_ADMIN'
         const orgFilter = params['organizationId'] || params['organization_id']
         const headerOrg = request.headers.get('x-organization-id') || undefined
-        const organizationId = isSuperAdmin ? null : await getUserOrganizationId(userId)
-        const effectiveOrgId = (isSuperAdmin && (orgFilter || headerOrg)) ? (orgFilter || headerOrg)! : (organizationId || headerOrg || '')
+        const requestedCompanyId = orgFilter || headerOrg
+        const access = await requireCompanyAccess(request, {
+          companyId: requestedCompanyId,
+          permission: COMPANY_PERMISSIONS.VIEW_REPORTS,
+          feature: COMPANY_FEATURE_KEYS.BASIC_REPORTS,
+          allowedRoles: ['OWNER', 'ADMIN'],
+        })
+        if (!access.ok) {
+          throw new Error('No autorizado')
+        }
+        const effectiveOrgId = (access.context.isSuperAdmin && requestedCompanyId)
+          ? requestedCompanyId
+          : (access.context.companyId || headerOrg || '')
 
         if (!effectiveOrgId) {
           throw new Error('Organization ID no disponible');
         }
 
-        let data: any = null
+        let data: unknown = null
         if (type === 'sales') data = await getSalesReportSupabase(supabase, params, effectiveOrgId)
         else if (type === 'inventory') data = await getInventoryReportSupabase(supabase, params, effectiveOrgId)
         else if (type === 'customers') data = await getCustomerReportSupabase(supabase, params, effectiveOrgId)

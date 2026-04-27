@@ -1,146 +1,139 @@
 'use client';
 
-import { useState } from 'react';
-import { 
-  Table, TableBody, TableCell, TableHead, 
-  TableHeader, TableRow 
+import Link from 'next/link';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { 
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, 
-  DropdownMenuTrigger 
-} from '@/components/ui/dropdown-menu';
-import { 
-  MoreHorizontal, AlertTriangle, Package, 
-  ShoppingCart, Settings, TrendingDown
-} from 'lucide-react';
-import { formatCurrency } from '@/lib/utils';
-import { Skeleton } from '@/components/ui/skeleton';
 import { PermissionGuard } from '@/components/ui/permission-guard';
-
-interface StockAlert {
-  id: string;
-  productId: string;
-  productName: string;
-  currentStock: number;
-  minThreshold: number;
-  maxThreshold: number;
-  severity: 'critical' | 'low' | 'warning';
-  category: string;
-  unitPrice: number;
-  estimatedDaysLeft: number;
-  lastRestocked: string;
-  supplier?: string;
-}
+import { Skeleton } from '@/components/ui/skeleton';
+import { formatCurrency } from '@/lib/utils';
+import type { StockAlertItem } from '@/lib/stock-alerts';
+import { AlertTriangle, ExternalLink, Package, Settings2, TrendingDown } from 'lucide-react';
 
 interface StockAlertsTableProps {
-  alerts: StockAlert[];
+  alerts: StockAlertItem[];
   isLoading: boolean;
   selectedProducts: Set<string>;
   onSelectionChange: (selected: Set<string>) => void;
-  onUpdateThreshold: (productId: string, threshold: number) => void;
-  onCreateOrder: (productIds: string[]) => void;
+  onEditThreshold: (alert: StockAlertItem) => void;
 }
 
-export function StockAlertsTable({ 
-  alerts, 
-  isLoading, 
+function severityBadge(severity: StockAlertItem['severity']) {
+  switch (severity) {
+    case 'critical':
+      return (
+        <Badge variant="destructive" className="gap-1">
+          <AlertTriangle className="h-3 w-3" />
+          Critica
+        </Badge>
+      );
+    case 'low':
+      return (
+        <Badge className="gap-1 bg-orange-100 text-orange-700 hover:bg-orange-100 dark:bg-orange-950/40 dark:text-orange-300">
+          <Package className="h-3 w-3" />
+          Bajo minimo
+        </Badge>
+      );
+    case 'warning':
+      return (
+        <Badge variant="outline" className="gap-1">
+          <TrendingDown className="h-3 w-3" />
+          Advertencia
+        </Badge>
+      );
+    default:
+      return null;
+  }
+}
+
+export function StockAlertsTable({
+  alerts,
+  isLoading,
   selectedProducts,
   onSelectionChange,
-  onUpdateThreshold, 
-  onCreateOrder 
+  onEditThreshold,
 }: StockAlertsTableProps) {
   if (isLoading) {
     return (
       <div className="space-y-3">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="flex items-center space-x-4 p-4">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <div key={index} className="grid grid-cols-[24px_2fr_repeat(5,minmax(0,1fr))_120px] items-center gap-4 p-3">
             <Skeleton className="h-4 w-4" />
-            <Skeleton className="h-4 w-32" />
-            <Skeleton className="h-4 w-20" />
-            <Skeleton className="h-4 w-16" />
-            <Skeleton className="h-4 w-24" />
-            <Skeleton className="h-8 w-20" />
+            <Skeleton className="h-10 w-full" />
+            {Array.from({ length: 6 }).map((__, cellIndex) => (
+              <Skeleton key={cellIndex} className="h-10 w-full" />
+            ))}
           </div>
         ))}
       </div>
     );
   }
 
-  if (!alerts?.length) {
+  if (alerts.length === 0) {
     return (
-      <div className="text-center py-12">
-        <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-        <h3 className="text-lg font-semibold mb-2">No hay alertas de stock</h3>
-        <p className="text-muted-foreground">
-          Todos los productos tienen stock suficiente.
+      <div className="flex flex-col items-center justify-center py-14 text-center">
+        <Package className="mb-4 h-12 w-12 text-muted-foreground" />
+        <h3 className="text-lg font-semibold">No hay alertas activas</h3>
+        <p className="max-w-md text-sm text-muted-foreground">
+          Con los filtros actuales, todos los productos mantienen una cobertura saludable.
         </p>
       </div>
     );
   }
 
-  const getSeverityBadge = (severity: string) => {
-    const severityConfig = {
-      critical: { label: 'Crítico', variant: 'destructive' as const, icon: AlertTriangle },
-      low: { label: 'Bajo', variant: 'secondary' as const, icon: TrendingDown },
-      warning: { label: 'Advertencia', variant: 'outline' as const, icon: Package }
-    };
-
-    const config = severityConfig[severity as keyof typeof severityConfig];
-    if (!config) return null;
-
-    const Icon = config.icon;
-    return (
-      <Badge variant={config.variant} className="flex items-center gap-1">
-        <Icon className="h-3 w-3" />
-        {config.label}
-      </Badge>
-    );
-  };
+  const visibleIds = alerts.map((alert) => alert.productId);
+  const selectedVisibleCount = visibleIds.filter((id) => selectedProducts.has(id)).length;
+  const isAllSelected = visibleIds.length > 0 && selectedVisibleCount === visibleIds.length;
+  const checkboxState = isAllSelected ? true : selectedVisibleCount > 0 ? 'indeterminate' : false;
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
-      onSelectionChange(new Set(alerts.map(alert => alert.productId)));
-    } else {
-      onSelectionChange(new Set());
+      onSelectionChange(new Set(visibleIds));
+      return;
     }
+
+    onSelectionChange(new Set());
   };
 
   const handleSelectProduct = (productId: string, checked: boolean) => {
-    const newSelection = new Set(selectedProducts);
+    const nextSelection = new Set(selectedProducts);
+
     if (checked) {
-      newSelection.add(productId);
+      nextSelection.add(productId);
     } else {
-      newSelection.delete(productId);
+      nextSelection.delete(productId);
     }
-    onSelectionChange(newSelection);
+
+    onSelectionChange(nextSelection);
   };
 
-  const isAllSelected = alerts.length > 0 && selectedProducts.size === alerts.length;
-  const isPartiallySelected = selectedProducts.size > 0 && selectedProducts.size < alerts.length;
-
   return (
-    <div className="rounded-md border">
+    <div className="overflow-hidden rounded-md border">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[50px]">
+            <TableHead className="w-[44px]">
               <Checkbox
-                checked={isAllSelected}
-                onCheckedChange={handleSelectAll}
+                checked={checkboxState}
+                onCheckedChange={(checked) => handleSelectAll(checked === true)}
                 aria-label="Seleccionar todos"
-                {...(isPartiallySelected && { 'data-state': 'indeterminate' })}
               />
             </TableHead>
             <TableHead>Producto</TableHead>
-            <TableHead>Stock Actual</TableHead>
-            <TableHead>Umbral Mínimo</TableHead>
+            <TableHead>Stock</TableHead>
+            <TableHead>Minimo</TableHead>
+            <TableHead>Cobertura</TableHead>
             <TableHead>Severidad</TableHead>
-            <TableHead>Días Restantes</TableHead>
-            <TableHead>Precio</TableHead>
-            <TableHead className="w-[50px]"></TableHead>
+            <TableHead>Reponer</TableHead>
+            <TableHead className="w-[120px] text-right">Acciones</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -149,74 +142,75 @@ export function StockAlertsTable({
               <TableCell>
                 <Checkbox
                   checked={selectedProducts.has(alert.productId)}
-                  onCheckedChange={(checked) => 
-                    handleSelectProduct(alert.productId, checked as boolean)
-                  }
+                  onCheckedChange={(checked) => handleSelectProduct(alert.productId, checked === true)}
                   aria-label={`Seleccionar ${alert.productName}`}
                 />
               </TableCell>
               <TableCell>
-                <div>
-                  <div className="font-medium">{alert.productName}</div>
-                  <div className="text-sm text-muted-foreground">
-                    {alert.category}
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href={`/dashboard/products/view/${alert.productId}`}
+                      className="font-medium hover:underline"
+                    >
+                      {alert.productName}
+                    </Link>
+                    <Link
+                      href={`/dashboard/products/view/${alert.productId}`}
+                      className="text-muted-foreground hover:text-foreground"
+                      aria-label={`Ver ${alert.productName}`}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Link>
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    {alert.sku} · {alert.category}
+                    {alert.supplier ? ` · ${alert.supplier}` : ''}
+                  </p>
                 </div>
               </TableCell>
               <TableCell>
-                <span className={`font-medium ${
-                  alert.currentStock <= alert.minThreshold 
-                    ? 'text-red-600' 
-                    : 'text-foreground'
-                }`}>
-                  {alert.currentStock}
-                </span>
-              </TableCell>
-              <TableCell>{alert.minThreshold}</TableCell>
-              <TableCell>
-                {getSeverityBadge(alert.severity)}
+                <div className="space-y-1">
+                  <p className="font-semibold">{alert.currentStock}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatCurrency(alert.unitPrice)} venta
+                  </p>
+                </div>
               </TableCell>
               <TableCell>
-                <span className={`${
-                  alert.estimatedDaysLeft <= 7 
-                    ? 'text-red-600 font-medium' 
-                    : alert.estimatedDaysLeft <= 14
-                    ? 'text-orange-600'
-                    : 'text-foreground'
-                }`}>
-                  {alert.estimatedDaysLeft}d
-                </span>
-              </TableCell>
-              <TableCell className="font-medium">
-                {formatCurrency(alert.unitPrice)}
+                <div className="space-y-1">
+                  <p className="font-medium">{alert.minThreshold}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Max {alert.maxThreshold ?? '--'}
+                  </p>
+                </div>
               </TableCell>
               <TableCell>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="h-8 w-8 p-0">
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <PermissionGuard permission="stock-alerts.edit">
-                      <DropdownMenuItem 
-                        onClick={() => onUpdateThreshold(alert.productId, alert.minThreshold)}
-                      >
-                        <Settings className="h-4 w-4 mr-2" />
-                        Ajustar Umbral
-                      </DropdownMenuItem>
-                    </PermissionGuard>
-                    
-                    <PermissionGuard permission="stock-alerts.create">
-                      <DropdownMenuItem 
-                        onClick={() => onCreateOrder([alert.productId])}
-                      >
-                        <ShoppingCart className="h-4 w-4 mr-2" />
-                        Crear Orden
-                      </DropdownMenuItem>
-                    </PermissionGuard>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <div className="space-y-1">
+                  <p className="font-medium">{alert.coverageLabel}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {alert.dailySalesVelocity > 0
+                      ? `${alert.dailySalesVelocity.toFixed(2)} u/dia`
+                      : 'Sin consumo reciente'}
+                  </p>
+                </div>
+              </TableCell>
+              <TableCell>{severityBadge(alert.severity)}</TableCell>
+              <TableCell>
+                <div className="space-y-1">
+                  <p className="font-medium">{alert.recommendedRestock} u</p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatCurrency(alert.replenishmentCost)}
+                  </p>
+                </div>
+              </TableCell>
+              <TableCell className="text-right">
+                <PermissionGuard permission="stock-alerts.edit">
+                  <Button variant="outline" size="sm" onClick={() => onEditThreshold(alert)}>
+                    <Settings2 className="mr-2 h-4 w-4" />
+                    Ajustar
+                  </Button>
+                </PermissionGuard>
               </TableCell>
             </TableRow>
           ))}

@@ -1,120 +1,231 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { createAdminClient } from '@/lib/supabase-admin'
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase-admin';
+import { getValidatedOrganizationId } from '@/lib/organization';
+import { carouselCache, getCarouselCacheKey } from '../../cache';
+
+async function resolveCarouselContext(request: NextRequest) {
+  const supabaseAuth = await createClient();
+  const {
+    data: { user },
+    error,
+  } = await supabaseAuth.auth.getUser();
+
+  if (error || !user) {
+    return {
+      user: null,
+      organizationId: null,
+      response: NextResponse.json(
+        { success: false, message: 'No autorizado' },
+        { status: 401 },
+      ),
+    };
+  }
+
+  const organizationId = await getValidatedOrganizationId(request);
+  if (!organizationId) {
+    return {
+      user,
+      organizationId: null,
+      response: NextResponse.json(
+        { success: false, message: 'No se pudo resolver la organizacion activa' },
+        { status: 400 },
+      ),
+    };
+  }
+
+  return {
+    user,
+    organizationId,
+    response: null,
+  };
+}
+
+async function validatePromotionIds(
+  supabase: ReturnType<typeof createAdminClient>,
+  organizationId: string,
+  ids: string[],
+) {
+  if (ids.length === 0) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('promotions')
+    .select('id')
+    .eq('organization_id', organizationId)
+    .in('id', ids);
+
+  if (error) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: 'Error al validar la version del carrusel',
+        error: error.message,
+        code: error.code,
+        details: error.details,
+      },
+      { status: 500 },
+    );
+  }
+
+  if ((data || []).length !== ids.length) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: 'La version del carrusel contiene promociones fuera de la organizacion activa',
+      },
+      { status: 400 },
+    );
+  }
+
+  return null;
+}
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
+    const context = await resolveCarouselContext(request);
+    if (context.response) {
+      return context.response;
+    }
+
     const { id } = await params;
-    
-    // Authenticate user
-    const supabaseAuth = await createClient()
-    const { data: { user } } = await supabaseAuth.auth.getUser()
+    const user = context.user!;
+    const organizationId = context.organizationId as string;
+    const supabase = createAdminClient();
 
-    if (!user) {
-      return NextResponse.json(
-        { success: false, message: 'No autorizado' },
-        { status: 401 }
-      )
-    }
-
-    // Use admin client for operations
-    let supabase
-    try {
-      supabase = createAdminClient()
-    } catch (clientError) {
-      return NextResponse.json(
-        { success: false, message: 'Error de configuración', error: String(clientError) },
-        { status: 500 }
-      )
-    }
-
-    // 1. Get the target audit log entry to revert TO
     const { data: logEntry, error: logError } = await supabase
-      .from('carousel_audit_log')
-      .select('new_state')
+      .from('audit_logs')
+      .select('changes, organization_id')
       .eq('id', id)
-      .single()
+      .eq('table_name', 'promotions_carousel')
+      .single();
 
     if (logError || !logEntry) {
       return NextResponse.json(
         { success: false, message: 'Entrada de historial no encontrada' },
-        { status: 404 }
-      )
+        { status: 404 },
+      );
     }
 
-    const targetState = logEntry.new_state as string[]
+    if (logEntry.organization_id && logEntry.organization_id !== organizationId) {
+      return NextResponse.json(
+        { success: false, message: 'La version solicitada no pertenece a la organizacion activa' },
+        { status: 404 },
+      );
+    }
+
+    const targetState = logEntry.changes?.new_state as string[] | undefined;
     if (!Array.isArray(targetState)) {
       return NextResponse.json(
-        { success: false, message: 'Estado inválido en el historial' },
-        { status: 400 }
-      )
+        { success: false, message: 'Estado invalido en el historial' },
+        { status: 400 },
+      );
     }
 
-    // 2. Get current state for the new audit entry
-    const { data: currentData } = await supabase
+    const validationResponse = await validatePromotionIds(supabase, organizationId, targetState);
+    if (validationResponse) {
+      return validationResponse;
+    }
+
+    const { data: currentData, error: currentError } = await supabase
       .from('promotions_carousel')
       .select('promotion_id')
-      .order('position', { ascending: true })
-    
-    const currentState = currentData ? currentData.map((r: any) => String(r.promotion_id)) : []
+      .eq('organization_id', organizationId)
+      .order('position', { ascending: true });
 
-    // 3. Update the carousel (Delete all, then Insert)
-    // First, delete existing
-    const { data: existingItems } = await supabase.from('promotions_carousel').select('id')
-    if (existingItems && existingItems.length > 0) {
-      await supabase
-        .from('promotions_carousel')
-        .delete()
-        .in('id', existingItems.map((i: any) => i.id))
+    if (currentError && currentError.code !== '42P01') {
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'Error al leer el carrusel actual',
+          error: currentError.message,
+          code: currentError.code,
+          details: currentError.details,
+        },
+        { status: 500 },
+      );
     }
 
-    // Insert target state
+    const currentState = (currentData || []).map((row: { promotion_id: string }) =>
+      String(row.promotion_id),
+    );
+
+    const { error: deleteError } = await supabase
+      .from('promotions_carousel')
+      .delete()
+      .eq('organization_id', organizationId);
+
+    if (deleteError) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'Error al limpiar el carrusel actual',
+          error: deleteError.message,
+          code: deleteError.code,
+          details: deleteError.details,
+        },
+        { status: 500 },
+      );
+    }
+
     if (targetState.length > 0) {
-      const rows = targetState.map((promoId, idx) => ({
-        promotion_id: promoId,
-        position: idx,
-      }))
+      const rows = targetState.map((promotionId, index) => ({
+        promotion_id: promotionId,
+        position: index + 1,
+        organization_id: organizationId,
+      }));
 
       const { error: insertError } = await supabase
         .from('promotions_carousel')
-        .insert(rows)
+        .insert(rows);
 
       if (insertError) {
-        throw new Error(insertError.message)
+        return NextResponse.json(
+          {
+            success: false,
+            message: 'Error al restaurar el carrusel',
+            error: insertError.message,
+            code: insertError.code,
+            details: insertError.details,
+          },
+          { status: 500 },
+        );
       }
     }
 
-    // 4. Log the revert action
-    const ip = request.headers.get('x-forwarded-for') || 'unknown'
-    const userAgent = request.headers.get('user-agent') || 'unknown'
+    const { error: auditError } = await supabase.from('audit_logs').insert({
+      user_id: user.id || null,
+      table_name: 'promotions_carousel',
+      record_id: 'carousel',
+      action: 'REVERT_CAROUSEL',
+      organization_id: organizationId,
+      changes: {
+        previous_state: currentState,
+        new_state: targetState,
+        reverted_from_log_id: id,
+      },
+    });
 
-    await supabase.rpc('log_carousel_change', {
-      p_user_id: user.id,
-      p_action: 'REVERT',
-      p_previous_state: currentState,
-      p_new_state: targetState,
-      p_ip_address: ip,
-      p_user_agent: userAgent,
-      p_metadata: { revertedFromLogId: id, source: 'dashboard' }
-    })
+    if (auditError) {
+      console.error('[API/Carousel/Revert] Audit log error:', auditError);
+    }
 
-    // Clear cache (using the map from route.ts would be nice but we are in a different file)
-    // We can't access the variable `carouselCache` from `../route.ts`. 
-    // Ideally we should move cache to a shared file or use a real cache like Redis.
-    // For now, since it's in-memory and likely different lambda/process, cache might not be shared anyway.
-    // But if running in same Node process, we can't clear it easily without shared module.
-    // This is a known limitation of this simple caching strategy.
+    carouselCache.delete(getCarouselCacheKey(organizationId));
 
-    return NextResponse.json({ success: true, ids: targetState })
-
+    return NextResponse.json({ success: true, ids: targetState });
   } catch (error) {
-    console.error('[API/Carousel/Revert] Critical Error:', error)
+    console.error('[API/Carousel/Revert] Critical error:', error);
     return NextResponse.json(
-      { success: false, message: 'Error al revertir cambios', error: String(error) },
-      { status: 500 }
-    )
+      {
+        success: false,
+        message: 'Error al revertir cambios',
+        error: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    );
   }
 }

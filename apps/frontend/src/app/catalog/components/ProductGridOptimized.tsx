@@ -102,14 +102,16 @@ export default function ProductGridOptimized({
       {loading && products.length === 0 && (
         <div className={`grid ${gridClassName}`}>
           {Array.from({ length: skeletonCount }).map((_, i) => (
-            <Card key={i} className="overflow-hidden">
-              <Skeleton className={`w-full ${viewMode === 'list' ? 'h-32' : viewMode === 'compact' ? 'aspect-square' : 'aspect-[4/3]'}`} />
-              <CardContent className="p-4 space-y-3">
-                <Skeleton className="h-5 w-3/4" />
-                <Skeleton className="h-4 w-full" />
-                <div className="flex justify-between items-center">
-                  <Skeleton className="h-6 w-20" />
-                  <Skeleton className="h-9 w-24" />
+            <Card key={i} className="overflow-hidden border-0 bg-white/40 dark:bg-slate-900/40 backdrop-blur-md rounded-2xl sm:rounded-3xl">
+              <div className={`w-full ${viewMode === 'list' ? 'h-32' : viewMode === 'compact' ? 'aspect-square' : 'aspect-[4/3]'} bg-slate-200 dark:bg-slate-800 animate-pulse relative overflow-hidden`}>
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" />
+              </div>
+              <CardContent className="p-4 space-y-4">
+                <div className="h-5 bg-slate-200 dark:bg-slate-800 rounded-lg w-3/4 animate-pulse" />
+                <div className="h-4 bg-slate-100 dark:bg-slate-900 rounded-lg w-full animate-pulse" />
+                <div className="flex justify-between items-center pt-2">
+                  <div className="h-7 bg-slate-200 dark:bg-slate-800 rounded-lg w-24 animate-pulse" />
+                  <div className="h-10 bg-slate-100 dark:bg-slate-900 rounded-xl w-32 animate-pulse" />
                 </div>
               </CardContent>
             </Card>
@@ -158,10 +160,9 @@ export default function ProductGridOptimized({
             {products.map((product, index) => (
               <div
                 key={product.id}
-                className="animate-in fade-in-0 slide-in-from-bottom-4"
+                className="animate-slide-up"
                 style={{ 
-                  animationDelay: `${Math.min(index * 30, 300)}ms`,
-                  animationDuration: '400ms',
+                  animationDelay: `${Math.min(index * 40, 400)}ms`,
                   animationFillMode: 'both'
                 }}
               >

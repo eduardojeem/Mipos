@@ -71,11 +71,13 @@ export function useMonitoringConfig() {
 
             // Luego cargar desde API para sincronizar
             const response = await fetch('/api/superadmin/monitoring/config');
-
             if (!response.ok) {
-                throw new Error('Failed to fetch config');
+                try {
+                    const err = await response.json();
+                    console.error('[useMonitoringConfig] API error:', err);
+                } catch {}
+                return;
             }
-
             const data = await response.json();
 
             if (data.success && data.config) {

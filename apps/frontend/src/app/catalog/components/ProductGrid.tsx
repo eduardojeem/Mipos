@@ -2,7 +2,6 @@
 
 import { useRef, useEffect, useMemo, useCallback, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent } from '@/components/ui/card';
 import {
     Search,
@@ -26,6 +25,7 @@ interface ProductGridProps {
     onLoadMore?: () => void;
     onClearFilters?: () => void;
     config: any;
+    allowAddToCart?: boolean;
 }
 
 export default function ProductGrid({
@@ -41,6 +41,7 @@ export default function ProductGrid({
     onLoadMore,
     onClearFilters,
     config,
+    allowAddToCart = true,
 }: ProductGridProps) {
     const sentinelRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -76,7 +77,7 @@ export default function ProductGrid({
             case 'compact':
                 return 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3';
             default:
-                return 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5';
+                return 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6';
         }
     }, [viewMode]);
 
@@ -102,14 +103,16 @@ export default function ProductGrid({
             {loading && products.length === 0 && (
                 <div className={`grid ${gridClassName}`}>
                     {Array.from({ length: skeletonCount }).map((_, i) => (
-                        <Card key={i} className="overflow-hidden">
-                            <Skeleton className={`w-full ${viewMode === 'list' ? 'h-32' : viewMode === 'compact' ? 'aspect-square' : 'aspect-[4/3]'}`} />
-                            <CardContent className="p-4 space-y-3">
-                                <Skeleton className="h-5 w-3/4" />
-                                <Skeleton className="h-4 w-full" />
-                                <div className="flex justify-between items-center">
-                                    <Skeleton className="h-6 w-20" />
-                                    <Skeleton className="h-9 w-24" />
+                        <Card key={i} className="overflow-hidden border-0 bg-white/40 dark:bg-slate-900/40 backdrop-blur-md rounded-2xl sm:rounded-3xl">
+                            <div className={`w-full ${viewMode === 'list' ? 'h-32' : viewMode === 'compact' ? 'aspect-square' : 'aspect-[4/3]'} bg-slate-200 dark:bg-slate-800 animate-pulse relative overflow-hidden`}>
+                                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" />
+                            </div>
+                            <CardContent className="p-4 space-y-4">
+                                <div className="h-5 bg-slate-200 dark:bg-slate-800 rounded-lg w-3/4 animate-pulse" />
+                                <div className="h-4 bg-slate-100 dark:bg-slate-900 rounded-lg w-full animate-pulse" />
+                                <div className="flex justify-between items-center pt-2">
+                                    <div className="h-7 bg-slate-200 dark:bg-slate-800 rounded-lg w-24 animate-pulse" />
+                                    <div className="h-10 bg-slate-100 dark:bg-slate-900 rounded-xl w-32 animate-pulse" />
                                 </div>
                             </CardContent>
                         </Card>
@@ -119,20 +122,20 @@ export default function ProductGrid({
 
             {/* Empty State */}
             {!loading && products.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-20 px-4">
+                <div className="flex flex-col items-center justify-center py-20 px-4 bg-white/20 dark:bg-slate-900/20 backdrop-blur-sm rounded-[32px] border border-slate-200/50 dark:border-white/5">
                     <div className="relative mb-8">
-                        <div className="w-32 h-32 rounded-full bg-gradient-to-br from-primary/10 to-purple-500/10 flex items-center justify-center">
-                            <Package className="w-16 h-16 text-muted-foreground/50" />
+                        <div className="w-32 h-32 rounded-full bg-gradient-to-br from-primary/10 to-purple-500/10 flex items-center justify-center animate-glow-pulse">
+                            <Package className="w-16 h-16 text-primary opacity-50" />
                         </div>
-                        <div className="absolute -bottom-2 -right-2 w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-                            <Search className="w-6 h-6 text-muted-foreground" />
+                        <div className="absolute -bottom-2 -right-2 w-12 h-12 rounded-full bg-white dark:bg-slate-800 shadow-xl flex items-center justify-center">
+                            <Search className="w-6 h-6 text-primary" />
                         </div>
                     </div>
 
-                    <h3 className="text-2xl font-bold text-foreground mb-3">
+                    <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-3">
                         No encontramos productos
                     </h3>
-                    <p className="text-muted-foreground text-center max-w-md mb-8">
+                    <p className="text-slate-500 dark:text-slate-400 text-center max-w-md mb-8 font-medium">
                         No hay productos que coincidan con tus criterios de búsqueda.
                         Intenta ajustar los filtros o explorar otras categorías.
                     </p>
@@ -142,7 +145,7 @@ export default function ProductGrid({
                             onClick={onClearFilters}
                             variant="default"
                             size="lg"
-                            className="gap-2"
+                            className="gap-2 rounded-2xl bg-primary text-white shadow-xl shadow-primary/25 border-0 hover:scale-105 transition-all"
                         >
                             <RefreshCw className="w-4 h-4" />
                             Limpiar filtros
@@ -158,10 +161,9 @@ export default function ProductGrid({
                         {products.map((product, index) => (
                             <div
                                 key={product.id}
-                                className="animate-in fade-in-0 slide-in-from-bottom-4"
+                                className="animate-slide-up"
                                 style={{
-                                    animationDelay: `${Math.min(index * 30, 300)}ms`,
-                                    animationDuration: '400ms',
+                                    animationDelay: `${Math.min(index * 40, 400)}ms`,
                                     animationFillMode: 'both'
                                 }}
                             >
@@ -174,6 +176,7 @@ export default function ProductGrid({
                                     onAddToCart={onAddToCart}
                                     config={config}
                                     priority={index < 4}
+                                    allowAddToCart={allowAddToCart}
                                 />
                             </div>
                         ))}
@@ -181,11 +184,11 @@ export default function ProductGrid({
 
                     {/* Loading More Indicator */}
                     {loadingMore && (
-                        <div className="flex items-center justify-center py-8">
-                            <div className="flex items-center gap-3 px-6 py-3 rounded-full bg-muted/50 backdrop-blur-sm">
+                        <div className="flex items-center justify-center py-12">
+                            <div className="flex items-center gap-3 px-8 py-4 rounded-full bg-white/50 dark:bg-white/5 backdrop-blur-xl border border-slate-200/50 dark:border-white/5 shadow-xl">
                                 <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                                <span className="text-sm font-medium text-muted-foreground">
-                                    Cargando más productos...
+                                <span className="text-sm font-bold text-slate-600 dark:text-slate-300 uppercase tracking-widest">
+                                    Cargando más...
                                 </span>
                             </div>
                         </div>
@@ -196,15 +199,15 @@ export default function ProductGrid({
 
                     {/* End of Results (solo para infinito) */}
                     {!hasMore && onLoadMore && products.length > 0 && (
-                        <div className="flex flex-col items-center py-12 text-center">
-                            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-                                <Package className="w-8 h-8 text-muted-foreground" />
+                        <div className="flex flex-col items-center py-16 text-center">
+                            <div className="w-16 h-16 rounded-full bg-slate-100 dark:bg-white/5 flex items-center justify-center mb-4 transition-all hover:scale-110">
+                                <Package className="w-8 h-8 text-slate-400" />
                             </div>
-                            <p className="text-muted-foreground mb-4">
+                            <p className="text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest text-xs mb-6 px-6 py-2 bg-slate-100/50 dark:bg-white/5 rounded-full">
                                 Has visto todos los {products.length} productos
                             </p>
                             {showBackToTop && (
-                                <Button variant="outline" size="sm" onClick={scrollToTop} className="gap-2">
+                                <Button variant="outline" size="sm" onClick={scrollToTop} className="gap-2 rounded-xl dark:border-white/10 dark:hover:bg-white/5">
                                     <ArrowUp className="w-4 h-4" />
                                     Volver arriba
                                 </Button>
@@ -219,11 +222,11 @@ export default function ProductGrid({
                 <Button
                     variant="secondary"
                     size="icon"
-                    className={`fixed bottom-6 right-6 z-40 h-12 w-12 rounded-full shadow-lg transition-all ${backToTopVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+                    className={`fixed bottom-6 right-6 z-40 h-12 w-12 rounded-full shadow-2xl bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200/50 dark:border-white/5 transition-all duration-300 hover:scale-110 hover:bg-white dark:hover:bg-slate-900 ${backToTopVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10 pointer-events-none'}`}
                     onClick={scrollToTop}
                     id="back-to-top"
                 >
-                    <ArrowUp className="w-5 h-5" />
+                    <ArrowUp className="w-5 h-5 text-primary" />
                 </Button>
             )}
 

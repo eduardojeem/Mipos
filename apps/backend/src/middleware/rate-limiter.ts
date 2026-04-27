@@ -133,3 +133,118 @@ export const reportsRateLimit = rateLimit({
     });
   }
 });
+
+// ==================== CASH MODULE RATE LIMITERS ====================
+
+/**
+ * Rate limiter para mutaciones de caja (abrir, cerrar, registrar movimientos)
+ * Previene abuso y saturación del sistema en operaciones críticas de efectivo
+ */
+export const cashMutationLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minuto
+  max: 10, // 10 requests por minuto por organización
+  message: {
+    error: 'Demasiadas operaciones de caja en poco tiempo. Por favor, espera un momento.',
+    retryAfter: 60
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  
+  // Usar organizationId si está disponible, sino IP
+  keyGenerator: (req: Request) => {
+    const user = (req as any).user;
+    return user?.organizationId || req.ip || 'unknown';
+  },
+  
+  // Skip rate limiting para super admins
+  skip: (req: Request) => {
+    const user = (req as any).user;
+    return user?.role === 'SUPER_ADMIN';
+  },
+  
+  handler: (req: Request, res: Response) => {
+    securityLogger.logRateLimit(req, {
+      category: 'cash_mutations',
+      limit: 10,
+      windowMs: 60 * 1000
+    });
+    
+    res.status(429).json({
+      error: 'Demasiadas operaciones de caja en poco tiempo.',
+      message: 'Has excedido el límite de 10 operaciones por minuto. Por favor, espera un momento antes de intentar nuevamente.',
+      retryAfter: 60
+    });
+  }
+});
+
+/**
+ * Rate limiter más restrictivo para exportaciones de caja
+ * Previene generación masiva de CSVs que pueden saturar el servidor
+ */
+export const cashExportLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minuto
+  max: 3, // 3 exports por minuto
+  message: {
+    error: 'Demasiadas exportaciones en poco tiempo. Por favor, espera un momento.',
+    retryAfter: 60
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  
+  keyGenerator: (req: Request) => {
+    const user = (req as any).user;
+    return user?.organizationId || req.ip || 'unknown';
+  },
+  
+  skip: (req: Request) => {
+    const user = (req as any).user;
+    return user?.role === 'SUPER_ADMIN';
+  },
+  
+  handler: (req: Request, res: Response) => {
+    securityLogger.logRateLimit(req, {
+      category: 'cash_exports',
+      limit: 3,
+      windowMs: 60 * 1000
+    });
+    
+    res.status(429).json({
+      error: 'Demasiadas exportaciones en poco tiempo.',
+      message: 'Has excedido el límite de 3 exportaciones por minuto. Por favor, espera antes de exportar nuevamente.',
+      retryAfter: 60
+    });
+  }
+});
+
+/**
+ * Rate limiter general para lecturas de caja
+ * Más permisivo pero previene consultas masivas
+ */
+export const cashReadLimiter = rateLimit({
+  windowMs: 15 * 1000, // 15 segundos
+  max: 30, // 30 requests cada 15 segundos
+  message: {
+    error: 'Demasiadas consultas en poco tiempo.',
+    retryAfter: 15
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  
+  keyGenerator: (req: Request) => {
+    const user = (req as any).user;
+    return user?.organizationId || req.ip || 'unknown';
+  },
+  
+  skip: (req: Request) => {
+    const user = (req as any).user;
+    return user?.role === 'SUPER_ADMIN';
+  },
+  
+  handler: (req: Request, res: Response) => {
+    res.status(429).json({
+      error: 'Demasiadas consultas en poco tiempo.',
+      message: 'Por favor, reduce la frecuencia de tus consultas.',
+      retryAfter: 15
+    });
+  }
+});

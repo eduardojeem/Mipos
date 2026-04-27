@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase/server';
+import { validateRole } from '@/app/api/_utils/role-validation';
+import {
+  generateCustomerCode,
+  mapCustomerTypeToDb,
+  resolveCustomerOrganizationId,
+  sanitizeNullableText,
+  transformCustomerRecord,
+} from '@/app/api/customers/_lib';
 
 /**
  * Customer CRUD API - Phase 5 Optimization
@@ -10,18 +18,30 @@ import { createClient } from '@/lib/supabase';
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createClient();
-    const body = await request.json();
+    const auth = await validateRole(request, {
+      roles: ['OWNER', 'ADMIN', 'SUPER_ADMIN', 'MANAGER', 'EMPLOYEE']
+    });
+    if (!auth.ok) {
+      return NextResponse.json(auth.body, { status: auth.status });
+    }
 
-    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    const supabase = await createClient();
+    const body = await request.json();
+    const orgId = await resolveCustomerOrganizationId(request, auth.userRole);
     if (!orgId) {
       return NextResponse.json({ success: false, error: 'Organization header missing' }, { status: 400 });
     }
 
     // Validate required fields
-    const { name, email, phone, address, customerType, birthDate, notes } = body;
+    const { name, email, phone, address, customerType, birthDate, notes, ruc, is_active } = body;
+    const normalizedName = sanitizeNullableText(name);
+    const normalizedEmail = sanitizeNullableText(email);
+    const normalizedPhone = sanitizeNullableText(phone);
+    const normalizedAddress = sanitizeNullableText(address);
+    const normalizedRUC = sanitizeNullableText(ruc);
+    const normalizedNotes = sanitizeNullableText(notes);
 
-    if (!name || name.trim().length === 0) {
+    if (!normalizedName) {
       return NextResponse.json(
         { success: false, error: 'Customer name is required' },
         { status: 400 }
@@ -29,7 +49,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate email format if provided
-    if (email && !isValidEmail(email)) {
+    if (normalizedEmail && !isValidEmail(normalizedEmail)) {
       return NextResponse.json(
         { success: false, error: 'Invalid email format' },
         { status: 400 }
@@ -37,13 +57,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Check for duplicate email
-    if (email) {
+    if (normalizedEmail) {
       const { data: existingEmail } = await supabase
         .from('customers')
         .select('id')
-        .eq('email', email)
+        .eq('email', normalizedEmail)
         .eq('organization_id', orgId)
-        .single();
+        .is('deleted_at', null)
+        .maybeSingle();
 
       if (existingEmail) {
         return NextResponse.json(
@@ -54,13 +75,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Check for duplicate phone
-    if (phone) {
+    if (normalizedPhone) {
       const { data: existingPhone } = await supabase
         .from('customers')
         .select('id')
-        .eq('phone', phone)
+        .eq('phone', normalizedPhone)
         .eq('organization_id', orgId)
-        .single();
+        .is('deleted_at', null)
+        .maybeSingle();
 
       if (existingPhone) {
         return NextResponse.json(
@@ -71,19 +93,21 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate customer code
-    const customerCode = generateCustomerCode(name);
+    const customerCode = generateCustomerCode(normalizedName);
 
     // Prepare data for insertion
     const customerData = {
-      name: name.trim(),
-      email: email?.trim() || null,
-      phone: phone?.trim() || null,
-      address: address?.trim() || null,
+      name: normalizedName,
+      email: normalizedEmail,
+      phone: normalizedPhone,
+      address: normalizedAddress,
+      ruc: normalizedRUC,
       customer_code: customerCode,
       customer_type: mapCustomerTypeToDb(customerType || 'regular'),
       birth_date: birthDate || null,
-      notes: notes?.trim() || null,
-      is_active: true,
+      notes: normalizedNotes,
+      status: typeof is_active === 'boolean' && !is_active ? 'inactive' : 'active',
+      is_active: typeof is_active === 'boolean' ? is_active : true,
       total_purchases: 0,
       total_orders: 0,
       created_at: new Date().toISOString(),
@@ -107,20 +131,20 @@ export async function POST(request: NextRequest) {
     }
 
     // Transform response data
-    const transformedCustomer = transformCustomerData(customer);
+    const transformedCustomer = transformCustomerRecord(customer);
 
     try {
       const origin = new URL(request.url).origin;
       const payload = {
-        id: transformedCustomer.id,
-        name: transformedCustomer.name,
-        email: transformedCustomer.email,
-        phone: transformedCustomer.phone,
-        address: transformedCustomer.address,
-        customer_code: transformedCustomer.customer_code,
-        customer_type: transformedCustomer.customer_type,
-        created_at: transformedCustomer.created_at,
-        updated_at: transformedCustomer.updated_at,
+        id: customer.id,
+        name: customer.name,
+        email: customer.email,
+        phone: customer.phone,
+        address: customer.address,
+        customer_code: customer.customer_code,
+        customer_type: customer.customer_type,
+        created_at: customer.created_at,
+        updated_at: customer.updated_at,
         organization_id: orgId
       };
       await fetch(`${origin}/api/external-sync/customers`, {
@@ -151,11 +175,18 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient();
+    const auth = await validateRole(request, {
+      roles: ['OWNER', 'ADMIN', 'SUPER_ADMIN', 'MANAGER', 'EMPLOYEE', 'CASHIER']
+    });
+    if (!auth.ok) {
+      return NextResponse.json(auth.body, { status: auth.status });
+    }
+
+    const supabase = await createClient();
     const { searchParams } = new URL(request.url);
     
     const id = searchParams.get('id');
-    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    const orgId = await resolveCustomerOrganizationId(request, auth.userRole);
     
     if (!orgId) {
       return NextResponse.json({ success: false, error: 'Organization header missing' }, { status: 400 });
@@ -173,6 +204,7 @@ export async function GET(request: NextRequest) {
       .select('*')
       .eq('id', id)
       .eq('organization_id', orgId)
+      .is('deleted_at', null)
       .single();
 
     if (error) {
@@ -185,7 +217,7 @@ export async function GET(request: NextRequest) {
       throw new Error(error.message);
     }
 
-    const transformedCustomer = transformCustomerData(customer);
+    const transformedCustomer = transformCustomerRecord(customer);
 
     return NextResponse.json({
       success: true,
@@ -205,98 +237,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Helper functions
 function isValidEmail(email: string): boolean {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
-}
-
-function generateCustomerCode(name: string): string {
-  const prefix = 'CL';
-  const nameCode = name.substring(0, 3).toUpperCase().replace(/[^A-Z]/g, 'X');
-  const timestamp = Date.now().toString().slice(-6);
-  return `${prefix}${nameCode}${timestamp}`;
-}
-
-function mapCustomerTypeToDb(uiType: string): 'REGULAR' | 'VIP' | 'WHOLESALE' {
-  const normalized = uiType?.toLowerCase();
-  if (normalized === 'wholesale') return 'WHOLESALE';
-  if (normalized === 'vip') return 'VIP';
-  return 'REGULAR';
-}
-
-function mapCustomerTypeToUI(dbType: string): 'regular' | 'vip' | 'wholesale' {
-  const normalized = dbType?.toUpperCase();
-  if (normalized === 'WHOLESALE') return 'wholesale';
-  if (normalized === 'VIP') return 'vip';
-  return 'regular';
-}
-
-function transformCustomerData(customer: any) {
-  return {
-    id: customer.id,
-    name: customer.name,
-    email: customer.email,
-    phone: customer.phone,
-    address: customer.address,
-    tax_id: customer.tax_id,
-    customer_code: customer.customer_code,
-    customer_type: customer.customer_type,
-    status: customer.status || 'active',
-    birth_date: customer.birth_date,
-    notes: customer.notes,
-    is_active: customer.is_active,
-    // UI-friendly fields
-    customerCode: customer.customer_code,
-    customerType: mapCustomerTypeToUI(customer.customer_type),
-    totalSpent: customer.total_purchases || 0,
-    totalOrders: customer.total_orders || 0,
-    lastPurchase: customer.last_purchase,
-    birthDate: customer.birth_date,
-    created_at: customer.created_at,
-    updated_at: customer.updated_at,
-    // Computed fields
-    segment: determineCustomerSegment(customer.total_orders || 0, customer.total_purchases || 0),
-    riskScore: calculateRiskScore(customer.last_purchase, customer.total_orders || 0),
-    lifetimeValue: calculateLifetimeValue(customer.total_purchases || 0, customer.total_orders || 0, customer.created_at)
-  };
-}
-
-function determineCustomerSegment(totalOrders: number, totalSpent: number): 'new' | 'regular' | 'frequent' | 'vip' | 'at_risk' | 'dormant' {
-  if (totalOrders <= 2) return 'new';
-  if (totalOrders >= 25 || totalSpent > 50000) return 'vip';
-  if (totalOrders >= 11) return 'frequent';
-  return 'regular';
-}
-
-function calculateRiskScore(lastPurchase: string | null, totalOrders: number): number {
-  let riskScore = 0;
-
-  const daysSinceLastPurchase = lastPurchase
-    ? Math.floor((Date.now() - new Date(lastPurchase).getTime()) / (1000 * 60 * 60 * 24))
-    : 999;
-
-  // Risk by inactivity
-  if (daysSinceLastPurchase > 180) riskScore += 50;
-  else if (daysSinceLastPurchase > 90) riskScore += 30;
-  else if (daysSinceLastPurchase > 30) riskScore += 15;
-
-  // Risk by low purchase frequency
-  if (totalOrders < 3) riskScore += 20;
-  else if (totalOrders < 10) riskScore += 10;
-
-  return Math.min(riskScore, 100);
-}
-
-function calculateLifetimeValue(totalSpent: number, totalOrders: number, createdAt: string): number {
-  if (totalOrders === 0) return 0;
-
-  const avgOrderValue = totalSpent / totalOrders;
-  const daysSinceFirstPurchase = Math.floor((Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60 * 24));
-  const purchaseFrequency = daysSinceFirstPurchase > 0 ? totalOrders / (daysSinceFirstPurchase / 30) : 0;
-
-  const profitMargin = 0.3; // 30% estimated margin
-  const expectedLifetime = 24; // 24 months expected
-
-  return Math.round(avgOrderValue * purchaseFrequency * profitMargin * expectedLifetime * 100) / 100;
 }

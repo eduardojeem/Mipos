@@ -1,10 +1,25 @@
 "use client";
 
 import Link from 'next/link';
+import {
+  Facebook,
+  Instagram,
+  Linkedin,
+  Mail,
+  MapPin,
+  MessageCircle,
+  Phone,
+  Twitter,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { BusinessConfig } from '@/types/business-config';
-import { Sparkles, Facebook, Instagram, Twitter, Phone, Mail, MapPin } from 'lucide-react';
-import { memo } from 'react';
+import { hexToRgba } from '@/lib/color-utils';
+import { useTenantPublicRouting } from '@/hooks/useTenantPublicRouting';
+import {
+  buildWhatsAppHref,
+  getTenantPublicContent,
+  getTenantPublicSections,
+} from '@/lib/public-site/tenant-public-config';
 
 interface FooterProps {
   config: BusinessConfig;
@@ -12,109 +27,171 @@ interface FooterProps {
 }
 
 function FooterComponent({ config, onNavigate }: FooterProps) {
-  // Defensive guard: ensure address object exists to avoid runtime crashes
-  const address = config?.address ?? {} as Partial<BusinessConfig['address']>;
-  const hours = Array.isArray(config.businessHours) ? config.businessHours : [];
+  const { tenantHref } = useTenantPublicRouting();
+  const sections = getTenantPublicSections(config);
+  const content = getTenantPublicContent(config);
+  const primary = config.branding?.primaryColor || '#0f766e';
+  const secondary = config.branding?.secondaryColor || '#1d4ed8';
+  const whatsappHref = buildWhatsAppHref(config, 'Hola, necesito ayuda con una compra.');
+  const socialLinks = [
+    { href: config.socialMedia?.facebook, icon: Facebook, label: 'Facebook' },
+    { href: config.socialMedia?.instagram, icon: Instagram, label: 'Instagram' },
+    { href: config.socialMedia?.twitter, icon: Twitter, label: 'Twitter' },
+    { href: config.socialMedia?.linkedin, icon: Linkedin, label: 'LinkedIn' },
+  ].filter((item) => Boolean(item.href));
+
+  const location = [config.address?.street, config.address?.city, config.address?.department]
+    .filter(Boolean)
+    .join(', ');
 
   return (
-    <footer className="relative bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white py-16 overflow-hidden">
-      {/* Animated background elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-30">
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-gradient-to-br from-sky-600/30 to-blue-600/30 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-gradient-to-br from-emerald-600/30 to-teal-600/30 rounded-full blur-3xl"></div>
+    <footer className="mt-16 border-t border-slate-200/70 bg-slate-950 text-slate-100">
+      <div
+        className="border-b border-white/10"
+        style={{
+          background: `linear-gradient(120deg, ${hexToRgba(primary, 0.18)}, ${hexToRgba(
+            secondary,
+            0.16
+          )})`,
+        }}
+      >
+        <div className="mx-auto grid max-w-7xl gap-6 px-4 py-10 sm:px-6 lg:grid-cols-[1.25fr_0.75fr] lg:px-8">
+          <div className="space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-300">
+              {config.businessName}
+            </p>
+            <h2 className="max-w-2xl text-2xl font-semibold tracking-tight text-white">
+              {content.footerHeadline || 'Experiencia publica alineada con el branding del negocio.'}
+            </h2>
+            <p className="max-w-2xl text-sm leading-7 text-slate-300">
+              {content.supportMessage ||
+                'Configura catalogo, promociones, contacto y horarios desde el panel administrativo.'}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 lg:justify-end">
+            <Button asChild className="rounded-full" style={{ backgroundColor: primary }}>
+              <Link href={tenantHref('/home')}>Volver al inicio</Link>
+            </Button>
+            {whatsappHref ? (
+              <Button asChild variant="outline" className="rounded-full border-white/20 bg-transparent text-white hover:bg-white/10">
+                <a href={whatsappHref} target="_blank" rel="noopener noreferrer">
+                  <MessageCircle className="mr-2 h-4 w-4" />
+                  Soporte comercial
+                </a>
+              </Button>
+            ) : null}
+          </div>
+        </div>
       </div>
-      
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-        <div className="grid md:grid-cols-4 gap-8">
-          {/* Logo y descripción */}
-          <div className="space-y-4">
-            <div className="flex items-center">
-              <div
-                className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg shadow-violet-500/50"
-                style={{ backgroundImage: `linear-gradient(135deg, ${config?.branding?.primaryColor || '#ec4899'}, ${config?.branding?.secondaryColor || '#9333ea'})` }}
-              >
-                <Sparkles className="w-6 h-6 text-white" />
-              </div>
-              <span className="ml-3 text-xl font-bold bg-gradient-to-r from-sky-400 to-blue-400 bg-clip-text text-transparent">{config.businessName}</span>
-            </div>
-            <p className="text-gray-300 text-sm">{config.tagline}. {config.heroDescription}</p>
-            <div className="flex space-x-4">
-              <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white hover:bg-sky-600/20 p-2 rounded-full transition-all duration-300 hover:scale-110">
-                <Facebook className="w-4 h-4" />
-              </Button>
-              <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white hover:bg-emerald-600/20 p-2 rounded-full transition-all duration-300 hover:scale-110">
-                <Instagram className="w-4 h-4" />
-              </Button>
-              <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white hover:bg-amber-600/20 p-2 rounded-full transition-all duration-300 hover:scale-110">
-                <Twitter className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
 
-          {/* Enlaces rápidos */}
-          <div>
-            <h3 className="font-semibold mb-4 text-sky-300">Enlaces Rápidos</h3>
-            <ul className="space-y-2 text-sm">
-              <li>
-                <button onClick={() => onNavigate('inicio')} className="text-gray-300 hover:text-sky-400 transition-colors duration-200">
-                  Inicio
-                </button>
-              </li>
-              <li>
-                <Link href="/offers" className="text-gray-300 hover:text-blue-400 transition-colors duration-200">
-                  Ofertas
-                </Link>
-              </li>
-              <li>
-                <button onClick={() => onNavigate('productos')} className="text-gray-300 hover:text-cyan-400 transition-colors duration-200">
-                  Productos
-                </button>
-              </li>
-              <li>
-                <Link href="/catalog" className="text-gray-300 hover:text-emerald-400 transition-colors duration-200">
-                  Productos
-                </Link>
-              </li>
-            </ul>
-          </div>
+      <div className="mx-auto grid max-w-7xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-4 lg:px-8">
+        <div className="space-y-3">
+          <p className="text-sm font-semibold text-white">Tienda</p>
+          <p className="text-sm leading-7 text-slate-400">
+            {config.tagline || config.heroDescription || 'Negocio publicado en MiPOS.'}
+          </p>
+        </div>
 
-          {/* Contacto */}
-          <div>
-            <h3 className="font-semibold mb-4 text-emerald-300">Contacto</h3>
-            <ul className="space-y-2 text-sm text-gray-300">
-              <li className="flex items-center hover:text-sky-400 transition-colors duration-200">
-                <Phone className="w-4 h-4 mr-2 text-sky-400" />
-                {config.contact.phone}
-              </li>
-              <li className="flex items-center hover:text-emerald-400 transition-colors duration-200">
-                <Mail className="w-4 h-4 mr-2 text-emerald-400" />
-                {config.contact.email}
-              </li>
-              <li className="flex items-center hover:text-teal-400 transition-colors duration-200">
-                <MapPin className="w-4 h-4 mr-2 text-teal-400" />
-                {address.street ?? ''}, {address.department ?? ''}
-              </li>
-            </ul>
-          </div>
-
-          {/* Horarios */}
-          <div>
-            <h3 className="font-semibold mb-4 text-amber-300">Horarios</h3>
-            <ul className="space-y-2 text-sm text-gray-300">
-              {hours.map((schedule, index) => (
-                <li key={index} className="hover:text-amber-400 transition-colors duration-200">{schedule}</li>
-              ))}
-            </ul>
+        <div className="space-y-3">
+          <p className="text-sm font-semibold text-white">Navegacion</p>
+          <div className="flex flex-col gap-2 text-sm text-slate-400">
+            <button onClick={() => onNavigate('inicio')} className="text-left transition-colors hover:text-white">
+              Inicio
+            </button>
+            {sections.showCatalog ? (
+              <Link href={tenantHref('/catalog')} className="transition-colors hover:text-white">
+                Catalogo
+              </Link>
+            ) : null}
+            {sections.showOffers ? (
+              <Link href={tenantHref('/offers')} className="transition-colors hover:text-white">
+                Ofertas
+              </Link>
+            ) : null}
+            {sections.showOrderTracking ? (
+              <Link href={tenantHref('/orders/track')} className="transition-colors hover:text-white">
+                Seguimiento
+              </Link>
+            ) : null}
+            {(sections.showContactInfo || sections.showLocation) ? (
+              <button onClick={() => onNavigate('contacto')} className="text-left transition-colors hover:text-white">
+                Contacto
+              </button>
+            ) : null}
           </div>
         </div>
 
-        <div className="border-t border-sky-500/30 mt-12 pt-8 text-center">
-          <p className="text-gray-300 text-sm">© 2024 <span className="bg-gradient-to-r from-sky-400 to-blue-400 bg-clip-text text-transparent font-semibold">{config.businessName}</span>. Todos los derechos reservados.</p>
+        <div className="space-y-3">
+          <p className="text-sm font-semibold text-white">Informacion visible</p>
+          <div className="space-y-2 text-sm text-slate-400">
+            {sections.showContactInfo && config.contact?.phone ? (
+              <p className="flex items-start gap-2">
+                <Phone className="mt-0.5 h-4 w-4 flex-none" />
+                <span>{config.contact.phone}</span>
+              </p>
+            ) : null}
+            {sections.showContactInfo && config.contact?.email ? (
+              <p className="flex items-start gap-2">
+                <Mail className="mt-0.5 h-4 w-4 flex-none" />
+                <span>{config.contact.email}</span>
+              </p>
+            ) : null}
+            {sections.showLocation && location ? (
+              <p className="flex items-start gap-2">
+                <MapPin className="mt-0.5 h-4 w-4 flex-none" />
+                <span>{location}</span>
+              </p>
+            ) : null}
+            {!sections.showContactInfo && !sections.showLocation ? (
+              <p>Los datos de contacto no estan publicados.</p>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <p className="text-sm font-semibold text-white">Presencia publica</p>
+          {sections.showBusinessHours && Array.isArray(config.businessHours) && config.businessHours.length > 0 ? (
+            <div className="space-y-2 text-sm text-slate-400">
+              {config.businessHours.slice(0, 4).map((hour) => (
+                <p key={hour}>{hour}</p>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-400">Horarios no publicados.</p>
+          )}
+
+          {sections.showSocialLinks && socialLinks.length > 0 ? (
+            <div className="flex items-center gap-2 pt-2">
+              {socialLinks.map((item) => (
+                <Button
+                  key={item.label}
+                  asChild
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-full bg-white/5 text-slate-200 hover:bg-white/12 hover:text-white"
+                >
+                  <a href={item.href!} target="_blank" rel="noopener noreferrer" aria-label={item.label}>
+                    <item.icon className="h-4 w-4" />
+                  </a>
+                </Button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="border-t border-white/10">
+        <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-5 text-xs text-slate-500 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+          <p>
+            {new Date().getFullYear()} {config.businessName}. Todos los derechos reservados.
+          </p>
+          <p>Frontend publico del tenant sincronizado con Business Config.</p>
         </div>
       </div>
     </footer>
   );
 }
 
-export const Footer = memo(FooterComponent);
-export default Footer;
+export const Footer = FooterComponent;
+export default FooterComponent;

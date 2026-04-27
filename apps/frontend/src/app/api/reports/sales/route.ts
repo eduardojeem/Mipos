@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getValidatedOrganizationId } from '@/lib/organization';
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,28 +17,31 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Start date and end date are required' }, { status: 400 });
     }
 
-    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    const orgId = ((await getValidatedOrganizationId(request)) || '').trim();
     if (!orgId) {
       return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
     }
 
     const supabase = await createClient();
 
+    const MAX_ROWS = 5000;
+
     // Build sales query with filters
     let salesQuery = supabase
       .from('sales')
       .select(`
         id,
-        total_amount,
-        created_at,
+        total,
+        date,
         status,
         customer_id,
         payment_method,
+        branch_id,
+        pos_id,
         sale_items (
           product_id,
           quantity,
           unit_price,
-          total_price,
           products (
             id,
             name,
@@ -46,8 +50,10 @@ export async function GET(request: NextRequest) {
         )
       `)
       .eq('organization_id', orgId) // Filter by Organization
-      .gte('created_at', startDate)
-      .lte('created_at', endDate);
+      .gte('date', startDate)
+      .lte('date', endDate)
+      .order('date', { ascending: false })
+      .range(0, MAX_ROWS - 1);
 
     // Apply filters
     if (status) salesQuery = salesQuery.eq('status', status);
@@ -60,20 +66,22 @@ export async function GET(request: NextRequest) {
 
     if (salesError) throw salesError;
 
+    const rows = Array.isArray(salesData) ? salesData : [];
+
     // Calculate metrics server-side
-    const totalSales = (salesData || []).reduce((sum: number, sale: any) => sum + (sale.total_amount || 0), 0);
+    const totalSales = rows.reduce((sum: number, sale: any) => sum + Number(sale.total || 0), 0);
     const totalOrders = salesData?.length || 0;
     const averageOrderValue = totalOrders > 0 ? totalSales / totalOrders : 0;
 
     // Process top products
     const productSales = new Map<string, { name: string; sales: number; quantity: number }>();
     
-    (salesData || []).forEach((sale: any) => {
+    rows.forEach((sale: any) => {
       (sale.sale_items || []).forEach((item: any) => {
         const productId = item.product_id;
         const productName = item.products?.name || 'Producto Desconocido';
         const quantity = Number(item.quantity || 0);
-        const totalPrice = Number(item.total_price || (item.unit_price * quantity) || 0);
+        const totalPrice = Number((item.unit_price || 0) * quantity);
         
         const existing = productSales.get(productId) || { name: productName, sales: 0, quantity: 0 };
         existing.sales += totalPrice;
@@ -89,10 +97,10 @@ export async function GET(request: NextRequest) {
 
     // Sales by date
     const salesByDateMap = new Map<string, { sales: number; orders: number }>();
-    (salesData || []).forEach((sale: any) => {
-      const date = new Date(sale.created_at).toISOString().split('T')[0];
+    rows.forEach((sale: any) => {
+      const date = new Date(sale.date || sale.created_at).toISOString().split('T')[0];
       const existing = salesByDateMap.get(date) || { sales: 0, orders: 0 };
-      existing.sales += sale.total_amount || 0;
+      existing.sales += Number(sale.total || 0);
       existing.orders += 1;
       salesByDateMap.set(date, existing);
     });
@@ -103,17 +111,28 @@ export async function GET(request: NextRequest) {
 
     // Sales by category
     const categorySales = new Map<string, number>();
-    (salesData || []).forEach((sale: any) => {
+    rows.forEach((sale: any) => {
       (sale.sale_items || []).forEach((item: any) => {
         const category = item.products?.category_id || 'Sin categoría';
-        const totalPrice = Number(item.total_price || (item.unit_price * item.quantity) || 0);
+        const totalPrice = Number((item.unit_price || 0) * Number(item.quantity || 0));
         categorySales.set(category, (categorySales.get(category) || 0) + totalPrice);
       });
     });
 
+    const categoryIds = Array.from(categorySales.keys()).filter((c) => c !== 'Sin categoría');
+    const { data: categoriesData } = categoryIds.length
+      ? await supabase
+          .from('categories')
+          .select('id,name')
+          .eq('organization_id', orgId)
+          .in('id', categoryIds)
+      : { data: [] as any[] };
+
+    const categoryNameMap = new Map<string, string>((categoriesData || []).map((c: any) => [String(c.id), String(c.name)]));
+
     const salesByCategory = Array.from(categorySales.entries())
       .map(([category, sales]) => ({
-        category,
+        category: category === 'Sin categoría' ? 'Sin categoría' : (categoryNameMap.get(String(category)) || 'Sin categoría'),
         sales,
         percentage: totalSales > 0 ? (sales / totalSales) * 100 : 0,
       }))
@@ -128,10 +147,10 @@ export async function GET(request: NextRequest) {
 
     let prevQuery = supabase
       .from('sales')
-      .select('total_amount')
+      .select('total')
       .eq('organization_id', orgId) // Filter by Organization
-      .gte('created_at', prevStart.toISOString().split('T')[0])
-      .lte('created_at', prevEnd.toISOString().split('T')[0]);
+      .gte('date', prevStart.toISOString())
+      .lte('date', prevEnd.toISOString());
 
     if (status) prevQuery = prevQuery.eq('status', status);
     if (branchId) prevQuery = prevQuery.eq('branch_id', branchId);
@@ -139,7 +158,7 @@ export async function GET(request: NextRequest) {
     if (paymentMethod) prevQuery = prevQuery.eq('payment_method', paymentMethod);
 
     const { data: prevData } = await prevQuery;
-    const prevTotalSales = (prevData || []).reduce((sum: number, sale: any) => sum + (sale.total_amount || 0), 0);
+    const prevTotalSales = (prevData || []).reduce((sum: number, sale: any) => sum + Number(sale.total || 0), 0);
     const prevTotalOrders = prevData?.length || 0;
     const prevAOV = prevTotalOrders > 0 ? prevTotalSales / prevTotalOrders : 0;
 

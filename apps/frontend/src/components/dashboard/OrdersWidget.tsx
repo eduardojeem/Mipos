@@ -285,7 +285,7 @@ export function OrdersWidget() {
                   <div key={order.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="font-medium text-sm">{order.order_number}</span>
+                        <span className="inline-flex items-center gap-1 rounded-md border border-border/60 bg-white px-1.5 py-0.5 font-mono text-xs dark:bg-zinc-900/50">{(() => { const p = order.order_number.match(/^([A-Z]{2,4})-(.+)$/); return p ? <><span className="font-bold text-blue-600 dark:text-blue-400">{p[1]}</span><span>{p[2]}</span></> : order.order_number; })()}</span>
                         {getStatusBadge(order.status)}
                       </div>
                       <p className="text-sm text-gray-600 dark:text-gray-400">

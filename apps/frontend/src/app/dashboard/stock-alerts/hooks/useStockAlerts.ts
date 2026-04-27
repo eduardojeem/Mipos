@@ -1,148 +1,62 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/components/ui/use-toast';
 import api from '@/lib/api';
+import { createClient as createSupabaseClient } from '@/lib/supabase/client';
+import { useCurrentOrganizationId } from '@/hooks/use-current-organization';
+import type { StockAlertsResponse } from '@/lib/stock-alerts';
 
-interface StockAlert {
-  id: string;
-  productId: string;
-  productName: string;
-  currentStock: number;
-  minThreshold: number;
-  maxThreshold: number;
-  severity: 'critical' | 'low' | 'warning';
-  category: string;
-  unitPrice: number;
-  estimatedDaysLeft: number;
-  lastRestocked: string;
-  supplier?: string;
+function invalidateStockAlertQueries(queryClient: ReturnType<typeof useQueryClient>) {
+  void queryClient.invalidateQueries({ queryKey: ['stock-alerts'] });
+  void queryClient.invalidateQueries({ queryKey: ['stock-alerts-config'] });
+  void queryClient.invalidateQueries({ queryKey: ['products'] });
+  void queryClient.invalidateQueries({ queryKey: ['products-list'] });
+  void queryClient.invalidateQueries({ queryKey: ['products-summary'] });
 }
 
-interface StockAlertsStats {
-  criticalAlerts: number;
-  lowStockAlerts: number;
-  warningAlerts: number;
-  totalProducts: number;
-  estimatedLoss: number;
-  avgDaysToStockout: number;
-  pendingOrders: number;
-}
-
-export function useStockAlerts(filters: any) {
+export function useStockAlerts(filters: {
+  filters?: {
+    search?: string;
+    severity?: string;
+    category?: string;
+    supplier?: string;
+  };
+}) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const organizationId = useCurrentOrganizationId();
 
-  // Fetch stock alerts
-  const { data: alerts, isLoading, refetch } = useQuery({
-    queryKey: ['stock-alerts', filters],
+  const query = useQuery({
+    queryKey: ['stock-alerts', organizationId, filters.filters || {}],
+    enabled: Boolean(organizationId),
+    staleTime: 30_000,
     queryFn: async () => {
-      // Mock data for demonstration
-      const mockAlerts: StockAlert[] = [
-        {
-          id: '1',
-          productId: 'prod-1',
-          productName: 'Base Líquida Premium',
-          currentStock: 3,
-          minThreshold: 10,
-          maxThreshold: 50,
-          severity: 'critical',
-          category: 'Maquillaje',
-          unitPrice: 45.99,
-          estimatedDaysLeft: 2,
-          lastRestocked: '2024-11-15',
-          supplier: 'Proveedor A'
-        },
-        {
-          id: '2',
-          productId: 'prod-2',
-          productName: 'Máscara de Pestañas',
-          currentStock: 8,
-          minThreshold: 15,
-          maxThreshold: 40,
-          severity: 'low',
-          category: 'Maquillaje',
-          unitPrice: 28.50,
-          estimatedDaysLeft: 5,
-          lastRestocked: '2024-11-20',
-          supplier: 'Proveedor B'
-        },
-        {
-          id: '3',
-          productId: 'prod-3',
-          productName: 'Crema Hidratante',
-          currentStock: 18,
-          minThreshold: 20,
-          maxThreshold: 60,
-          severity: 'warning',
-          category: 'Cuidado de la piel',
-          unitPrice: 35.00,
-          estimatedDaysLeft: 12,
-          lastRestocked: '2024-11-25',
-          supplier: 'Proveedor C'
-        }
-      ];
+      const response = await api.get<StockAlertsResponse>('/stock-alerts', {
+        params: filters.filters,
+      });
 
-      // Apply filters
-      let filtered = mockAlerts;
-      
-      if (filters.searchTerm) {
-        filtered = filtered.filter(alert => 
-          alert.productName.toLowerCase().includes(filters.searchTerm.toLowerCase())
-        );
-      }
-      
-      if (filters.severity && filters.severity !== 'all') {
-        filtered = filtered.filter(alert => alert.severity === filters.severity);
-      }
-      
-      if (filters.category && filters.category !== 'all') {
-        filtered = filtered.filter(alert => 
-          alert.category.toLowerCase().includes(filters.category.toLowerCase())
-        );
-      }
-
-      return filtered;
+      return response.data;
     },
-    staleTime: 30000, // 30 seconds
   });
 
-  // Fetch stats
-  const { data: stats } = useQuery({
-    queryKey: ['stock-alerts-stats', filters],
-    queryFn: async () => {
-      // Mock stats data
-      const mockStats: StockAlertsStats = {
-        criticalAlerts: 3,
-        lowStockAlerts: 5,
-        warningAlerts: 8,
-        totalProducts: 150,
-        estimatedLoss: 2500.00,
-        avgDaysToStockout: 8,
-        pendingOrders: 2
-      };
-      return mockStats;
-    },
-    staleTime: 60000, // 1 minute
-  });
-
-  // Update threshold mutation
   const updateThresholdMutation = useMutation({
     mutationFn: async ({ productId, threshold }: { productId: string; threshold: number }) => {
-      // Mock API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      return { success: true };
+      const response = await api.patch(`/stock-alerts/${productId}/threshold`, {
+        minThreshold: threshold,
+      });
+
+      return response.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['stock-alerts'] });
-      queryClient.invalidateQueries({ queryKey: ['stock-alerts-stats'] });
+      invalidateStockAlertQueries(queryClient);
       toast({
         title: 'Umbral actualizado',
-        description: 'El umbral del producto ha sido actualizado exitosamente.',
+        description: 'El minimo del producto se sincronizo con el sistema.',
       });
     },
-    onError: (error: any) => {
+    onError: () => {
       toast({
         title: 'Error',
         description: 'No se pudo actualizar el umbral del producto.',
@@ -151,65 +65,97 @@ export function useStockAlerts(filters: any) {
     },
   });
 
-  // Create purchase order mutation
-  const createPurchaseOrderMutation = useMutation({
-    mutationFn: async (productIds: string[]) => {
-      // Mock API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      return { success: true, orderId: 'ORDER-' + Date.now() };
+  const bulkUpdateThresholdsMutation = useMutation({
+    mutationFn: async ({
+      productIds,
+      threshold,
+    }: {
+      productIds: string[];
+      threshold: number;
+    }) => {
+      const response = await api.patch('/stock-alerts/bulk-threshold', {
+        productIds,
+        minThreshold: threshold,
+      });
+
+      return response.data;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['stock-alerts'] });
-      queryClient.invalidateQueries({ queryKey: ['stock-alerts-stats'] });
+      invalidateStockAlertQueries(queryClient);
       toast({
-        title: 'Orden de compra creada',
-        description: `Orden ${data.orderId} creada exitosamente.`,
+        title: 'Umbrales aplicados',
+        description: `Se actualizaron ${data?.updated ?? 0} productos.`,
       });
     },
-    onError: (error: any) => {
+    onError: () => {
       toast({
         title: 'Error',
-        description: 'No se pudo crear la orden de compra.',
+        description: 'No se pudieron actualizar los umbrales seleccionados.',
         variant: 'destructive',
       });
     },
   });
 
-  // Mark as resolved mutation
-  const markAsResolvedMutation = useMutation({
-    mutationFn: async (productIds: string[]) => {
-      // Mock API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      return { success: true };
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['stock-alerts'] });
-      queryClient.invalidateQueries({ queryKey: ['stock-alerts-stats'] });
-      toast({
-        title: 'Alertas resueltas',
-        description: 'Las alertas seleccionadas han sido marcadas como resueltas.',
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Error',
-        description: 'No se pudieron resolver las alertas.',
-        variant: 'destructive',
-      });
-    },
-  });
+  useEffect(() => {
+    if (!organizationId) {
+      return;
+    }
+
+    let supabase: ReturnType<typeof createSupabaseClient> | null = null;
+
+    try {
+      supabase = createSupabaseClient();
+    } catch {
+      supabase = null;
+    }
+
+    if (!supabase) {
+      return;
+    }
+
+    const sync = () => invalidateStockAlertQueries(queryClient);
+
+    const channel = supabase
+      .channel(`stock-alerts-${organizationId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'products',
+        filter: `organization_id=eq.${organizationId}`,
+      }, sync)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'inventory_movements',
+        filter: `organization_id=eq.${organizationId}`,
+      }, sync)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'settings',
+        filter: `organization_id=eq.${organizationId}`,
+      }, sync)
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [organizationId, queryClient]);
 
   return {
-    alerts: alerts || [],
-    stats: stats || null,
-    isLoading,
-    refreshAlerts: refetch,
-    updateThreshold: (productId: string, threshold: number) => 
-      updateThresholdMutation.mutate({ productId, threshold }),
-    createPurchaseOrder: createPurchaseOrderMutation.mutate,
-    markAsResolved: markAsResolvedMutation.mutate,
+    alerts: query.data?.data || [],
+    stats: query.data?.stats || null,
+    trends: query.data?.trends || [],
+    filterOptions: query.data?.filters || { categories: [], suppliers: [] },
+    lastUpdated: query.data?.lastUpdated || null,
+    isLoading: query.isLoading,
+    isFetching: query.isFetching,
+    refreshAlerts: query.refetch,
+    updateThreshold: (productId: string, threshold: number) =>
+      updateThresholdMutation.mutateAsync({ productId, threshold }),
+    bulkUpdateThresholds: (productIds: string[], threshold: number) =>
+      bulkUpdateThresholdsMutation.mutateAsync({ productIds, threshold }),
     isUpdating: updateThresholdMutation.isPending,
-    isCreatingOrder: createPurchaseOrderMutation.isPending,
-    isResolving: markAsResolvedMutation.isPending,
+    isBulkUpdating: bulkUpdateThresholdsMutation.isPending,
   };
 }

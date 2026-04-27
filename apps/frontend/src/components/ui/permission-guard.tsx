@@ -3,9 +3,9 @@
 import React from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
-import { Shield, Lock, AlertTriangle } from 'lucide-react';
+import { Shield, Lock } from 'lucide-react';
 import { usePermissionsContext as useUnifiedPermissionsContext } from '@/hooks/use-unified-permissions';
+import { useCompanyAccess } from '@/hooks/use-company-access';
 
 // Tipos de permisos del sistema
 export type Permission = 
@@ -65,6 +65,21 @@ export type Permission =
 
 // Roles del sistema y sus permisos
 export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
+  SUPER_ADMIN: [
+    'products.view', 'products.create', 'products.edit', 'products.delete', 'products.export', 'products.import',
+    'categories.view', 'categories.create', 'categories.edit', 'categories.delete',
+    'sales.view', 'sales.create', 'sales.edit', 'sales.delete', 'sales.reports',
+    'customers.view', 'customers.create', 'customers.edit', 'customers.delete', 'customers.export',
+    'suppliers.view', 'suppliers.create', 'suppliers.edit', 'suppliers.delete',
+    'users.view', 'users.create', 'users.edit', 'users.delete',
+    'settings.view', 'settings.edit',
+    'reports.view', 'reports.export',
+    'returns.view', 'returns.create', 'returns.edit', 'returns.delete', 'returns.export', 'returns.approve', 'returns.process',
+    'stock-alerts.view', 'stock-alerts.create', 'stock-alerts.edit', 'stock-alerts.delete', 'stock-alerts.export', 'stock-alerts.configure',
+    'content.view', 'content.create', 'content.edit', 'content.delete', 'content.export', 'content.configure',
+    'dashboard.view',
+    'pos.access'
+  ],
   ADMIN: [
     'products.view', 'products.create', 'products.edit', 'products.delete', 'products.export', 'products.import',
     'categories.view', 'categories.create', 'categories.edit', 'categories.delete',
@@ -116,6 +131,9 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
 
 interface PermissionGuardProps {
   permission: Permission | Permission[];
+  companyPermission?: string;
+  feature?: string;
+  companyId?: string;
   children: React.ReactNode;
   fallback?: React.ReactNode;
   showError?: boolean;
@@ -145,7 +163,20 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
 
   const userPermissions = React.useMemo<Permission[]>(() => {
     if (!unified || !Array.isArray(unified.permissions)) return fallbackPerms;
-    const mapped = unified.permissions.map(p => `${p.resource}.${p.action}` as Permission);
+
+    const normalizeAction = (action: string) => {
+      const a = action.trim().toLowerCase();
+      if (a === 'read' || a === 'view' || a === 'list') return 'view';
+      if (a === 'write' || a === 'update' || a === 'edit') return 'edit';
+      return action.trim();
+    };
+
+    const mapped = unified.permissions.map((p) => {
+      const resource = String(p.resource || '').trim();
+      const action = normalizeAction(String(p.action || ''));
+      return `${resource}.${action}` as Permission;
+    });
+
     return Array.from(new Set(mapped));
   }, [unified, unified?.permissions, fallbackPerms]);
 
@@ -185,6 +216,9 @@ export function usePermissions() {
 // Componente principal PermissionGuard
 export function PermissionGuard({
   permission,
+  companyPermission,
+  feature,
+  companyId,
   children,
   fallback,
   showError = true,
@@ -194,9 +228,15 @@ export function PermissionGuard({
 }: PermissionGuardProps) {
   const { user, loading } = useAuth();
   const { hasPermission, userRole, userPermissions } = usePermissions();
+  const companyAccess = useCompanyAccess({
+    permission: companyPermission,
+    feature,
+    companyId,
+    enabled: Boolean(user) && Boolean(companyPermission || feature),
+  });
 
   // Evitar mostrar alertas mientras el estado de autenticación está cargando
-  if (loading) {
+  if (loading || companyAccess.isLoading) {
     return fallback ? <>{fallback}</> : null;
   }
 
@@ -259,9 +299,11 @@ export function PermissionGuard({
   }
 
   // Verificar permisos
-  const hasAccess = requireAll 
+  const hasLocalAccess = requireAll 
     ? permissions.every(perm => hasPermission(perm))
     : hasPermission(permissions);
+  const hasCompanyAccess = companyPermission || feature ? Boolean(companyAccess.data?.allowed) : true;
+  const hasAccess = hasLocalAccess && hasCompanyAccess;
 
   if (hasAccess) {
     return <>{children}</>;

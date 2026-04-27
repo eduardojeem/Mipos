@@ -1,6 +1,5 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import {
     Package,
     Tag,
@@ -66,8 +65,6 @@ export function SearchResults({
     onSelect,
     onClose
 }: SearchResultsProps) {
-    const router = useRouter();
-
     if (!query || query.length < 2) {
         return (
             <div className="p-8 text-center">
@@ -141,7 +138,6 @@ export function SearchResults({
                                         key={result.id}
                                         onClick={() => {
                                             onSelect(result);
-                                            router.push(result.href);
                                             onClose();
                                         }}
                                         className={cn(

@@ -1,416 +1,364 @@
-'use client';
+'use client'
 
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useToast } from '@/components/ui/use-toast';
-import { 
-  Globe, 
-  ExternalLink, 
-  Copy, 
-  CheckCircle, 
+import { useEffect, useMemo, useState } from 'react'
+import {
   AlertCircle,
+  CheckCircle,
+  Copy,
+  ExternalLink,
+  Globe,
   Loader2,
-  Eye,
-  Sparkles
-} from 'lucide-react';
-import { useAuth } from '@/hooks/use-auth';
-import { useUserOrganizations } from '@/hooks/use-user-organizations';
+  Route,
+  ShieldCheck,
+  Sparkles,
+} from 'lucide-react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { useToast } from '@/components/ui/use-toast'
+import { useAuth } from '@/hooks/use-auth'
+import { useUserOrganizations } from '@/hooks/use-user-organizations'
+import { buildTenantPublicBaseUrl } from '@/lib/domain/host-context'
 
 interface DomainSettingsFormProps {
-  onUpdate?: () => void;
+  allowCustomDomain?: boolean
+  onUpdate?: () => void
+  planName?: string
 }
 
-export function DomainSettingsForm({ onUpdate }: DomainSettingsFormProps) {
-  const { user } = useAuth();
-  const { selectedOrganization, loading: orgLoading } = useUserOrganizations(user?.id);
-  const { toast } = useToast();
-  
-  const [subdomain, setSubdomain] = useState('');
-  const [customDomain, setCustomDomain] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState('');
-  const [baseDomain, setBaseDomain] = useState('miposparaguay.vercel.app');
+export function DomainSettingsForm({
+  allowCustomDomain = false,
+  onUpdate,
+  planName = 'Starter',
+}: DomainSettingsFormProps) {
+  const { user } = useAuth()
+  const { selectedOrganization, loading: orgLoading } = useUserOrganizations(user?.id)
+  const { toast } = useToast()
 
-  // Cargar dominio base del sistema
+  const [subdomain, setSubdomain] = useState('')
+  const [customDomain, setCustomDomain] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [baseDomain, setBaseDomain] = useState('miposparaguay.vercel.app')
+  const [copiedUrl, setCopiedUrl] = useState<string | null>(null)
+
   useEffect(() => {
     fetch('/api/superadmin/system-settings')
-      .then(res => res.json())
-      .then(data => {
-        if (data.baseDomain) {
-          setBaseDomain(data.baseDomain);
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.baseDomain) {
+          setBaseDomain(String(data.baseDomain))
         }
       })
-      .catch(err => console.error('Error loading base domain:', err));
-  }, []);
+      .catch(() => {})
+  }, [])
 
-  // Cargar datos de la organización
   useEffect(() => {
-    if (selectedOrganization) {
-      setSubdomain(selectedOrganization.subdomain || selectedOrganization.slug || '');
-      setCustomDomain(selectedOrganization.custom_domain || '');
-    }
-  }, [selectedOrganization]);
+    if (!selectedOrganization) return
+    setSubdomain(selectedOrganization.subdomain || selectedOrganization.slug || '')
+    setCustomDomain(selectedOrganization.custom_domain || '')
+  }, [selectedOrganization])
 
-  // Actualizar preview URL
-  useEffect(() => {
-    if (subdomain) {
-      setPreviewUrl(`${subdomain}.${baseDomain}`);
+  const publicBaseUrl = useMemo(() => {
+    if (typeof window === 'undefined') return ''
+
+    const normalizedSubdomain = subdomain.trim().toLowerCase()
+    const normalizedCustomDomain = customDomain.trim().toLowerCase()
+
+    if (!normalizedSubdomain && !normalizedCustomDomain) {
+      return ''
     }
-  }, [subdomain, baseDomain]);
+
+    return buildTenantPublicBaseUrl(
+      {
+        slug: selectedOrganization?.slug || normalizedSubdomain,
+        subdomain: normalizedSubdomain || selectedOrganization?.subdomain || '',
+        custom_domain: normalizedCustomDomain || null,
+      },
+      window.location.host
+    )
+  }, [customDomain, selectedOrganization?.slug, selectedOrganization?.subdomain, subdomain])
+
+  const publicRoutes = useMemo(
+    () =>
+      ['/home', '/catalog', '/offers'].map((path) => ({
+        path,
+        url: publicBaseUrl ? `${publicBaseUrl}${path}` : path,
+      })),
+    [publicBaseUrl]
+  )
 
   const handleSave = async () => {
     if (!selectedOrganization?.id) {
       toast({
         title: 'Error',
-        description: 'No se pudo identificar la organización',
+        description: 'No se pudo identificar la organizacion',
         variant: 'destructive',
-      });
-      return;
+      })
+      return
     }
 
-    // Validar subdomain
-    if (!subdomain || subdomain.trim() === '') {
+    const normalizedSubdomain = subdomain.trim().toLowerCase()
+    const normalizedCustomDomain = customDomain.trim().toLowerCase()
+
+    if (!normalizedSubdomain) {
       toast({
         title: 'Error',
         description: 'El subdominio es requerido',
         variant: 'destructive',
-      });
-      return;
+      })
+      return
     }
 
-    // Validar formato de subdomain
-    const subdomainRegex = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
-    if (!subdomainRegex.test(subdomain)) {
+    const subdomainRegex = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/
+    if (!subdomainRegex.test(normalizedSubdomain)) {
       toast({
         title: 'Error',
-        description: 'El subdominio solo puede contener letras minúsculas, números y guiones (no al inicio o final)',
+        description: 'Usa minusculas, numeros y guiones en el subdominio.',
         variant: 'destructive',
-      });
-      return;
+      })
+      return
     }
 
-    setSaving(true);
+    if (normalizedCustomDomain && !allowCustomDomain) {
+      toast({
+        title: 'Plan insuficiente',
+        description: 'El dominio personalizado requiere Professional.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setSaving(true)
 
     try {
       const response = await fetch(`/api/admin/organizations/${selectedOrganization.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          subdomain: subdomain.toLowerCase().trim(),
-          custom_domain: customDomain.trim() || null,
+          subdomain: normalizedSubdomain,
+          custom_domain: normalizedCustomDomain || null,
         }),
-      });
+      })
 
+      const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Error al actualizar dominio');
+        throw new Error(payload?.error || 'No se pudo actualizar la ruta publica')
+      }
+
+      if (typeof window !== 'undefined' && selectedOrganization) {
+        const nextOrganization = {
+          ...selectedOrganization,
+          subdomain: normalizedSubdomain,
+          custom_domain: normalizedCustomDomain || null,
+        }
+        localStorage.setItem('selected_organization', JSON.stringify(nextOrganization))
+        window.dispatchEvent(
+          new CustomEvent('organization-changed', {
+            detail: { organizationId: selectedOrganization.id, organization: nextOrganization },
+          })
+        )
       }
 
       toast({
-        title: '✅ Dominio actualizado',
-        description: 'Tu tienda pública ahora está disponible en el nuevo dominio',
-      });
+        title: 'Ruta publica actualizada',
+        description: allowCustomDomain
+          ? 'La pagina publica ya usa la configuracion de dominio mas reciente.'
+          : 'El subdominio publico quedo actualizado correctamente.',
+      })
 
-      onUpdate?.();
+      onUpdate?.()
     } catch (error: any) {
       toast({
         title: 'Error',
-        description: error.message || 'No se pudo actualizar el dominio',
+        description: error?.message || 'No se pudo actualizar la ruta publica',
         variant: 'destructive',
-      });
+      })
     } finally {
-      setSaving(false);
+      setSaving(false)
     }
-  };
+  }
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    toast({
-      title: 'Copiado',
-      description: 'URL copiada al portapapeles',
-    });
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const openPreview = () => {
-    if (previewUrl) {
-      // En desarrollo, abrir localhost
-      const url = process.env.NODE_ENV === 'development' 
-        ? `http://localhost:3001/home`
-        : `https://${previewUrl}/home`;
-      window.open(url, '_blank');
+  const copyToClipboard = async (value: string) => {
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopiedUrl(value)
+      toast({
+        title: 'URL copiada',
+        description: 'El enlace publico se copio al portapapeles.',
+      })
+      window.setTimeout(() => setCopiedUrl(null), 1800)
+    } catch {
+      toast({
+        title: 'No se pudo copiar',
+        description: 'Intenta nuevamente.',
+        variant: 'destructive',
+      })
     }
-  };
+  }
 
   if (orgLoading) {
     return (
       <div className="flex items-center justify-center p-12">
         <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
       </div>
-    );
+    )
   }
 
   return (
     <div className="space-y-6">
-      {/* Header con badge */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <Globe className="h-6 w-6 text-blue-600" />
-            Dominio de tu Tienda Pública
+          <h2 className="flex items-center gap-2 text-2xl font-bold text-slate-900 dark:text-white">
+            <Route className="h-6 w-6 text-blue-600" />
+            Ruta publica de la empresa
           </h2>
-          <p className="text-slate-600 dark:text-slate-400 mt-1">
-            Configura cómo los clientes accederán a tu tienda online
+          <p className="mt-1 text-slate-600 dark:text-slate-400">
+            Define desde donde se accede a tu sitio publico y que rutas compartes con clientes.
           </p>
         </div>
-        <Badge className="bg-gradient-to-r from-blue-500 to-purple-500 text-white border-none">
-          <Sparkles className="h-3 w-3 mr-1" />
-          SaaS Multitenancy
+        <Badge className="border-none bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900">
+          Plan {planName}
         </Badge>
       </div>
 
-      {/* Vista Previa Destacada */}
-      <Card className="border-2 border-blue-200 dark:border-blue-800 bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20">
+      <Card className="border-blue-200 bg-gradient-to-br from-blue-50 to-cyan-50 dark:border-blue-900/40 dark:from-blue-950/20 dark:to-cyan-950/10">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-blue-900 dark:text-blue-100">
-            <Eye className="h-5 w-5" />
-            Vista Previa de tu Tienda
+            <Globe className="h-5 w-5" />
+            Base publica actual
           </CardTitle>
+          <CardDescription>
+            Esta base se usa para construir la home, el catalogo y la pagina de ofertas.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {previewUrl ? (
-            <>
-              <div className="flex items-center gap-3 p-4 bg-white dark:bg-slate-900 rounded-xl border-2 border-blue-300 dark:border-blue-700">
-                <Globe className="h-6 w-6 text-blue-600 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wider mb-1">
-                    Tu tienda estará disponible en:
-                  </p>
-                  <p className="text-xl font-bold text-blue-600 dark:text-blue-400 font-mono truncate">
-                    {previewUrl}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => copyToClipboard(`https://${previewUrl}`)}
-                    className="gap-2"
-                  >
-                    {copied ? (
-                      <>
-                        <CheckCircle className="h-4 w-4 text-green-600" />
-                        Copiado
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="h-4 w-4" />
-                        Copiar
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    onClick={openPreview}
-                    className="gap-2 bg-blue-600 hover:bg-blue-700"
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                    Abrir Tienda
-                  </Button>
-                </div>
-              </div>
+          <div className="rounded-2xl border border-blue-300/70 bg-white/90 p-4 dark:border-blue-800 dark:bg-slate-950/50">
+            <p className="text-xs uppercase tracking-[0.18em] text-slate-500">URL base</p>
+            <p className="mt-2 break-all font-mono text-lg font-semibold text-blue-700 dark:text-blue-300">
+              {publicBaseUrl || 'Configura un subdominio para generar la ruta publica'}
+            </p>
+          </div>
 
-              {/* Preview visual */}
-              <div className="relative rounded-xl overflow-hidden border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
-                <div className="bg-slate-100 dark:bg-slate-800 px-4 py-2 flex items-center gap-2 border-b border-slate-200 dark:border-slate-700">
-                  <div className="flex gap-1.5">
-                    <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                    <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                    <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                  </div>
-                  <div className="flex-1 bg-white dark:bg-slate-900 rounded px-3 py-1 text-sm font-mono text-slate-600 dark:text-slate-400">
-                    https://{previewUrl}/home
-                  </div>
-                </div>
-                <div className="p-8 text-center">
-                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 text-white mb-4">
-                    <Store className="h-8 w-8" />
-                  </div>
-                  <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">
-                    {selectedOrganization?.name || 'Tu Tienda'}
-                  </h3>
-                  <p className="text-slate-600 dark:text-slate-400 text-sm">
-                    Así verán tus clientes tu tienda online
-                  </p>
-                </div>
-              </div>
-            </>
-          ) : (
-            <Alert>
+          {process.env.NODE_ENV === 'development' && subdomain.trim() ? (
+            <Alert className="border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                Configura tu subdominio para ver la vista previa
+                En desarrollo local la ruta publica usa <span className="font-mono">localhost/{subdomain.trim().toLowerCase()}</span>.
+                Algunos entornos de Windows no resuelven correctamente <span className="font-mono">{subdomain.trim().toLowerCase()}.localhost</span>.
               </AlertDescription>
             </Alert>
-          )}
+          ) : null}
+
+          <div className="grid gap-3 md:grid-cols-3">
+            {publicRoutes.map((route) => (
+              <div key={route.path} className="rounded-2xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-950/50">
+                <p className="text-xs uppercase tracking-[0.16em] text-slate-500">{route.path}</p>
+                <p className="mt-2 truncate text-sm font-medium text-slate-900 dark:text-slate-100">{route.url}</p>
+                <div className="mt-3 flex gap-2">
+                  <Button variant="outline" size="sm" className="gap-2" onClick={() => copyToClipboard(route.url)}>
+                    {copiedUrl === route.url ? <CheckCircle className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+                    Copiar
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-2" onClick={() => window.open(route.url, '_blank', 'noopener,noreferrer')}>
+                    <ExternalLink className="h-4 w-4" />
+                    Abrir
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
         </CardContent>
       </Card>
 
-      {/* Formulario de Configuración */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Subdominio */}
+      <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
               <Globe className="h-5 w-5 text-blue-600" />
-              Subdominio
+              Subdominio de la empresa
             </CardTitle>
             <CardDescription>
-              Tu dirección única para la tienda pública
+              Disponible para planes con panel admin. Es la base operativa recomendada del sitio publico.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="subdomain" className="text-sm font-medium">
-                Subdominio *
-              </Label>
-              <div className="relative">
-                <Input
-                  id="subdomain"
-                  value={subdomain}
-                  onChange={(e) => setSubdomain(e.target.value.toLowerCase())}
-                  placeholder="mi-tienda"
-                  className="pl-10 font-mono"
-                />
-                <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              </div>
-              <p className="text-xs text-slate-500 flex items-center gap-1">
-                <span className="font-mono bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-                  {subdomain || 'mi-tienda'}.{baseDomain}
-                </span>
+              <Label htmlFor="subdomain">Subdominio</Label>
+              <Input
+                id="subdomain"
+                value={subdomain}
+                onChange={(event) => setSubdomain(event.target.value.toLowerCase())}
+                placeholder="mi-tienda"
+                className="font-mono"
+              />
+              <p className="text-xs text-slate-500">
+                Vista esperada: <span className="font-mono">{subdomain || 'mi-tienda'}.{baseDomain}</span>
               </p>
             </div>
 
-            <Alert className="bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
-              <AlertCircle className="h-4 w-4 text-blue-600" />
-              <AlertDescription className="text-xs text-blue-900 dark:text-blue-100">
-                <strong>Formato válido:</strong> Solo letras minúsculas, números y guiones. 
-                No puede empezar o terminar con guión.
+            <Alert className="border-blue-200 bg-blue-50 text-blue-950 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-100">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Usa minusculas, numeros y guiones. Este valor tambien ayuda a resolver la ruta publica actual del negocio.
               </AlertDescription>
             </Alert>
           </CardContent>
         </Card>
 
-        {/* Dominio Personalizado */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
-              <Globe className="h-5 w-5 text-purple-600" />
-              Dominio Personalizado
-              <Badge variant="secondary" className="ml-auto">Premium</Badge>
+              <Sparkles className="h-5 w-5 text-violet-600" />
+              Dominio personalizado
             </CardTitle>
             <CardDescription>
-              Usa tu propio dominio (opcional)
+              Disponible en Professional para conectar tu propio dominio comercial.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="custom_domain" className="text-sm font-medium">
-                Dominio Personalizado
-              </Label>
-              <div className="relative">
-                <Input
-                  id="custom_domain"
-                  value={customDomain}
-                  onChange={(e) => setCustomDomain(e.target.value.toLowerCase())}
-                  placeholder="www.mi-tienda.com"
-                  className="pl-10 font-mono"
-                />
-                <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              </div>
+              <Label htmlFor="custom_domain">Dominio propio</Label>
+              <Input
+                id="custom_domain"
+                value={customDomain}
+                onChange={(event) => setCustomDomain(event.target.value.toLowerCase())}
+                placeholder="www.miempresa.com"
+                className="font-mono"
+                disabled={!allowCustomDomain}
+              />
             </div>
 
-            <Alert className="bg-purple-50 dark:bg-purple-950/20 border-purple-200 dark:border-purple-800">
-              <AlertCircle className="h-4 w-4 text-purple-600" />
-              <AlertDescription className="text-xs text-purple-900 dark:text-purple-100">
-                <strong>Requiere configuración DNS:</strong> Deberás configurar un registro CNAME 
-                en tu proveedor de dominio apuntando a nuestro servidor.
-              </AlertDescription>
-            </Alert>
+            {allowCustomDomain ? (
+              <Alert className="border-violet-200 bg-violet-50 text-violet-950 dark:border-violet-900/40 dark:bg-violet-950/20 dark:text-violet-100">
+                <ShieldCheck className="h-4 w-4" />
+                <AlertDescription>
+                  Luego de guardar, apunta tu DNS al proveedor indicado por soporte para activar el dominio.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Tu plan actual puede operar con subdominio y rutas publicas. El dominio personalizado se habilita en Professional.
+                </AlertDescription>
+              </Alert>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Botón de Guardar */}
-      <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-700">
+      <div className="flex items-center justify-between border-t border-slate-200 pt-4 dark:border-slate-800">
         <p className="text-sm text-slate-600 dark:text-slate-400">
-          Los cambios se aplicarán inmediatamente
+          Los cambios de ruta se aplican inmediatamente a la pagina publica activa.
         </p>
-        <Button
-          onClick={handleSave}
-          disabled={saving || !subdomain}
-          className="gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
-        >
-          {saving ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Guardando...
-            </>
-          ) : (
-            <>
-              <CheckCircle className="h-4 w-4" />
-              Guardar Configuración
-            </>
-          )}
+        <Button onClick={handleSave} disabled={saving || !subdomain.trim()} className="gap-2">
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+          Guardar ruta publica
         </Button>
       </div>
-
-      {/* Información adicional */}
-      <Card className="bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800">
-        <CardHeader>
-          <CardTitle className="text-base">¿Cómo funciona?</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3 text-sm text-slate-600 dark:text-slate-400">
-          <div className="flex gap-3">
-            <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0 text-blue-600 font-bold text-xs">
-              1
-            </div>
-            <div>
-              <p className="font-medium text-slate-900 dark:text-white">Configura tu subdominio</p>
-              <p className="text-xs">Elige un nombre único para tu tienda</p>
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0 text-blue-600 font-bold text-xs">
-              2
-            </div>
-            <div>
-              <p className="font-medium text-slate-900 dark:text-white">Guarda los cambios</p>
-              <p className="text-xs">Los cambios se aplican automáticamente</p>
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0 text-blue-600 font-bold text-xs">
-              3
-            </div>
-            <div>
-              <p className="font-medium text-slate-900 dark:text-white">Comparte tu tienda</p>
-              <p className="text-xs">Tus clientes podrán acceder desde el nuevo dominio</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
-  );
+  )
 }
-
-// Import necesario para el icono Store
-import { Store } from 'lucide-react';

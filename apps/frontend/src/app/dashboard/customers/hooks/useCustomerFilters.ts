@@ -1,13 +1,15 @@
 import { useState, useMemo, useCallback } from 'react';
+import type { CustomerSortField } from '@/types/customer-page';
 
 export interface CustomerFiltersState {
     status: 'all' | 'active' | 'inactive';
     type: 'all' | 'regular' | 'vip' | 'wholesale';
     search: string;
+    hasRUC?: 'all' | 'yes' | 'no';
 }
 
 export interface SortState {
-    sortBy: 'name' | 'created_at' | 'totalSpent' | 'totalOrders';
+    sortBy: CustomerSortField;
     sortOrder: 'asc' | 'desc';
 }
 
@@ -45,7 +47,8 @@ export function useCustomerFilters(): UseCustomerFiltersReturn {
     const [filters, setFilters] = useState<CustomerFiltersState>({
         status: 'all',
         type: 'all',
-        search: ''
+        search: '',
+        hasRUC: 'all'
     });
 
     const [sortState, setSortState] = useState<SortState>({
@@ -77,7 +80,8 @@ export function useCustomerFilters(): UseCustomerFiltersReturn {
         setFilters({
             status: 'all',
             type: 'all',
-            search: ''
+            search: '',
+            hasRUC: 'all'
         });
         setSortState({
             sortBy: 'created_at',
@@ -90,6 +94,7 @@ export function useCustomerFilters(): UseCustomerFiltersReturn {
         if (filters.status !== 'all') count++;
         if (filters.type !== 'all') count++;
         if (filters.search.trim()) count++;
+        if (filters.hasRUC && filters.hasRUC !== 'all') count++;
         return count;
     }, [filters]);
 

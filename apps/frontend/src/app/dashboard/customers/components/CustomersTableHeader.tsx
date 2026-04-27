@@ -1,14 +1,15 @@
 import { memo } from 'react';
-import { Checkbox } from '@/components/ui/checkbox';
+import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import type { CustomerSortField } from '@/types/customer-page';
 
 interface CustomersTableHeaderProps {
     selectedCount: number;
     totalCount: number;
-    sortBy: string;
+    sortBy: CustomerSortField;
     sortOrder: 'asc' | 'desc';
-    onSort: (field: string) => void;
+    onSort: (field: CustomerSortField) => void;
     onSelectAll: () => void;
 }
 
@@ -20,29 +21,29 @@ export const CustomersTableHeader = memo(function CustomersTableHeader({
     onSort,
     onSelectAll
 }: CustomersTableHeaderProps) {
-    const SortIcon = ({ field }: { field: string }) => {
+    const SortIcon = ({ field }: { field: CustomerSortField }) => {
         const isActive = sortBy === field;
 
         if (!isActive) {
-            return <ArrowUpDown className="h-4 w-4 ml-2 opacity-40 group-hover:opacity-70 transition-opacity" />;
+            return <ArrowUpDown className="ml-2 h-4 w-4 opacity-40 transition-opacity group-hover:opacity-70" />;
         }
 
         const Icon = sortOrder === 'asc' ? ArrowUp : ArrowDown;
-        return <Icon className="h-4 w-4 ml-2 text-primary animate-in fade-in duration-200" />;
+        return <Icon className="ml-2 h-4 w-4 animate-in fade-in text-primary duration-200" />;
     };
 
-    const getSortButtonClass = (field: string) => {
+    const getSortButtonClass = (field: CustomerSortField) => {
         const isActive = sortBy === field;
         return `
-            hover:bg-transparent transition-colors group
-            ${isActive ? 'text-primary font-semibold' : 'text-muted-foreground'}
+            group hover:bg-transparent transition-colors
+            ${isActive ? 'font-semibold text-primary' : 'text-muted-foreground'}
         `;
     };
 
     return (
-        <thead className="bg-muted/50 sticky top-0 z-10 backdrop-blur-sm">
+        <thead className="sticky top-0 z-10 bg-muted/50 backdrop-blur-sm">
             <tr className="border-b">
-                <th className="p-4 text-left w-12">
+                <th className="w-12 p-4 text-left">
                     <Checkbox
                         checked={selectedCount === totalCount && totalCount > 0}
                         onCheckedChange={onSelectAll}
@@ -51,7 +52,10 @@ export const CustomersTableHeader = memo(function CustomersTableHeader({
                     />
                 </th>
 
-                <th className="p-4 text-left">
+                <th
+                    className="p-4 text-left"
+                    aria-sort={sortBy === 'name' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
+                >
                     <Button
                         variant="ghost"
                         size="sm"
@@ -68,18 +72,40 @@ export const CustomersTableHeader = memo(function CustomersTableHeader({
                 </th>
 
                 <th className="p-4 text-left">
-                    <span className="text-sm font-semibold text-muted-foreground">Tipo</span>
+                    <span className="text-sm font-semibold text-muted-foreground">RUC</span>
                 </th>
 
                 <th className="p-4 text-left">
+                    <span className="text-sm font-semibold text-muted-foreground">Tipo</span>
+                </th>
+
+                <th
+                    className="p-4 text-left"
+                    aria-sort={sortBy === 'total_orders' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
+                >
                     <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => onSort('totalSpent')}
-                        className={getSortButtonClass('totalSpent')}
+                        onClick={() => onSort('total_orders')}
+                        className={getSortButtonClass('total_orders')}
                     >
-                        Estadísticas
-                        <SortIcon field="totalSpent" />
+                        Pedidos
+                        <SortIcon field="total_orders" />
+                    </Button>
+                </th>
+
+                <th
+                    className="p-4 text-left"
+                    aria-sort={sortBy === 'total_purchases' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
+                >
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onSort('total_purchases')}
+                        className={getSortButtonClass('total_purchases')}
+                    >
+                        Gastado
+                        <SortIcon field="total_purchases" />
                     </Button>
                 </th>
 
@@ -87,7 +113,10 @@ export const CustomersTableHeader = memo(function CustomersTableHeader({
                     <span className="text-sm font-semibold text-muted-foreground">Estado</span>
                 </th>
 
-                <th className="p-4 text-left">
+                <th
+                    className="p-4 text-left"
+                    aria-sort={sortBy === 'created_at' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
+                >
                     <Button
                         variant="ghost"
                         size="sm"
@@ -97,6 +126,14 @@ export const CustomersTableHeader = memo(function CustomersTableHeader({
                         Creado
                         <SortIcon field="created_at" />
                     </Button>
+                </th>
+
+                <th className="p-4 text-left">
+                    <span className="text-sm font-semibold text-muted-foreground">Última compra</span>
+                </th>
+
+                <th className="p-4 text-left">
+                    <span className="text-sm font-semibold text-muted-foreground">Valor de vida</span>
                 </th>
 
                 <th className="p-4 text-left">

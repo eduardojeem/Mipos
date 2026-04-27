@@ -50,6 +50,7 @@ export interface User {
   created_at: string;
   updated_at: string;
   last_login?: string;
+  organization_id?: string;
 }
 
 export interface UserRole {
@@ -74,6 +75,7 @@ export interface Category {
   description?: string;
   is_active: boolean;
   organization_id?: string;
+  parent_id?: string | null;
   created_at: string;
   updated_at: string;
   _count?: {
@@ -150,6 +152,7 @@ export interface Customer {
   phone?: string;
   address?: string;
   tax_id?: string;
+  ruc?: string;
   customer_code?: string;
   customer_type: 'RETAIL' | 'WHOLESALE';
   status: string;
@@ -157,6 +160,7 @@ export interface Customer {
   birth_date?: string;
   notes?: string;
   total_purchases?: number;
+  total_orders?: number;
   last_purchase?: string;
   wholesale_discount?: number; // Descuento mayorista por defecto
   min_wholesale_quantity?: number; // Cantidad mínima para precio mayorista
@@ -177,7 +181,23 @@ export interface Sale {
   discount_amount: number;
   discount_type?: 'PERCENTAGE' | 'FIXED_AMOUNT';
   coupon_code?: string;
-  payment_method: 'CASH' | 'CARD' | 'TRANSFER' | 'OTHER';
+  payment_method: 'CASH' | 'CARD' | 'TRANSFER' | 'QR' | 'OTHER' | 'MIXED';
+  payment_details?: {
+    version?: number;
+    primaryMethod?: string;
+    payments?: Array<{
+      method: string;
+      amount: number;
+      affectsCash?: boolean;
+      reference?: string | null;
+    }>;
+    cashAmount?: number;
+    cashReceived?: number | null;
+    change?: number | null;
+    transferReference?: string | null;
+  };
+  branch_id?: string | null;
+  pos_id?: string | null;
   status: 'PENDING' | 'COMPLETED' | 'CANCELLED' | 'REFUNDED';
   sale_type: 'RETAIL' | 'WHOLESALE'; // Tipo de venta
   notes?: string;
@@ -234,6 +254,8 @@ export interface CashSession {
   discrepancy_amount?: number | null;
   status: 'OPEN' | 'CLOSED' | 'CANCELLED';
   notes?: string | null;
+  branch_id?: string | null;
+  pos_id?: string | null;
   opening_time: string;
   closing_time?: string | null;
   created_at: string;
@@ -248,6 +270,8 @@ export interface CashMovement {
   reason?: string | null;
   reference_type?: string | null; // e.g., SALE, RETURN, CREDIT_PAYMENT
   reference_id?: string | null;
+  branch_id?: string | null;
+  pos_id?: string | null;
   created_by: string;
   created_at: string;
 }
@@ -540,7 +564,9 @@ export enum PaymentMethod {
   CASH = 'CASH',
   CARD = 'CARD',
   TRANSFER = 'TRANSFER',
-  OTHER = 'OTHER'
+  QR = 'QR',
+  OTHER = 'OTHER',
+  MIXED = 'MIXED'
 }
 
 export enum SaleStatus {

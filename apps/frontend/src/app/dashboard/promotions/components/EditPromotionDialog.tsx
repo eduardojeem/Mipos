@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import {
   Dialog,
@@ -21,23 +21,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Package, Plus, X } from 'lucide-react'
 import api from '@/lib/api'
+import { ProductSelectionDialog } from './ProductSelectionDialog'
 
-interface Promotion {
-  id: string
-  name: string
-  description: string
-  discountType: 'PERCENTAGE' | 'FIXED_AMOUNT'
-  discountValue: number
-  startDate: string
-  endDate: string
-  isActive: boolean
-  minPurchaseAmount?: number
-  maxDiscountAmount?: number
-  usageLimit?: number
-}
+import type { Promotion } from '@/lib/validation/promotion-validation'
 
 interface EditPromotionDialogProps {
   promotion: Promotion | null
@@ -65,6 +55,8 @@ export function EditPromotionDialog({
   onSuccess,
 }: EditPromotionDialogProps) {
   const [loading, setLoading] = useState(false)
+  const [isProductSelectOpen, setIsProductSelectOpen] = useState(false)
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([])
   const { toast } = useToast()
   
   const {
@@ -77,6 +69,21 @@ export function EditPromotionDialog({
   } = useForm<FormData>()
 
   const discountType = watch('discountType')
+  const discountValue = watch('discountValue')
+
+  const knownProducts = useMemo(() => {
+    const applicable = promotion?.applicableProducts || []
+    const entries = Array.isArray(applicable)
+      ? applicable
+          .map((product) => ({
+            id: typeof product?.id === 'string' ? product.id : String(product?.id || ''),
+            name: typeof product?.name === 'string' ? product.name : '',
+          }))
+          .filter((product) => product.id)
+      : []
+
+    return new Map(entries.map((product) => [product.id, product.name]))
+  }, [promotion?.applicableProducts])
 
   useEffect(() => {
     if (promotion && open) {
@@ -95,8 +102,25 @@ export function EditPromotionDialog({
         maxDiscountAmount: promotion.maxDiscountAmount || 0,
         usageLimit: promotion.usageLimit || 0,
       })
+
+      setSelectedProductIds(
+        Array.isArray(promotion.applicableProducts)
+          ? promotion.applicableProducts
+              .map((product) => String(product?.id || '').trim())
+              .filter((id): id is string => id.length > 0)
+          : []
+      )
     }
   }, [promotion, open, reset])
+
+  const handleAddProducts = (productIds: string[]) => {
+    setSelectedProductIds((prev) => Array.from(new Set([...prev, ...productIds])))
+    setIsProductSelectOpen(false)
+  }
+
+  const removeProduct = (productId: string) => {
+    setSelectedProductIds((prev) => prev.filter((id) => id !== productId))
+  }
 
   const onSubmit = async (data: FormData) => {
     if (!promotion) return
@@ -105,10 +129,10 @@ export function EditPromotionDialog({
     const start = new Date(data.startDate);
     const end = new Date(data.endDate);
     
-    if (end <= start) {
+    if (end < start) {
       toast({
         title: 'Error de validación',
-        description: 'La fecha de fin debe ser posterior a la fecha de inicio',
+        description: 'La fecha de fin no puede ser anterior a la fecha de inicio',
         variant: 'destructive',
       });
       return;
@@ -116,17 +140,21 @@ export function EditPromotionDialog({
 
     setLoading(true)
     try {
-      const response = await api.patch(`/promotions/${promotion.id}`, {
+      const payload = {
         name: data.name,
         description: data.description,
         discountType: data.discountType,
         discountValue: Number(data.discountValue),
-        startDate: data.startDate,
-        endDate: data.endDate,
+        startDate: data.startDate || null,
+        endDate: data.endDate || null,
         minPurchaseAmount: Number(data.minPurchaseAmount) || 0,
         maxDiscountAmount: Number(data.maxDiscountAmount) || 0,
         usageLimit: Number(data.usageLimit) || 0,
-      })
+        isActive: promotion.isActive, // preserve current active state
+        applicableProductIds: selectedProductIds,
+      }
+      
+      const response = await api.patch(`/promotions/${promotion.id}`, payload)
 
       if (response.data?.success) {
         toast({
@@ -138,10 +166,12 @@ export function EditPromotionDialog({
       } else {
         throw new Error(response.data?.message || 'Error al actualizar')
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const apiError = error as { response?: { data?: { message?: string } }, message?: string };
+      const message = apiError.response?.data?.message || apiError.message || 'No se pudo actualizar la promoción';
       toast({
         title: 'Error',
-        description: error?.response?.data?.message || error?.message || 'No se pudo actualizar la promoción',
+        description: message,
         variant: 'destructive',
       })
     } finally {
@@ -152,8 +182,9 @@ export function EditPromotionDialog({
   if (!promotion) return null
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Editar Promoción</DialogTitle>
           <DialogDescription>
@@ -186,13 +217,79 @@ export function EditPromotionDialog({
             />
           </div>
 
+          <div className="space-y-3 pt-4 border-t">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <Label className="text-sm font-semibold flex items-center gap-2">
+                  <Package className="h-4 w-4 text-violet-500" />
+                  Productos Asociados
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Agrega o quita productos. Los cambios se guardan al pulsar Guardar Cambios.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 gap-2"
+                onClick={() => setIsProductSelectOpen(true)}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Agregar productos
+              </Button>
+            </div>
+
+            <div className="rounded-xl border border-dashed border-violet-200 bg-violet-50/30 p-3 dark:border-violet-900/50 dark:bg-violet-900/10">
+              {selectedProductIds.length > 0 ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-violet-700 dark:text-violet-300">
+                      {selectedProductIds.length} producto{selectedProductIds.length !== 1 ? 's' : ''} asociado{selectedProductIds.length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  <div className="max-h-28 overflow-y-auto">
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedProductIds.map((id) => {
+                        const name = knownProducts.get(id)
+                        return (
+                          <Badge
+                            key={id}
+                            variant="secondary"
+                            className="gap-1 bg-violet-100 pr-1 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300"
+                          >
+                            <span className="max-w-[150px] truncate">
+                              {name || `Nuevo ···${id.slice(-6)}`}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => removeProduct(id)}
+                              className="rounded-full p-0.5 hover:bg-violet-200 dark:hover:bg-violet-800"
+                              aria-label="Quitar producto"
+                            >
+                              <X className="h-2.5 w-2.5" />
+                            </button>
+                          </Badge>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-center text-muted-foreground py-2">
+                  Sin productos seleccionados. La promoción se aplicará a todos los productos.
+                </p>
+              )}
+            </div>
+          </div>
+
           {/* Tipo y Valor de Descuento */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="discountType">Tipo de Descuento *</Label>
               <Select
                 value={discountType}
-                onValueChange={(value) => setValue('discountType', value as any)}
+                onValueChange={(value: 'PERCENTAGE' | 'FIXED_AMOUNT') => setValue('discountType', value)}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -313,7 +410,16 @@ export function EditPromotionDialog({
             </Button>
           </DialogFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+      <ProductSelectionDialog
+        open={isProductSelectOpen}
+        onOpenChange={setIsProductSelectOpen}
+        onConfirm={handleAddProducts}
+        excludeProductIds={selectedProductIds}
+        discountType={discountType || promotion.discountType}
+        discountValue={Number(discountValue) || promotion.discountValue}
+      />
+    </>
   )
 }

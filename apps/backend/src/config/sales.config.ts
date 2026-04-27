@@ -7,7 +7,7 @@ export const SALES_CONFIG = {
     /**
      * Límites de paginación
      */
-    DEFAULT_LIMIT: 5,
+    DEFAULT_LIMIT: 20,
     MAX_LIMIT: 100,
 
     /**
@@ -37,4 +37,13 @@ export const CACHE_CONFIG = {
 export const DISCOUNT_THRESHOLDS = {
     REQUIRES_REASON: 10,        // % descuento que requiere razón
     REQUIRES_APPROVAL: 20,      // % descuento que requiere permiso especial
+} as const;
+
+/**
+ * Configuración de redondeo legal (ej. para Paraguay PYG)
+ */
+export const ROUNDING_CONFIG = {
+    ENABLED: true,
+    UNIT: 50, // Redondear a los 50 guaraníes más cercanos
+    STRATEGY: 'NEAREST', // 'UP', 'DOWN', 'NEAREST'
 } as const;

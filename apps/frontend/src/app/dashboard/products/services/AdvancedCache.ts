@@ -1,5 +1,7 @@
 'use client';
 
+import { createLogger } from '@/lib/logger';
+
 interface CacheEntry<T = any> {
   key: string;
   data: T;
@@ -18,7 +20,7 @@ interface CacheConfig {
 
 const logger = createLogger('AdvancedCache');
 
-class AdvancedCache {
+export class AdvancedCache {
   private static instance: AdvancedCache;
   private db: IDBDatabase | null = null;
   private config: CacheConfig;

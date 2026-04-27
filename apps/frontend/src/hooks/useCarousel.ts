@@ -9,6 +9,7 @@
 
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useToast } from '@/components/ui/use-toast';
+import { getSelectedOrganizationId } from '@/lib/organization-context';
 
 /**
  * Maximum number of items allowed in carousel
@@ -76,6 +77,15 @@ export function useCarousel(initialIds: string[] = []): UseCarouselReturn {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<CarouselError | null>(null);
   const { toast } = useToast();
+
+  const getRequestHeaders = useCallback(() => {
+    const organizationId = getSelectedOrganizationId();
+
+    return {
+      'Content-Type': 'application/json',
+      ...(organizationId ? { 'x-organization-id': organizationId } : {}),
+    };
+  }, []);
 
   /**
    * Check if there are unsaved changes
@@ -225,9 +235,7 @@ export function useCarousel(initialIds: string[] = []): UseCarouselReturn {
       // Use fetch directly to call Next.js API Route
       const response = await fetch('/api/promotions/carousel', {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getRequestHeaders(),
         body: JSON.stringify({ ids: carouselIds }),
       });
 
@@ -309,7 +317,7 @@ export function useCarousel(initialIds: string[] = []): UseCarouselReturn {
     } finally {
       setSaving(false);
     }
-  }, [carouselIds, originalIds, hasChanges, isValid, validationErrors, toast]);
+  }, [carouselIds, originalIds, hasChanges, isValid, validationErrors, toast, getRequestHeaders]);
 
   /**
    * Revert changes to original state
@@ -335,9 +343,7 @@ export function useCarousel(initialIds: string[] = []): UseCarouselReturn {
       // Use fetch directly to call Next.js API Route
       const response = await fetch('/api/promotions/carousel', {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getRequestHeaders(),
       });
 
       if (!response.ok) {
@@ -385,7 +391,7 @@ export function useCarousel(initialIds: string[] = []): UseCarouselReturn {
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, getRequestHeaders]);
 
   // Load carousel on mount if no initial IDs provided
   useEffect(() => {

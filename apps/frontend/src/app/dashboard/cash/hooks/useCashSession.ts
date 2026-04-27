@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
 import type { CashSession } from '@/types/cash';
 import type { CashSessionState } from '../types/cash.types';
+import { useCurrentOrganizationId } from '@/hooks/use-current-organization';
 
 interface UseCashSessionReturn extends CashSessionState {
     refetch: () => Promise<any>;
@@ -15,16 +15,16 @@ interface UseCashSessionReturn extends CashSessionState {
  */
 export function useCashSession(): UseCashSessionReturn {
     const queryClient = useQueryClient();
-    const [session, setSession] = useState<CashSession | null>(null);
-    const [error, setError] = useState<any>(null);
+    const organizationId = useCurrentOrganizationId();
 
     const {
-        data: sessionRes,
+        data,
         isLoading,
-        error: queryError,
+        error,
         refetch,
     } = useQuery({
-        queryKey: ['cashSession'],
+        queryKey: ['cashSession', organizationId ?? 'no-org'],
+        enabled: Boolean(organizationId),
         queryFn: async () => {
             const res = await api.get('/cash/session/current');
             return res.data;
@@ -33,26 +33,14 @@ export function useCashSession(): UseCashSessionReturn {
         staleTime: 60_000,
     });
 
-    useEffect(() => {
-        if (sessionRes?.session !== undefined) {
-            setSession(sessionRes.session || null);
-        }
-    }, [sessionRes]);
-
-    useEffect(() => {
-        if (queryError) {
-            setError(queryError);
-        }
-    }, [queryError]);
-
     const invalidate = async () => {
         await queryClient.invalidateQueries({ queryKey: ['cashSession'] });
     };
 
     return {
-        session,
+        session: (data?.session as CashSession | null | undefined) ?? null,
         isLoading,
-        error,
+        error: error as any,
         refetch,
         invalidate,
     };

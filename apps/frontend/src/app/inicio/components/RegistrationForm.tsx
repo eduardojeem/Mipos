@@ -7,16 +7,11 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Eye, EyeOff, CheckCircle2, AlertCircle } from 'lucide-react';
 import { toast } from '@/lib/toast';
-
-interface SelectedPlan {
-    id: string;
-    name: string;
-    slug: string;
-    priceMonthly: number;
-}
+import type { Plan } from '@/hooks/use-subscription';
+import { createClient as createSupabaseClient } from '@/lib/supabase/client';
 
 interface RegistrationFormProps {
-    selectedPlan: SelectedPlan;
+    selectedPlan: Plan;
     onSuccess: () => void;
 }
 
@@ -94,6 +89,9 @@ export function RegistrationForm({ selectedPlan, onSuccess }: RegistrationFormPr
         setError(null);
 
         try {
+            const supabase = createSupabaseClient();
+            await supabase.auth.signOut();
+
             const response = await fetch('/api/auth/register', {
                 method: 'POST',
                 headers: {

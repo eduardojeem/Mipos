@@ -33,6 +33,10 @@ export const createCustomerSchema = z.object({
     .max(50, 'El ID fiscal es muy largo')
     .optional()
     .or(z.literal('')),
+  ruc: z.string()
+    .max(20, 'El RUC es muy largo')
+    .optional()
+    .or(z.literal('')),
   customer_code: z.string()
     .min(3, 'El código del cliente debe tener al menos 3 caracteres')
     .max(50, 'El código del cliente es muy largo')

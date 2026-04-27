@@ -1,22 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { requireOrganization } from '@/lib/organization';
+import { createAdminClient } from '@/lib/supabase/server';
+import { resolveOrganizationId } from '@/lib/organization';
 
 export async function GET(request: NextRequest) {
   try {
-    // Validate and get organization ID
-    const orgId = await requireOrganization(request);
+    const orgId = await resolveOrganizationId(request);
+    if (!orgId) {
+      return NextResponse.json(
+        { error: 'Organization required', message: 'No organization selected' },
+        { status: 400 }
+      );
+    }
     
-    const supabase = await createClient();
+    const supabase = await createAdminClient();
+    const { searchParams } = new URL(request.url);
+    const isActiveParam = searchParams.get('isActive');
+    const normalizedIsActive =
+      isActiveParam === 'true' ? true : isActiveParam === 'false' ? false : null;
 
     // Get current date for recent products calculation
     const now = new Date();
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    // Fetch all active products for accurate calculation
-    // We select only necessary fields to minimize data transfer
-    // Filtered by organization for multitenancy
-    const { data: products, error } = await supabase
+    // Fetch only the fields needed for summary calculations.
+    let query = supabase
       .from('products')
       .select(`
         id,
@@ -27,12 +34,17 @@ export async function GET(request: NextRequest) {
         category_id,
         created_at
       `)
-      .eq('is_active', true)
       .eq('organization_id', orgId);
 
-    if (error) throw error;
+    if (normalizedIsActive !== null) {
+      query = query.eq('is_active', normalizedIsActive);
+    }
 
-    const allProducts = products || [];
+    const { data: scopedProducts, error: scopedError } = await query;
+
+    if (scopedError) throw scopedError;
+
+    const allProducts = scopedProducts || [];
     
     // Calculate stats in memory
     const stats = allProducts.reduce((acc: {
@@ -105,14 +117,6 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('Products summary error:', error);
-    
-    // Return specific error if it's an organization validation error
-    if (error instanceof Error && error.message.includes('No valid organization')) {
-      return NextResponse.json(
-        { error: 'Organization required', message: error.message },
-        { status: 400 }
-      );
-    }
     
     // Return fallback data
     return NextResponse.json({

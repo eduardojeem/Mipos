@@ -1,19 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase/server';
+import { validateRole } from '@/app/api/_utils/role-validation';
+import {
+  resolveCustomerOrganizationId,
+  transformCustomerRecord,
+} from '@/app/api/customers/_lib';
 
 /**
  * Customer Search API - Phase 5 Optimization
- * 
+ *
  * Provides intelligent customer search with suggestions, fuzzy matching, and relevance scoring.
  * Optimized for real-time search with minimal latency.
  */
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient();
+    const auth = await validateRole(request, {
+      roles: ['OWNER', 'ADMIN', 'SUPER_ADMIN', 'MANAGER', 'EMPLOYEE', 'CASHIER']
+    });
+    if (!auth.ok) {
+      return NextResponse.json(auth.body, { status: auth.status });
+    }
+
+    const supabase = await createClient();
     const { searchParams } = new URL(request.url);
-    
-    const orgId = (request.headers.get('x-organization-id') || '').trim();
+
+    const orgId = await resolveCustomerOrganizationId(request, auth.userRole);
     if (!orgId) {
       return NextResponse.json({ success: false, error: 'Organization header missing' }, { status: 400 });
     }
@@ -37,7 +49,6 @@ export async function GET(request: NextRequest) {
     const startTime = performance.now();
     const searchTerm = query.trim();
 
-    // Build search query with relevance scoring
     const { data: customers, error } = await supabase
       .from('customers')
       .select(`
@@ -45,34 +56,46 @@ export async function GET(request: NextRequest) {
         name,
         email,
         phone,
+        address,
+        tax_id,
+        ruc,
         customer_code,
         customer_type,
         is_active,
         total_purchases,
         total_orders,
         last_purchase,
-        created_at
+        birth_date,
+        notes,
+        created_at,
+        updated_at
       `)
       .eq('organization_id', orgId)
+      .is('deleted_at', null)
       .or(`name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%,customer_code.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%`)
-      .limit(limit * 2); // Get more results for relevance scoring
+      .limit(limit * 2);
 
     if (error) {
       throw new Error(error.message);
     }
 
-    // Score and rank results by relevance
-    const scoredResults = (customers || []).map((customer: any) => {
-      const score = calculateRelevanceScore(customer, searchTerm);
-      return {
-        customer: transformCustomerData(customer),
-        score,
-        matchedFields: getMatchedFields(customer, searchTerm)
-      };
-    })
-    .filter((item: any) => item.score > 0)
-    .sort((a: any, b: any) => b.score - a.score)
-    .slice(0, limit);
+    const scoredResults = (customers || [])
+      .map((customer: any) => {
+        const score = calculateRelevanceScore(customer, searchTerm);
+        const transformedCustomer = transformCustomerRecord(customer);
+
+        return {
+          customer: {
+            ...transformedCustomer,
+            valueLevel: getValueLevel(transformedCustomer.totalSpent || 0),
+          },
+          score,
+          matchedFields: getMatchedFields(customer, searchTerm)
+        };
+      })
+      .filter((item: any) => item.score > 0)
+      .sort((a: any, b: any) => b.score - a.score)
+      .slice(0, limit);
 
     const results = scoredResults.map((item: any) => ({
       ...item.customer,
@@ -82,13 +105,11 @@ export async function GET(request: NextRequest) {
 
     const searchTime = Math.round(performance.now() - startTime);
 
-    // Generate suggestions if requested
     let suggestions: string[] = [];
     if (includeSuggestions && results.length < limit) {
       suggestions = await generateSearchSuggestions(supabase, searchTerm, orgId);
     }
 
-    // Generate search stats if requested
     let stats = { totalResults: results.length, searchTime };
     if (includeStats) {
       stats = {
@@ -106,12 +127,11 @@ export async function GET(request: NextRequest) {
         query: searchTerm
       }
     });
-
   } catch (error) {
     console.error('Error in customer search:', error);
     return NextResponse.json(
-      { 
-        success: false, 
+      {
+        success: false,
         error: 'Failed to search customers',
         details: error instanceof Error ? error.message : 'Unknown error'
       },
@@ -124,35 +144,28 @@ function calculateRelevanceScore(customer: any, searchTerm: string): number {
   let score = 0;
   const term = searchTerm.toLowerCase();
 
-  // Exact matches get highest scores
   if (customer.name?.toLowerCase() === term) score += 100;
   if (customer.email?.toLowerCase() === term) score += 90;
   if (customer.customer_code?.toLowerCase() === term) score += 95;
   if (customer.phone?.toLowerCase() === term) score += 85;
 
-  // Starts with matches
   if (customer.name?.toLowerCase().startsWith(term)) score += 50;
   if (customer.email?.toLowerCase().startsWith(term)) score += 45;
   if (customer.customer_code?.toLowerCase().startsWith(term)) score += 48;
 
-  // Contains matches (weighted by field importance)
   if (customer.name?.toLowerCase().includes(term)) score += 30;
   if (customer.email?.toLowerCase().includes(term)) score += 25;
   if (customer.customer_code?.toLowerCase().includes(term)) score += 28;
   if (customer.phone?.toLowerCase().includes(term)) score += 20;
 
-  // Boost active customers
   if (customer.is_active) score += 5;
 
-  // Boost high-value customers
   if (customer.total_purchases > 10000) score += 10;
   else if (customer.total_purchases > 5000) score += 5;
 
-  // Boost frequent customers
   if (customer.total_orders > 20) score += 8;
   else if (customer.total_orders > 10) score += 4;
 
-  // Recent activity boost
   if (customer.last_purchase) {
     const daysSinceLastPurchase = Math.floor(
       (Date.now() - new Date(customer.last_purchase).getTime()) / (1000 * 60 * 60 * 24)
@@ -175,35 +188,16 @@ function getMatchedFields(customer: any, searchTerm: string): string[] {
   return matchedFields;
 }
 
-function transformCustomerData(customer: any) {
-  return {
-    id: customer.id,
-    name: customer.name,
-    email: customer.email,
-    phone: customer.phone,
-    customerCode: customer.customer_code,
-    customerType: mapCustomerTypeToUI(customer.customer_type),
-    isActive: customer.is_active,
-    totalSpent: customer.total_purchases || 0,
-    totalOrders: customer.total_orders || 0,
-    lastPurchase: customer.last_purchase,
-    createdAt: customer.created_at,
-    // Add computed fields for search context
-    segment: determineCustomerSegment(customer.total_orders || 0, customer.total_purchases || 0),
-    valueLevel: getValueLevel(customer.total_purchases || 0)
-  };
-}
-
 async function generateSearchSuggestions(supabase: any, searchTerm: string, orgId: string): Promise<string[]> {
   const suggestions: Set<string> = new Set();
   const term = searchTerm.toLowerCase();
 
   try {
-    // Get customers with names starting with the search term
     const { data: nameMatches } = await supabase
       .from('customers')
       .select('name')
       .eq('organization_id', orgId)
+      .is('deleted_at', null)
       .ilike('name', `${term}%`)
       .limit(5);
 
@@ -213,11 +207,11 @@ async function generateSearchSuggestions(supabase: any, searchTerm: string, orgI
       }
     });
 
-    // Get customers with emails starting with the search term
     const { data: emailMatches } = await supabase
       .from('customers')
       .select('email')
       .eq('organization_id', orgId)
+      .is('deleted_at', null)
       .ilike('email', `${term}%`)
       .limit(3);
 
@@ -227,11 +221,11 @@ async function generateSearchSuggestions(supabase: any, searchTerm: string, orgI
       }
     });
 
-    // Get customer codes starting with the search term
     const { data: codeMatches } = await supabase
       .from('customers')
       .select('customer_code')
       .eq('organization_id', orgId)
+      .is('deleted_at', null)
       .ilike('customer_code', `${term}%`)
       .limit(3);
 
@@ -240,7 +234,6 @@ async function generateSearchSuggestions(supabase: any, searchTerm: string, orgI
         suggestions.add(customer.customer_code);
       }
     });
-
   } catch (error) {
     console.error('Error generating suggestions:', error);
   }
@@ -250,24 +243,23 @@ async function generateSearchSuggestions(supabase: any, searchTerm: string, orgI
 
 async function generateSearchStats(supabase: any, searchTerm: string, resultCount: number, orgId: string) {
   try {
-    // Get total possible matches (without limit)
     const { count: totalMatches } = await supabase
       .from('customers')
       .select('*', { count: 'exact', head: true })
       .eq('organization_id', orgId)
+      .is('deleted_at', null)
       .or(`name.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%,customer_code.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%`);
 
-    // Get match distribution by field
     const [
       { count: nameMatches },
       { count: emailMatches },
       { count: codeMatches },
       { count: phoneMatches }
     ] = await Promise.all([
-      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('organization_id', orgId).ilike('name', `%${searchTerm}%`),
-      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('organization_id', orgId).ilike('email', `%${searchTerm}%`),
-      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('organization_id', orgId).ilike('customer_code', `%${searchTerm}%`),
-      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('organization_id', orgId).ilike('phone', `%${searchTerm}%`)
+      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('organization_id', orgId).is('deleted_at', null).ilike('name', `%${searchTerm}%`),
+      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('organization_id', orgId).is('deleted_at', null).ilike('email', `%${searchTerm}%`),
+      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('organization_id', orgId).is('deleted_at', null).ilike('customer_code', `%${searchTerm}%`),
+      supabase.from('customers').select('*', { count: 'exact', head: true }).eq('organization_id', orgId).is('deleted_at', null).ilike('phone', `%${searchTerm}%`)
     ]);
 
     return {
@@ -288,21 +280,6 @@ async function generateSearchStats(supabase: any, searchTerm: string, resultCoun
       matchDistribution: { name: 0, email: 0, customerCode: 0, phone: 0 }
     };
   }
-}
-
-// Helper functions
-function mapCustomerTypeToUI(dbType: string): 'regular' | 'vip' | 'wholesale' {
-  const normalized = dbType?.toUpperCase();
-  if (normalized === 'WHOLESALE') return 'wholesale';
-  if (normalized === 'VIP') return 'vip';
-  return 'regular';
-}
-
-function determineCustomerSegment(totalOrders: number, totalSpent: number): 'new' | 'regular' | 'frequent' | 'vip' {
-  if (totalOrders <= 2) return 'new';
-  if (totalOrders >= 25 || totalSpent > 50000) return 'vip';
-  if (totalOrders >= 11) return 'frequent';
-  return 'regular';
 }
 
 function getValueLevel(totalSpent: number): 'low' | 'medium' | 'high' | 'premium' {

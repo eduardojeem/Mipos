@@ -1,20 +1,23 @@
 'use client';
 
-import React, { memo, useState, useEffect, useCallback } from 'react';
+import React, { memo, useState, useEffect, useCallback, useRef } from 'react';
 import { useForm } from 'react-hook-form';
-import { 
-  Package, 
-  Tag, 
-  DollarSign, 
+import {
+  Package,
+  Tag,
+  DollarSign,
   Upload,
   Save,
   X,
   AlertTriangle,
-  Image as ImageIcon,
   Percent,
   Plus,
   Building2,
-  RefreshCw
+  RefreshCw,
+  Boxes,
+  CheckCircle2,
+  ImageOff,
+  Trash2,
 } from 'lucide-react';
 import {
   Dialog,
@@ -34,14 +37,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 import { toast } from '@/lib/toast';
 import { createClient } from '@/lib/supabase/client';
+import { cn } from '@/lib/utils';
 import type { Product } from '@/types';
 import type { Database } from '@/types/supabase';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import NextImage from 'next/image';
+
+// ── Types ────────────────────────────────────────────────────────────────────
 
 interface ProductEditModalProps {
   product: Product | null;
@@ -71,157 +77,353 @@ interface ProductFormData {
   image_url?: string;
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Lee orgId de localStorage de forma segura. */
+function getOrgId(): string | null {
+  try {
+    const raw =
+      typeof window !== 'undefined'
+        ? window.localStorage.getItem('selected_organization')
+        : null;
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed?.id || parsed?.organization_id || null;
+    } catch {
+      return raw;
+    }
+  } catch {
+    return null;
+  }
+}
+
+/** Redimensiona y comprime una imagen usando un canvas. Máx 800×800, calidad 80%. */
+function compressImage(file: File): Promise<File> {
+  return new Promise((resolve) => {
+    const MAX = 800;
+    const img = new Image();
+    img.onerror = () => resolve(file);
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > MAX || height > MAX) {
+        if (width > height) { height = Math.round((height * MAX) / width); width = MAX; }
+        else { width = Math.round((width * MAX) / height); height = MAX; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d')?.drawImage(img, 0, 0, width, height);
+      canvas.toBlob(
+        (blob) => resolve(blob ? new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() }) : file),
+        'image/jpeg',
+        0.8
+      );
+    };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+const BUCKET = process.env.NEXT_PUBLIC_SUPABASE_BUCKET_PRODUCTS || 'products';
+
+// ── Section header ────────────────────────────────────────────────────────────
+
+function SectionHeader({
+  icon: Icon,
+  title,
+  accent = 'blue',
+}: {
+  icon: React.ElementType;
+  title: string;
+  accent?: 'blue' | 'green' | 'orange';
+}) {
+  const colors = {
+    blue: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
+    green: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
+    orange: 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20',
+  };
+  return (
+    <div className="flex items-center gap-2.5 pb-1">
+      <div className={cn('rounded-lg border p-1.5', colors[accent])}>
+        <Icon className="h-4 w-4" />
+      </div>
+      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+    </div>
+  );
+}
+
+// ── Inline create form ────────────────────────────────────────────────────────
+function InlineCreate({
+  label,
+  placeholder,
+  value,
+  onChange,
+  onSave,
+  onCancel,
+  loading,
+}: {
+  label: string;
+  placeholder: string;
+  value: string;
+  onChange: (v: string) => void;
+  onSave: () => void;
+  onCancel: () => void;
+  loading: boolean;
+}) {
+  return (
+    <div className="space-y-2 rounded-xl border border-dashed border-border bg-muted/30 p-3">
+      <Label className="text-xs font-medium">{label}</Label>
+      <Input
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={loading}
+        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onSave(); } }}
+        className="h-8 text-sm"
+        autoFocus
+      />
+      <div className="flex gap-2">
+        <Button type="button" size="sm" onClick={onSave} disabled={loading || !value.trim()} className="h-7 gap-1 text-xs">
+          {loading ? <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <CheckCircle2 className="h-3 w-3" />}
+          Guardar
+        </Button>
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={loading} className="h-7 text-xs">
+          Cancelar
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ── Image section ─────────────────────────────────────────────────────────────
+function ImageSection({
+  imagePreview,
+  uploadProgress,
+  uploading,
+  onSelectFile,
+  onClear,
+}: {
+  imagePreview: string | null;
+  uploadProgress: number;
+  uploading: boolean;
+  onSelectFile: () => void;
+  onClear: () => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <SectionHeader icon={Upload} title="Imagen" accent="blue" />
+
+      {/* Preview */}
+      <div className="relative aspect-square overflow-hidden rounded-xl border-2 border-dashed border-border bg-muted/30 transition-colors hover:border-primary/30">
+        {imagePreview ? (
+          <>
+            <NextImage
+              src={imagePreview}
+              alt="Preview"
+              fill
+              className="object-cover"
+              sizes="(max-width: 768px) 100vw, 280px"
+              unoptimized={imagePreview.startsWith('blob:')}
+            />
+            <Button
+              type="button"
+              size="icon"
+              variant="destructive"
+              className="absolute right-2 top-2 h-7 w-7 shadow-md"
+              onClick={onClear}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+            {uploading && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 backdrop-blur-sm">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-white/30 border-t-white" />
+                <span className="text-xs font-medium text-white">{uploadProgress}%</span>
+              </div>
+            )}
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={onSelectFile}
+            className="absolute inset-0 flex flex-col items-center justify-center gap-2 transition-colors hover:bg-muted/50"
+          >
+            <div className="rounded-full bg-muted p-3">
+              <Package className="h-8 w-8 text-muted-foreground/40" />
+            </div>
+            <span className="text-xs text-muted-foreground">Click para subir imagen</span>
+            <span className="text-[10px] text-muted-foreground/60">JPG, PNG, WebP · Máx. 5MB</span>
+          </button>
+        )}
+      </div>
+
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={onSelectFile}
+        disabled={uploading}
+        className="w-full gap-2 text-xs"
+      >
+        {uploading ? (
+          <><div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />Subiendo...</>
+        ) : (
+          <><Upload className="h-3.5 w-3.5" />{imagePreview ? 'Cambiar imagen' : 'Seleccionar imagen'}</>
+        )}
+      </Button>
+
+      {/* Upload progress bar */}
+      {uploading && (
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full bg-primary transition-all duration-300"
+            style={{ width: `${uploadProgress}%` }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Price summary ─────────────────────────────────────────────────────────────
+function PriceSummary({
+  cost, sale, offer, wholesale, hasOffer,
+}: { cost: number; sale: number; offer: number; wholesale: number; hasOffer: boolean }) {
+  if (!cost && !sale) return null;
+  const fmt = (n: number) => `Gs ${n.toLocaleString('es-PY')}`;
+  const margin = cost > 0 && sale > 0 ? ((sale - cost) / cost * 100) : 0;
+
+  return (
+    <div className="rounded-xl border border-border/50 bg-muted/30 p-3 text-xs">
+      <p className="mb-2 font-medium text-foreground">Resumen</p>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-muted-foreground">
+        {cost > 0 && <span>Costo: <span className="font-medium text-foreground">{fmt(cost)}</span></span>}
+        {sale > 0 && <span>Venta: <span className="font-medium text-foreground">{fmt(sale)}</span></span>}
+        {hasOffer && offer > 0 && <span>Oferta: <span className="font-medium text-amber-600">{fmt(offer)}</span></span>}
+        {wholesale > 0 && <span>Mayorista: <span className="font-medium text-blue-600">{fmt(wholesale)}</span></span>}
+        {margin > 0 && (
+          <span className="col-span-2 border-t border-border/40 pt-1 mt-0.5">
+            Margen: <span className={cn('font-semibold', margin >= 20 ? 'text-emerald-600' : 'text-amber-600')}>{margin.toFixed(1)}%</span>
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 export const ProductEditModal = memo(function ProductEditModal({
   product,
   open,
   onOpenChange,
   onSave,
   categories: propCategories = [],
-  suppliers: propSuppliers = []
+  suppliers: propSuppliers = [],
 }: ProductEditModalProps) {
-  const [loading, setLoading] = useState(false);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [uploadingImage, setUploadingImage] = useState(false);
-  const [categories, setCategories] = useState<Array<{ id: string; name: string }>>(propCategories);
-  const [suppliers, setSuppliers] = useState<Array<{ id: string; name: string }>>(propSuppliers);
-  const [loadingData, setLoadingData] = useState(false);
-  const [showCreateCategory, setShowCreateCategory] = useState(false);
-  const [showCreateSupplier, setShowCreateSupplier] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState('');
-  const [newSupplierName, setNewSupplierName] = useState('');
-  const [creatingCategory, setCreatingCategory] = useState(false);
-  const [creatingSupplier, setCreatingSupplier] = useState(false);
-  const [generatingSku, setGeneratingSku] = useState(false);
-  const [autoGenerateSku, setAutoGenerateSku] = useState(true);
-  const supabase = createClient() as SupabaseClient<Database>;
+  const supabaseRef = useRef(createClient());
+  const supabase = supabaseRef.current;
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Form
   const {
-    register,
-    handleSubmit,
-    formState: { errors },
-    reset,
-    setValue,
-    watch,
-    clearErrors,
-    trigger
+    register, handleSubmit, formState: { errors }, reset,
+    setValue, watch, clearErrors, trigger,
   } = useForm<ProductFormData>();
 
   const isActive = watch('is_active');
   const hasOffer = watch('has_offer');
   const categoryId = watch('category_id');
   const productName = watch('name');
-  // Verificar autenticación
-  const checkAuth = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    return user;
-  }, [supabase]);
+  const costPrice = Number(watch('cost_price')) || 0;
+  const salePrice = Number(watch('sale_price')) || 0;
+  const offerPrice = Number(watch('offer_price')) || 0;
+  const wholesalePrice = Number(watch('wholesale_price')) || 0;
 
-  // Cargar categorías y proveedores desde Supabase
+  // UI state
+  const [loading, setLoading] = useState(false);
+  const [loadingData, setLoadingData] = useState(false);
+  const [categories, setCategories] = useState<Array<{ id: string; name: string }>>(propCategories);
+  const [suppliers, setSuppliers] = useState<Array<{ id: string; name: string }>>(propSuppliers);
+
+  // Image upload state
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageBlobUrl, setImageBlobUrl] = useState<string | null>(null);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploading, setUploading] = useState(false);
+
+  // Inline create forms
+  const [showCreateCategory, setShowCreateCategory] = useState(false);
+  const [showCreateSupplier, setShowCreateSupplier] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newSupplierName, setNewSupplierName] = useState('');
+  const [creatingCategory, setCreatingCategory] = useState(false);
+  const [creatingSupplier, setCreatingSupplier] = useState(false);
+
+  // SKU
+  const [generatingSku, setGeneratingSku] = useState(false);
+  const [autoGenerateSku, setAutoGenerateSku] = useState(true);
+
+  // ── Load categories & suppliers ──────────────────────────────────────────
   const loadCategoriesAndSuppliers = useCallback(async () => {
     if (!open) return;
-    
     setLoadingData(true);
     try {
-      // Verificar autenticación
-      const user = await checkAuth();
-      if (!user) {
-        toast.error('Debes estar autenticado para acceder a esta funcionalidad');
-        return;
-      }
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { toast.error('Debes estar autenticado'); return; }
 
-      let orgId: string | null = null;
+      const orgId = getOrgId();
       let orgIds: string[] = [];
-      try {
-        const raw = typeof window !== 'undefined' ? window.localStorage.getItem('selected_organization') : null;
-        if (raw) {
-          try {
-            const parsed = JSON.parse(raw);
-            orgId = parsed?.id || parsed?.organization_id || null;
-          } catch {
-            orgId = raw;
-          }
-        }
-        if (!orgId) {
-          const { data: mem } = await supabase
-            .from('organization_members')
-            .select('organization_id')
-            .eq('user_id', user.id);
-          orgIds = ((mem ?? []) as Array<{ organization_id: string }>).map((m) => m.organization_id).filter(Boolean);
-          if (orgIds.length === 1) orgId = orgIds[0];
-        }
-      } catch {}
-
-      // Cargar categorías
-      let catQuery = supabase
-        .from('categories')
-        .select('id, name')
-        .eq('is_active', true)
-        .order('name');
-      if (orgId) catQuery = catQuery.eq('organization_id', orgId);
-      else if (orgIds.length) catQuery = catQuery.in('organization_id', orgIds);
-      const { data: categoriesData, error: categoriesError } = await catQuery;
-
-      if (categoriesError) {
-        console.error('Error loading categories:', categoriesError);
-        if (categoriesError.message.includes('row-level security')) {
-          toast.error('Sin permisos para ver categorías. Contacta al administrador.');
-        } else {
-          toast.error('Error al cargar categorías');
-        }
-      } else {
-        setCategories(categoriesData || []);
+      if (!orgId) {
+        const { data: mem } = await supabase
+          .from('organization_members')
+          .select('organization_id')
+          .eq('user_id', user.id);
+        orgIds = ((mem ?? []) as Array<{ organization_id: string }>)
+          .map((m) => m.organization_id)
+          .filter(Boolean);
       }
 
-      // Cargar proveedores
-      let supQuery = supabase
-        .from('suppliers')
-        .select('id, name')
-        .eq('is_active', true)
-        .order('name');
-      if (orgId) supQuery = supQuery.eq('organization_id', orgId);
-      else if (orgIds.length) supQuery = supQuery.in('organization_id', orgIds);
-      const { data: suppliersData, error: suppliersError } = await supQuery;
+      // Categories
+      let catQ = supabase.from('categories').select('id, name').eq('is_active', true).order('name');
+      if (orgId) catQ = catQ.eq('organization_id', orgId);
+      else if (orgIds.length) catQ = catQ.in('organization_id', orgIds);
+      const { data: catsData, error: catsErr } = await catQ;
+      if (!catsErr) setCategories(catsData || []);
 
-      if (suppliersError) {
-        console.error('Error loading suppliers:', suppliersError);
-        if (suppliersError.message.includes('row-level security')) {
-          toast.error('Sin permisos para ver proveedores. Contacta al administrador.');
-        } else {
-          toast.error('Error al cargar proveedores');
-        }
-      } else {
-        setSuppliers(suppliersData || []);
-      }
-    } catch (error) {
-      console.error('Error loading data:', error);
+      // Suppliers
+      let supQ = supabase.from('suppliers').select('id, name').eq('is_active', true).order('name');
+      if (orgId) supQ = supQ.eq('organization_id', orgId);
+      else if (orgIds.length) supQ = supQ.in('organization_id', orgIds);
+      const { data: supsData, error: supsErr } = await supQ;
+      if (!supsErr) setSuppliers(supsData || []);
+    } catch {
       toast.error('Error al cargar datos');
     } finally {
       setLoadingData(false);
     }
-  }, [supabase, open, checkAuth]);
+  }, [supabase, open]);
 
-  // Cargar datos cuando se abre el modal
-  useEffect(() => {
-    if (open) {
-      loadCategoriesAndSuppliers();
-    }
-  }, [open, loadCategoriesAndSuppliers]);
+  useEffect(() => { if (open) loadCategoriesAndSuppliers(); }, [open, loadCategoriesAndSuppliers]);
 
-  // Limpiar estados cuando se cierra el modal
+  // ── Reset on close ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!open) {
       setShowCreateCategory(false);
       setShowCreateSupplier(false);
       setNewCategoryName('');
       setNewSupplierName('');
-      setAutoGenerateSku(true); // Resetear a automático
+      setAutoGenerateSku(true);
+      setPendingFile(null);
+      if (imageBlobUrl) { URL.revokeObjectURL(imageBlobUrl); setImageBlobUrl(null); }
+      setImagePreview(null);
+      setUploadProgress(0);
     }
-  }, [open]);
+  }, [open, imageBlobUrl]);
 
-  // Reset form when product changes
+  // ── Populate form ────────────────────────────────────────────────────────
   useEffect(() => {
-    if (product && open) {
-      const formData: ProductFormData = {
+    if (open && product) {
+      reset({
         name: product.name || '',
         sku: product.sku || '',
         description: product.description || '',
@@ -237,124 +439,227 @@ export const ProductEditModal = memo(function ProductEditModal({
         supplier_id: product.supplier_id || 'none',
         barcode: product.barcode || '',
         is_active: product.is_active ?? true,
-        image_url: product.image_url || ''
-      };
-      
-      reset(formData);
+        image_url: product.image_url || '',
+      });
       setImagePreview(product.image_url || null);
-      setAutoGenerateSku(false); // Desactivar auto-generación para productos existentes
-    } else if (!product && open) {
-      // New product
+      setAutoGenerateSku(false);
+    } else if (open && !product) {
       reset({
-        name: '',
-        sku: '',
-        description: '',
-        sale_price: 0,
-        cost_price: 0,
-        offer_price: 0,
-        has_offer: false,
-        stock_quantity: 0,
-        min_stock: 5,
-        category_id: '',
-        supplier_id: 'none',
-        is_active: true
+        name: '', sku: '', description: '', sale_price: 0, cost_price: 0,
+        offer_price: 0, has_offer: false, stock_quantity: 0, min_stock: 5,
+        category_id: '', supplier_id: 'none', is_active: true,
       });
       setImagePreview(null);
     }
   }, [product, open, reset]);
 
-  const onSubmit = async (data: ProductFormData) => {
-    setLoading(true);
-    
-    // Verificar si hay errores de validación antes de proceder
-    const formErrors = Object.keys(errors);
-    if (formErrors.length > 0) {
-      toast.error('Por favor corrige los errores en el formulario antes de continuar');
-      setLoading(false);
+  // ── Cross-field validation trigger ───────────────────────────────────────
+  useEffect(() => {
+    const sub = watch((_, { name }) => {
+      if (name === 'cost_price' || name === 'sale_price') {
+        trigger(['cost_price', 'sale_price', 'offer_price', 'wholesale_price']);
+      }
+    });
+    return () => sub.unsubscribe();
+  }, [watch, trigger]);
+
+  // ── Image upload ─────────────────────────────────────────────────────────
+  const handleSelectFile = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Revoke previous blob
+    if (imageBlobUrl) URL.revokeObjectURL(imageBlobUrl);
+
+    // Compress
+    const compressed = file.size > 500_000 ? await compressImage(file) : file;
+
+    // Show local preview immediately
+    const blobUrl = URL.createObjectURL(compressed);
+    setImageBlobUrl(blobUrl);
+    setImagePreview(blobUrl);
+    setPendingFile(compressed);
+
+    // Reset file input
+    e.target.value = '';
+  }, [imageBlobUrl]);
+
+  const uploadPendingFile = useCallback(async (): Promise<string | null> => {
+    if (!pendingFile) return null;
+    setUploading(true);
+    setUploadProgress(0);
+    try {
+      const ext = pendingFile.name.split('.').pop()?.toLowerCase() || 'jpg';
+      const path = `product-${product?.id || Date.now()}-${Date.now()}.${ext}`;
+
+      // Simulate progress
+      const ticker = setInterval(() => {
+        setUploadProgress((p) => p < 85 ? p + 8 : p);
+      }, 200);
+
+      const { data, error } = await supabase.storage
+        .from(BUCKET)
+        .upload(path, pendingFile, { upsert: true, contentType: pendingFile.type });
+
+      clearInterval(ticker);
+
+      if (error) {
+        // Fallback: keep base64 if storage fails (bucket may not exist yet)
+        toast.warning('No se pudo subir a Storage, la imagen quedará como referencia local');
+        return null;
+      }
+
+      setUploadProgress(100);
+      const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(data.path);
+      return pub?.publicUrl || null;
+    } catch {
+      return null;
+    } finally {
+      setUploading(false);
+      setTimeout(() => setUploadProgress(0), 800);
+    }
+  }, [pendingFile, product?.id, supabase]);
+
+  const clearImage = useCallback(() => {
+    if (imageBlobUrl) URL.revokeObjectURL(imageBlobUrl);
+    setImageBlobUrl(null);
+    setImagePreview(null);
+    setPendingFile(null);
+    setValue('image_url', '');
+  }, [imageBlobUrl, setValue]);
+
+  // ── SKU generation ────────────────────────────────────────────────────────
+  const generateSku = useCallback(async (name: string, catId: string): Promise<string> => {
+    const category = categories.find((c) => c.id === catId);
+    const prefix =
+      category?.name?.substring(0, 3).toUpperCase().replace(/[^A-Z]/g, '') || 'GEN';
+    const namePart = name
+      .trim().toUpperCase().replace(/[^A-Z0-9\s]/g, '')
+      .split(' ').filter(Boolean).slice(0, 2)
+      .map((w) => w.substring(0, 3)).join('');
+    const base = `${prefix}-${namePart}`;
+
+    // Find first available sequence number (max 50 iterations)
+    for (let n = 1; n <= 50; n++) {
+      const candidate = `${base}-${String(n).padStart(3, '0')}`;
+      const { error } = await supabase.from('products').select('id').eq('sku', candidate).single();
+      if (error?.code === 'PGRST116') return candidate; // not found = available
+    }
+    return `${base}-${Date.now().toString().slice(-4)}`;
+  }, [categories, supabase]);
+
+  const handleGenerateSku = useCallback(async () => {
+    if (!productName || !categoryId) {
+      toast.error('Ingresa el nombre y la categoría primero');
       return;
     }
-
+    setGeneratingSku(true);
     try {
-      // Convertir a números para validaciones
-      const costPrice = Number(data.cost_price) || 0;
-      const salePrice = Number(data.sale_price) || 0;
-      const offerPrice = Number(data.offer_price) || 0;
-      const wholesalePrice = Number(data.wholesale_price) || 0;
+      const sku = await generateSku(productName, categoryId);
+      setValue('sku', sku);
+    } finally {
+      setGeneratingSku(false);
+    }
+  }, [productName, categoryId, generateSku, setValue]);
 
-      // Validaciones de lógica de negocio críticas
-      if (salePrice <= 0) {
-        toast.error('El precio de venta debe ser mayor a 0');
+  // Auto-generate SKU for new products
+  useEffect(() => {
+    if (!autoGenerateSku || !productName || !categoryId || product) return;
+    const id = setTimeout(async () => {
+      const sku = await generateSku(productName, categoryId);
+      if (sku) setValue('sku', sku);
+    }, 600);
+    return () => clearTimeout(id);
+  }, [productName, categoryId, autoGenerateSku, product, generateSku, setValue]);
+
+  // ── Create category/supplier ──────────────────────────────────────────────
+  const handleCreateCategory = useCallback(async () => {
+    if (!newCategoryName.trim()) return;
+    const orgId = getOrgId();
+    if (!orgId) { toast.error('Selecciona una organización'); return; }
+    setCreatingCategory(true);
+    try {
+      const payload: Database['public']['Tables']['categories']['Insert'] = {
+        name: newCategoryName.trim(),
+        description: `Categoría creada desde productos`,
+        is_active: true,
+        organization_id: orgId,
+      };
+      const { data, error } = await supabase.from('categories')
+        .insert(payload as unknown as never).select('id, name').single();
+      if (error) {
+        if (error.code === '23505') toast.error('Ya existe una categoría con ese nombre');
+        else toast.error('Error al crear categoría: ' + error.message);
         return;
       }
+      const newCat = data as { id: string; name: string };
+      setCategories((prev) => [...prev, newCat].sort((a, b) => a.name.localeCompare(b.name)));
+      setValue('category_id', newCat.id);
+      setNewCategoryName('');
+      setShowCreateCategory(false);
+      toast.success('Categoría creada');
+    } finally {
+      setCreatingCategory(false);
+    }
+  }, [newCategoryName, supabase, setValue]);
 
-      if (costPrice > 0 && costPrice >= salePrice) {
-        toast.error('El precio de costo debe ser menor al precio de venta');
+  const handleCreateSupplier = useCallback(async () => {
+    if (!newSupplierName.trim()) return;
+    const orgId = getOrgId();
+    if (!orgId) { toast.error('Selecciona una organización'); return; }
+    setCreatingSupplier(true);
+    try {
+      const payload: Database['public']['Tables']['suppliers']['Insert'] = {
+        name: newSupplierName.trim(),
+        is_active: true,
+        organization_id: orgId,
+      };
+      const { data, error } = await supabase.from('suppliers')
+        .insert(payload as unknown as never).select('id, name').single();
+      if (error) {
+        if (error.code === '23505') toast.error('Ya existe un proveedor con ese nombre');
+        else toast.error('Error al crear proveedor: ' + error.message);
         return;
       }
+      const newSup = data as { id: string; name: string };
+      setSuppliers((prev) => [...prev, newSup].sort((a, b) => a.name.localeCompare(b.name)));
+      setValue('supplier_id', newSup.id);
+      setNewSupplierName('');
+      setShowCreateSupplier(false);
+      toast.success('Proveedor creado');
+    } finally {
+      setCreatingSupplier(false);
+    }
+  }, [newSupplierName, supabase, setValue]);
 
-      if (data.has_offer && offerPrice > 0) {
-        if (offerPrice >= salePrice) {
-          toast.error('El precio de oferta debe ser menor al precio de venta');
-          return;
+  // ── Submit ───────────────────────────────────────────────────────────────
+  const onSubmit = async (data: ProductFormData) => {
+    setLoading(true);
+    try {
+      // Upload image to Supabase Storage if pending
+      let finalImageUrl = imagePreview && !imageBlobUrl ? imagePreview : undefined;
+      if (pendingFile) {
+        const storageUrl = await uploadPendingFile();
+        if (storageUrl) {
+          finalImageUrl = storageUrl;
+          setValue('image_url', storageUrl);
         }
-        if (costPrice > 0 && offerPrice <= costPrice) {
-          toast.error('El precio de oferta debe ser mayor al precio de costo');
-          return;
-        }
+        // If storage upload failed, don't persist base64
       }
 
-      if (wholesalePrice > 0) {
-        if (costPrice > 0 && wholesalePrice <= costPrice) {
-          toast.error('El precio mayorista debe ser mayor al precio de costo');
-          return;
-        }
-        if (wholesalePrice >= salePrice) {
-          toast.error('El precio mayorista debe ser menor al precio de venta');
-          return;
-        }
-      }
-
-      // Validación adicional para SKU único (solo si no es auto-generado)
-      if (!autoGenerateSku && data.sku) {
-        let orgId: string | null = null;
-        try {
-          const raw = typeof window !== 'undefined' ? window.localStorage.getItem('selected_organization') : null;
-          if (raw) {
-            try {
-              const parsed = JSON.parse(raw);
-              orgId = parsed?.id || parsed?.organization_id || null;
-            } catch { orgId = raw; }
-          }
-        } catch {}
-        let skuQuery = supabase
-          .from('products')
-          .select('id')
-          .eq('sku', data.sku);
-        if (orgId) skuQuery = skuQuery.eq('organization_id', orgId);
-        const { data: existingProduct } = await skuQuery.single();
-        const existingProductId = (existingProduct as { id: string } | null)?.id;
-          
-        if (existingProductId && existingProductId !== product?.id) {
-          toast.error('Ya existe un producto con este SKU');
-          return;
-        }
-      }
-
-      // Preparar datos para envío
-      console.log('Form data received:', data);
-      
       const productData: Partial<Product> = {
-        // Campos obligatorios
         name: data.name.trim(),
         sku: data.sku.trim(),
         sale_price: Number(data.sale_price),
-        cost_price: Number(data.cost_price) || 0, // Default to 0 if not provided
+        cost_price: Number(data.cost_price) || 0,
         stock_quantity: Number(data.stock_quantity),
         min_stock: Number(data.min_stock),
         category_id: data.category_id,
         is_active: data.is_active,
-        
-        // Campos opcionales
         description: data.description?.trim() || undefined,
         offer_price: data.has_offer && data.offer_price ? Number(data.offer_price) : undefined,
         wholesale_price: data.wholesale_price ? Number(data.wholesale_price) : undefined,
@@ -362,1149 +667,464 @@ export const ProductEditModal = memo(function ProductEditModal({
         max_stock: data.max_stock ? Number(data.max_stock) : undefined,
         supplier_id: data.supplier_id === 'none' ? undefined : data.supplier_id,
         barcode: data.barcode?.trim() || undefined,
-        image_url: data.image_url?.trim() || undefined
+        image_url: finalImageUrl,
       };
 
-      console.log('Prepared product data:', productData);
-
       await onSave(productData);
-      toast.success(product ? 'Producto actualizado exitosamente' : 'Producto creado exitosamente');
+      toast.success(product ? 'Producto actualizado' : 'Producto creado');
       onOpenChange(false);
-      
-    } catch (error) {
-      console.error('Error saving product:', error);
-      
-      // Mostrar el mensaje de error específico
-      const errorMessage = error instanceof Error 
-        ? error.message 
-        : 'Error al guardar el producto';
-      
-      toast.error(errorMessage);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al guardar el producto');
     } finally {
       setLoading(false);
     }
   };
 
- 
+  const hasErrors = Object.keys(errors).length > 0;
 
-  // Función para optimizar imagen
-  const optimizeImage = useCallback(async (file: File): Promise<File> => {
-    return new Promise((resolve) => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      const img = new Image();
-
-      img.onload = () => {
-        // Calcular nuevas dimensiones (máximo 800x800)
-        const maxSize = 800;
-        let { width, height } = img;
-
-        if (width > height) {
-          if (width > maxSize) {
-            height = (height * maxSize) / width;
-            width = maxSize;
-          }
-        } else {
-          if (height > maxSize) {
-            width = (width * maxSize) / height;
-            height = maxSize;
-          }
-        }
-
-        // Configurar canvas
-        canvas.width = width;
-        canvas.height = height;
-
-        // Dibujar imagen redimensionada
-        ctx?.drawImage(img, 0, 0, width, height);
-
-        // Convertir a blob con compresión
-        canvas.toBlob(
-          (blob) => {
-            if (blob) {
-              const optimizedFile = new File([blob], file.name, {
-                type: 'image/jpeg',
-                lastModified: Date.now(),
-              });
-              resolve(optimizedFile);
-            } else {
-              resolve(file);
-            }
-          },
-          'image/jpeg',
-          0.8 // Calidad 80%
-        );
-      };
-
-      img.onerror = () => resolve(file);
-      img.src = URL.createObjectURL(file);
-    });
-  }, []);
-
-
-
-  // Función alternativa para cargar imagen como base64 (fallback)
-  const handleImageAsBase64 = useCallback(async (file: File) => {
-    try {
-      // Optimizar imagen primero
-      const optimizedFile = await optimizeImage(file);
-      
-      // Convertir a base64
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const dataUrl = e.target?.result as string;
-        setImagePreview(dataUrl);
-        setValue('image_url', dataUrl);
-        
-        const originalSize = (file.size / 1024 / 1024).toFixed(2);
-        const optimizedSize = (optimizedFile.size / 1024 / 1024).toFixed(2);
-        const reduction = (((file.size - optimizedFile.size) / file.size) * 100).toFixed(1);
-        
-        toast.success(`Imagen optimizada localmente (${reduction}% reducción: ${originalSize}MB → ${optimizedSize}MB)`);
-      };
-      reader.readAsDataURL(optimizedFile);
-    } catch (error) {
-      console.error('Error processing image as base64:', error);
-      toast.error('Error al procesar la imagen');
-    }
-  }, [optimizeImage, setValue]);
-
-  // Función para generar SKU automáticamente
-  const generateSku = useCallback(async (name: string, categoryId: string) => {
-    if (!name || !categoryId) return '';
-
-    try {
-      // Obtener prefijo de la categoría
-      const category = categories.find(c => c.id === categoryId);
-      const categoryPrefix = category?.name
-        ?.substring(0, 3)
-        .toUpperCase()
-        .replace(/[^A-Z]/g, '') || 'GEN';
-
-      // Limpiar y procesar el nombre del producto
-      const cleanName = name
-        .trim()
-        .toUpperCase()
-        .replace(/[^A-Z0-9\s]/g, '')
-        .split(' ')
-        .filter(word => word.length > 0)
-        .slice(0, 2) // Tomar máximo 2 palabras
-        .map(word => word.substring(0, 3)) // Máximo 3 caracteres por palabra
-        .join('');
-
-      // Generar número secuencial único
-      let counter = 1;
-      const baseSku = `${categoryPrefix}-${cleanName}`;
-      let finalSku = `${baseSku}-${counter.toString().padStart(3, '0')}`;
-
-      // Verificar si el SKU ya existe en la base de datos
-      while (true) {
-        const { data: existingProduct, error } = await supabase
-          .from('products')
-          .select('id')
-          .eq('sku', finalSku)
-          .single();
-
-        if (error && error.code === 'PGRST116') {
-          // No existe, podemos usar este SKU
-          break;
-        } else {
-          const existingProductId = (existingProduct as { id: string } | null)?.id;
-          if (existingProductId && existingProductId !== product?.id) {
-          // Existe y no es el producto actual, incrementar contador
-          counter++;
-          finalSku = `${baseSku}-${counter.toString().padStart(3, '0')}`;
-          } else {
-          // Es el producto actual o no hay error, podemos usar este SKU
-          break;
-          }
-        }
-
-        // Prevenir bucle infinito
-        if (counter > 999) {
-          finalSku = `${baseSku}-${Date.now().toString().slice(-3)}`;
-          break;
-        }
-      }
-
-      return finalSku;
-    } catch (error) {
-      console.error('Error generating SKU:', error);
-      // Fallback: generar SKU simple con timestamp
-      const timestamp = Date.now().toString().slice(-4);
-      return `GEN-${timestamp}`;
-    }
-  }, [categories, supabase, product?.id]);
-
-  // Función para generar SKU manualmente
-  const handleGenerateSku = useCallback(async () => {
-    if (!productName || !categoryId) {
-      toast.error('Ingresa el nombre del producto y selecciona una categoría primero');
-      return;
-    }
-
-    setGeneratingSku(true);
-    try {
-      const newSku = await generateSku(productName, categoryId);
-      setValue('sku', newSku);
-      toast.success('SKU generado automáticamente');
-    } catch (error) {
-      toast.error('Error al generar SKU');
-    } finally {
-      setGeneratingSku(false);
-    }
-  }, [productName, categoryId, generateSku, setValue]);
-
-  // Generar SKU automáticamente cuando cambia el nombre o categoría
-  useEffect(() => {
-    if (autoGenerateSku && productName && categoryId && !product) {
-      // Solo para productos nuevos
-      const timeoutId = setTimeout(async () => {
-        const newSku = await generateSku(productName, categoryId);
-        if (newSku) {
-          setValue('sku', newSku);
-        }
-      }, 500); // Debounce de 500ms
-
-      return () => clearTimeout(timeoutId);
-    }
-  }, [productName, categoryId, autoGenerateSku, product, generateSku, setValue]);
-
-  // Trigger validation when prices change to ensure cross-validation
-  useEffect(() => {
-    const subscription = watch((value, { name }) => {
-      if (name === 'cost_price' || name === 'sale_price') {
-        // Re-validate both fields when either changes
-        trigger(['cost_price', 'sale_price', 'offer_price', 'wholesale_price']);
-      }
-      if (name === 'offer_price' && hasOffer) {
-        trigger(['offer_price']);
-      }
-      if (name === 'wholesale_price') {
-        trigger(['wholesale_price']);
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, [watch, trigger, hasOffer]);
-
-  // Función para crear nueva categoría
-  const handleCreateCategory = useCallback(async () => {
-    if (!newCategoryName.trim()) {
-      toast.error('Por favor ingresa un nombre para la categoría');
-      return;
-    }
-
-    setCreatingCategory(true);
-    try {
-      let orgId: string | null = null;
-      try {
-        const raw = typeof window !== 'undefined' ? window.localStorage.getItem('selected_organization') : null;
-        if (raw) {
-          try {
-            const parsed = JSON.parse(raw);
-            orgId = parsed?.id || parsed?.organization_id || null;
-          } catch { orgId = raw; }
-        }
-      } catch {}
-      if (!orgId) {
-        toast.error('Selecciona una organización antes de crear categorías');
-        setCreatingCategory(false);
-        return;
-      }
-      const finalOrgId = orgId as string;
-      const payload: Database['public']['Tables']['categories']['Insert'] = {
-        name: newCategoryName.trim(),
-        description: `Categoría creada desde productos: ${newCategoryName.trim()}`,
-        is_active: true,
-        organization_id: finalOrgId
-      };
-      const { data, error } = await supabase
-        .from('categories')
-        .insert(payload as unknown as never)
-        .select('id, name')
-        .single();
-
-      if (error) {
-        console.error('Error creating category:', error);
-        
-        // Manejo específico de errores RLS
-        if (error.code === '42501' || error.message.includes('row-level security')) {
-          toast.error('No tienes permisos para crear categorías. Contacta al administrador.');
-        } else if (error.code === '23505' || error.message.includes('duplicate')) {
-          toast.error('Ya existe una categoría con ese nombre');
-        } else {
-          toast.error('Error al crear la categoría: ' + error.message);
-        }
-        return;
-      }
-
-      // Agregar la nueva categoría a la lista
-      const newCat = data as { id: string; name: string };
-      setCategories(prev => [...prev, newCat].sort((a, b) => a.name.localeCompare(b.name)));
-      
-      // Seleccionar la nueva categoría
-      setValue('category_id', newCat.id);
-      
-      // Limpiar y cerrar el formulario
-      setNewCategoryName('');
-      setShowCreateCategory(false);
-      
-      toast.success('Categoría creada exitosamente');
-    } catch (error) {
-      console.error('Error creating category:', error);
-      toast.error('Error inesperado al crear la categoría');
-    } finally {
-      setCreatingCategory(false);
-    }
-  }, [newCategoryName, supabase, setValue]);
-
-  // Función para crear nuevo proveedor
-  const handleCreateSupplier = useCallback(async () => {
-    if (!newSupplierName.trim()) {
-      toast.error('Por favor ingresa un nombre para el proveedor');
-      return;
-    }
-
-    setCreatingSupplier(true);
-    try {
-      let orgId: string | null = null;
-      try {
-        const raw = typeof window !== 'undefined' ? window.localStorage.getItem('selected_organization') : null;
-        if (raw) {
-          try {
-            const parsed = JSON.parse(raw);
-            orgId = parsed?.id || parsed?.organization_id || null;
-          } catch { orgId = raw; }
-        }
-      } catch {}
-      if (!orgId) {
-        toast.error('Selecciona una organización antes de crear proveedores');
-        setCreatingSupplier(false);
-        return;
-      }
-      const finalOrgId = orgId as string;
-      const payload: Database['public']['Tables']['suppliers']['Insert'] = {
-        name: newSupplierName.trim(),
-        is_active: true,
-        organization_id: finalOrgId
-      };
-      const { data, error } = await supabase
-        .from('suppliers')
-        .insert(payload as unknown as never)
-        .select('id, name')
-        .single();
-
-      if (error) {
-        console.error('Error creating supplier:', error);
-        
-        // Manejo específico de errores RLS
-        if (error.code === '42501' || error.message.includes('row-level security')) {
-          toast.error('No tienes permisos para crear proveedores. Contacta al administrador.');
-        } else if (error.code === '23505' || error.message.includes('duplicate')) {
-          toast.error('Ya existe un proveedor con ese nombre');
-        } else {
-          toast.error('Error al crear el proveedor: ' + error.message);
-        }
-        return;
-      }
-
-      // Agregar el nuevo proveedor a la lista
-      const newSupplier = data as { id: string; name: string };
-      setSuppliers(prev => [...prev, newSupplier].sort((a, b) => a.name.localeCompare(b.name)));
-      
-      // Seleccionar el nuevo proveedor
-      setValue('supplier_id', newSupplier.id);
-      
-      // Limpiar y cerrar el formulario
-      setNewSupplierName('');
-      setShowCreateSupplier(false);
-      
-      toast.success('Proveedor creado exitosamente');
-    } catch (error) {
-      console.error('Error creating supplier:', error);
-      toast.error('Error inesperado al crear el proveedor');
-    } finally {
-      setCreatingSupplier(false);
-    }
-  }, [newSupplierName, supabase, setValue]);
-
+  // ── Render ───────────────────────────────────────────────────────────────
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center justify-between">
-            <span>{product ? 'Editar Producto' : 'Nuevo Producto'}</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onOpenChange(false)}
-              className="h-8 w-8 p-0"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </DialogTitle>
+      <DialogContent className="flex max-h-[92vh] max-w-4xl flex-col gap-0 overflow-hidden p-0">
+        {/* ── Header ── */}
+        <DialogHeader className="flex-shrink-0 border-b border-border/50 bg-gradient-to-r from-card via-card to-primary/5 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/20">
+                <Package className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <DialogTitle className="text-base font-semibold">
+                  {product ? 'Editar Producto' : 'Nuevo Producto'}
+                </DialogTitle>
+                {product && (
+                  <p className="text-xs text-muted-foreground font-mono mt-0.5">{product.sku}</p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {product?.is_active !== undefined && (
+                <Badge variant={product.is_active ? 'default' : 'secondary'} className="text-xs">
+                  {product.is_active ? 'Activo' : 'Inactivo'}
+                </Badge>
+              )}
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onOpenChange(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Imagen del Producto */}
-            <div className="lg:col-span-1">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-sm">
-                    <Upload className="h-4 w-4" />
-                    Imagen del Producto
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="relative aspect-square bg-muted rounded-lg overflow-hidden">
-                    {imagePreview ? (
-                      <>
-                        <NextImage
-                          src={imagePreview}
-                          alt="Preview"
-                          fill
-                          className="object-cover"
-                          sizes="(max-width: 768px) 100vw, 33vw"
-                        />
-                        <div className="absolute top-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-                          Optimizada
-                        </div>
-                      </>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center h-full text-center p-4">
-                        <Package className="h-12 w-12 text-muted-foreground/30 mb-2" />
-                        <p className="text-xs text-muted-foreground">
-                          Las imágenes se optimizan automáticamente
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Máximo 800x800px, formato JPEG
-                        </p>
-                      </div>
-                    )}
-                    
-                    {uploadingImage && (
-                      <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center">
-                        <div className="flex items-center space-x-2 text-white mb-2">
-                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          <span className="text-sm">Optimizando y subiendo...</span>
-                        </div>
-                        <p className="text-xs text-white/80">
-                          Redimensionando y comprimiendo imagen
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="space-y-3">
-                    {/* Subir imagen local */}
-                    <div className="space-y-2">
-                      <Label>Subir Imagen</Label>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          const input = document.createElement('input');
-                          input.type = 'file';
-                          input.accept = 'image/*';
-                          input.onchange = (e) => {
-                            const file = (e.target as HTMLInputElement).files?.[0];
-                            if (file) {
-                              setUploadingImage(true);
-                              handleImageAsBase64(file).finally(() => setUploadingImage(false));
-                            }
-                          };
-                          input.click();
-                        }}
-                        disabled={uploadingImage}
-                        className="gap-2 w-full"
-                      >
-                        <ImageIcon className="h-4 w-4" />
-                        📁 Seleccionar Imagen Local
-                      </Button>
-                      <p className="text-xs text-muted-foreground">
-                        Máximo 10MB. Se optimizará automáticamente a 800x800px y 80% calidad.
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="sr-only"
+          onChange={handleFileChange}
+        />
+
+        {/* ── Scrollable body ── */}
+        <div className="flex-1 overflow-y-auto">
+          <form id="product-form" onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-3">
+            {/* ── Left column: Image ── */}
+            <div className="space-y-4 lg:col-span-1">
+              <ImageSection
+                imagePreview={imagePreview}
+                uploadProgress={uploadProgress}
+                uploading={uploading}
+                onSelectFile={handleSelectFile}
+                onClear={clearImage}
+              />
+
+              {/* Active toggle */}
+              <Separator />
+              <div className="flex items-center justify-between rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
+                <div>
+                  <p className="text-sm font-medium">Estado</p>
+                  <p className="text-xs text-muted-foreground">Visible en catálogo</p>
+                </div>
+                <Switch
+                  id="is_active"
+                  checked={isActive}
+                  onCheckedChange={(v) => setValue('is_active', v)}
+                />
+              </div>
             </div>
 
-            {/* Formulario Principal */}
-            <div className="lg:col-span-2 space-y-6">
-              {/* Información Básica */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Tag className="h-5 w-5" />
-                    Información Básica
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="name">Nombre del Producto *</Label>
-                      <Input
-                        id="name"
-                        placeholder="Ej: Labial Rojo Intenso"
-                        {...register('name', { 
-                          required: 'El nombre es obligatorio',
-                          minLength: { value: 2, message: 'Mínimo 2 caracteres' }
-                        })}
-                      />
-                      {errors.name && (
-                        <p className="text-sm text-destructive">{errors.name.message}</p>
-                      )}
-                    </div>
+            {/* ── Right column: Form ── */}
+            <div className="space-y-6 lg:col-span-2">
+              {/* ── Basic info ── */}
+              <section className="space-y-4">
+                <SectionHeader icon={Tag} title="Información Básica" accent="blue" />
 
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="sku">SKU *</Label>
-                        <div className="flex items-center gap-2">
-                          <div className="flex items-center space-x-2">
-                            <Switch
-                              id="auto_generate_sku"
-                              checked={autoGenerateSku}
-                              onCheckedChange={setAutoGenerateSku}
-                              disabled={!!product} // Solo para productos nuevos
-                            />
-                            <Label htmlFor="auto_generate_sku" className="text-xs">
-                              Auto
-                            </Label>
-                          </div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={handleGenerateSku}
-                            disabled={generatingSku || !productName || !categoryId}
-                            className="h-6 px-2 text-xs"
-                          >
-                            {generatingSku ? (
-                              <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                            ) : (
-                              <RefreshCw className="h-3 w-3" />
-                            )}
-                          </Button>
+                {/* Name */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="name" className="text-sm">Nombre del Producto <span className="text-destructive">*</span></Label>
+                  <Input
+                    id="name"
+                    placeholder="Ej: Labial Rojo Intenso"
+                    className={cn(errors.name && 'border-destructive')}
+                    {...register('name', {
+                      required: 'El nombre es obligatorio',
+                      minLength: { value: 2, message: 'Mínimo 2 caracteres' },
+                    })}
+                  />
+                  {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
+                </div>
+
+                {/* SKU */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="sku" className="text-sm">SKU <span className="text-destructive">*</span></Label>
+                    <div className="flex items-center gap-3">
+                      {!product && (
+                        <div className="flex items-center gap-1.5">
+                          <Switch
+                            id="auto_sku"
+                            checked={autoGenerateSku}
+                            onCheckedChange={setAutoGenerateSku}
+                            className="h-4 w-7 data-[state=checked]:bg-primary"
+                          />
+                          <Label htmlFor="auto_sku" className="cursor-pointer text-xs text-muted-foreground">Auto</Label>
                         </div>
-                      </div>
-                      
-                      <Input
-                        id="sku"
-                        placeholder={autoGenerateSku ? "Se generará automáticamente..." : "Ej: LAB-001"}
-                        {...register('sku', { 
-                          required: 'El SKU es obligatorio',
-                          minLength: { value: 2, message: 'Mínimo 2 caracteres' },
-                          pattern: {
-                            value: /^[A-Z0-9\-]+$/,
-                            message: 'Solo letras mayúsculas, números y guiones'
-                          },
-                          validate: () => {
-                            if (autoGenerateSku && !categoryId) {
-                              return 'Selecciona una categoría para generar el SKU automáticamente';
-                            }
-                            return true;
-                          }
-                        })}
-                        readOnly={autoGenerateSku && !product}
-                      />
-                      
-                      {errors.sku && (
-                        <p className="text-sm text-destructive">{errors.sku.message}</p>
                       )}
-                      
-                      {autoGenerateSku && !product && (
-                        <p className="text-xs text-muted-foreground">
-                          El SKU se genera automáticamente: [CATEGORÍA]-[NOMBRE]-[NÚMERO]
-                        </p>
-                      )}
+                      <Button
+                        type="button" variant="ghost" size="icon"
+                        onClick={handleGenerateSku}
+                        disabled={generatingSku || !productName || !categoryId}
+                        className="h-6 w-6"
+                        title="Regenerar SKU"
+                      >
+                        <RefreshCw className={cn('h-3.5 w-3.5', generatingSku && 'animate-spin')} />
+                      </Button>
                     </div>
                   </div>
+                  <Input
+                    id="sku"
+                    placeholder={autoGenerateSku && !product ? 'Se generará automáticamente...' : 'Ej: LAB-001'}
+                    readOnly={autoGenerateSku && !product}
+                    className={cn(
+                      errors.sku && 'border-destructive',
+                      autoGenerateSku && !product && 'bg-muted/40 text-muted-foreground'
+                    )}
+                    {...register('sku', {
+                      required: 'El SKU es obligatorio',
+                      minLength: { value: 2, message: 'Mínimo 2 caracteres' },
+                    })}
+                  />
+                  {errors.sku && <p className="text-xs text-destructive">{errors.sku.message}</p>}
+                </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="description">Descripción</Label>
-                    <Textarea
-                      id="description"
-                      placeholder="Descripción detallada del producto..."
-                      rows={3}
-                      {...register('description')}
-                    />
-                  </div>
+                {/* Description */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="description" className="text-sm">Descripción</Label>
+                  <Textarea
+                    id="description"
+                    placeholder="Descripción del producto..."
+                    rows={2}
+                    className="resize-none text-sm"
+                    {...register('description')}
+                  />
+                </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="category_id">Categoría *</Label>
+                {/* Category + Supplier */}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {/* Category */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="category_id" className="text-sm">Categoría <span className="text-destructive">*</span></Label>
+                      {!showCreateCategory && (
                         <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
+                          type="button" variant="ghost" size="sm"
                           onClick={() => setShowCreateCategory(true)}
-                          className="h-6 px-2 text-xs"
+                          className="h-5 gap-1 px-1 text-xs text-muted-foreground hover:text-foreground"
                           disabled={loadingData}
                         >
-                          <Plus className="h-3 w-3 mr-1" />
-                          Nueva
+                          <Plus className="h-3 w-3" /> Nueva
                         </Button>
-                      </div>
-                      
-                      {!showCreateCategory ? (
-                        <>
-                          <Select
-                            value={watch('category_id')}
-                            onValueChange={(value) => {
-                              setValue('category_id', value);
-                              clearErrors('category_id');
-                            }}
-                            disabled={loadingData}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder={loadingData ? "Cargando categorías..." : "Seleccionar categoría"} />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {categories.map((category) => (
-                                <SelectItem key={category.id} value={category.id}>
-                                  {category.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <input
-                            type="hidden"
-                            {...register('category_id', {
-                              required: 'La categoría es obligatoria'
-                            })}
-                          />
-                          {errors.category_id && (
-                            <p className="text-sm text-destructive">{errors.category_id.message}</p>
-                          )}
-                        </>
-                      ) : (
-                        <div className="space-y-2 p-3 border rounded-lg bg-muted/20">
-                          <Label htmlFor="new_category_name">Nueva Categoría</Label>
-                          <Input
-                            id="new_category_name"
-                            placeholder="Nombre de la categoría"
-                            value={newCategoryName}
-                            onChange={(e) => setNewCategoryName(e.target.value)}
-                            disabled={creatingCategory}
-                          />
-                          <div className="flex gap-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              onClick={handleCreateCategory}
-                              disabled={creatingCategory || !newCategoryName.trim()}
-                              className="gap-1"
-                            >
-                              {creatingCategory ? (
-                                <>
-                                  <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                  Creando...
-                                </>
-                              ) : (
-                                <>
-                                  <Plus className="h-3 w-3" />
-                                  Crear
-                                </>
-                              )}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setShowCreateCategory(false);
-                                setNewCategoryName('');
-                              }}
-                              disabled={creatingCategory}
-                            >
-                              Cancelar
-                            </Button>
-                          </div>
-                        </div>
                       )}
                     </div>
-
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="supplier_id">Proveedor</Label>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setShowCreateSupplier(true)}
-                          className="h-6 px-2 text-xs"
-                          disabled={loadingData}
-                        >
-                          <Building2 className="h-3 w-3 mr-1" />
-                          Nuevo
-                        </Button>
-                      </div>
-                      
-                      {!showCreateSupplier ? (
+                    {showCreateCategory ? (
+                      <InlineCreate
+                        label="Nueva categoría"
+                        placeholder="Nombre categoría"
+                        value={newCategoryName}
+                        onChange={setNewCategoryName}
+                        onSave={handleCreateCategory}
+                        onCancel={() => { setShowCreateCategory(false); setNewCategoryName(''); }}
+                        loading={creatingCategory}
+                      />
+                    ) : (
+                      <>
                         <Select
-                          value={watch('supplier_id') || 'none'}
-                          onValueChange={(value) => setValue('supplier_id', value === 'none' ? undefined : value)}
+                          value={watch('category_id')}
+                          onValueChange={(v) => { setValue('category_id', v); clearErrors('category_id'); }}
                           disabled={loadingData}
                         >
-                          <SelectTrigger>
-                            <SelectValue placeholder={loadingData ? "Cargando proveedores..." : "Seleccionar proveedor"} />
+                          <SelectTrigger className={cn('text-sm', errors.category_id && 'border-destructive')}>
+                            <SelectValue placeholder={loadingData ? 'Cargando...' : 'Seleccionar'} />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="none">Sin proveedor</SelectItem>
-                            {suppliers.map((supplier) => (
-                              <SelectItem key={supplier.id} value={supplier.id}>
-                                {supplier.name}
-                              </SelectItem>
+                            {categories.map((c) => (
+                              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
-                      ) : (
-                        <div className="space-y-2 p-3 border rounded-lg bg-muted/20">
-                          <Label htmlFor="new_supplier_name">Nuevo Proveedor</Label>
-                          <Input
-                            id="new_supplier_name"
-                            placeholder="Nombre del proveedor"
-                            value={newSupplierName}
-                            onChange={(e) => setNewSupplierName(e.target.value)}
-                            disabled={creatingSupplier}
-                          />
-                          <div className="flex gap-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              onClick={handleCreateSupplier}
-                              disabled={creatingSupplier || !newSupplierName.trim()}
-                              className="gap-1"
-                            >
-                              {creatingSupplier ? (
-                                <>
-                                  <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                  Creando...
-                                </>
-                              ) : (
-                                <>
-                                  <Building2 className="h-3 w-3" />
-                                  Crear
-                                </>
-                              )}
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setShowCreateSupplier(false);
-                                setNewSupplierName('');
-                              }}
-                              disabled={creatingSupplier}
-                            >
-                              Cancelar
-                            </Button>
-                          </div>
-                        </div>
+                        <input type="hidden" {...register('category_id', { required: 'Selecciona una categoría' })} />
+                        {errors.category_id && <p className="text-xs text-destructive">{errors.category_id.message}</p>}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Supplier */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="supplier_id" className="text-sm">Proveedor</Label>
+                      {!showCreateSupplier && (
+                        <Button
+                          type="button" variant="ghost" size="sm"
+                          onClick={() => setShowCreateSupplier(true)}
+                          className="h-5 gap-1 px-1 text-xs text-muted-foreground hover:text-foreground"
+                          disabled={loadingData}
+                        >
+                          <Building2 className="h-3 w-3" /> Nuevo
+                        </Button>
                       )}
                     </div>
+                    {showCreateSupplier ? (
+                      <InlineCreate
+                        label="Nuevo proveedor"
+                        placeholder="Nombre proveedor"
+                        value={newSupplierName}
+                        onChange={setNewSupplierName}
+                        onSave={handleCreateSupplier}
+                        onCancel={() => { setShowCreateSupplier(false); setNewSupplierName(''); }}
+                        loading={creatingSupplier}
+                      />
+                    ) : (
+                      <Select
+                        value={watch('supplier_id') || 'none'}
+                        onValueChange={(v) => setValue('supplier_id', v === 'none' ? undefined : v)}
+                        disabled={loadingData}
+                      >
+                        <SelectTrigger className="text-sm">
+                          <SelectValue placeholder={loadingData ? 'Cargando...' : 'Sin proveedor'} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Sin proveedor</SelectItem>
+                          {suppliers.map((s) => (
+                            <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
                   </div>
+                </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="barcode">Código de Barras</Label>
-                    <Input
-                      id="barcode"
-                      placeholder="Ej: 1234567890123"
-                      {...register('barcode')}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
+                {/* Barcode */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="barcode" className="text-sm">Código de Barras</Label>
+                  <Input
+                    id="barcode"
+                    placeholder="Ej: 1234567890123"
+                    className="font-mono text-sm"
+                    {...register('barcode')}
+                  />
+                </div>
+              </section>
 
-              {/* Precios */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <DollarSign className="h-5 w-5" />
-                    Precios
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="sale_price">Precio de Venta *</Label>
+              <Separator />
+
+              {/* ── Prices ── */}
+              <section className="space-y-4">
+                <SectionHeader icon={DollarSign} title="Precios" accent="green" />
+
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Sale price */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="sale_price" className="text-sm">Precio de Venta <span className="text-destructive">*</span></Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">Gs</span>
                       <Input
-                        id="sale_price"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        placeholder="0.00"
-                        {...register('sale_price', { 
-                          required: 'El precio de venta es obligatorio',
-                          min: { value: 0.01, message: 'Debe ser mayor a 0' },
+                        id="sale_price" type="number" min="0" step="1" placeholder="0"
+                        className={cn('pl-8 text-sm', errors.sale_price && 'border-destructive')}
+                        {...register('sale_price', {
+                          required: 'Requerido',
                           validate: {
-                            greaterThanCost: (value) => {
-                              const costPrice = Number(watch('cost_price')) || 0;
-                              const salePrice = Number(value) || 0;
-                              if (costPrice > 0 && salePrice > 0 && costPrice >= salePrice) {
-                                return 'El precio de venta debe ser mayor al precio de costo';
-                              }
-                              return true;
+                            positive: (v) => Number(v) > 0 || 'Debe ser mayor a 0',
+                            greaterThanCost: (v) => {
+                              const c = Number(watch('cost_price')) || 0;
+                              return (c === 0 || Number(v) > c) || 'Debe ser mayor al costo';
                             },
-                            validNumber: (value) => {
-                              const num = Number(value);
-                              if (isNaN(num) || num <= 0) {
-                                return 'Ingresa un precio válido mayor a 0';
-                              }
-                              return true;
-                            }
-                          }
+                          },
                         })}
                       />
-                      {errors.sale_price && (
-                        <p className="text-sm text-destructive">{errors.sale_price.message}</p>
-                      )}
                     </div>
+                    {errors.sale_price && <p className="text-xs text-destructive">{errors.sale_price.message}</p>}
+                  </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="cost_price">Precio de Costo</Label>
+                  {/* Cost price */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cost_price" className="text-sm">Precio de Costo</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">Gs</span>
                       <Input
-                        id="cost_price"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        placeholder="0.00"
+                        id="cost_price" type="number" min="0" step="1" placeholder="0"
+                        className={cn('pl-8 text-sm', errors.cost_price && 'border-destructive')}
                         {...register('cost_price', {
-                          min: { value: 0, message: 'Debe ser mayor o igual a 0' },
                           validate: {
-                            lessThanSale: (value) => {
-                              if (!value) return true; // Campo opcional
-                              const costPrice = Number(value) || 0;
-                              const salePrice = Number(watch('sale_price')) || 0;
-                              if (costPrice > 0 && salePrice > 0 && costPrice >= salePrice) {
-                                return 'El precio de costo debe ser menor al precio de venta';
-                              }
-                              return true;
+                            lessThanSale: (v) => {
+                              if (!v) return true;
+                              const s = Number(watch('sale_price')) || 0;
+                              return (s === 0 || Number(v) < s) || 'Debe ser menor a la venta';
                             },
-                            validNumber: (value) => {
-                              if (!value) return true; // Campo opcional
-                              const num = Number(value);
-                              if (isNaN(num) || num < 0) {
-                                return 'Ingresa un precio válido mayor o igual a 0';
-                              }
-                              return true;
-                            }
-                          }
+                          },
                         })}
                       />
-                      {errors.cost_price && (
-                        <p className="text-sm text-destructive">{errors.cost_price.message}</p>
-                      )}
                     </div>
+                    {errors.cost_price && <p className="text-xs text-destructive">{errors.cost_price.message}</p>}
                   </div>
+                </div>
 
-                  {/* Precio de Oferta */}
-                  <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
-                    <div className="flex items-center space-x-2">
+                {/* Offer price */}
+                <div className="space-y-3 rounded-xl border border-border/50 bg-muted/20 p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
                       <Switch
                         id="has_offer"
                         checked={hasOffer}
-                        onCheckedChange={(checked) => {
-                          setValue('has_offer', checked);
-                          if (!checked) {
-                            setValue('offer_price', 0);
-                          }
-                        }}
+                        onCheckedChange={(v) => { setValue('has_offer', v); if (!v) setValue('offer_price', 0); }}
                       />
-                      <Label htmlFor="has_offer" className="flex items-center gap-2">
-                        <Percent className="h-4 w-4" />
-                        Activar Precio de Oferta
+                      <Label htmlFor="has_offer" className="flex cursor-pointer items-center gap-1.5 text-sm">
+                        <Percent className="h-3.5 w-3.5" /> Precio de Oferta
                       </Label>
                     </div>
-                    
-                    {hasOffer && (
-                      <div className="space-y-2">
-                        <Label htmlFor="offer_price">Precio de Oferta *</Label>
-                        <Input
-                          id="offer_price"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          placeholder="0.00"
-                          {...register('offer_price', {
-                            required: hasOffer ? 'El precio de oferta es obligatorio cuando está activado' : false,
-                            min: { value: 0.01, message: 'Debe ser mayor a 0' },
-                            validate: {
-                              requiredWhenActive: (value) => {
-                                if (hasOffer && (!value || Number(value) <= 0)) {
-                                  return 'El precio de oferta es obligatorio cuando está activado';
-                                }
-                                return true;
-                              },
-                              lessThanSale: (value) => {
-                                if (!hasOffer || !value) return true;
-                                const offerPrice = Number(value) || 0;
-                                const salePrice = Number(watch('sale_price')) || 0;
-                                if (offerPrice > 0 && salePrice > 0 && offerPrice >= salePrice) {
-                                  return 'El precio de oferta debe ser menor al precio de venta';
-                                }
-                                return true;
-                              },
-                              greaterThanCost: (value) => {
-                                if (!hasOffer || !value) return true;
-                                const offerPrice = Number(value) || 0;
-                                const costPrice = Number(watch('cost_price')) || 0;
-                                if (offerPrice > 0 && costPrice > 0 && offerPrice <= costPrice) {
-                                  return 'El precio de oferta debe ser mayor al precio de costo';
-                                }
-                                return true;
-                              },
-                              validNumber: (value) => {
-                                if (!hasOffer || !value) return true;
-                                const num = Number(value);
-                                if (isNaN(num) || num <= 0) {
-                                  return 'Ingresa un precio de oferta válido mayor a 0';
-                                }
-                                return true;
-                              }
-                            }
-                          })}
-                        />
-                        {errors.offer_price && (
-                          <p className="text-sm text-destructive">{errors.offer_price.message}</p>
-                        )}
-                        {(() => {
-                          const salePrice = Number(watch('sale_price')) || 0;
-                          const offerPrice = Number(watch('offer_price')) || 0;
-                          if (salePrice > 0 && offerPrice > 0) {
-                            const discount = ((salePrice - offerPrice) / salePrice * 100).toFixed(1);
-                            const savings = (salePrice - offerPrice).toFixed(2);
-                            return (
-                              <div className="text-xs space-y-1">
-                                <p className="text-muted-foreground">
-                                  Descuento: {discount}%
-                                </p>
-                                <p className="text-muted-foreground">
-                                  Ahorro: ${savings}
-                                </p>
-                              </div>
-                            );
-                          }
-                          return null;
-                        })()}
-                      </div>
+                    {hasOffer && salePrice > 0 && offerPrice > 0 && offerPrice < salePrice && (
+                      <Badge variant="secondary" className="border-amber-200 bg-amber-50 text-amber-700 text-xs dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
+                        -{((1 - offerPrice / salePrice) * 100).toFixed(0)}% desc.
+                      </Badge>
                     )}
                   </div>
+                  {hasOffer && (
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">Gs</span>
+                      <Input
+                        id="offer_price" type="number" min="0" step="1" placeholder="0"
+                        className={cn('pl-8 text-sm', errors.offer_price && 'border-destructive')}
+                        {...register('offer_price', {
+                          validate: {
+                            requiredWhenActive: (v) => !hasOffer || Number(v) > 0 || 'Ingresa el precio de oferta',
+                            lessThanSale: (v) => {
+                              if (!hasOffer || !v) return true;
+                              return Number(v) < salePrice || 'Debe ser menor al precio de venta';
+                            },
+                          },
+                        })}
+                      />
+                    </div>
+                  )}
+                  {errors.offer_price && <p className="text-xs text-destructive">{errors.offer_price.message}</p>}
+                </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="wholesale_price">Precio Mayorista</Label>
+                {/* Wholesale price */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="wholesale_price" className="text-sm">Precio Mayorista</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">Gs</span>
                     <Input
-                      id="wholesale_price"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="0.00"
+                      id="wholesale_price" type="number" min="0" step="1" placeholder="0"
+                      className={cn('pl-8 text-sm', errors.wholesale_price && 'border-destructive')}
                       {...register('wholesale_price', {
-                        min: { value: 0, message: 'Debe ser mayor o igual a 0' },
                         validate: {
-                          greaterThanCost: (value) => {
-                            if (!value) return true; // Campo opcional
-                            const wholesalePrice = Number(value) || 0;
-                            const costPrice = Number(watch('cost_price')) || 0;
-                            if (wholesalePrice > 0 && costPrice > 0 && wholesalePrice <= costPrice) {
-                              return 'El precio mayorista debe ser mayor al precio de costo';
-                            }
+                          range: (v) => {
+                            if (!v || Number(v) === 0) return true;
+                            const w = Number(v);
+                            if (costPrice > 0 && w <= costPrice) return 'Debe ser mayor al costo';
+                            if (salePrice > 0 && w >= salePrice) return 'Debe ser menor a la venta';
                             return true;
                           },
-                          lessThanSale: (value) => {
-                            if (!value) return true; // Campo opcional
-                            const wholesalePrice = Number(value) || 0;
-                            const salePrice = Number(watch('sale_price')) || 0;
-                            if (wholesalePrice > 0 && salePrice > 0 && wholesalePrice >= salePrice) {
-                              return 'El precio mayorista debe ser menor al precio de venta';
-                            }
-                            return true;
-                          },
-                          validNumber: (value) => {
-                            if (!value) return true; // Campo opcional
-                            const num = Number(value);
-                            if (isNaN(num) || num < 0) {
-                              return 'Ingresa un precio mayorista válido mayor o igual a 0';
-                            }
-                            return true;
-                          },
-                          logicalRange: (value) => {
-                            if (!value) return true;
-                            const wholesalePrice = Number(value) || 0;
-                            const costPrice = Number(watch('cost_price')) || 0;
-                            const salePrice = Number(watch('sale_price')) || 0;
-                            
-                            // El precio mayorista debe estar entre el costo y la venta
-                            if (wholesalePrice > 0 && costPrice > 0 && salePrice > 0) {
-                              if (wholesalePrice <= costPrice || wholesalePrice >= salePrice) {
-                                return 'El precio mayorista debe estar entre el costo y la venta';
-                              }
-                            }
-                            return true;
-                          }
-                        }
+                        },
                       })}
                     />
-                    {errors.wholesale_price && (
-                      <p className="text-sm text-destructive">{errors.wholesale_price.message}</p>
-                    )}
-
                   </div>
+                  {errors.wholesale_price && <p className="text-xs text-destructive">{errors.wholesale_price.message}</p>}
+                </div>
 
-                  {/* Resumen de Precios */}
-                  {(() => {
-                    const costPrice = Number(watch('cost_price')) || 0;
-                    const salePrice = Number(watch('sale_price')) || 0;
-                    const offerPrice = Number(watch('offer_price')) || 0;
-                    const wholesalePrice = Number(watch('wholesale_price')) || 0;
-                    
-                    if (costPrice > 0 || salePrice > 0 || offerPrice > 0 || wholesalePrice > 0) {
-                      return (
-                        <div className="p-3 bg-muted/30 rounded-lg">
-                          <h4 className="text-sm font-medium mb-2">Resumen de Precios</h4>
-                          <div className="grid grid-cols-2 gap-2 text-xs">
-                            {costPrice > 0 && (
-                              <div>Costo: <span className="font-medium">${costPrice.toFixed(2)}</span></div>
-                            )}
-                            {salePrice > 0 && (
-                              <div>Venta: <span className="font-medium">${salePrice.toFixed(2)}</span></div>
-                            )}
-                            {offerPrice > 0 && hasOffer && (
-                              <div>Oferta: <span className="font-medium text-orange-600">${offerPrice.toFixed(2)}</span></div>
-                            )}
-                            {wholesalePrice > 0 && (
-                              <div>Mayorista: <span className="font-medium text-blue-600">${wholesalePrice.toFixed(2)}</span></div>
-                            )}
-                            {costPrice > 0 && salePrice > 0 && (
-                              <div className="col-span-2 pt-1 border-t">
-                                Margen: <span className="font-medium text-green-600">
-                                  {((salePrice - costPrice) / costPrice * 100).toFixed(1)}%
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    }
-                    return null;
-                  })()}
-                </CardContent>
-              </Card>
+                <PriceSummary
+                  cost={costPrice} sale={salePrice}
+                  offer={offerPrice} wholesale={wholesalePrice}
+                  hasOffer={hasOffer}
+                />
+              </section>
 
-              {/* Inventario */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Package className="h-5 w-5" />
-                    Inventario
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="stock_quantity">Stock Actual *</Label>
+              <Separator />
+
+              {/* ── Inventory ── */}
+              <section className="space-y-4">
+                <SectionHeader icon={Boxes} title="Inventario" accent="orange" />
+
+                <div className="grid grid-cols-3 gap-4">
+                  {[
+                    { id: 'stock_quantity', label: 'Stock Actual', required: true, default: '0' },
+                    { id: 'min_stock', label: 'Stock Mínimo', required: true, default: '5' },
+                    { id: 'max_stock', label: 'Stock Máximo', required: false, default: '100' },
+                  ].map(({ id, label, required, default: def }) => (
+                    <div key={id} className="space-y-1.5">
+                      <Label htmlFor={id} className="text-sm">
+                        {label} {required && <span className="text-destructive">*</span>}
+                      </Label>
                       <Input
-                        id="stock_quantity"
-                        type="number"
-                        min="0"
-                        placeholder="0"
-                        {...register('stock_quantity', { 
-                          required: 'El stock actual es obligatorio',
-                          min: { value: 0, message: 'Debe ser mayor o igual a 0' }
-                        })}
-                      />
-                      {errors.stock_quantity && (
-                        <p className="text-sm text-destructive">{errors.stock_quantity.message}</p>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="min_stock">Stock Mínimo *</Label>
-                      <Input
-                        id="min_stock"
-                        type="number"
-                        min="0"
-                        placeholder="5"
-                        {...register('min_stock', { 
-                          required: 'El stock mínimo es obligatorio',
-                          min: { value: 0, message: 'Debe ser mayor o igual a 0' }
-                        })}
-                      />
-                      {errors.min_stock && (
-                        <p className="text-sm text-destructive">{errors.min_stock.message}</p>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="max_stock">Stock Máximo</Label>
-                      <Input
-                        id="max_stock"
-                        type="number"
-                        min="0"
-                        placeholder="100"
-                        {...register('max_stock')}
+                        id={id} type="number" min="0" placeholder={def}
+                        className="text-sm"
+                        {...register(id as keyof ProductFormData, required ? {
+                          required: 'Requerido',
+                          min: { value: 0, message: '≥ 0' },
+                        } : { min: { value: 0, message: '≥ 0' } })}
                       />
                     </div>
-                  </div>
-
-                  {/* Estado Activo */}
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="is_active"
-                      checked={isActive}
-                      onCheckedChange={(checked) => setValue('is_active', checked)}
-                    />
-                    <Label htmlFor="is_active">Producto activo</Label>
-                  </div>
-                </CardContent>
-              </Card>
+                  ))}
+                </div>
+              </section>
             </div>
-          </div>
+          </form>
+        </div>
 
-          {/* Alertas de Validación */}
-          {Object.keys(errors).length > 0 && (
-            <Alert variant="destructive">
+        {/* ── Footer ── */}
+        <div className="flex-shrink-0 border-t border-border/50 bg-card px-6 py-4">
+          {hasErrors && (
+            <Alert variant="destructive" className="mb-3 py-2">
               <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>
-                Por favor corrige los errores en el formulario antes de continuar.
+              <AlertDescription className="text-xs">
+                Corrige los errores antes de continuar.
               </AlertDescription>
             </Alert>
           )}
-
-          {/* Acciones */}
-          <div className="flex items-center justify-end space-x-2 pt-4 border-t">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={loading}
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="submit"
-              disabled={loading}
-              className="gap-2"
-            >
-              {loading ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Guardando...
-                </>
-              ) : (
-                <>
-                  <Save className="h-4 w-4" />
-                  {product ? 'Actualizar' : 'Crear'} Producto
-                </>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              {pendingFile && !uploading && (
+                <><ImageOff className="h-3.5 w-3.5" /> Imagen pendiente de guardar</>
               )}
-            </Button>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={loading}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit" form="product-form" disabled={loading || uploading}
+                className="min-w-[130px] gap-2"
+              >
+                {loading ? (
+                  <><div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> Guardando...</>
+                ) : (
+                  <><Save className="h-4 w-4" />{product ? 'Actualizar' : 'Crear'} Producto</>
+                )}
+              </Button>
+            </div>
           </div>
-        </form>
+        </div>
       </DialogContent>
     </Dialog>
   );

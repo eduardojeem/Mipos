@@ -2,12 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useErrorRecovery } from '@/hooks/use-error-recovery';
 import { customerService, type CustomerFilters, type CustomerStats } from '@/lib/customer-service';
 import { useCustomerOptimizations } from '@/hooks/useCustomerOptimizations';
-import { logger } from '@/lib/logger';
 import { PERFORMANCE_CONFIG } from '@/config/performance';
-import { supabase } from '@/lib/supabase/client';
-import { customersApi } from '../api/customers-api';
 import { createLogger } from '@/lib/logger';
-import type { Customer } from '@/types';
 import type { UICustomer } from '@/types/customer-page';
 
 export interface UseCustomersDataConfig {
@@ -69,28 +65,6 @@ export function useCustomersData(config: UseCustomersDataConfig): UseCustomersDa
 
     const errorRecovery = useErrorRecovery();
     const { getCachedData, setCachedData, createCacheKey } = useCustomerOptimizations();
-
-    const mapCustomerType = (type: string): 'regular' | 'vip' | 'wholesale' => {
-        const normalized = type?.toUpperCase();
-        if (normalized === 'WHOLESALE') return 'wholesale';
-        if (normalized === 'VIP') return 'vip';
-        return 'regular';
-    };
-
-    const mapToUICustomer = (customer: Customer): UICustomer => {
-        return {
-            ...customer,
-            customerCode: customer.customer_code,
-            customerType: mapCustomerType(customer.customer_type),
-            totalSpent: customer.total_purchases || 0,
-            totalOrders: 0, // This might need to be fetched or calculated if available
-            lastPurchase: customer.last_purchase,
-            birthDate: customer.birth_date,
-            notes: customer.notes,
-            created_at: customer.created_at,
-            updated_at: customer.updated_at
-        };
-    };
 
     const { search, status, type } = filters || {} as CustomerFilters;
     const sortBy = (filters as any)?.sortBy;

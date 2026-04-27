@@ -111,7 +111,8 @@ router.get('/', validateQuery(enhancedQuerySchema), asyncHandler(async (req, res
         createdAt: true,
         updatedAt: true,
         totalPurchases: true,
-        last_purchase: true,
+        totalOrders: true,
+        lastPurchase: true,
         _count: {
           select: {
             sales: true
@@ -135,6 +136,7 @@ router.get('/', validateQuery(enhancedQuerySchema), asyncHandler(async (req, res
     _sum: {
       total: true
     },
+    _count: true,
     _max: {
       date: true
     }
@@ -146,6 +148,7 @@ router.get('/', validateQuery(enhancedQuerySchema), asyncHandler(async (req, res
       stat.customerId,
       {
         totalSpent: stat._sum.total || 0,
+        totalOrders: stat._count || 0,
         lastPurchaseDate: stat._max.date
       }
     ])
@@ -154,7 +157,8 @@ router.get('/', validateQuery(enhancedQuerySchema), asyncHandler(async (req, res
   // Combinar datos de clientes con estadísticas
   const customersWithStats = customers.map(customer => ({
     ...customer,
-    totalSpent: statsMap.get(customer.id)?.totalSpent || 0,
+    totalSpent: statsMap.get(customer.id)?.totalSpent || customer.totalPurchases || 0,
+    totalOrders: statsMap.get(customer.id)?.totalOrders || customer.totalOrders || 0,
     lastPurchaseDate: statsMap.get(customer.id)?.lastPurchaseDate || customer.lastPurchase
   }));
 
@@ -217,13 +221,13 @@ router.post('/sync-statistics', asyncHandler(async (req: AuthenticatedRequest, r
 
       // Only update if there are changes
       if (customer.totalPurchases !== totalPurchases || 
-          customer.last_purchase?.getTime() !== lastPurchase?.getTime()) {
+          customer.lastPurchase?.getTime() !== lastPurchase?.getTime()) {
         
         await prisma.customer.update({
           where: { id: customer.id },
           data: {
             totalPurchases,
-            last_purchase: lastPurchase
+            lastPurchase: lastPurchase
           }
         });
         updatedCount++;
@@ -266,7 +270,7 @@ router.get('/analytics', asyncHandler(async (req: AuthenticatedRequest, res) => 
       prisma.customer.count({
         where: {
           isActive: true,
-          last_purchase: {
+          lastPurchase: {
             gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
           }
         }
@@ -292,7 +296,7 @@ router.get('/analytics', asyncHandler(async (req: AuthenticatedRequest, res) => 
           id: true,
           name: true,
           totalPurchases: true,
-          last_purchase: true,
+          lastPurchase: true,
           _count: { select: { sales: true } }
         }
       }),

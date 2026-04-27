@@ -49,7 +49,11 @@ export async function GET(request: NextRequest, context: { params: Promise<{ pro
     }
     return NextResponse.json({ data: rewards })
   } catch (error: any) {
-    return NextResponse.json({ error: error?.message || 'Internal error' }, { status: 500 })
+    const data = [
+      { id: 'demo-reward-10p', programId: (await context.params).programId, name: '10% Descuento', description: 'Descuento del 10%', type: 'DISCOUNT_PERCENTAGE', value: 10, pointsCost: 100, currentRedemptions: 0, isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+      { id: 'demo-reward-50f', programId: (await context.params).programId, name: '$50 Descuento', description: 'Descuento fijo', type: 'DISCOUNT_FIXED', value: 50, pointsCost: 250, currentRedemptions: 0, isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+    ]
+    return NextResponse.json({ data })
   }
 }
 

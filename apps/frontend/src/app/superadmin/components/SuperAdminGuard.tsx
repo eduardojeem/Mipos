@@ -1,11 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Shield, AlertTriangle, ArrowLeft } from 'lucide-react';
+import { Shield } from 'lucide-react';
 
 interface SuperAdminGuardProps {
   children: React.ReactNode;
@@ -15,46 +14,14 @@ interface SuperAdminGuardProps {
 export function SuperAdminGuard({ children, fallback }: SuperAdminGuardProps) {
   const { user, loading } = useAuth();
   const router = useRouter();
-  const [permLoading, setPermLoading] = useState(false);
-  const [isSuperAdmin, setIsSuperAdmin] = useState<boolean | null>(null);
 
   useEffect(() => {
-    if (!loading && !user) {
-      router.push('/auth/signin');
-    }
-  }, [user, loading, router]);
+    if (!loading && !user) router.push('/auth/signin');
+  }, [loading, user, router]);
 
-  useEffect(() => {
-    if (!loading && user) {
-      // Short-circuit: si ya tenemos rol SUPER_ADMIN desde Auth, no consultar API
-      if (String(user.role || '').toUpperCase() === 'SUPER_ADMIN') {
-        setIsSuperAdmin(true);
-        return;
-      }
-
-      setPermLoading(true);
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
-
-      fetch('/api/superadmin/me', { signal: controller.signal })
-        .then(async (r) => {
-          const j = await r.json();
-          if (r.ok && j && typeof j.isSuperAdmin === 'boolean') {
-            setIsSuperAdmin(j.isSuperAdmin);
-          } else {
-            setIsSuperAdmin(false);
-          }
-        })
-        .catch(() => setIsSuperAdmin(false))
-        .finally(() => {
-          clearTimeout(timeoutId);
-          setPermLoading(false);
-        });
-    }
-  }, [loading, user]);
-
-  // Mostrar loading mientras se verifica la autenticación
-  if (loading || permLoading || isSuperAdmin === null) {
+  // Server-first: el rol se valida en el layout server-side.
+  // Este guard solo evita flashes cuando no hay sesión.
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800">
         <Card className="w-96">
@@ -62,10 +29,8 @@ export function SuperAdminGuard({ children, fallback }: SuperAdminGuardProps) {
             <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center mx-auto mb-4">
               <Shield className="h-8 w-8 text-white animate-pulse" />
             </div>
-            <h3 className="text-lg font-semibold mb-2">Verificando permisos...</h3>
-            <p className="text-slate-500 dark:text-slate-400">
-              Validando acceso de super administrador
-            </p>
+            <h3 className="text-lg font-semibold mb-2">Cargando sesión...</h3>
+            <p className="text-slate-500 dark:text-slate-400">Preparando el panel</p>
             <div className="mt-4">
               <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-600 mx-auto"></div>
             </div>
@@ -78,45 +43,6 @@ export function SuperAdminGuard({ children, fallback }: SuperAdminGuardProps) {
   // Si no hay usuario, no mostrar nada (se redirigirá)
   if (!user) {
     return null;
-  }
-
-  // Verificar si es super admin
-  const userRole = user.role;
-
-  if (!isSuperAdmin) {
-    if (fallback) {
-      return <>{fallback}</>;
-    }
-
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-slate-800">
-        <Card className="w-96">
-          <CardContent className="p-8 text-center">
-            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-red-500 to-orange-500 flex items-center justify-center mx-auto mb-4">
-              <AlertTriangle className="h-8 w-8 text-white" />
-            </div>
-            <h3 className="text-lg font-semibold mb-2 text-red-600 dark:text-red-400">
-              Acceso Denegado
-            </h3>
-            <p className="text-slate-600 dark:text-slate-400 mb-6">
-              No tienes permisos de super administrador para acceder a esta sección.
-            </p>
-            <div className="space-y-3">
-              <Button 
-                onClick={() => router.push('/dashboard')}
-                className="w-full gap-2"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Volver al Dashboard
-              </Button>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Rol actual: {userRole || 'No definido'}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
   }
 
   return <>{children}</>;

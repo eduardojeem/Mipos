@@ -4,6 +4,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { useConfirmationDialog } from '@/components/ui/confirmation-dialog';
 import { useCurrencyFormatter } from '@/contexts/BusinessConfigContext';
 import api from '@/lib/api';
+import { MAX_CASH_OPENING_AMOUNT } from '@/lib/cash/constants';
 import { triggerCashSaasSync } from '@/lib/sync/cash-saas';
 import type { CashSession } from '@/types/cash';
 import type { CashMutationPayload, CashSummary, LoadingStates } from '../types/cash.types';
@@ -23,15 +24,11 @@ interface UseCashMutationsOptions {
 interface UseCashMutationsReturn {
     loadingStates: LoadingStates;
     handleOpenSession: (amount: number, notes?: string) => void;
-    requestCloseSession: (amount: number) => void;
+    requestCloseSession: (payload: { closingAmount: number; notes?: string }) => void;
     requestRegisterMovement: (payload: CashMutationPayload) => void;
     ConfirmationDialog: () => React.JSX.Element;
 }
 
-/**
- * Hook for cash mutations (open, close, register movement)
- * Handles all mutation logic with confirmations and validations
- */
 export function useCashMutations(options: UseCashMutationsOptions): UseCashMutationsReturn {
     const { session, summary, onSuccess } = options;
     const queryClient = useQueryClient();
@@ -46,7 +43,10 @@ export function useCashMutations(options: UseCashMutationsOptions): UseCashMutat
         fetchingData: false,
     });
 
-    // Open session mutation
+    const availableBalance =
+        session?.summary?.expectedCash ??
+        Number(session?.openingAmount || 0) + Number(summary.balance || 0);
+
     const openSessionMutation = useMutation({
         mutationFn: async ({ amount, notes }: { amount: number; notes?: string }) => {
             const res = await api.post('/cash/session/open', {
@@ -56,27 +56,34 @@ export function useCashMutations(options: UseCashMutationsOptions): UseCashMutat
             return res.data;
         },
         onSuccess: async () => {
-            await queryClient.invalidateQueries({ queryKey: ['cashSession'] });
+            await Promise.all([
+                queryClient.refetchQueries({ queryKey: ['cashSession'], type: 'all' }),
+                queryClient.refetchQueries({ queryKey: ['cashSessions'], type: 'all' }),
+                queryClient.invalidateQueries({ queryKey: ['cashMovements'] }),
+            ]);
             onSuccess?.();
         },
     });
 
-    // Close session mutation
     const closeSessionMutation = useMutation({
-        mutationFn: async (amount: number) => {
+        mutationFn: async ({ amount, notes }: { amount: number; notes?: string }) => {
             const res = await api.post('/cash/session/close', {
                 closingAmount: amount,
-                notes: 'Cierre de caja',
+                notes: notes || 'Cierre de caja',
+                systemExpected: availableBalance,
             });
             return res.data;
         },
         onSuccess: async () => {
-            await queryClient.invalidateQueries({ queryKey: ['cashSession'] });
+            await Promise.all([
+                queryClient.refetchQueries({ queryKey: ['cashSession'], type: 'all' }),
+                queryClient.refetchQueries({ queryKey: ['cashSessions'], type: 'all' }),
+                queryClient.invalidateQueries({ queryKey: ['cashMovements'] }),
+            ]);
             onSuccess?.();
         },
     });
 
-    // Register movement mutation
     const registerMovementMutation = useMutation({
         mutationFn: async ({ amount, type, reason }: { amount: number; type: string; reason?: string }) => {
             const res = await api.post('/cash/movements', {
@@ -88,106 +95,150 @@ export function useCashMutations(options: UseCashMutationsOptions): UseCashMutat
             return res.data;
         },
         onSuccess: async () => {
-            // Invalidate and refetch to ensure UI updates
             await Promise.all([
-                queryClient.invalidateQueries({ queryKey: ['cashMovements', session?.id] }),
+                queryClient.invalidateQueries({ queryKey: ['cashMovements'] }),
                 queryClient.invalidateQueries({ queryKey: ['cashSession'] }),
+                queryClient.invalidateQueries({ queryKey: ['cashSessions'] }),
             ]);
-            // Force refetch
-            await queryClient.refetchQueries({ queryKey: ['cashMovements', session?.id] });
+            await queryClient.refetchQueries({ queryKey: ['cashMovements'] });
             onSuccess?.();
         },
     });
 
-    // Open session handler
     const performOpenSession = useCallback(
         async (amount: number, notes?: string) => {
             try {
                 setLoadingStates((prev) => ({ ...prev, openingSession: true }));
                 if (amount < 0) throw new Error('El monto debe ser positivo');
-                if (amount > 1000000) throw new Error('Monto de apertura demasiado alto');
+                if (amount > MAX_CASH_OPENING_AMOUNT) throw new Error('Monto de apertura demasiado alto');
                 await openSessionMutation.mutateAsync({ amount, notes });
-                toast({ description: 'Sesión de caja abierta exitosamente' });
-                // Disparar sincronización SaaS con payload
+                toast({ description: 'Sesion de caja abierta exitosamente' });
                 triggerCashSaasSync('open', { amount, notes, createdAt: new Date().toISOString() });
             } catch (e: unknown) {
                 const error = e as any;
-                console.error('Error opening session:', error);
                 const status = error?.response?.status;
                 const srv = error?.response?.data || {};
-                const msg = srv?.error || srv?.message || error?.message || 'Error abriendo sesión';
+                const msg = srv?.error || srv?.message || error?.message || 'Error abriendo sesion';
                 const details = srv?.details;
 
-                if (status === 400 && (msg?.toLowerCase?.().includes('organization') || msg?.toLowerCase?.().includes('header'))) {
-                    toast({ description: 'Falta seleccionar organización. Ve al selector de organización y elige una antes de abrir caja.', variant: 'destructive' });
-                }
-                if (status === 403 && (msg?.toLowerCase?.().includes('rls') || msg?.toLowerCase?.().includes('permission'))) {
+                const normalizedMessage = String(msg || '').toLowerCase();
+                if (status === 400 && (normalizedMessage.includes('organization') || normalizedMessage.includes('header'))) {
+                    toast({ description: 'Falta seleccionar organizacion antes de abrir caja.', variant: 'destructive' });
+                } else if (
+                    (status === 400 || status === 409) &&
+                    (
+                        normalizedMessage.includes('already') ||
+                        normalizedMessage.includes('open cash session') ||
+                        normalizedMessage.includes('ya existe') ||
+                        normalizedMessage.includes('sesion de caja abierta') ||
+                        normalizedMessage.includes('contexto operativo')
+                    )
+                ) {
+                    const conflict = srv?.conflict;
+                    const scopeLabel =
+                        conflict?.scope === 'POS'
+                            ? `POS ${conflict?.posId || ''}`.trim()
+                            : conflict?.scope === 'BRANCH'
+                                ? `sucursal ${conflict?.branchId || ''}`.trim()
+                                : 'contexto global';
+                    const openedAtLabel = conflict?.openedAt
+                        ? ` Abierta desde ${new Date(conflict.openedAt).toLocaleString()}.`
+                        : '';
+
                     showConfirmation({
-                        title: 'Permiso denegado por RLS',
-                        description: 'Tu usuario no tiene permisos para insertar en cash_sessions según las políticas RLS.',
+                        title: 'Ya existe una caja abierta',
+                        description: `Hay una sesión de caja abierta para ${scopeLabel}.${openedAtLabel}\n\n¿Deseas cerrar la sesión anterior y abrir una nueva?`,
+                        confirmText: 'Cerrar anterior y abrir nueva',
+                        cancelText: 'Cancelar',
+                        variant: 'warning',
+                        onConfirm: async () => {
+                            try {
+                                setLoadingStates((prev) => ({ ...prev, openingSession: true }));
+                                // Force close all open sessions
+                                await api.post('/cash/session/force-close', {
+                                    notes: 'Cierre forzado para reabrir caja',
+                                });
+                                // Wait for DB to settle
+                                await new Promise((r) => setTimeout(r, 300));
+                                // Now open the new session
+                                await openSessionMutation.mutateAsync({ amount, notes });
+                                // Force refetch ALL cashSession queries (including validation)
+                                await queryClient.refetchQueries({ queryKey: ['cashSession'], type: 'all' });
+                                await queryClient.refetchQueries({ queryKey: ['cashSessions'], type: 'all' });
+                                toast({ description: 'Caja anterior cerrada y nueva sesión abierta exitosamente' });
+                                triggerCashSaasSync('open', { amount, notes, createdAt: new Date().toISOString() });
+                                onSuccess?.();
+                            } catch (forceError: any) {
+                                const forceSrv = forceError?.response?.data || {};
+                                const forceMsg = forceSrv?.error || forceSrv?.message || forceError?.message || 'Error al forzar cierre';
+                                toast({ description: forceMsg, variant: 'destructive' });
+                                // Refetch anyway to sync state
+                                queryClient.refetchQueries({ queryKey: ['cashSession'], type: 'all' });
+                            } finally {
+                                setLoadingStates((prev) => ({ ...prev, openingSession: false }));
+                            }
+                        },
+                    });
+                } else if (status === 403 && (msg?.toLowerCase?.().includes('rls') || msg?.toLowerCase?.().includes('permission'))) {
+                    showConfirmation({
+                        title: 'Permiso denegado',
+                        description: 'Tu usuario no tiene permisos para abrir caja.',
                         confirmText: 'Entendido',
                         cancelText: 'Cerrar',
                         variant: 'info',
                         onConfirm: () => { },
                     });
                 } else {
-                    const text = details ? `${msg}: ${details}` : msg;
-                    toast({ description: text, variant: 'destructive' });
+                    toast({ description: details ? `${msg}: ${details}` : msg, variant: 'destructive' });
                 }
             } finally {
                 setLoadingStates((prev) => ({ ...prev, openingSession: false }));
             }
         },
-        [openSessionMutation, toast, showConfirmation]
+        [openSessionMutation, showConfirmation, toast]
     );
 
     const handleOpenSession = useCallback(
         (amount: number, notes?: string) => {
-            showConfirmation({
-                title: 'Confirmar apertura de caja',
-                description: `Se abrirá la sesión con monto inicial: ${fmtCurrency(amount)}${notes ? `\nNotas: ${notes}` : ''}. ¿Deseas continuar?`,
-                confirmText: 'Abrir caja',
-                cancelText: 'Cancelar',
-                variant: 'warning',
-                onConfirm: () => performOpenSession(amount, notes),
-            });
+            performOpenSession(amount, notes);
         },
-        [performOpenSession, showConfirmation, fmtCurrency]
+        [performOpenSession]
     );
 
-    // Close session handler
     const performCloseSession = useCallback(
-        async (amount: number) => {
+        async ({ closingAmount, notes }: { closingAmount: number; notes?: string }) => {
             try {
                 setLoadingStates((prev) => ({ ...prev, closingSession: true }));
-                if (!Number.isFinite(amount)) throw new Error('El monto de cierre es inválido');
-                if (amount < 0) throw new Error('El monto debe ser positivo');
-                const isOpen = ((session?.status || '') as string).toUpperCase() === 'OPEN';
-                if (!session?.id || !isOpen) throw new Error('No hay sesión abierta');
+                if (!Number.isFinite(closingAmount)) throw new Error('El monto de cierre es invalido');
+                if (closingAmount < 0) throw new Error('El monto debe ser positivo');
+                const isOpen = String(session?.status || '').toUpperCase() === 'OPEN';
+                if (!session?.id || !isOpen) throw new Error('No hay sesion abierta');
 
-                const expectedBalance = summary.balance;
-                const difference = Math.abs(amount - expectedBalance);
+                const difference = Math.abs(closingAmount - availableBalance);
                 if (difference > 0) {
                     toast({
                         description: `Diferencia respecto al balance esperado: ${fmtCurrency(difference)}`,
-                        variant: difference > Math.max(100000, expectedBalance * 0.5) ? 'destructive' : 'default',
+                        variant: difference > Math.max(100000, availableBalance * 0.5) ? 'destructive' : 'default',
                     });
                 }
 
-                await closeSessionMutation.mutateAsync(amount);
-                toast({ description: 'Sesión de caja cerrada exitosamente' });
-                // Disparar sincronización SaaS con payload
-                triggerCashSaasSync('close', { amount, sessionId: session?.id, createdAt: new Date().toISOString() });
+                await closeSessionMutation.mutateAsync({ amount: closingAmount, notes });
+                toast({ description: 'Sesion de caja cerrada exitosamente' });
+                triggerCashSaasSync('close', {
+                    amount: closingAmount,
+                    notes,
+                    sessionId: session?.id,
+                    createdAt: new Date().toISOString(),
+                });
             } catch (e: unknown) {
                 const error = e as any;
-                console.error('Error closing session:', error);
                 const status = error?.response?.status;
                 const srv = error?.response?.data || {};
-                const msg = srv?.error || srv?.message || error?.message || 'Error cerrando sesión';
+                const msg = srv?.error || srv?.message || error?.message || 'Error cerrando sesion';
                 if (status === 400 && (msg?.toLowerCase?.().includes('organization') || msg?.toLowerCase?.().includes('header'))) {
-                    toast({ description: 'Falta seleccionar organización. Usa el selector de organización antes de cerrar caja.', variant: 'destructive' });
+                    toast({ description: 'Falta seleccionar organizacion antes de cerrar caja.', variant: 'destructive' });
                 } else if (status === 404 && msg?.toLowerCase?.().includes('no open session')) {
-                    toast({ description: 'No hay sesión de caja abierta en tu organización. Ábrela primero.', variant: 'destructive' });
+                    toast({ description: 'No hay sesion de caja abierta en tu organizacion.', variant: 'destructive' });
                 } else {
                     toast({ description: msg, variant: 'destructive' });
                 }
@@ -195,63 +246,61 @@ export function useCashMutations(options: UseCashMutationsOptions): UseCashMutat
                 setLoadingStates((prev) => ({ ...prev, closingSession: false }));
             }
         },
-        [closeSessionMutation, session, summary.balance, fmtCurrency, toast]
+        [availableBalance, closeSessionMutation, fmtCurrency, session?.id, session?.status, toast]
     );
 
     const requestCloseSession = useCallback(
-        (amount: number) => {
-            const expectedBalance = summary.balance;
-            const difference = Math.abs(amount - expectedBalance);
-            const highDifference = difference > Math.max(100000, expectedBalance * 0.5);
-            const baseDesc = `Monto de cierre: ${fmtCurrency(amount)}\nBalance esperado: ${fmtCurrency(expectedBalance)}\nDiferencia: ${fmtCurrency(difference)}`;
+        ({ closingAmount, notes }: { closingAmount: number; notes?: string }) => {
+            const difference = Math.abs(closingAmount - availableBalance);
+            const highDifference = difference > Math.max(100000, availableBalance * 0.5);
+            const baseDesc =
+                `Monto de cierre: ${fmtCurrency(closingAmount)}\n` +
+                `Balance esperado: ${fmtCurrency(availableBalance)}\n` +
+                `Diferencia: ${fmtCurrency(difference)}`;
 
             showConfirmation({
                 title: highDifference ? 'Diferencia alta al cerrar caja' : 'Confirmar cierre de caja',
-                description: `${baseDesc}\n\n${highDifference ? 'Esta diferencia es elevada. Si confirmas, se registrará igualmente el cierre.' : '¿Deseas continuar con el cierre?'}`,
+                description: `${baseDesc}${notes ? `\nNotas: ${notes}` : ''}\n\n${highDifference ? 'Esta diferencia es elevada. Si confirmas, se registrara igualmente el cierre.' : 'Deseas continuar con el cierre?'}`,
                 confirmText: highDifference ? 'Cerrar de todos modos' : 'Cerrar caja',
                 cancelText: 'Cancelar',
                 variant: highDifference ? 'warning' : 'default',
-                onConfirm: () => performCloseSession(amount),
+                onConfirm: () => performCloseSession({ closingAmount, notes }),
             });
         },
-        [performCloseSession, showConfirmation, fmtCurrency, summary.balance]
+        [availableBalance, fmtCurrency, performCloseSession, showConfirmation]
     );
 
-    // Register movement handler
     const performRegisterMovement = useCallback(
         async (payload: CashMutationPayload) => {
             try {
                 setLoadingStates((prev) => ({ ...prev, registeringMovement: true }));
 
                 if (!session?.id) {
-                    throw new Error('No hay sesión abierta');
+                    throw new Error('No hay sesion abierta');
                 }
 
                 const amount = Number(payload.amount || 0);
 
-                // Use shared validation function
                 try {
                     validateMovementAmount(amount, payload.type as any);
                 } catch (validationError: any) {
                     throw new Error(validationError.message);
                 }
 
-                // Additional validations for balance
-                if (payload.type === MOVEMENT_TYPES.OUT && Math.abs(amount) > summary.balance) {
+                if (payload.type === MOVEMENT_TYPES.OUT && Math.abs(amount) > availableBalance) {
                     throw new Error('No hay suficiente saldo en caja para este egreso');
                 }
 
                 if (payload.type === MOVEMENT_TYPES.ADJUSTMENT) {
                     if (!payload.direction) {
-                        throw new Error('Debe especificar la dirección del ajuste');
+                        throw new Error('Debe especificar la direccion del ajuste');
                     }
 
-                    if (payload.direction === MOVEMENT_DIRECTION.DECREASE && Math.abs(amount) > summary.balance) {
+                    if (payload.direction === MOVEMENT_DIRECTION.DECREASE && Math.abs(amount) > availableBalance) {
                         throw new Error('El ajuste negativo no puede exceder el saldo actual');
                     }
                 }
 
-                // Normalize amount using shared function
                 const normalizedAmount = normalizeMovementAmount(
                     amount,
                     payload.type as any,
@@ -265,7 +314,6 @@ export function useCashMutations(options: UseCashMutationsOptions): UseCashMutat
                 });
 
                 toast({ description: 'Movimiento registrado exitosamente' });
-                // Disparar sincronización SaaS con payload
                 triggerCashSaasSync('movement', {
                     amount: normalizedAmount,
                     type: payload.type,
@@ -275,14 +323,13 @@ export function useCashMutations(options: UseCashMutationsOptions): UseCashMutat
                 });
             } catch (e: unknown) {
                 const error = e as any;
-                console.error('Error registering movement:', error);
                 const errorMessage = error?.response?.data?.error || error?.message || 'Error registrando movimiento';
                 toast({ description: errorMessage, variant: 'destructive' });
             } finally {
                 setLoadingStates((prev) => ({ ...prev, registeringMovement: false }));
             }
         },
-        [registerMovementMutation, session?.id, summary.balance, toast]
+        [availableBalance, registerMovementMutation, session?.id, toast]
     );
 
     const requestRegisterMovement = useCallback(
@@ -295,14 +342,14 @@ export function useCashMutations(options: UseCashMutationsOptions): UseCashMutat
 
             showConfirmation({
                 title: payload.type === 'ADJUSTMENT' ? 'Confirmar ajuste de caja' : 'Confirmar egreso de caja',
-                description: `Tipo: ${payload.type}. Monto: ${fmtCurrency(payload.amount)}${payload.reason ? `\nMotivo: ${payload.reason}` : ''}. ¿Deseas proceder?`,
+                description: `Tipo: ${payload.type}. Monto: ${fmtCurrency(payload.amount)}${payload.reason ? `\nMotivo: ${payload.reason}` : ''}. Deseas proceder?`,
                 confirmText: 'Registrar',
                 cancelText: 'Cancelar',
                 variant: 'warning',
                 onConfirm: () => performRegisterMovement(payload),
             });
         },
-        [performRegisterMovement, showConfirmation, fmtCurrency]
+        [fmtCurrency, performRegisterMovement, showConfirmation]
     );
 
     return {

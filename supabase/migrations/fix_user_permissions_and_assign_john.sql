@@ -5,6 +5,7 @@ CREATE OR REPLACE FUNCTION public.get_user_permissions(user_uuid uuid)
 RETURNS TABLE (permission_name text, resource text, action text)
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = ''
 AS $$
 BEGIN
   RETURN QUERY
@@ -38,4 +39,3 @@ BEGIN
     ON CONFLICT (user_id, role_id) DO UPDATE SET organization_id = COALESCE(org_id, public.user_roles.organization_id), is_active = true;
   END IF;
 END $$;
-

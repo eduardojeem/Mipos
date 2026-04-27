@@ -11,7 +11,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Download, FileSpreadsheet, FileText, File, Loader2 } from 'lucide-react';
-import { ExportFormat } from '../hooks/useEnhancedReportExport';
+import type { ExportFormat } from '../hooks/useAdvancedReportExport';
 import { cn } from '@/lib/utils';
 
 interface ExportMenuProps {

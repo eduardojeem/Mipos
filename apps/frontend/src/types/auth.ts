@@ -13,8 +13,8 @@ export interface SupabaseUser {
   email_confirmed_at?: string;
   phone_confirmed_at?: string;
   last_sign_in_at?: string;
-  app_metadata?: Record<string, any>;
-  user_metadata?: Record<string, any>;
+  app_metadata?: Record<string, unknown>;
+  user_metadata?: Record<string, unknown>;
 }
 
 // Extended User type for our application
@@ -30,6 +30,7 @@ export interface User {
   lastLogin?: string;
   avatar?: string;
   phone?: string;
+  organizationId?: string;
 }
 
 // Role definition
@@ -99,7 +100,7 @@ export interface PermissionContextType {
 }
 
 // API Response types
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;

@@ -138,63 +138,47 @@ export function ProductsManager({ promotionId, discountType, discountValue }: Pr
   }, [])
 
   const handleBulkRemove = useCallback(async () => {
-    const promises = Array.from(selectedProducts).map(id => removeProduct(id))
-    const results = await Promise.all(promises)
-    
-    const successCount = results.filter(r => r.success).length
-    const errorCount = results.length - successCount
-    
-    if (successCount > 0) {
-      toast({
-        title: 'Productos desasociados',
-        description: `${successCount} producto(s) desasociado(s) exitosamente`,
-      })
-    }
-    
-    if (errorCount > 0) {
-      toast({
-        title: 'Algunos errores',
-        description: `${errorCount} producto(s) no pudieron ser desasociados`,
-        variant: 'destructive',
-      })
-    }
-    
-    setSelectedProducts(new Set())
-  }, [selectedProducts, removeProduct, toast])
+    const results = await Promise.allSettled(
+      Array.from(selectedProducts).map((id) => removeProduct(id)),
+    );
 
-  // Atajos de teclado
+    const successCount = results.filter((r) => r.status === 'fulfilled' && (r.value as any)?.success).length;
+    const errorCount = results.length - successCount;
+
+    if (successCount > 0) {
+      toast({ title: 'Productos desasociados', description: `${successCount} producto(s) desasociado(s) exitosamente` });
+    }
+    if (errorCount > 0) {
+      toast({ title: 'Algunos errores', description: `${errorCount} producto(s) no pudieron ser desasociados`, variant: 'destructive' });
+    }
+
+    setSelectedProducts(new Set());
+  }, [selectedProducts, removeProduct, toast]);
+
+  // Keyboard shortcuts — scoped to avoid interfering with inputs and other dialogs
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      // Ctrl/Cmd + A para seleccionar todos
-      if ((event.ctrlKey || event.metaKey) && event.key === 'a' && filteredProducts.length > 0) {
-        event.preventDefault()
-        const allIds = new Set(filteredProducts.map(p => p.id))
-        setSelectedProducts(allIds)
-        toast({
-          title: 'Productos seleccionados',
-          description: `${allIds.size} productos seleccionados`,
-        })
-      }
-      
-      // Escape para deseleccionar todos
-      if (event.key === 'Escape' && selectedProducts.size > 0) {
-        setSelectedProducts(new Set())
-        toast({
-          title: 'Selección limpiada',
-          description: 'Todos los productos deseleccionados',
-        })
-      }
-      
-      // Ctrl/Cmd + N para agregar productos
-      if ((event.ctrlKey || event.metaKey) && event.key === 'n') {
-        event.preventDefault()
-        setIsSelectionDialogOpen(true)
-      }
-    }
+      // Ignore if focus is inside an input/textarea/select
+      const tag = (event.target as HTMLElement)?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
 
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [filteredProducts, selectedProducts.size, toast])
+      // Ctrl/Cmd + N — open product selector
+      if ((event.ctrlKey || event.metaKey) && event.key === 'n') {
+        event.preventDefault();
+        setIsSelectionDialogOpen(true);
+        return;
+      }
+
+      // Escape — clear selection (only when there is one)
+      if (event.key === 'Escape' && selectedProducts.size > 0) {
+        setSelectedProducts(new Set());
+        return;
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [selectedProducts.size]);
 
   if (error) {
     return (

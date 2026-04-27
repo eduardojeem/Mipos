@@ -26,7 +26,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { SuperAdminGuard } from '../../components/SuperAdminGuard';
-// import { createClient } from '@/lib/supabase/client'; // Removed
+import { createClient } from '@/lib/supabase';
 import { toast } from '@/lib/toast';
 
 type SuperAdminUser = {

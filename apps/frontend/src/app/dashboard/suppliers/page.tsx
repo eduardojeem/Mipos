@@ -1,9 +1,8 @@
 'use client';
 
-import { useState, useCallback, memo } from 'react';
+import { useState, useCallback, memo, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Plus, Download } from 'lucide-react';
-import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/components/ui/use-toast';
 
 // UI Components
@@ -12,13 +11,13 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { PermissionGuard, PermissionProvider } from '@/components/ui/permission-guard';
 
 // Custom Hooks and Types
-import { useSuppliers, useCreateSupplier, useUpdateSupplier, useDeleteSupplier } from '@/hooks/useSuppliersData';
-import { useSupplierFilters } from './hooks/useSupplierFilters';
-import type { SupplierWithStats } from '@/types/suppliers';
+import { useSuppliers, useCreateSupplier, useUpdateSupplier, useDeleteSupplier, SuppliersQueryParams } from '@/hooks/useSuppliersData';
+import type { SupplierWithStats, Supplier } from '@/types/suppliers';
 
 // Modular Components
 import { SupplierFormDialog } from '@/components/suppliers/SupplierFormDialog';
 import { SuppliersTable } from '@/components/suppliers/SuppliersTable';
+import { SuppliersGrid } from '@/components/suppliers/SuppliersGrid'; // We will create this!
 import { SuppliersStats } from '@/components/suppliers/SuppliersStats';
 import { SuppliersFilters } from '@/components/suppliers/SuppliersFilters';
 import { SupplierViewDialog } from '@/components/suppliers/SupplierViewDialog';
@@ -36,8 +35,15 @@ export default function SuppliersPage() {
 
 const SuppliersPageContent = memo(function SuppliersPageContent() {
   const router = useRouter();
-  const { user } = useAuth();
   const { toast } = useToast();
+
+  // URL / Query Params State
+  const [page, setPage] = useState(1);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
+  const [filterCategory, setFilterCategory] = useState('all');
+  const [sortBy, setSortBy] = useState<SuppliersQueryParams['sortBy']>('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   // Dialog states
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -45,79 +51,81 @@ const SuppliersPageContent = memo(function SuppliersPageContent() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<SupplierWithStats | null>(null);
+  
+  // View mode
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
 
-  // Data Fetching
-  const { data: suppliersResponse, isLoading } = useSuppliers({
-    page: 1,
-    limit: 100,
+  // Server-Side Data Fetching
+  const { data, isLoading } = useSuppliers({
+    page,
+    limit: 25,
+    search: searchQuery,
+    status: filterStatus,
+    category: filterCategory,
+    sortBy,
+    sortOrder,
   });
 
-  const suppliers = suppliersResponse?.suppliers || [];
+  const suppliers = useMemo(() => data?.suppliers || [], [data?.suppliers]);
+  const availableCategories = useMemo(() => {
+    const uniq = new Set<string>();
+    for (const s of suppliers) {
+      const v = (s as any)?.category;
+      if (typeof v === 'string' && v.trim()) uniq.add(v.trim());
+    }
+    if (filterCategory !== 'all' && typeof filterCategory === 'string' && filterCategory.trim()) {
+      uniq.add(filterCategory.trim());
+    }
+    return Array.from(uniq).sort((a, b) => a.localeCompare(b));
+  }, [suppliers, filterCategory]);
+  const stats = data?.stats || {
+    totalSuppliers: 0,
+    newThisMonth: 0,
+    activeSuppliers: 0,
+    totalPurchases: 0,
+    totalOrders: 0
+  };
+  const pagination = data?.pagination || { page: 1, pages: 1, total: 0 };
 
   // Mutations
   const createSupplierMutation = useCreateSupplier();
   const updateSupplierMutation = useUpdateSupplier();
   const deleteSupplierMutation = useDeleteSupplier();
 
-  // Filters and sorting
-  const {
-    searchQuery,
-    filterStatus,
-    filterCategory,
-    setSearchQuery,
-    setFilterStatus,
-    setFilterCategory,
-    filteredSuppliers,
-    stats,
-    handleSort,
-  } = useSupplierFilters(suppliers);
-
   // Handlers
-  const handleCreate = useCallback(
-    async (data: any) => {
-      try {
-        await createSupplierMutation.mutateAsync(data);
-        setIsCreateDialogOpen(false);
-        toast({
-          title: 'Éxito',
-          description: 'Proveedor creado correctamente',
-        });
-      } catch (error) {
-        toast({
-          title: 'Error',
-          description: 'No se pudo crear el proveedor',
-          variant: 'destructive',
-        });
-      }
-    },
-    [createSupplierMutation, toast]
-  );
+  const handleSort = useCallback((field: string) => {
+    if (sortBy === field) {
+      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field as SuppliersQueryParams['sortBy']);
+      setSortOrder('asc');
+    }
+  }, [sortBy]);
 
-  const handleEdit = useCallback(
-    async (data: any) => {
-      if (!selectedSupplier) return;
-      try {
-        await updateSupplierMutation.mutateAsync({
-          id: selectedSupplier.id,
-          data,
-        });
-        setIsEditDialogOpen(false);
-        setSelectedSupplier(null);
-        toast({
-          title: 'Éxito',
-          description: 'Proveedor actualizado correctamente',
-        });
-      } catch (error) {
-        toast({
-          title: 'Error',
-          description: 'No se pudo actualizar el proveedor',
-          variant: 'destructive',
-        });
-      }
-    },
-    [selectedSupplier, updateSupplierMutation, toast]
-  );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleCreate = useCallback(async (formData: any) => {
+    try {
+      await createSupplierMutation.mutateAsync(formData);
+      setIsCreateDialogOpen(false);
+    } catch {
+      // Error is handled by hook's native toast
+    }
+  }, [createSupplierMutation]);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleEdit = useCallback(async (formData: any) => {
+    if (!selectedSupplier) return;
+    try {
+      await updateSupplierMutation.mutateAsync({
+        id: selectedSupplier.id,
+        data: formData,
+      });
+      setIsEditDialogOpen(false);
+      setSelectedSupplier(null);
+    } catch {
+      // Error is handled by hook
+    }
+  }, [selectedSupplier, updateSupplierMutation]);
 
   const handleDelete = useCallback(async () => {
     if (!selectedSupplier) return;
@@ -125,26 +133,20 @@ const SuppliersPageContent = memo(function SuppliersPageContent() {
       await deleteSupplierMutation.mutateAsync(selectedSupplier.id);
       setIsDeleteDialogOpen(false);
       setSelectedSupplier(null);
-      toast({
-        title: 'Éxito',
-        description: 'Proveedor eliminado correctamente',
-      });
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'No se pudo eliminar el proveedor',
-        variant: 'destructive',
-      });
+    } catch {
+      // Error is handled by hook
     }
-  }, [selectedSupplier, deleteSupplierMutation, toast]);
+  }, [selectedSupplier, deleteSupplierMutation]);
 
   const handleExport = useCallback(() => {
-    exportSuppliersToCSV(filteredSuppliers);
+    if (suppliers.length === 0) return;
+    
+    exportSuppliersToCSV(suppliers as Supplier[]);
     toast({
       title: 'Éxito',
-      description: `Se exportaron ${filteredSuppliers.length} proveedores`,
+      description: `Se exportaron ${suppliers.length} proveedores. (Nota: Esto expota la página actual)`,
     });
-  }, [filteredSuppliers, toast]);
+  }, [suppliers, toast]);
 
   const handleView = useCallback((supplier: SupplierWithStats) => {
     setSelectedSupplier(supplier);
@@ -162,7 +164,7 @@ const SuppliersPageContent = memo(function SuppliersPageContent() {
   }, []);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-7xl mx-auto pb-10">
       {/* Back Button */}
       <div>
         <Button
@@ -176,7 +178,7 @@ const SuppliersPageContent = memo(function SuppliersPageContent() {
       </div>
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Proveedores</h1>
           <p className="text-muted-foreground">
@@ -188,10 +190,10 @@ const SuppliersPageContent = memo(function SuppliersPageContent() {
             <Button
               variant="outline"
               onClick={handleExport}
-              disabled={filteredSuppliers.length === 0}
+              disabled={suppliers.length === 0}
             >
               <Download className="mr-2 h-4 w-4" />
-              Exportar
+              Exportar Actuales
             </Button>
           </PermissionGuard>
           <PermissionGuard permission="suppliers.create">
@@ -212,27 +214,74 @@ const SuppliersPageContent = memo(function SuppliersPageContent() {
         totalOrders={stats.totalOrders}
       />
 
-      {/* Search and Filters */}
-      <SuppliersFilters
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        filterStatus={filterStatus}
-        onFilterStatusChange={(value) => setFilterStatus(value as 'all' | 'active' | 'inactive')}
-        filterCategory={filterCategory}
-        onFilterCategoryChange={setFilterCategory}
-        viewMode={viewMode}
-        onViewModeChange={setViewMode}
-      />
+      {/* Modern Filter Bar */}
+      <div className="bg-card/50 backdrop-blur-sm border rounded-lg p-2 flex flex-col md:flex-row gap-4 items-center justify-between">
+        <div className="w-full flex-1">
+          <SuppliersFilters
+            searchQuery={searchQuery}
+            onSearchChange={(q) => { setSearchQuery(q); setPage(1); }}
+            filterStatus={filterStatus}
+            onFilterStatusChange={(v) => { setFilterStatus(v as 'all' | 'active' | 'inactive'); setPage(1); }}
+            filterCategory={filterCategory}
+            onFilterCategoryChange={(c) => { setFilterCategory(c); setPage(1); }}
+            categories={availableCategories}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+          />
+        </div>
+      </div>
 
-      {/* Suppliers Table/Grid */}
-      <SuppliersTable
-        suppliers={filteredSuppliers}
-        loading={isLoading}
-        onSort={handleSort}
-        onView={handleView}
-        onEdit={handleEditClick}
-        onDelete={handleDeleteClick}
-      />
+      {/* View Toggle / Output */}
+      <div className="animate-in fade-in-50 duration-500">
+        {viewMode === 'list' ? (
+          <SuppliersTable
+            suppliers={suppliers}
+            loading={isLoading}
+            onSort={handleSort}
+            onView={handleView}
+            onEdit={handleEditClick}
+            onDelete={handleDeleteClick}
+          />
+        ) : (
+          <SuppliersGrid 
+            suppliers={suppliers}
+            loading={isLoading}
+            onView={handleView}
+            onEdit={handleEditClick}
+            onDelete={handleDeleteClick}
+          />
+        )}
+      </div>
+
+      {/* Pagination Controls */}
+      {pagination.pages > 1 && (
+        <div className="flex items-center justify-between pt-4">
+          <p className="text-sm text-muted-foreground">
+            Mostrando {suppliers.length} de {pagination.total} resultados
+          </p>
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => setPage(p => Math.max(1, p - 1))} 
+              disabled={page === 1 || isLoading}
+            >
+              Anterior
+            </Button>
+            <div className="flex items-center px-4 text-sm font-medium">
+              Página {page} de {pagination.pages}
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => setPage(p => Math.min(pagination.pages, p + 1))} 
+              disabled={page === pagination.pages || isLoading}
+            >
+              Siguiente
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Create Dialog */}
       <SupplierFormDialog
@@ -267,27 +316,27 @@ const SuppliersPageContent = memo(function SuppliersPageContent() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+            <AlertDialogTitle>¿Está seguro de que desea eliminar este proveedor?</AlertDialogTitle>
             <AlertDialogDescription>
               Esta acción no se puede deshacer. Se eliminará permanentemente el
               proveedor
               <strong> {selectedSupplier?.name}</strong> de la base de datos.
             </AlertDialogDescription>
             {selectedSupplier?._count?.purchases && selectedSupplier._count.purchases > 0 && (
-              <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-yellow-800">
+              <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded text-red-800 text-sm">
                 <strong>Advertencia:</strong> Este proveedor tiene{' '}
-                {selectedSupplier._count.purchases} órdenes de compra asociadas.
+                {selectedSupplier._count.purchases} órdenes de compra asociadas. No es seguro eliminarlo.
               </div>
             )}
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-red-600 hover:bg-red-700 text-white"
               onClick={handleDelete}
-              disabled={(selectedSupplier?._count?.purchases || 0) > 0}
+              disabled={(selectedSupplier?._count?.purchases || 0) > 0 || deleteSupplierMutation.isPending}
             >
-              Eliminar
+              {deleteSupplierMutation.isPending ? 'Eliminando...' : 'Eliminar Proveedor'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

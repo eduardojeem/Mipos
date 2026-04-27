@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createClient as createSupabaseJsClient } from '@supabase/supabase-js';
+import { getSupabaseConfig } from '@/lib/env';
 
 export async function PUT(request: NextRequest) {
   try {
@@ -13,12 +15,36 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const { current_password, new_password } = body || {};
 
+    if (!current_password || typeof current_password !== 'string') {
+      return NextResponse.json({ error: 'Debes ingresar tu contraseña actual' }, { status: 400 });
+    }
+
     if (!new_password || typeof new_password !== 'string' || new_password.length < 8) {
       return NextResponse.json({ error: 'La nueva contraseña debe tener al menos 8 caracteres' }, { status: 400 });
     }
 
-    // Nota: Supabase no requiere la contraseña actual si la sesión es válida.
-    // Si se necesita validar la contraseña actual, se debe implementar un flujo adicional.
+    if (!user.email) {
+      return NextResponse.json({ error: 'No se pudo validar tu identidad (email faltante)' }, { status: 400 });
+    }
+
+    const cfg = getSupabaseConfig();
+    if (!cfg) {
+      return NextResponse.json({ error: 'Supabase no está configurado' }, { status: 500 });
+    }
+
+    const verifier = createSupabaseJsClient(cfg.url, cfg.anonKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    const { error: signInError } = await verifier.auth.signInWithPassword({
+      email: user.email,
+      password: current_password,
+    });
+
+    if (signInError) {
+      return NextResponse.json({ error: 'La contraseña actual es incorrecta' }, { status: 400 });
+    }
+
     const { error: updateError } = await supabase.auth.updateUser({ password: new_password });
 
     if (updateError) {

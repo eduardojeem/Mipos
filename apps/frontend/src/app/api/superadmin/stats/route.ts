@@ -6,21 +6,7 @@ import { assertSuperAdmin } from '@/app/api/_utils/auth';
 
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
-  
-  const auth = await assertSuperAdmin(request);
-  if (!('ok' in auth) || auth.ok === false) {
-      return NextResponse.json(auth.body, { status: auth.status });
-  }
 
-  structuredLogger.info('Starting stats request', {
-    component: 'SuperAdminStatsAPI',
-    action: 'GET',
-    metadata: {
-      url: request.url,
-      method: request.method,
-    },
-  });
-  
   // Validate required Supabase environment variables
   structuredLogger.info('Validating Supabase environment variables', {
     component: 'SuperAdminStatsAPI',
@@ -84,10 +70,38 @@ export async function GET(request: NextRequest) {
       hasServiceRoleKey: true,
     },
   });
+
+  const auth = await assertSuperAdmin(request);
+  if (!('ok' in auth) || auth.ok === false) {
+    structuredLogger.info('Authentication check completed', {
+      component: 'SuperAdminStatsAPI',
+      action: 'auth',
+      metadata: {
+        ok: false,
+        status: auth.status,
+      },
+    });
+    return NextResponse.json(auth.body, { status: auth.status });
+  }
+
+  structuredLogger.info('Authentication check completed', {
+    component: 'SuperAdminStatsAPI',
+    action: 'auth',
+    metadata: {
+      ok: true,
+    },
+  });
+
+  structuredLogger.info('Starting stats request', {
+    component: 'SuperAdminStatsAPI',
+    action: 'GET',
+    metadata: {
+      url: request.url,
+      method: request.method,
+    },
+  });
   
   try {
-    const supabase = await createClient();
-    
     // 2. Fetch stats
     const adminClient = await createAdminClient();
 

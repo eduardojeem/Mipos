@@ -19,7 +19,7 @@ export const OrganizationCreateSchema = z.object({
     .max(50, 'El slug no puede exceder 50 caracteres')
     .regex(/^[a-z0-9-]+$/, 'El slug solo puede contener letras minúsculas, números y guiones')
     .trim(),
-  subscription_plan: z.enum(['FREE', 'BASIC', 'PRO', 'ENTERPRISE'], {
+  subscription_plan: z.enum(['FREE', 'STARTER', 'PROFESSIONAL', 'PRO', 'ENTERPRISE'], {
     errorMap: () => ({ message: 'Plan de suscripción inválido' }),
   }),
   subscription_status: z.enum(['ACTIVE', 'SUSPENDED', 'CANCELLED', 'TRIAL'], {
@@ -41,7 +41,7 @@ export const OrganizationUpdateSchema = z.object({
     .regex(/^[a-z0-9-]+$/, 'El slug solo puede contener letras minúsculas, números y guiones')
     .trim()
     .optional(),
-  subscription_plan: z.enum(['FREE', 'BASIC', 'PRO', 'ENTERPRISE']).optional(),
+  subscription_plan: z.enum(['FREE', 'STARTER', 'PROFESSIONAL', 'PRO', 'ENTERPRISE']).optional(),
   subscription_status: z.enum(['ACTIVE', 'SUSPENDED', 'CANCELLED', 'TRIAL']).optional(),
   settings: z.record(z.unknown()).optional(),
 });
@@ -51,7 +51,7 @@ export const OrganizationQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
   search: z.string().max(100).optional(),
   status: z.enum(['ACTIVE', 'SUSPENDED', 'CANCELLED', 'TRIAL', 'ALL']).optional(),
-  plan: z.enum(['FREE', 'BASIC', 'PRO', 'ENTERPRISE', 'ALL']).optional(),
+  plan: z.enum(['FREE', 'STARTER', 'PROFESSIONAL', 'PRO', 'ENTERPRISE', 'ALL']).optional(),
   sortBy: z.enum(['created_at', 'name', 'updated_at']).default('created_at'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
 });

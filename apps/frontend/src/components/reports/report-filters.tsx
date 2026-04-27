@@ -64,6 +64,7 @@ export const ReportFilters: React.FC<ReportFiltersProps> = ({
   const [productQuery, setProductQuery] = useState('');
   const [categoryQuery, setCategoryQuery] = useState('');
   const [customerQuery, setCustomerQuery] = useState('');
+  const [hasInteracted, setHasInteracted] = useState(false);
 
   // Debounce para inputs simples (supplierId, userId)
   const supplierDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -153,12 +154,15 @@ export const ReportFilters: React.FC<ReportFiltersProps> = ({
   }, []);
 
   useEffect(() => {
-    // Cada cambio de filtros: persistir y sincronizar URL
+    // Cada cambio de filtros: persistir y sincronizar URL (solo si hay interacción o parámetros previos)
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(filters));
-      syncFiltersToUrl(filters);
+      const hasParams = typeof window !== 'undefined' && window.location.search.length > 0;
+      if (hasInteracted || hasParams) {
+        syncFiltersToUrl(filters);
+      }
     } catch {}
-  }, [filters, syncFiltersToUrl]);
+  }, [filters, syncFiltersToUrl, hasInteracted]);
 
   // Datos para autocompletado
   const { data: productsData } = useProducts({ is_active: true, limit: 200 });
@@ -167,6 +171,7 @@ export const ReportFilters: React.FC<ReportFiltersProps> = ({
   const categories = (categoriesData ?? []) as Category[];
 
   const handleFilterChange = useCallback((key: keyof ReportFilter, value: string | undefined) => {
+    setHasInteracted(true);
     onFiltersChange({
       ...filters,
       [key]: value || undefined,
@@ -174,6 +179,7 @@ export const ReportFilters: React.FC<ReportFiltersProps> = ({
   }, [filters, onFiltersChange]);
 
   const handleDatePreset = useCallback((preset: keyof typeof DATE_PRESETS) => {
+    setHasInteracted(true);
     const { startDate: start, endDate: end } = DATE_PRESETS[preset].getValue();
     setStartDate(new Date(start));
     setEndDate(new Date(end));
@@ -185,6 +191,7 @@ export const ReportFilters: React.FC<ReportFiltersProps> = ({
   }, [filters, onFiltersChange]);
 
   const handleStartDateChange = useCallback((date: Date | undefined) => {
+    setHasInteracted(true);
     setStartDate(date);
     onFiltersChange({
       ...filters,
@@ -193,6 +200,7 @@ export const ReportFilters: React.FC<ReportFiltersProps> = ({
   }, [filters, onFiltersChange]);
 
   const handleEndDateChange = useCallback((date: Date | undefined) => {
+    setHasInteracted(true);
     setEndDate(date);
     onFiltersChange({
       ...filters,
@@ -201,6 +209,7 @@ export const ReportFilters: React.FC<ReportFiltersProps> = ({
   }, [filters, onFiltersChange]);
 
   const clearFilters = useCallback(() => {
+    setHasInteracted(true);
     setStartDate(undefined);
     setEndDate(undefined);
     onFiltersChange({});

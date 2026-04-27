@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/components/ui/use-toast';
 import api from '@/lib/api';
 import { createLogger } from '@/lib/logger';
+import { useCurrentOrganizationId } from '@/hooks/use-current-organization';
 
 // Types
 interface UserSettings {
@@ -79,6 +80,8 @@ interface SystemSettings {
   
   // Programa de lealtad
   enable_loyalty_program?: boolean;
+  loyalty_points_per_purchase?: number;
+  loyalty_points_for_reward?: number;
   
   // SMTP Configuration
   smtp_host?: string;
@@ -88,6 +91,7 @@ interface SystemSettings {
   smtp_secure?: boolean;
   smtp_from_email?: string;
   smtp_from_name?: string;
+  smtp_password_configured?: boolean;
 }
 
 interface SecuritySettings {
@@ -139,7 +143,7 @@ const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
   email: '',
   website: '',
   logo_url: '',
-  tax_rate: 0,
+  tax_rate: 10,
   currency: 'PYG',
   receipt_footer: '',
   low_stock_threshold: 10,
@@ -161,13 +165,16 @@ const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
   max_discount_percentage: 50,
   require_customer_info: false,
   enable_loyalty_program: false,
+  loyalty_points_per_purchase: 1,
+  loyalty_points_for_reward: 100,
   smtp_host: '',
   smtp_port: 587,
   smtp_user: '',
   smtp_password: '',
   smtp_secure: true,
   smtp_from_email: '',
-  smtp_from_name: ''
+  smtp_from_name: '',
+  smtp_password_configured: false
 };
 
 const DEFAULT_SECURITY_SETTINGS: SecuritySettings = {
@@ -184,6 +191,39 @@ const DEFAULT_SECURITY_SETTINGS: SecuritySettings = {
 
 const logger = createLogger('SettingsHook');
 
+function getErrorStatus(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object' || !('response' in error)) {
+    return undefined;
+  }
+
+  const response = (error as { response?: unknown }).response;
+  if (!response || typeof response !== 'object' || !('status' in response)) {
+    return undefined;
+  }
+
+  const status = (response as { status?: unknown }).status;
+  return typeof status === 'number' ? status : undefined;
+}
+
+function getResponseErrorMessage(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object' || !('response' in error)) {
+    return undefined;
+  }
+
+  const response = (error as { response?: unknown }).response;
+  if (!response || typeof response !== 'object' || !('data' in response)) {
+    return undefined;
+  }
+
+  const data = (response as { data?: unknown }).data;
+  if (!data || typeof data !== 'object' || !('error' in data)) {
+    return undefined;
+  }
+
+  const message = (data as { error?: unknown }).error;
+  return typeof message === 'string' ? message : undefined;
+}
+
 // Optimized hooks
 export function useUserSettings() {
   return useQuery({
@@ -192,7 +232,7 @@ export function useUserSettings() {
       try {
         const response = await api.get('/user/settings');
         return { ...DEFAULT_USER_SETTINGS, ...response.data.data };
-      } catch (error) {
+      } catch {
         logger.warn('Failed to load user settings, using defaults');
         return DEFAULT_USER_SETTINGS;
       }
@@ -204,17 +244,21 @@ export function useUserSettings() {
 }
 
 export function useSystemSettings() {
+  const organizationId = useCurrentOrganizationId();
   return useQuery({
-    queryKey: ['system-settings'],
+    queryKey: ['system-settings', organizationId],
     queryFn: async (): Promise<SystemSettings> => {
       try {
+        if (!organizationId) {
+          return DEFAULT_SYSTEM_SETTINGS;
+        }
         const response = await api.get('/system/settings');
         // Usar los datos directamente, ya que el endpoint devuelve un objeto plano
         // si data.data existe úsalo, si no, usa data
         const settings = response.data.data || response.data;
         return { ...DEFAULT_SYSTEM_SETTINGS, ...settings };
-      } catch (error: any) {
-        const status = error?.response?.status;
+      } catch (error: unknown) {
+        const status = getErrorStatus(error);
         if (status === 401 || status === 403) {
           throw error;
         }
@@ -224,19 +268,21 @@ export function useSystemSettings() {
     },
     staleTime: 10 * 60 * 1000, // 10 minutes
     gcTime: 30 * 60 * 1000, // 30 minutes
-    retry: 1
+    retry: 1,
+    enabled: !!organizationId,
   });
 }
 
 export function useSecuritySettings() {
+  const organizationId = useCurrentOrganizationId();
   return useQuery({
-    queryKey: ['security-settings'],
+    queryKey: ['security-settings', organizationId],
     queryFn: async (): Promise<SecuritySettings> => {
       try {
         const response = await api.get('/security/settings');
         return { ...DEFAULT_SECURITY_SETTINGS, ...response.data.data };
-      } catch (error: any) {
-        const status = error?.response?.status;
+      } catch (error: unknown) {
+        const status = getErrorStatus(error);
         if (status === 401 || status === 403) {
           throw error;
         }
@@ -246,7 +292,8 @@ export function useSecuritySettings() {
     },
     staleTime: 15 * 60 * 1000, // 15 minutes
     gcTime: 60 * 60 * 1000, // 1 hour
-    retry: 1
+    retry: 1,
+    enabled: !!organizationId,
   });
 }
 
@@ -259,33 +306,41 @@ export function useUpdateUserSettings() {
     mutationFn: async (settings: Partial<UserSettings>) => {
       try {
         const response = await api.put('/user/settings', settings, {
-          _noRetry: true,
-        } as any);
+          headers: {
+            'X-No-Retry': 'true',
+          },
+        });
         return response.data;
-      } catch (error: any) {
-        if (error?.response?.status === 431) {
+      } catch (error: unknown) {
+        if (getErrorStatus(error) === 431) {
           throw error;
         }
         throw error;
       }
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      queryClient.setQueryData<UserSettings>(['user-settings'], (current) => ({
+        ...DEFAULT_USER_SETTINGS,
+        ...(current || {}),
+        ...variables,
+      }));
       queryClient.invalidateQueries({ queryKey: ['user-settings'] });
       toast({
         title: 'Éxito',
         description: 'Configuración actualizada correctamente.',
       });
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
       logger.error('Error saving user settings:', error);
 
       let title = 'Error al guardar';
       let errorMessage = 'No se pudo actualizar la configuración del perfil';
+      const status = getErrorStatus(error);
 
-      if (error?.response?.status === 431) {
+      if (status === 431) {
         title = 'Sesión demasiado pesada (431)';
         errorMessage = 'Tu token de acceso es demasiado grande. Esto sucede por guardar datos pesados (como imágenes) en el perfil. Por favor, cierra sesión y vuelve a entrar para limpiar tu token.';
-      } else if (error?.response?.status === 413) {
+      } else if (status === 413) {
         errorMessage = 'Los datos enviados son demasiado grandes.';
       }
 
@@ -301,6 +356,7 @@ export function useUpdateUserSettings() {
 export function useUpdateSystemSettings() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const organizationId = useCurrentOrganizationId();
 
   return useMutation({
     mutationFn: async (settings: Partial<SystemSettings>) => {
@@ -309,49 +365,54 @@ export function useUpdateSystemSettings() {
         const response = await api.put('/system/settings', settings, {
           headers: {
             'Content-Type': 'application/json',
+            'X-No-Retry': 'true',
           },
-          // Evitar retry automático para esta operación (casting a any porque _noRetry no está en tipos estándar)
-          _noRetry: true,
-        } as any);
+        });
         return response.data;
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Si es error 431, intentar con menos datos
-        if (error?.response?.status === 431) {
+        if (getErrorStatus(error) === 431) {
           logger.warn('Headers too large, retrying with minimal data');
           const minimalSettings = {
-            businessName: settings.businessName,
+            business_name: settings.business_name,
             currency: settings.currency,
             timezone: settings.timezone,
           };
           const response = await api.put('/system/settings', minimalSettings, {
             headers: {
               'Content-Type': 'application/json',
+              'X-No-Retry': 'true',
             },
-            _noRetry: true,
-          } as any);
+          });
           return response.data;
         }
         throw error;
       }
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['system-settings', organizationId] });
       queryClient.invalidateQueries({ queryKey: ['system-settings'] });
+      queryClient.invalidateQueries({ queryKey: ['company-profile'] });
+      queryClient.invalidateQueries({ queryKey: ['company-profile', organizationId || 'no-org'] });
+      queryClient.invalidateQueries({ queryKey: ['business-config'] });
       toast({
         title: 'Éxito',
         description: 'Configuración del sistema actualizada correctamente',
       });
     },
-    onError: (error: any) => {
+    onError: (error: unknown) => {
       logger.error('Error saving system settings:', error);
 
       let errorMessage = 'No se pudo actualizar la configuración del sistema';
+      const status = getErrorStatus(error);
+      const responseError = getResponseErrorMessage(error);
 
-      if (error?.response?.status === 431) {
+      if (status === 431) {
         errorMessage = 'Los datos son demasiado grandes. Intenta con menos información.';
-      } else if (error?.response?.status === 413) {
+      } else if (status === 413) {
         errorMessage = 'Los datos enviados son demasiado grandes.';
-      } else if (error?.response?.data?.error) {
-        errorMessage = error.response.data.error;
+      } else if (responseError) {
+        errorMessage = responseError;
       }
 
       toast({
@@ -366,6 +427,7 @@ export function useUpdateSystemSettings() {
 export function useUpdateSecuritySettings() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const organizationId = useCurrentOrganizationId();
 
   return useMutation({
     mutationFn: async (settings: Partial<SecuritySettings>) => {
@@ -373,6 +435,7 @@ export function useUpdateSecuritySettings() {
       return response.data;
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['security-settings', organizationId] });
       queryClient.invalidateQueries({ queryKey: ['security-settings'] });
       toast({
         title: 'Éxito',

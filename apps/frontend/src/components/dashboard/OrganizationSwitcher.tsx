@@ -14,16 +14,11 @@ import { Building2, Check, ChevronDown, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 
-/**
- * OrganizationSwitcher Component
- * Permite a los usuarios cambiar entre sus organizaciones en un sistema multitenancy
- */
 export function OrganizationSwitcher() {
   const { user } = useAuth();
-  const router = useRouter();
+  const queryClient = useQueryClient();
   const {
     organizations,
     selectedOrganization,
@@ -31,14 +26,6 @@ export function OrganizationSwitcher() {
     loading,
   } = useUserOrganizations(user?.id);
 
-  // Auto-seleccionar si solo hay una organización
-  useEffect(() => {
-    if (!loading && organizations.length === 1 && !selectedOrganization) {
-      selectOrganization(organizations[0]);
-    }
-  }, [loading, organizations, selectedOrganization, selectOrganization]);
-
-  // No mostrar si no está cargado o no hay organizaciones
   if (loading) {
     return (
       <div className="flex items-center gap-2 px-3 py-2 text-muted-foreground">
@@ -52,7 +39,6 @@ export function OrganizationSwitcher() {
     return null;
   }
 
-  // Si solo hay una organización, mostrar sin dropdown
   if (organizations.length === 1) {
     return (
       <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50">
@@ -67,13 +53,49 @@ export function OrganizationSwitcher() {
     );
   }
 
+  const refreshQueryKeys: readonly string[][] = [
+    ['dashboard-optimized-summary'],
+    ['products'],
+    ['products-list'],
+    ['products-summary'],
+    ['product-stats'],
+    ['product-categories'],
+    ['orders'],
+    ['orders-stats'],
+    ['sales'],
+    ['sales-summary'],
+    ['sales-summary-optimized'],
+    ['recent-sales'],
+    ['recent-sales-optimized'],
+    ['customers'],
+    ['suppliers'],
+    ['company-profile'],
+    ['plan-limits'],
+    ['system-settings'],
+    ['business-config'],
+    ['sales-report'],
+    ['inventory-report'],
+    ['customer-report'],
+    ['financial-report'],
+    ['stock-alerts'],
+    ['stock-alerts-stats'],
+    ['cashSession'],
+    ['cashSessions'],
+    ['cashMovements'],
+    ['returns'],
+    ['returns-stats'],
+    ['loyalty'],
+    ['pos'],
+  ];
+
   const handleOrganizationChange = (orgId: string) => {
-    const org = organizations.find(o => o.id === orgId);
-    if (org) {
-      selectOrganization(org);
-      // Refrescar la página para actualizar los datos con la nueva organización
-      router.refresh();
-    }
+    const org = organizations.find((item) => item.id === orgId);
+    if (!org || selectedOrganization?.id === org.id) return;
+
+    selectOrganization(org);
+    refreshQueryKeys.forEach((queryKey) => {
+      void queryClient.invalidateQueries({ queryKey });
+    });
   };
 
   const getSubscriptionBadgeColor = (plan: string) => {
@@ -105,14 +127,14 @@ export function OrganizationSwitcher() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button 
-          variant="ghost" 
+        <Button
+          variant="ghost"
           className="gap-2 h-auto py-2 hover:bg-muted/50 transition-colors"
         >
           <Building2 className="h-4 w-4 text-primary flex-shrink-0" />
           <div className="hidden md:flex flex-col items-start min-w-0">
             <span className="text-sm font-medium truncate max-w-[150px]">
-              {selectedOrganization?.name || 'Seleccionar organización'}
+              {selectedOrganization?.name || 'Seleccionar organizacion'}
             </span>
             {selectedOrganization && (
               <span className="text-xs text-muted-foreground capitalize">
@@ -140,8 +162,8 @@ export function OrganizationSwitcher() {
               key={org.id}
               onClick={() => handleOrganizationChange(org.id)}
               className={cn(
-                "cursor-pointer py-3 px-2 focus:bg-accent/50",
-                isSelected && "bg-accent/30"
+                'cursor-pointer py-3 px-2 focus:bg-accent/50',
+                isSelected && 'bg-accent/30'
               )}
             >
               <div className="flex items-center justify-between w-full gap-3">
@@ -154,10 +176,10 @@ export function OrganizationSwitcher() {
                       <span className="font-medium text-sm truncate">
                         {org.name}
                       </span>
-                      <Badge 
-                        variant="outline" 
+                      <Badge
+                        variant="outline"
                         className={cn(
-                          "text-xs px-1.5 py-0 h-5 font-medium",
+                          'text-xs px-1.5 py-0 h-5 font-medium',
                           getSubscriptionBadgeColor(org.subscription_plan)
                         )}
                       >

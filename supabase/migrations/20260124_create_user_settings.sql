@@ -28,12 +28,13 @@ CREATE POLICY "Users can insert their own settings"
 
 -- Function to handle updated_at
 CREATE OR REPLACE FUNCTION update_user_settings_updated_at()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+AS $$
 BEGIN
     NEW.updated_at = NOW();
     RETURN NEW;
 END;
-$$ language 'plpgsql';
+$$ LANGUAGE plpgsql SET search_path = '';
 
 -- Trigger
 DROP TRIGGER IF EXISTS update_user_settings_timestamp ON public.user_settings;

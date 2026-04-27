@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Save, Shield, Lock, Key, AlertTriangle, CheckCircle, RefreshCw } from 'lucide-react';
+import { Save, Shield, Lock, Key, AlertTriangle, CheckCircle, RefreshCw, ArrowUpRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -24,8 +24,10 @@ export function SecuritySettingsTab() {
 
   const handleSave = () => {
     if (Object.keys(localSettings).length > 0) {
-      updateSecuritySettings.mutate(localSettings);
-      setLocalSettings({});
+      const changes = { ...localSettings };
+      updateSecuritySettings.mutate(changes, {
+        onSuccess: () => setLocalSettings({}),
+      });
     }
   };
 
@@ -257,15 +259,15 @@ export function SecuritySettingsTab() {
               <div className="space-y-1">
                 <Label className="font-bold flex items-center gap-2">
                   <Shield className="w-3.5 h-3.5 text-indigo-500" />
-                  Habilitar 2FA
+                  Estado 2FA
                 </Label>
                 <p className="text-xs text-muted-foreground leading-tight">
-                  Requiere código de verificación adicional al iniciar sesión
+                  Se activa desde la configuracion de cada cuenta
                 </p>
               </div>
               <Switch
                 checked={currentSettings.two_factor_enabled ?? false}
-                onCheckedChange={(checked) => updateSetting('two_factor_enabled', checked)}
+                disabled
                 className="data-[state=checked]:bg-indigo-500"
               />
             </div>
@@ -278,6 +280,17 @@ export function SecuritySettingsTab() {
               </AlertDescription>
             </Alert>
 
+            <Button
+              variant="outline"
+              className="w-full justify-center rounded-xl"
+              onClick={() => {
+                window.location.href = '/dashboard/profile/two-factor';
+              }}
+            >
+              Gestionar 2FA de mi cuenta
+              <ArrowUpRight className="ml-2 h-4 w-4" />
+            </Button>
+
             {currentSettings.two_factor_enabled && (
               <div className="p-4 rounded-2xl bg-green-500/10 border border-green-500/20">
                 <div className="flex items-center gap-2 mb-2">
@@ -287,7 +300,7 @@ export function SecuritySettingsTab() {
                   </p>
                 </div>
                 <p className="text-xs text-green-700 dark:text-green-400">
-                  Todos los usuarios deberán configurar 2FA en su próximo inicio de sesión
+                  La autenticacion de dos factores esta activa o requerida para esta cuenta.
                 </p>
               </div>
             )}

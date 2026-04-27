@@ -11,6 +11,7 @@ import { Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { useToast } from '@/components/ui/use-toast'
+import { getCanonicalPlanDisplayName, normalizePlanSlug } from '@/lib/plan-catalog'
 
 interface SubscriptionItem {
   id: string
@@ -34,11 +35,11 @@ export default function BillingPage() {
   const [search, setSearch] = useState('')
   const [cycle, setCycle] = useState<'all' | 'monthly' | 'yearly'>('all')
   const [status, setStatus] = useState<'all' | 'ACTIVE' | 'PAST_DUE' | 'CANCELED'>('all')
-  const [plan, setPlan] = useState<'all' | 'free' | 'pro'>('all')
+  const [plan, setPlan] = useState<'all' | 'free' | 'starter' | 'professional'>('all')
   const [assignOpen, setAssignOpen] = useState(false)
   const [assignOrgId, setAssignOrgId] = useState<string | null>(null)
   const [assignOrgName, setAssignOrgName] = useState<string | null>(null)
-  const [assignPlan, setAssignPlan] = useState<string>('pro')
+  const [assignPlan, setAssignPlan] = useState<string>('starter')
   const [assignCycle, setAssignCycle] = useState<string>('monthly')
   const [plans, setPlans] = useState<Array<{ slug: string; name: string }>>([])
 
@@ -80,7 +81,7 @@ export default function BillingPage() {
       const okSearch = !search || txt.includes(search.toLowerCase())
       const okCycle = cycle === 'all' || (String(s.billingCycle || '').toLowerCase() === cycle)
       const okStatus = status === 'all' || (String(s.status || '').toUpperCase() === status)
-      const okPlan = plan === 'all' || (String(s.plan || '').toLowerCase() === plan)
+      const okPlan = plan === 'all' || normalizePlanSlug(String(s.plan || '').toLowerCase()) === plan
       return okSearch && okCycle && okStatus && okPlan
     })
   }, [list, search, cycle, status, plan])
@@ -97,7 +98,7 @@ export default function BillingPage() {
   const openAssign = (orgId: string | null, orgName: string) => {
     setAssignOrgId(orgId)
     setAssignOrgName(orgName)
-    setAssignPlan('pro')
+    setAssignPlan('starter')
     setAssignCycle('monthly')
     setAssignOpen(true)
   }
@@ -117,7 +118,7 @@ export default function BillingPage() {
         if (reload.ok) {
           setList(Array.isArray(json.subscriptions) ? json.subscriptions : [])
         }
-        toast({ title: 'Plan asignado', description: `Se asignó ${assignPlan.toUpperCase()} (${assignCycle === 'yearly' ? 'Anual' : 'Mensual'}) a ${assignOrgName || ''}` })
+        toast({ title: 'Plan asignado', description: `Se asignó el plan premium a ${assignOrgName || assignOrgId} por 1 ${assignCycle === 'yearly' ? 'año' : 'mes'}.` })
         setAssignOpen(false)
       } else {
         toast({ title: 'Error al asignar', description: data?.error || 'No se pudo asignar el plan', variant: 'destructive' })
@@ -169,12 +170,13 @@ export default function BillingPage() {
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar..." className="pl-9 w-64" />
             </div>
-            <Select value={plan} onValueChange={(v: 'all' | 'free' | 'pro') => setPlan(v)}>
+            <Select value={plan} onValueChange={(v: 'all' | 'free' | 'starter' | 'professional') => setPlan(v)}>
               <SelectTrigger className="w-40"><SelectValue placeholder="Plan" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos</SelectItem>
                 <SelectItem value="free">Free</SelectItem>
-                <SelectItem value="pro">PRO</SelectItem>
+                <SelectItem value="starter">Starter</SelectItem>
+                <SelectItem value="professional">Professional</SelectItem>
               </SelectContent>
             </Select>
             <Select value={cycle} onValueChange={(v: 'all' | 'monthly' | 'yearly') => setCycle(v)}>
@@ -228,7 +230,7 @@ export default function BillingPage() {
                         ))}
                       </div>
                     </TableCell>
-                    <TableCell className="uppercase">{s.plan}</TableCell>
+                    <TableCell className="uppercase">{getCanonicalPlanDisplayName(s.plan)}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className="text-xs">{s.status || 'N/A'}</Badge>
                     </TableCell>
@@ -286,3 +288,4 @@ export default function BillingPage() {
     </SuperAdminGuard>
   )
 }
+

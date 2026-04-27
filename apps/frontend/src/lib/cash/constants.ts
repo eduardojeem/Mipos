@@ -1,0 +1,1 @@
+export const MAX_CASH_OPENING_AMOUNT = 100_000_000;

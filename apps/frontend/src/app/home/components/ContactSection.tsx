@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 import { BusinessConfig } from '@/types/business-config';
-import { Facebook, Instagram, Twitter, Phone, Mail, Clock } from 'lucide-react';
+import { Facebook, Instagram, Twitter, Phone, Mail, Clock, Linkedin } from 'lucide-react';
 import { memo } from 'react';
 
 interface ContactSectionProps {
@@ -38,6 +38,12 @@ function ContactSectionComponent({ config }: ContactSectionProps) {
   };
 
   const hours = Array.isArray(config.businessHours) ? config.businessHours : [];
+  const socialLinks = [
+    { href: config.socialMedia?.facebook, icon: Facebook, label: 'Facebook', className: 'border-sky-500 text-sky-600 hover:bg-sky-600' },
+    { href: config.socialMedia?.instagram, icon: Instagram, label: 'Instagram', className: 'border-emerald-500 text-emerald-600 hover:bg-emerald-600' },
+    { href: config.socialMedia?.twitter, icon: Twitter, label: 'Twitter', className: 'border-amber-500 text-amber-600 hover:bg-amber-600' },
+    { href: config.socialMedia?.linkedin, icon: Linkedin, label: 'LinkedIn', className: 'border-cyan-500 text-cyan-600 hover:bg-cyan-600' },
+  ].filter((item) => Boolean(item.href));
 
   return (
     <section id="contacto" className="py-20 relative overflow-hidden bg-white dark:bg-slate-900">
@@ -103,15 +109,15 @@ function ContactSectionComponent({ config }: ContactSectionProps) {
             <div>
               <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-4">Síguenos</h4>
               <div className="flex space-x-4">
-                <Button variant="outline" size="sm" className="rounded-full w-10 h-10 p-0 border-2 border-sky-500 text-sky-600 hover:bg-sky-600 hover:text-white hover:scale-110 transition-all duration-300 shadow-md hover:shadow-lg hover:shadow-sky-500/50">
-                  <Facebook className="w-4 h-4" />
-                </Button>
-                <Button variant="outline" size="sm" className="rounded-full w-10 h-10 p-0 border-2 border-emerald-500 text-emerald-600 hover:bg-emerald-600 hover:text-white hover:scale-110 transition-all duration-300 shadow-md hover:shadow-lg hover:shadow-emerald-500/50">
-                  <Instagram className="w-4 h-4" />
-                </Button>
-                <Button variant="outline" size="sm" className="rounded-full w-10 h-10 p-0 border-2 border-amber-500 text-amber-600 hover:bg-amber-600 hover:text-white hover:scale-110 transition-all duration-300 shadow-md hover:shadow-lg hover:shadow-amber-500/50">
-                  <Twitter className="w-4 h-4" />
-                </Button>
+                {socialLinks.length > 0 ? socialLinks.map((item) => (
+                  <Button key={item.label} asChild variant="outline" size="sm" className={`rounded-full w-10 h-10 p-0 border-2 hover:text-white hover:scale-110 transition-all duration-300 shadow-md ${item.className}`}>
+                    <a href={item.href!} target="_blank" rel="noopener noreferrer" aria-label={item.label}>
+                      <item.icon className="w-4 h-4" />
+                    </a>
+                  </Button>
+                )) : (
+                  <p className="text-sm text-gray-600 dark:text-gray-400">Aun no hay redes sociales publicadas.</p>
+                )}
               </div>
             </div>
           </div>

@@ -2,6 +2,8 @@ import { useCallback, useMemo, useEffect, useState } from 'react';
 import { toast } from '@/lib/toast';
 import { type Product, type Customer } from '@/types';
 import { useStockConfig, validateStockAvailability } from '@/lib/pos/stock-config';
+import { useBusinessConfigData } from '@/contexts/BusinessConfigContext'
+import { calculateCartWithIva } from '@/lib/pos/calculations'
 
 export interface CartItem {
   product_id: string;
@@ -180,22 +182,20 @@ export function useCart({ products, selectedCustomer, isWholesaleMode, discount 
   }, [isWholesaleMode, selectedCustomer, products, computeFinalPricing]);
 
 
+  const { config } = useBusinessConfigData();
   const cartTotals = useMemo(() => {
-    const IVA_RATE = Number(process.env.NEXT_PUBLIC_IVA_RATE ?? '0.16');
-    const subtotal = round2(cart.reduce((sum, item) => sum + item.total, 0));
-    const discountAmount = round2(discount);
-    const base = Math.max(0, subtotal - discountAmount);
-    const taxAmount = round2(base * IVA_RATE);
-    const total = round2(base + taxAmount);
-
+    const productsMap = new Map(products.map(p => [p.id, p]));
+    const items = cart.map(it => ({ ...it }));
+    const productsList = items.map(it => productsMap.get(it.product_id)).filter(Boolean) as Product[];
+    const totals = calculateCartWithIva(items, productsList, discount, 'FIXED_AMOUNT', config);
     return {
-      subtotal,
-      discountAmount,
-      taxAmount,
-      total,
-      itemCount: cart.reduce((sum, item) => sum + item.quantity, 0),
+      subtotal: totals.subtotal,
+      discountAmount: totals.discountAmount,
+      taxAmount: totals.taxAmount,
+      total: totals.total,
+      itemCount: totals.itemCount,
     };
-  }, [cart, discount]);
+  }, [cart, discount, products, config]);
 
   return {
     cart,

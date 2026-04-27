@@ -3,13 +3,14 @@
 import React, { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import {
   Menu,
   Smartphone,
   Tablet,
   Monitor,
 } from 'lucide-react';
+import { useBusinessConfig } from '@/contexts/BusinessConfigContext';
 
 interface ResponsiveLayoutProps {
   children: React.ReactNode;
@@ -28,6 +29,8 @@ export function ResponsiveLayout({
   header,
   className
 }: ResponsiveLayoutProps) {
+  const { config } = useBusinessConfig();
+  const businessName = config.businessName || 'Mi empresa';
   const [deviceType, setDeviceType] = useState<DeviceType>('desktop');
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -106,11 +109,10 @@ export function ResponsiveLayout({
                 <SheetContent
                   side="left"
                   className="w-80 p-0 flex flex-col bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-r border-slate-200/50 dark:border-slate-800/50"
-                  aria-labelledby="mobile-sidebar-title"
+                  aria-describedby={undefined}
                 >
-                  <SheetHeader className="sr-only">
-                    <SheetTitle id="mobile-sidebar-title">Menú de Navegación</SheetTitle>
-                  </SheetHeader>
+                  <SheetTitle className="sr-only">Menú de Navegación</SheetTitle>
+                  <SheetDescription className="sr-only">Navegación principal</SheetDescription>
 
                   <div className="flex-1 overflow-y-auto">
                     {mobileSidebar || sidebar}
@@ -123,7 +125,7 @@ export function ResponsiveLayout({
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                       </div>
                       <p className="text-xs text-slate-500 dark:text-slate-400">
-                        BeautyPOS v2.0 © 2024
+                        {businessName} © {new Date().getFullYear()}
                       </p>
                     </div>
                   </div>
@@ -137,9 +139,8 @@ export function ResponsiveLayout({
           </div>
         </div>
 
-        {/* Mobile Content */}
         <main className="relative z-10 p-4">
-          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-200">
             {children}
           </div>
         </main>
@@ -176,7 +177,7 @@ export function ResponsiveLayout({
 
             {/* Tablet Content */}
             <main className="relative z-10 flex-1 overflow-y-auto p-6">
-              <div className="max-w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="max-w-full animate-in fade-in slide-in-from-bottom-4 duration-200">
                 {children}
               </div>
             </main>
@@ -185,7 +186,7 @@ export function ResponsiveLayout({
             <footer className="border-t border-slate-200/50 dark:border-slate-800/50 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
               <div className="px-6 py-3">
                 <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-                  <p>© {new Date().getFullYear()} BeautyPOS</p>
+                  <p>© {new Date().getFullYear()} {businessName}</p>
                   <div className="flex items-center gap-2">
                     <div className="relative flex h-2 w-2">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -230,7 +231,7 @@ export function ResponsiveLayout({
 
           {/* Desktop Content */}
           <main className="relative z-10 flex-1 overflow-y-auto p-8">
-            <div className="max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-200">
               {children}
             </div>
           </main>
@@ -239,7 +240,7 @@ export function ResponsiveLayout({
           <footer className="border-t border-slate-200/50 dark:border-slate-800/50 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm">
             <div className="max-w-7xl mx-auto px-8 py-3">
               <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-                <p>© {new Date().getFullYear()} BeautyPOS. Todos los derechos reservados.</p>
+                <p>© {new Date().getFullYear()} {businessName}. Todos los derechos reservados.</p>
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2">
                     <div className="relative flex h-2 w-2">

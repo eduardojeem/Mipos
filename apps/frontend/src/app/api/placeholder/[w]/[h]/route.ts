@@ -2,10 +2,11 @@ import { NextRequest } from 'next/server'
 
 export async function GET(
   _req: NextRequest,
-  context: { params: { w: string; h: string } }
+  context: { params: Promise<{ w: string; h: string }> }
 ) {
-  const w = Math.max(1, Math.min(4096, parseInt(context.params.w || '300', 10) || 300));
-  const h = Math.max(1, Math.min(4096, parseInt(context.params.h || '300', 10) || 300));
+  const { w: rawW, h: rawH } = await context.params;
+  const w = Math.max(1, Math.min(4096, parseInt(rawW || '300', 10) || 300));
+  const h = Math.max(1, Math.min(4096, parseInt(rawH || '300', 10) || 300));
 
   const bg = '#e5e7eb'; // slate-200
   const fg = '#9ca3af'; // gray-400

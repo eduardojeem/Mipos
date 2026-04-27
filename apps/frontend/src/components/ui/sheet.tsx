@@ -63,7 +63,14 @@ const SheetContent = React.forwardRef<
       if (Array.isArray(node)) return node.some(walk);
       if (React.isValidElement(node)) {
         const el: any = node;
-        if (el.type === SheetTitle || el.type === (SheetPrimitive as any).Title) return true;
+        if (
+          el.type === SheetTitle ||
+          el.type === SheetPrimitive.Title ||
+          el.type?.displayName === "SheetTitle" ||
+          el.type?.displayName === SheetPrimitive.Title.displayName
+        ) {
+          return true;
+        }
         return walk(el.props?.children);
       }
       return false;

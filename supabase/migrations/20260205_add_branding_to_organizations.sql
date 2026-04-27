@@ -21,7 +21,8 @@ CREATE INDEX IF NOT EXISTS idx_organizations_branding ON public.organizations US
 
 -- Add default branding structure for new organizations
 CREATE OR REPLACE FUNCTION public.set_default_organization_branding()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+AS $$
 BEGIN
   IF NEW.branding IS NULL OR NEW.branding = '{}'::jsonb THEN
     NEW.branding = jsonb_build_object(
@@ -37,7 +38,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path = '';
 
 -- Create trigger for default branding
 DROP TRIGGER IF EXISTS trg_set_default_branding ON public.organizations;

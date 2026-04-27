@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -25,9 +25,14 @@ import {
     Printer
 } from 'lucide-react';
 import type { UICustomer } from '@/types/customer-page';
-import type { PurchaseHistoryItem } from '@/lib/customer-service';
-import { customerService } from '@/lib/customer-service';
+import { useCurrencyFormatter } from '@/contexts/BusinessConfigContext';
 import { ReceiptModal } from '@/components/pos/ReceiptModal';
+import { useCustomerDetail } from '@/hooks/useOptimizedCustomers';
+import {
+    buildInternalTicketMetadata,
+    formatSaleReferenceNumber,
+    type PosInternalTicket,
+} from '@/lib/pos/internal-ticket';
 
 interface CustomerDetailsModalProps {
     customer: UICustomer | null;
@@ -35,51 +40,51 @@ interface CustomerDetailsModalProps {
     onOpenChange: (open: boolean) => void;
 }
 
-export function CustomerDetailsModal({ customer, open, onOpenChange }: CustomerDetailsModalProps) {
-    const [purchaseHistory, setPurchaseHistory] = useState<PurchaseHistoryItem[]>([]);
-    const [loadingHistory, setLoadingHistory] = useState(false);
+type PurchaseHistoryItem = NonNullable<UICustomer['purchaseHistory']>[number];
+export function CustomerDetailsModal({ customer: baseCustomer, open, onOpenChange }: CustomerDetailsModalProps) {
+    const customerDetail = useCustomerDetail(baseCustomer?.id ?? '', {
+        enabled: open && Boolean(baseCustomer?.id)
+    });
     const [showReceiptModal, setShowReceiptModal] = useState(false);
-    const [selectedSale, setSelectedSale] = useState<any>(null);
-
-    const formatCurrency = (value: number) => {
-        return new Intl.NumberFormat('es-ES', {
-            style: 'currency',
-            currency: 'USD'
-        }).format(value);
-    };
+    const [selectedSale, setSelectedSale] = useState<PosInternalTicket | null>(null);
+    const formatCurrency = useCurrencyFormatter();
+    const customer = customerDetail.data ?? baseCustomer;
+    const purchaseHistory = customer?.purchaseHistory ?? [];
+    const loadingHistory = customerDetail.isLoading;
 
     const handlePrintReceipt = (order: PurchaseHistoryItem) => {
         // Convert order to sale format for ReceiptModal
-        const saleData = {
-            id: order.orderNumber.replace('#', ''),
+        const saleId = order.orderNumber.replace('#', '');
+        const metadata = buildInternalTicketMetadata(saleId);
+        const saleData: PosInternalTicket = {
+            id: saleId,
+            saleNumber: formatSaleReferenceNumber(saleId),
+            ...metadata,
             totalAmount: order.total,
             createdAt: order.date,
             paymentMethod: 'CASH',
-            items: order.products?.map(p => ({
+            items: order.products?.map((p, index) => ({
+                id: `${saleId}-${index}`,
+                productId: '',
                 productName: p.name,
                 quantity: p.quantity,
                 unitPrice: p.price,
+                totalPrice: p.quantity * p.price,
+                discountAmount: 0,
             })) || [],
             subtotal: order.total,
             taxAmount: 0,
             discountAmount: 0,
+            status: 'COMPLETED',
+            customer: customer ? {
+                name: customer.name,
+                phone: customer.phone || undefined,
+                email: customer.email || undefined,
+            } : null,
         };
         setSelectedSale(saleData);
         setShowReceiptModal(true);
     };
-
-    // Fetch purchase history when modal opens
-    useEffect(() => {
-        if (open && customer?.id) {
-            setLoadingHistory(true);
-            customerService.getPurchaseHistory(customer.id, 5).then(result => {
-                if (result.data) {
-                    setPurchaseHistory(result.data);
-                }
-                setLoadingHistory(false);
-            });
-        }
-    }, [open, customer?.id]);
 
     if (!customer) return null;
 
@@ -147,7 +152,7 @@ export function CustomerDetailsModal({ customer, open, onOpenChange }: CustomerD
                             </Avatar>
                             {customer.customerType === 'vip' && (
                                 <div className="absolute -bottom-1 -right-1 bg-background rounded-full p-1">
-                                    <Sparkles className="h-5 w-5 text-yellow-500 fill-yellow-500 animate-pulse" />
+                                    <Sparkles className="h-5 w-5 text-yellow-500 fill-yellow-500" />
                                 </div>
                             )}
                         </div>
@@ -363,7 +368,7 @@ export function CustomerDetailsModal({ customer, open, onOpenChange }: CustomerD
                                                 className="w-full"
                                             >
                                                 <Printer className="h-4 w-4 mr-2" />
-                                                Imprimir Comprobante
+                                                Imprimir ticket
                                             </Button>
                                         </div>
 
@@ -418,7 +423,7 @@ export function CustomerDetailsModal({ customer, open, onOpenChange }: CustomerD
                     </section>
 
                     {/* Additional Info */}
-                    {(customer.birthDate || customer.notes || customer.tax_id) && (
+                    {(customer.birthDate || customer.notes || customer.tax_id || customer.ruc) && (
                         <>
                             <Separator />
                             <section>
@@ -443,6 +448,15 @@ export function CustomerDetailsModal({ customer, open, onOpenChange }: CustomerD
                                             <div>
                                                 <span className="text-xs text-muted-foreground">NIF/CIF: </span>
                                                 <span className="text-sm font-medium">{customer.tax_id}</span>
+                                            </div>
+                                        </div>
+                                    )}
+                                    {customer.ruc && (
+                                        <div className="flex items-center gap-3">
+                                            <CreditCard className="h-4 w-4 text-muted-foreground" />
+                                            <div>
+                                                <span className="text-xs text-muted-foreground">RUC: </span>
+                                                <span className="text-sm font-medium">{customer.ruc}</span>
                                             </div>
                                         </div>
                                     )}

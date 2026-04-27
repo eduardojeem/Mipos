@@ -1,7 +1,8 @@
 'use client';
 export const dynamic = 'force-dynamic';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   DollarSign,
@@ -11,9 +12,9 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { useBusinessConfig } from '@/contexts/BusinessConfigContext';
 import { createLogger } from '@/lib/logger';
 import { useToast } from '@/components/ui/use-toast';
+import { useCurrentOrganizationId } from '@/hooks/use-current-organization';
 
 // Componentes UI
 import { ReportFilters, ReportFilterValues } from './components/ReportFilters';
@@ -42,19 +43,38 @@ import {
   useOptimizedInventoryReport,
   useOptimizedCustomerReport,
   useOptimizedFinancialReport,
+  SalesData,
+  InventoryData,
+  CustomerData,
+  FinancialData
 } from './hooks/useOptimizedReportData';
-import { useAdvancedReportExport, ExportFormat } from './hooks/useAdvancedReportExport';
+import { useReportsExportHandler } from './hooks/useReportsExportHandler';
 
 // Tipo para los reportes
 export type ReportType = 'sales' | 'inventory' | 'customers' | 'financial';
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const logger = createLogger('ReportsPage');
 
 export default function ReportsPage() {
   const { toast } = useToast();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const organizationId = useCurrentOrganizationId();
   const [activeTab, setActiveTab] = useState<ReportType>('sales');
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
+
+  const urlType = useMemo(() => {
+    const t = (searchParams.get('type') || '').toLowerCase();
+    if (t === 'sales' || t === 'inventory' || t === 'customers' || t === 'financial') return t as ReportType;
+    return null;
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!urlType) return;
+    setActiveTab(urlType);
+  }, [urlType]);
 
   // Filtros
   const [filters, setFilters] = useState<ReportFilterValues>({
@@ -66,26 +86,24 @@ export default function ReportsPage() {
 
   // Optimized hooks with better caching and reduced refresh intervals
   const salesReport = useOptimizedSalesReport(appliedFilters, {
-    enabled: activeTab === 'sales',
+    enabled: activeTab === 'sales' && !!organizationId,
     refetchInterval: autoRefresh ? 5 * 60 * 1000 : undefined, // 5 minutes instead of 30 seconds
   });
 
   const inventoryReport = useOptimizedInventoryReport(appliedFilters, {
-    enabled: activeTab === 'inventory',
+    enabled: activeTab === 'inventory' && !!organizationId,
     refetchInterval: autoRefresh ? 10 * 60 * 1000 : undefined, // 10 minutes for inventory
   });
 
   const customerReport = useOptimizedCustomerReport(appliedFilters, {
-    enabled: activeTab === 'customers',
+    enabled: activeTab === 'customers' && !!organizationId,
     refetchInterval: autoRefresh ? 8 * 60 * 1000 : undefined, // 8 minutes for customers
   });
 
   const financialReport = useOptimizedFinancialReport(appliedFilters, {
-    enabled: activeTab === 'financial',
+    enabled: activeTab === 'financial' && !!organizationId,
     refetchInterval: autoRefresh ? 8 * 60 * 1000 : undefined, // 8 minutes for financial
   });
-
-  const { exportReport, isExporting } = useAdvancedReportExport();
 
   // Obtener reporte actual
   const getCurrentReport = () => {
@@ -104,6 +122,13 @@ export default function ReportsPage() {
   };
 
   const currentReport = getCurrentReport();
+
+  // Export handler from custom hook
+  const { handleExport, isExporting } = useReportsExportHandler({
+    activeTab,
+    appliedFilters,
+    currentReportData: currentReport.data,
+  });
 
   // Actualizar timestamp cuando los datos cambien
   useEffect(() => {
@@ -134,175 +159,8 @@ export default function ReportsPage() {
     currentReport.refetch();
     toast({
       title: 'Actualizando datos',
-      description: 'Los datos se están recargando desde Supabase...',
+      description: 'Los datos se están recargando desde la base de datos...',
     });
-  };
-
-  const handleExport = async (format: ExportFormat) => {
-    const data = currentReport.data;
-    if (!data) {
-      const reportNames = {
-        sales: 'ventas',
-        inventory: 'productos en inventario',
-        customers: 'clientes',
-        financial: 'datos financieros'
-      };
-
-      toast({
-        title: `📊 No hay ${reportNames[activeTab]} para exportar`,
-        description: `No se encontraron ${reportNames[activeTab]} para el período seleccionado. Intenta ajustar los filtros de fecha o verifica que haya datos registrados.`,
-        variant: 'destructive',
-        duration: 5000,
-      });
-      return;
-    }
-
-    try {
-      // Configurar exportación según el tipo de reporte
-      const reportData = data as any; // Cast para acceder a propiedades específicas
-
-      if (activeTab === 'sales') {
-        const exportData = reportData.topProducts || [];
-        const charts = [
-          {
-            type: 'bar' as const,
-            title: 'Ventas por Fecha',
-            labels: reportData.salesByDate?.map((item: any) =>
-              new Date(item.date).toLocaleDateString('es-ES', { month: 'short', day: 'numeric' })
-            ) || [],
-            datasets: [{
-              label: 'Ventas (₲)',
-              data: reportData.salesByDate?.map((item: any) => item.sales) || [],
-              backgroundColor: 'rgba(99, 102, 241, 0.8)',
-              borderColor: 'rgba(99, 102, 241, 1)',
-            }]
-          },
-          {
-            type: 'pie' as const,
-            title: 'Ventas por Categoría',
-            labels: reportData.salesByCategory?.map((item: any) => item.category) || [],
-            datasets: [{
-              label: 'Ventas',
-              data: reportData.salesByCategory?.map((item: any) => item.sales) || [],
-            }]
-          }
-        ];
-
-        await exportReport(exportData, format, {
-          filename: `ventas-${new Date().toISOString().split('T')[0]}`,
-          title: 'Reporte de Ventas',
-          subtitle: `Período: ${appliedFilters.startDate?.toLocaleDateString()} - ${appliedFilters.endDate?.toLocaleDateString()}`,
-          columns: [
-            { header: 'Producto', dataKey: 'name', width: 200, format: 'text' },
-            { header: 'Ventas', dataKey: 'sales', width: 120, format: 'currency' },
-            { header: 'Cantidad', dataKey: 'quantity', width: 100, format: 'number' },
-          ],
-          charts,
-          includeCharts: true,
-          orientation: 'landscape',
-        });
-      } else if (activeTab === 'inventory') {
-        const exportData = reportData.stockLevels || [];
-        const charts = [
-          {
-            type: 'bar' as const,
-            title: 'Productos por Categoría',
-            labels: reportData.categoryBreakdown?.map((item: any) => item.category) || [],
-            datasets: [{
-              label: 'Cantidad',
-              data: reportData.categoryBreakdown?.map((item: any) => item.count) || [],
-              backgroundColor: 'rgba(16, 185, 129, 0.8)',
-            }]
-          }
-        ];
-
-        await exportReport(exportData, format, {
-          filename: `inventario-${new Date().toISOString().split('T')[0]}`,
-          title: 'Reporte de Inventario',
-          subtitle: 'Estado actual del inventario',
-          columns: [
-            { header: 'Producto', dataKey: 'name', width: 200, format: 'text' },
-            { header: 'Stock', dataKey: 'stock', width: 100, format: 'number' },
-            { header: 'Estado', dataKey: 'status', width: 100, format: 'text' },
-          ],
-          charts,
-          includeCharts: true,
-        });
-      } else if (activeTab === 'customers') {
-        const exportData = reportData.topCustomers || [];
-        const charts = [
-          {
-            type: 'pie' as const,
-            title: 'Segmentos de Clientes',
-            labels: reportData.customerSegments?.map((item: any) => item.segment) || [],
-            datasets: [{
-              label: 'Clientes',
-              data: reportData.customerSegments?.map((item: any) => item.count) || [],
-            }]
-          }
-        ];
-
-        await exportReport(exportData, format, {
-          filename: `clientes-${new Date().toISOString().split('T')[0]}`,
-          title: 'Reporte de Clientes',
-          subtitle: `Período: ${appliedFilters.startDate?.toLocaleDateString()} - ${appliedFilters.endDate?.toLocaleDateString()}`,
-          columns: [
-            { header: 'Cliente', dataKey: 'name', width: 180, format: 'text' },
-            { header: 'Total Gastado', dataKey: 'totalSpent', width: 120, format: 'currency' },
-            { header: 'Pedidos', dataKey: 'orders', width: 100, format: 'number' },
-          ],
-          charts,
-          includeCharts: true,
-        });
-      } else if (activeTab === 'financial') {
-        const exportData = reportData.revenueByMonth || [];
-        const charts = [
-          {
-            type: 'bar' as const,
-            title: 'Ingresos vs Gastos',
-            labels: reportData.revenueByMonth?.map((item: any) => item.month) || [],
-            datasets: [
-              {
-                label: 'Ingresos',
-                data: reportData.revenueByMonth?.map((item: any) => item.revenue) || [],
-                backgroundColor: 'rgba(16, 185, 129, 0.8)',
-              },
-              {
-                label: 'Gastos',
-                data: reportData.revenueByMonth?.map((item: any) => item.expenses) || [],
-                backgroundColor: 'rgba(239, 68, 68, 0.8)',
-              }
-            ]
-          },
-          {
-            type: 'pie' as const,
-            title: 'Desglose de Gastos',
-            labels: reportData.expenseBreakdown?.map((item: any) => item.category) || [],
-            datasets: [{
-              label: 'Gastos',
-              data: reportData.expenseBreakdown?.map((item: any) => item.amount) || [],
-            }]
-          }
-        ];
-
-        await exportReport(exportData, format, {
-          filename: `financiero-${new Date().toISOString().split('T')[0]}`,
-          title: 'Reporte Financiero',
-          subtitle: `Período: ${appliedFilters.startDate?.toLocaleDateString()} - ${appliedFilters.endDate?.toLocaleDateString()}`,
-          columns: [
-            { header: 'Período', dataKey: 'month', width: 120, format: 'text' },
-            { header: 'Ingresos', dataKey: 'revenue', width: 120, format: 'currency' },
-            { header: 'Gastos', dataKey: 'expenses', width: 120, format: 'currency' },
-            { header: 'Beneficio', dataKey: 'profit', width: 120, format: 'currency' },
-          ],
-          charts,
-          includeCharts: true,
-          orientation: 'landscape',
-        });
-      }
-    } catch (error) {
-      logger.error('Error exporting report:', error);
-    }
   };
 
   return (
@@ -336,10 +194,10 @@ export default function ReportsPage() {
             recordCount={
               currentReport.data
                 ? (
-                  (currentReport.data as any).topProducts?.length ||
-                  (currentReport.data as any).stockLevels?.length ||
-                  (currentReport.data as any).topCustomers?.length ||
-                  (currentReport.data as any).revenueByMonth?.length ||
+                  ((currentReport.data as SalesData).topProducts)?.length ||
+                  ((currentReport.data as InventoryData).stockLevels)?.length ||
+                  ((currentReport.data as CustomerData).topCustomers)?.length ||
+                  ((currentReport.data as FinancialData).revenueByMonth)?.length ||
                   0
                 )
                 : 0
@@ -356,24 +214,35 @@ export default function ReportsPage() {
         onReset={handleResetFilters}
         loading={currentReport.loading}
         showAdvanced={true}
+        activeTab={activeTab}
       />
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as ReportType)} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4 h-12 bg-muted/50 dark:bg-slate-900/60 dark:border dark:border-slate-800/50">
-          <TabsTrigger value="sales" className="gap-2 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 dark:data-[state=active]:text-slate-100 transition-colors">
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => {
+          const next = value as ReportType;
+          setActiveTab(next);
+          const nextParams = new URLSearchParams(searchParams.toString());
+          nextParams.set('type', next);
+          router.replace(`?${nextParams.toString()}`);
+        }}
+        className="space-y-6"
+      >
+        <TabsList className="flex items-center w-full overflow-x-auto scrollbar-hide h-12 bg-muted/50 dark:bg-slate-900/60 dark:border dark:border-slate-800/50 rounded-lg p-1">
+          <TabsTrigger value="sales" className="gap-2 shrink-0 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 dark:data-[state=active]:text-slate-100 transition-colors">
             <ShoppingCart className="w-4 h-4" />
             Ventas
           </TabsTrigger>
-          <TabsTrigger value="inventory" className="gap-2 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 dark:data-[state=active]:text-slate-100 transition-colors">
+          <TabsTrigger value="inventory" className="gap-2 shrink-0 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 dark:data-[state=active]:text-slate-100 transition-colors">
             <Package className="w-4 h-4" />
             Inventario
           </TabsTrigger>
-          <TabsTrigger value="customers" className="gap-2 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 dark:data-[state=active]:text-slate-100 transition-colors">
+          <TabsTrigger value="customers" className="gap-2 shrink-0 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 dark:data-[state=active]:text-slate-100 transition-colors">
             <Users className="w-4 h-4" />
             Clientes
           </TabsTrigger>
-          <TabsTrigger value="financial" className="gap-2 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 dark:data-[state=active]:text-slate-100 transition-colors">
+          <TabsTrigger value="financial" className="gap-2 shrink-0 data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 dark:data-[state=active]:text-slate-100 transition-colors">
             <DollarSign className="w-4 h-4" />
             Financiero
           </TabsTrigger>

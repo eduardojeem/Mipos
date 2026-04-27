@@ -16,6 +16,8 @@ interface MobileCartSheetProps {
   onClose: () => void;
   items: CartItem[];
   total: number;
+  subtotal: number;
+  taxAmount: number;
   onUpdateQuantity: (itemId: string, quantity: number) => void;
   onRemoveItem: (itemId: string) => void;
   onClearCart: () => void;
@@ -29,6 +31,8 @@ export default function MobileCartSheet({
   onClose,
   items,
   total,
+  subtotal,
+  taxAmount,
   onUpdateQuantity,
   onRemoveItem,
   onClearCart,
@@ -73,23 +77,23 @@ export default function MobileCartSheet({
 
       {/* Bottom Sheet */}
       <div
-        className={`absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl transition-transform duration-300 ease-out ${isOpen ? 'translate-y-0' : 'translate-y-full'
+        className={`absolute bottom-0 left-0 right-0 rounded-t-2xl bg-background text-foreground shadow-2xl transition-transform duration-300 ease-out ${isOpen ? 'translate-y-0' : 'translate-y-full'
           }`}
         style={{ maxHeight: '85vh' }}
       >
         {/* Header */}
-        <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 rounded-t-2xl">
+        <div className="sticky top-0 rounded-t-2xl border-b border-border bg-background/95 px-4 py-3 backdrop-blur">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <ShoppingCart className="w-5 h-5 text-gray-600" />
+              <ShoppingCart className="w-5 h-5 text-muted-foreground" />
               <div>
-                <h3 className="font-semibold text-gray-900">Carrito</h3>
-                <p className="text-sm text-gray-500">{items.length} artículos</p>
+                <h3 className="font-semibold text-foreground">Carrito</h3>
+                <p className="text-sm text-muted-foreground">{items.length} artículos</p>
               </div>
             </div>
             <button
               onClick={onClose}
-              className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+              className="p-2 text-muted-foreground transition-colors hover:text-foreground"
             >
               <X className="w-5 h-5" />
             </button>
@@ -101,10 +105,10 @@ export default function MobileCartSheet({
           {/* Items List */}
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
             {items.length === 0 ? (
-              <div className="text-center py-8">
-                <ShoppingCart className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Tu carrito está vacío</h3>
-                <p className="text-sm text-gray-500">Agrega productos para comenzar una venta</p>
+              <div className="py-8 text-center">
+                <ShoppingCart className="mx-auto mb-4 h-16 w-16 text-muted-foreground/40" />
+                <h3 className="mb-2 text-lg font-medium text-foreground">Tu carrito está vacío</h3>
+                <p className="text-sm text-muted-foreground">Agrega productos para comenzar una venta</p>
               </div>
             ) : (
               items.map((item) => {
@@ -112,7 +116,7 @@ export default function MobileCartSheet({
                 const itemName = item.name || item.product_name || 'Producto';
 
                 return (
-                  <div key={itemId} className="bg-gray-50 rounded-lg p-3">
+                  <div key={itemId} className="rounded-lg border border-border/60 bg-muted/40 p-3">
                     <div className="flex items-start space-x-3">
                       {/* Imagen del producto */}
                       {item.image_url ? (
@@ -122,21 +126,21 @@ export default function MobileCartSheet({
                           className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
                         />
                       ) : (
-                        <div className="w-12 h-12 bg-gray-200 rounded-lg flex-shrink-0 flex items-center justify-center">
-                          <span className="text-gray-500 text-xs">{itemName.substring(0, 1)}</span>
+                        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-muted">
+                          <span className="text-xs text-muted-foreground">{itemName.substring(0, 1)}</span>
                         </div>
                       )}
 
                       {/* Información del producto */}
                       <div className="flex-1 min-w-0">
-                        <h4 className="text-sm font-medium text-gray-900 truncate">{itemName}</h4>
+                        <h4 className="truncate text-sm font-medium text-foreground">{itemName}</h4>
                         <p className="text-sm text-green-600 font-semibold">${item.price?.toFixed(2) || '0.00'}</p>
                       </div>
 
                       {/* Botón eliminar */}
                       <button
                         onClick={() => onRemoveItem(itemId)}
-                        className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                        className="p-1 text-muted-foreground transition-colors hover:text-red-500"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -147,21 +151,21 @@ export default function MobileCartSheet({
                       <div className="flex items-center space-x-3">
                         <button
                           onClick={() => handleQuantityChange(itemId, item.quantity - 1)}
-                          className="w-8 h-8 rounded-full bg-white border border-gray-300 flex items-center justify-center hover:bg-gray-100 transition-colors"
+                          className="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background transition-colors hover:bg-muted"
                         >
                           <Minus className="w-4 h-4" />
                         </button>
-                        <span className="text-base font-medium text-gray-900 min-w-[2rem] text-center">
+                        <span className="min-w-[2rem] text-center text-base font-medium text-foreground">
                           {item.quantity}
                         </span>
                         <button
                           onClick={() => handleQuantityChange(itemId, item.quantity + 1)}
-                          className="w-8 h-8 rounded-full bg-white border border-gray-300 flex items-center justify-center hover:bg-gray-100 transition-colors"
+                          className="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background transition-colors hover:bg-muted"
                         >
                           <Plus className="w-4 h-4" />
                         </button>
                       </div>
-                      <span className="text-base font-semibold text-gray-900">
+                      <span className="text-base font-semibold text-foreground">
                         ${((item.price || 0) * item.quantity).toFixed(2)}
                       </span>
                     </div>
@@ -173,11 +177,23 @@ export default function MobileCartSheet({
 
           {/* Footer */}
           {items.length > 0 && (
-            <div className="sticky bottom-0 bg-white border-t border-gray-200 px-4 py-4 space-y-4">
+            <div className="sticky bottom-0 space-y-4 border-t border-border bg-background/95 px-4 py-4 backdrop-blur">
+              {/* Totals Breakdown */}
+              <div className="space-y-1 pt-2">
+                <div className="flex items-center justify-between text-sm text-muted-foreground">
+                  <span>Subtotal:</span>
+                  <span>${subtotal.toFixed(2)}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm text-muted-foreground border-b border-border/40 pb-2">
+                  <span>IVA (10%):</span>
+                  <span>${taxAmount.toFixed(2)}</span>
+                </div>
+              </div>
+
               {/* Total */}
               <div className="flex items-center justify-between">
-                <span className="text-lg font-semibold text-gray-900">Total:</span>
-                <span className="text-2xl font-bold text-gray-900">${total.toFixed(2)}</span>
+                <span className="text-lg font-bold text-foreground">Total:</span>
+                <span className="text-2xl font-black text-green-600">${total.toFixed(2)}</span>
               </div>
 
               {/* Botón de pago */}
@@ -199,7 +215,7 @@ export default function MobileCartSheet({
               <button
                 onClick={onClearCart}
                 disabled={isProcessing}
-                className="w-full h-12 text-gray-600 hover:text-gray-800 text-base font-medium transition-colors border border-gray-200 rounded-lg"
+                className="h-12 w-full rounded-lg border border-border text-base font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
                 Limpiar carrito
               </button>

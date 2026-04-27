@@ -1,10 +1,11 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useToast } from '@/components/ui/use-toast';
 import api from '@/lib/api';
 import type { CashMovement } from '@/types/cash';
-import type { CashFilterState, CashSummary } from '../types/cash.types';
+import type { CashSummary } from '../types/cash.types';
 import { calculateMovementSummary } from '../movements/utils/movementCalculations';
+import { useCurrentOrganizationId } from '@/hooks/use-current-organization';
 
 interface UseMovementsOptions {
     sessionId?: string;
@@ -19,23 +20,29 @@ interface UseMovementsReturn {
     isFetching: boolean;
     error: Error | null;
     summary: CashSummary;
-    refetch: () => Promise<any>;
+    refetch: () => Promise<unknown>;
 }
 
 export function useMovements(options: UseMovementsOptions = {}): UseMovementsReturn {
     const { sessionId, enabled = true, includeUser = true, createdByMe = false } = options;
     const { toast } = useToast();
-    const [movements, setMovements] = useState<CashMovement[]>([]);
+    const organizationId = useCurrentOrganizationId();
 
     const {
-        data: movementsRes,
+        data,
         isLoading,
         isFetching,
         error,
         refetch,
     } = useQuery({
-        queryKey: ['cashMovements', sessionId],
-        enabled: enabled && !!sessionId,
+        queryKey: [
+            'cashMovements',
+            organizationId ?? 'no-org',
+            sessionId ?? null,
+            includeUser ? 'with-user' : 'plain',
+            createdByMe ? 'mine' : 'all',
+        ],
+        enabled: enabled && !!organizationId && !!sessionId,
         queryFn: async () => {
             const params: Record<string, string> = {};
             if (sessionId) params.sessionId = sessionId;
@@ -46,23 +53,21 @@ export function useMovements(options: UseMovementsOptions = {}): UseMovementsRet
             return res.data;
         },
         refetchOnWindowFocus: false,
-        staleTime: 10_000, // Reduced from 60s to 10s for more responsive updates
+        staleTime: 60_000, // Increased to 60s to prevent constant background refetching
     });
-
-    useEffect(() => {
-        if (movementsRes?.movements) {
-            setMovements(movementsRes.movements || []);
-        }
-    }, [movementsRes]);
 
     useEffect(() => {
         if (error) {
             toast({
-                description: (error as any)?.message || 'Error cargando movimientos',
+                description: (error as Error)?.message || 'Error cargando movimientos',
                 variant: 'destructive',
             });
         }
     }, [error, toast]);
+
+    const movements = useMemo<CashMovement[]>(() => {
+        return Array.isArray(data?.movements) ? data.movements : [];
+    }, [data?.movements]);
 
     const summary = useMemo<CashSummary>(() => {
         return calculateMovementSummary(movements);

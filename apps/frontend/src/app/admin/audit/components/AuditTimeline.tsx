@@ -9,17 +9,14 @@ import {
   User, 
   Activity, 
   Database,
-  ZoomIn,
-  ZoomOut,
   Filter,
   Calendar,
   ChevronDown,
-  ChevronRight,
   AlertTriangle,
   CheckCircle,
   XCircle
 } from 'lucide-react';
-import { format, isToday, isYesterday, parseISO, differenceInMinutes } from 'date-fns';
+import { format, isToday, isYesterday, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 interface AuditTimelineProps {
@@ -123,11 +120,11 @@ export function AuditTimeline({ logs, loading, theme, fullView = false }: AuditT
   };
 
   const getActionColor = (action: string) => {
-    if (action.startsWith('CREATE')) return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300';
-    if (action.startsWith('UPDATE')) return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300';
-    if (action.startsWith('DELETE')) return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300';
-    if (action.startsWith('VIEW')) return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
-    return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300';
+    if (action.startsWith('CREATE')) return 'bg-green-500/10 text-green-700 dark:text-green-400';
+    if (action.startsWith('UPDATE')) return 'bg-primary/10 text-primary';
+    if (action.startsWith('DELETE')) return 'bg-destructive/10 text-destructive';
+    if (action.startsWith('VIEW')) return 'bg-muted text-muted-foreground';
+    return 'bg-secondary text-secondary-foreground';
   };
 
   const formatActionLabel = (action: string) => {
@@ -144,14 +141,13 @@ export function AuditTimeline({ logs, loading, theme, fullView = false }: AuditT
       count: group.logs.filter(log => selectedTypes.has(log.action)).length
     })).filter(group => group.count > 0);
   }, [groupedLogs, selectedTypes]);
-
-  if (loading) {
+  if (loading) {
     return (
-      <Card className={theme === 'dark' ? 'bg-gray-800 border-gray-700' : ''}>
+      <Card className="rounded-3xl border-border/60 bg-background/80 shadow-sm animate-pulse">
         <CardContent className="p-8">
           <div className="flex justify-center items-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            <span className="ml-2">Cargando timeline...</span>
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <span className="ml-2 text-muted-foreground">Cargando timeline...</span>
           </div>
         </CardContent>
       </Card>
@@ -161,21 +157,22 @@ export function AuditTimeline({ logs, loading, theme, fullView = false }: AuditT
   return (
     <div className="space-y-4">
       {/* Controles del timeline */}
-      <Card className={theme === 'dark' ? 'bg-gray-800 border-gray-700' : ''}>
+      <Card className="rounded-3xl border-border/60 bg-background/80 shadow-sm">
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5" />
+            <CardTitle className="flex items-center gap-2 text-foreground">
+              <Clock className="h-5 w-5 text-primary" />
               Timeline de Eventos
             </CardTitle>
             
             <div className="flex items-center gap-2">
               {/* Zoom controls */}
-              <div className="flex items-center gap-1 border rounded-lg p-1">
+              <div className="flex items-center gap-1 bg-muted/30 border border-border/50 rounded-2xl p-1">
                 <Button
                   variant={zoomLevel === 'hour' ? 'default' : 'ghost'}
                   size="sm"
                   onClick={() => setZoomLevel('hour')}
+                  className="rounded-xl h-8 text-xs"
                 >
                   Hora
                 </Button>
@@ -183,6 +180,7 @@ export function AuditTimeline({ logs, loading, theme, fullView = false }: AuditT
                   variant={zoomLevel === 'day' ? 'default' : 'ghost'}
                   size="sm"
                   onClick={() => setZoomLevel('day')}
+                  className="rounded-xl h-8 text-xs"
                 >
                   Día
                 </Button>
@@ -190,6 +188,7 @@ export function AuditTimeline({ logs, loading, theme, fullView = false }: AuditT
                   variant={zoomLevel === 'week' ? 'default' : 'ghost'}
                   size="sm"
                   onClick={() => setZoomLevel('week')}
+                  className="rounded-xl h-8 text-xs"
                 >
                   Semana
                 </Button>
@@ -200,19 +199,19 @@ export function AuditTimeline({ logs, loading, theme, fullView = false }: AuditT
         
         <CardContent>
           {/* Filtros de tipo de evento */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium flex items-center gap-1">
-              <Filter className="h-4 w-4" />
+          <div className="space-y-3">
+            <label className="text-sm font-semibold flex items-center gap-2 text-foreground">
+              <Filter className="h-4 w-4 text-muted-foreground" />
               Filtrar por tipo de evento
             </label>
             <div className="flex gap-2 flex-wrap">
               {eventTypes.map(type => (
                 <Button
                   key={type}
-                  variant={selectedTypes.has(type) ? 'default' : 'outline'}
+                  variant={selectedTypes.has(type) ? 'default' : 'secondary'}
                   size="sm"
                   onClick={() => toggleEventType(type)}
-                  className="text-xs"
+                  className="text-[10px] h-7 px-3 rounded-full font-medium"
                 >
                   {formatActionLabel(type)}
                 </Button>
@@ -222,7 +221,7 @@ export function AuditTimeline({ logs, loading, theme, fullView = false }: AuditT
                   variant="ghost"
                   size="sm"
                   onClick={() => setSelectedTypes(new Set())}
-                  className="text-xs"
+                  className="text-xs h-7 px-2 hover:text-destructive"
                 >
                   Limpiar filtros
                 </Button>
@@ -234,31 +233,31 @@ export function AuditTimeline({ logs, loading, theme, fullView = false }: AuditT
 
       {/* Timeline */}
       <div className="space-y-4">
-        {filteredGroupedLogs.map((group, groupIndex) => (
-          <Card key={group.date} className={theme === 'dark' ? 'bg-gray-800 border-gray-700' : ''}>
+        {filteredGroupedLogs.map((group) => (
+          <Card key={group.date} className="rounded-3xl border-border/60 bg-background/80 shadow-sm overflow-hidden">
             <CardHeader 
-              className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              className="p-0 cursor-pointer hover:bg-muted/30 transition-colors"
               onClick={() => toggleGroup(group.date)}
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  {expandedGroups.has(group.date) ? (
-                    <ChevronDown className="h-4 w-4" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4" />
-                  )}
-                  <Calendar className="h-5 w-5 text-blue-500" />
+              <div className="flex items-center justify-between p-6">
+                <div className="flex items-center gap-4">
+                  <div className={`p-2 rounded-2xl transition-transform ${expandedGroups.has(group.date) ? 'rotate-0' : '-rotate-90'}`}>
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <div className="p-3 rounded-2xl bg-primary/10">
+                    <Calendar className="h-5 w-5 text-primary" />
+                  </div>
                   <div>
-                    <h3 className="font-semibold">{group.displayDate}</h3>
-                    <p className="text-sm text-gray-500">
-                      {group.count} evento{group.count !== 1 ? 's' : ''}
+                    <h3 className="font-bold text-lg text-foreground">{group.displayDate}</h3>
+                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
+                      {group.count} evento{group.count !== 1 ? 's' : ''} detectados
                     </p>
                   </div>
                 </div>
                 
                 <div className="flex items-center gap-2">
                   {/* Resumen de estados */}
-                  <div className="flex gap-1">
+                  <div className="flex gap-1.5">
                     {['SUCCESS', 'FAILURE', 'PENDING'].map(status => {
                       const count = group.logs.filter(log => log.status === status).length;
                       if (count === 0) return null;
@@ -267,10 +266,10 @@ export function AuditTimeline({ logs, loading, theme, fullView = false }: AuditT
                         <Badge 
                           key={status}
                           variant="outline"
-                          className={`text-xs ${
-                            status === 'SUCCESS' ? 'border-green-500 text-green-600' :
-                            status === 'FAILURE' ? 'border-red-500 text-red-600' :
-                            'border-yellow-500 text-yellow-600'
+                          className={`text-[10px] px-2 h-5 font-bold rounded-full ${
+                            status === 'SUCCESS' ? 'bg-green-500/10 border-green-500/20 text-green-700 dark:text-green-400' :
+                            status === 'FAILURE' ? 'bg-destructive/10 border-destructive/20 text-destructive' :
+                            'bg-yellow-500/10 border-yellow-500/20 text-yellow-700 dark:text-yellow-400'
                           }`}
                         >
                           {count}
@@ -283,73 +282,86 @@ export function AuditTimeline({ logs, loading, theme, fullView = false }: AuditT
             </CardHeader>
 
             {expandedGroups.has(group.date) && (
-              <CardContent>
-                <div className="space-y-3">
+              <CardContent className="px-6 pb-6 pt-0">
+                <div className="space-y-4 mt-2">
                   {group.logs.map((log, logIndex) => (
                     <div 
                       key={log.id}
-                      className={`flex items-start gap-4 p-3 rounded-lg border-l-4 ${
-                        log.status === 'SUCCESS' ? 'border-l-green-500 bg-green-50 dark:bg-green-900/20' :
-                        log.status === 'FAILURE' ? 'border-l-red-500 bg-red-50 dark:bg-red-900/20' :
-                        'border-l-yellow-500 bg-yellow-50 dark:bg-yellow-900/20'
+                      className={`relative flex items-start gap-5 p-5 rounded-2xl border transition-all ${
+                        log.status === 'SUCCESS' ? 'border-green-500/10 bg-green-50/30 dark:bg-green-500/5' :
+                        log.status === 'FAILURE' ? 'border-destructive/10 bg-destructive/5' :
+                        'border-yellow-500/10 bg-yellow-50/30 dark:bg-yellow-500/5'
                       }`}
                     >
-                      {/* Timeline connector */}
-                      <div className="flex flex-col items-center">
-                        {getStatusIcon(log.status)}
-                        {logIndex < group.logs.length - 1 && (
-                          <div className="w-px h-8 bg-gray-300 dark:bg-gray-600 mt-2"></div>
-                        )}
+                      {/* Timeline connector visual (opcional/simplificado) */}
+                      <div className="flex flex-col items-center mt-1 z-10">
+                        <div className={`rounded-full p-1.5 ${
+                          log.status === 'SUCCESS' ? 'bg-green-500/20 text-green-600' :
+                          log.status === 'FAILURE' ? 'bg-destructive/10 text-destructive' :
+                          'bg-yellow-500/20 text-yellow-600'
+                        }`}>
+                          {getStatusIcon(log.status)}
+                        </div>
                       </div>
 
                       {/* Event details */}
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-2 flex-wrap">
-                          <Badge className={getActionColor(log.action)}>
+                        <div className="flex items-center gap-2 mb-3 flex-wrap">
+                          <Badge variant="outline" className={`${getActionColor(log.action)} text-[10px] font-bold border-none`}>
                             {formatActionLabel(log.action)}
                           </Badge>
-                          <Badge variant="outline">
+                          <Badge variant="secondary" className="text-[10px] font-normal opacity-80 h-5">
                             {log.resource}
                           </Badge>
-                          <span className="text-sm text-gray-500">
+                          <span className="text-xs font-mono text-muted-foreground ml-auto bg-muted/40 px-2 py-0.5 rounded-lg">
+                            <Clock className="h-3 w-3 inline mr-1 opacity-70" />
                             {format(parseISO(log.createdAt), 'HH:mm:ss', { locale: es })}
                           </span>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                          <div>
-                            <span className="font-medium flex items-center gap-1">
-                              <User className="h-3 w-3" /> Usuario:
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                          <div className="p-3 bg-background/40 rounded-xl border border-border/30">
+                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block mb-1">
+                              Usuario
                             </span>
-                            <p className="text-gray-600 dark:text-gray-400 truncate">
-                              {log.userEmail || 'N/A'}
-                            </p>
+                            <div className="flex items-center gap-2">
+                              <User className="h-3.5 w-3.5 text-primary opacity-70" />
+                              <p className="text-foreground font-semibold truncate">
+                                {log.userEmail || 'N/A'}
+                              </p>
+                            </div>
                           </div>
                           
-                          <div>
-                            <span className="font-medium flex items-center gap-1">
-                              <Database className="h-3 w-3" /> Recurso ID:
+                          <div className="p-3 bg-background/40 rounded-xl border border-border/30">
+                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block mb-1">
+                              Recurso ID
                             </span>
-                            <p className="text-gray-600 dark:text-gray-400 font-mono text-xs truncate">
-                              {log.resourceId || 'N/A'}
-                            </p>
+                            <div className="flex items-center gap-2">
+                              <Database className="h-3.5 w-3.5 text-primary opacity-70" />
+                              <p className="text-muted-foreground font-mono text-xs truncate">
+                                {log.resourceId || 'N/A'}
+                              </p>
+                            </div>
                           </div>
                           
-                          <div>
-                            <span className="font-medium">IP:</span>
-                            <p className="text-gray-600 dark:text-gray-400 font-mono text-xs">
+                          <div className="p-3 bg-background/40 rounded-xl border border-border/30">
+                            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block mb-1">
+                              Dirección IP
+                            </span>
+                            <p className="text-muted-foreground font-mono text-xs mt-0.5">
                               {log.ipAddress}
                             </p>
                           </div>
                         </div>
 
                         {log.details && Object.keys(log.details).length > 0 && (
-                          <details className="mt-2">
-                            <summary className="cursor-pointer text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400">
-                              Ver detalles adicionales
+                          <details className="mt-4 group/details">
+                            <summary className="cursor-pointer text-xs font-bold text-primary hover:opacity-80 transition-opacity list-none flex items-center gap-1">
+                              <Activity className="h-3 w-3" />
+                              Ver metadatos adicionales
                             </summary>
-                            <div className="mt-2 p-2 bg-gray-100 dark:bg-gray-700 rounded text-xs overflow-x-auto">
-                              <pre className="text-gray-600 dark:text-gray-300 whitespace-pre-wrap">
+                            <div className="mt-3 p-4 bg-muted/30 border border-border/30 rounded-xl text-[11px] font-mono overflow-x-auto shadow-inner">
+                              <pre className="text-muted-foreground whitespace-pre-wrap">
                                 {JSON.stringify(log.details, null, 2)}
                               </pre>
                             </div>
@@ -365,16 +377,16 @@ export function AuditTimeline({ logs, loading, theme, fullView = false }: AuditT
         ))}
 
         {filteredGroupedLogs.length === 0 && (
-          <Card className={theme === 'dark' ? 'bg-gray-800 border-gray-700' : ''}>
-            <CardContent className="p-8">
-              <div className="text-center text-gray-500">
-                <AlertTriangle className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                <p>No se encontraron eventos para mostrar en el timeline</p>
-                {selectedTypes.size > 0 && (
-                  <p className="text-sm mt-2">
-                    Intenta ajustar los filtros de tipo de evento
-                  </p>
-                )}
+          <Card className="rounded-3xl border-border/60 bg-background/80 shadow-sm">
+            <CardContent className="p-12">
+              <div className="text-center text-muted-foreground">
+                <AlertTriangle className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                <p className="font-semibold text-foreground">No hay eventos que coincidan</p>
+                <p className="text-sm mt-1">
+                  {selectedTypes.size > 0 
+                    ? 'Intenta ajustar los filtros de tipo de evento seleccionados'
+                    : 'No hay eventos de auditoría disponibles en este periodo'}
+                </p>
               </div>
             </CardContent>
           </Card>

@@ -1,80 +1,65 @@
+import { normalizePlanCode } from '@/lib/plan-catalog';
 
-// Plan Types and Features Configuration
-
-export type PlanType = 'FREE' | 'STARTER' | 'PROFESSIONAL' | 'PREMIUM' | 'ENTERPRISE';
+export type PlanType = 'FREE' | 'STARTER' | 'PROFESSIONAL';
 
 export const PLAN_FEATURES = {
-  ANALYTICS: 'analytics', // Reportes avanzados
-  EXPORT_REPORTS: 'export_reports', // Exportar Excel/PDF
-  TEAM_MANAGEMENT: 'team_management', // Gestión de usuarios y roles
-  ADMIN_PANEL: 'admin_panel', // Panel de administración avanzado
-  ADVANCED_INVENTORY: 'advanced_inventory', // Proveedores, Stock bajo, etc.
-  API_ACCESS: 'api_access', // Acceso a API
-  MULTIPLE_BRANCHES: 'multiple_branches', // Múltiples sucursales
-  LOYALTY_PROGRAM: 'loyalty_program', // Programa de lealtad
-  UNLIMITED_PRODUCTS: 'unlimited_products', // Productos ilimitados (vs límite)
-  CUSTOM_BRANDING: 'custom_branding', // Logo y colores personalizados
+  BASIC_INVENTORY: 'basic_inventory',
+  BASIC_SALES: 'basic_sales',
+  PURCHASE_MODULE: 'purchase_module',
+  BASIC_REPORTS: 'basic_reports',
+  ADVANCED_REPORTS: 'advanced_reports',
+  MULTI_BRANCH: 'multi_branch',
+  AUDIT_LOGS: 'audit_logs',
+  UNLIMITED_USERS: 'unlimited_users',
+  ANALYTICS: 'basic_reports',
+  EXPORT_REPORTS: 'export_reports',
+  TEAM_MANAGEMENT: 'team_management',
+  ADMIN_PANEL: 'admin_panel',
+  ADVANCED_INVENTORY: 'advanced_inventory',
+  API_ACCESS: 'api_access',
+  MULTIPLE_BRANCHES: 'multi_branch',
+  LOYALTY_PROGRAM: 'loyalty_program',
+  UNLIMITED_PRODUCTS: 'unlimited_products',
+  CUSTOM_BRANDING: 'custom_branding',
 } as const;
 
-// Definition of capabilities for each plan
 export const PLANS: Record<PlanType, string[]> = {
   FREE: [
-    // Basic features only
+    PLAN_FEATURES.BASIC_INVENTORY,
+    PLAN_FEATURES.BASIC_SALES,
+    PLAN_FEATURES.ADMIN_PANEL,
   ],
   STARTER: [
-    PLAN_FEATURES.ANALYTICS, // Basic analytics
-    PLAN_FEATURES.TEAM_MANAGEMENT, // Basic team
+    PLAN_FEATURES.BASIC_INVENTORY,
+    PLAN_FEATURES.BASIC_SALES,
+    PLAN_FEATURES.PURCHASE_MODULE,
+    PLAN_FEATURES.BASIC_REPORTS,
+    PLAN_FEATURES.TEAM_MANAGEMENT,
+    PLAN_FEATURES.ADMIN_PANEL,
+    PLAN_FEATURES.ADVANCED_INVENTORY,
   ],
   PROFESSIONAL: [
-    PLAN_FEATURES.ANALYTICS,
-    PLAN_FEATURES.EXPORT_REPORTS,
-    PLAN_FEATURES.TEAM_MANAGEMENT,
-    PLAN_FEATURES.ADVANCED_INVENTORY,
-    PLAN_FEATURES.LOYALTY_PROGRAM,
-    PLAN_FEATURES.CUSTOM_BRANDING,
-  ],
-  PREMIUM: [
-    PLAN_FEATURES.ANALYTICS,
-    PLAN_FEATURES.EXPORT_REPORTS,
-    PLAN_FEATURES.TEAM_MANAGEMENT,
-    PLAN_FEATURES.ADMIN_PANEL,
-    PLAN_FEATURES.ADVANCED_INVENTORY,
-    PLAN_FEATURES.API_ACCESS,
-    PLAN_FEATURES.MULTIPLE_BRANCHES,
-    PLAN_FEATURES.LOYALTY_PROGRAM,
-    PLAN_FEATURES.UNLIMITED_PRODUCTS,
-    PLAN_FEATURES.CUSTOM_BRANDING,
-  ],
-  ENTERPRISE: [
-    // Enterprise includes everything from Premium + more exclusive features if any
-    PLAN_FEATURES.ANALYTICS,
+    PLAN_FEATURES.BASIC_INVENTORY,
+    PLAN_FEATURES.BASIC_SALES,
+    PLAN_FEATURES.PURCHASE_MODULE,
+    PLAN_FEATURES.BASIC_REPORTS,
+    PLAN_FEATURES.ADVANCED_REPORTS,
+    PLAN_FEATURES.MULTI_BRANCH,
+    PLAN_FEATURES.AUDIT_LOGS,
+    PLAN_FEATURES.UNLIMITED_USERS,
     PLAN_FEATURES.EXPORT_REPORTS,
     PLAN_FEATURES.TEAM_MANAGEMENT,
     PLAN_FEATURES.ADMIN_PANEL,
     PLAN_FEATURES.ADVANCED_INVENTORY,
-    PLAN_FEATURES.API_ACCESS,
-    PLAN_FEATURES.MULTIPLE_BRANCHES,
     PLAN_FEATURES.LOYALTY_PROGRAM,
-    PLAN_FEATURES.UNLIMITED_PRODUCTS,
     PLAN_FEATURES.CUSTOM_BRANDING,
-  ]
+  ],
 };
 
-// Helper to normalize plan names from DB to PlanType
 export const normalizePlan = (planName?: string): PlanType => {
-  if (!planName) return 'FREE';
-  
-  const normalized = planName.toUpperCase().trim();
-  
-  if (normalized === 'PRO' || normalized === 'PROFESSIONAL') return 'PROFESSIONAL';
-  if (normalized === 'PREMIUM') return 'PREMIUM';
-  if (normalized === 'ENTERPRISE') return 'ENTERPRISE';
-  if (normalized === 'STARTER') return 'STARTER';
-  
-  return 'FREE';
+  return normalizePlanCode(planName);
 };
 
-// Helper to check if a plan has a specific feature
 export const planHasFeature = (planName: string | undefined, feature: string): boolean => {
   const plan = normalizePlan(planName);
   const features = PLANS[plan] || [];

@@ -1,11 +1,11 @@
 import { useCallback } from 'react';
+import { Filter as FilterIcon, Search, X } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Search, X, Filter as FilterIcon } from 'lucide-react';
 import type { UseCustomerFiltersReturn } from '../hooks';
 
 interface CustomerFiltersBarProps {
@@ -14,18 +14,13 @@ interface CustomerFiltersBarProps {
     onToggleFilters?: () => void;
 }
 
-/**
- * Filter bar component for customers page.
- * Manages search, status, and type filters with active filter count.
- */
 export function CustomerFiltersBar({
     filters,
     showFilters = true,
     onToggleFilters
 }: CustomerFiltersBarProps) {
-    // Memoize handlers to prevent infinite re-renders
-    const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-        filters.updateFilter('search', e.target.value);
+    const handleSearchChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+        filters.updateFilter('search', event.target.value);
     }, [filters]);
 
     const handleSearchClear = useCallback(() => {
@@ -44,12 +39,11 @@ export function CustomerFiltersBar({
         <Card>
             <CardContent className="pt-6">
                 <div className="space-y-4">
-                    {/* Search Bar */}
                     <div className="flex items-center gap-2">
                         <div className="relative flex-1">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                             <Input
-                                placeholder="Buscar por nombre, email o código..."
+                                placeholder="Buscar por nombre, email o codigo..."
                                 value={filters.searchTerm}
                                 onChange={handleSearchChange}
                                 className="pl-10 pr-10"
@@ -58,7 +52,7 @@ export function CustomerFiltersBar({
                                 <Button
                                     variant="ghost"
                                     size="sm"
-                                    className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7 w-7 p-0"
+                                    className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 p-0"
                                     onClick={handleSearchClear}
                                 >
                                     <X className="h-4 w-4" />
@@ -72,10 +66,13 @@ export function CustomerFiltersBar({
                                 onClick={onToggleFilters}
                                 className="shrink-0"
                             >
-                                <FilterIcon className="h-4 w-4 mr-2" />
+                                <FilterIcon className="mr-2 h-4 w-4" />
                                 Filtros
                                 {filters.activeFiltersCount > 0 && (
-                                    <Badge variant="secondary" className="ml-2 h-5 w-5 p-0 flex items-center justify-center text-xs">
+                                    <Badge
+                                        variant="secondary"
+                                        className="ml-2 flex h-5 w-5 items-center justify-center p-0 text-xs"
+                                    >
                                         {filters.activeFiltersCount}
                                     </Badge>
                                 )}
@@ -83,15 +80,11 @@ export function CustomerFiltersBar({
                         )}
                     </div>
 
-                    {/* Filters Panel */}
                     {showFilters && (
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t">
+                        <div className="grid grid-cols-1 gap-4 border-t pt-4 md:grid-cols-3">
                             <div className="space-y-2">
                                 <Label htmlFor="status-filter">Estado</Label>
-                                <Select
-                                    value={filters.filters.status}
-                                    onValueChange={handleStatusChange}
-                                >
+                                <Select value={filters.filters.status} onValueChange={handleStatusChange}>
                                     <SelectTrigger id="status-filter">
                                         <SelectValue placeholder="Todos los estados" />
                                     </SelectTrigger>
@@ -104,11 +97,8 @@ export function CustomerFiltersBar({
                             </div>
 
                             <div className="space-y-2">
-                                <Label htmlFor="type-filter">Tipo de Cliente</Label>
-                                <Select
-                                    value={filters.filters.type}
-                                    onValueChange={handleTypeChange}
-                                >
+                                <Label htmlFor="type-filter">Tipo de cliente</Label>
+                                <Select value={filters.filters.type} onValueChange={handleTypeChange}>
                                     <SelectTrigger id="type-filter">
                                         <SelectValue placeholder="Todos los tipos" />
                                     </SelectTrigger>
@@ -121,6 +111,20 @@ export function CustomerFiltersBar({
                                 </Select>
                             </div>
 
+                            <div className="space-y-2">
+                                <Label htmlFor="ruc-filter">RUC</Label>
+                                <Select value={filters.filters.hasRUC || 'all'} onValueChange={(value) => filters.updateFilter('hasRUC', value)}>
+                                    <SelectTrigger id="ruc-filter">
+                                        <SelectValue placeholder="Todos" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">Todos</SelectItem>
+                                        <SelectItem value="yes">Con RUC</SelectItem>
+                                        <SelectItem value="no">Sin RUC</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
                             <div className="flex items-end">
                                 <Button
                                     variant="outline"
@@ -128,8 +132,8 @@ export function CustomerFiltersBar({
                                     disabled={filters.activeFiltersCount === 0}
                                     className="w-full"
                                 >
-                                    <X className="h-4 w-4 mr-2" />
-                                    Limpiar Filtros
+                                    <X className="mr-2 h-4 w-4" />
+                                    Limpiar filtros
                                 </Button>
                             </div>
                         </div>

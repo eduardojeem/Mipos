@@ -1,8 +1,9 @@
-import { useCallback, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { Database } from '@/types/supabase';
+import { createClient } from '@/lib/supabase/client';
 import { UserFilters } from './useAdminFilters';
 import { useToast } from '@/components/ui/use-toast';
-import type { Database } from '@/types/supabase';
 
 export interface AdminUser {
     id: string;
@@ -26,6 +27,38 @@ interface UseUsersOptions {
     page?: number;
 }
 
+type UsersQueryResponse = {
+    users: Array<Record<string, unknown>>;
+    total: number;
+};
+
+function normalizeAdminUser(raw: Record<string, unknown>, fallbackOrganizationId?: string): AdminUser {
+    const organizationName = raw.organization && typeof raw.organization === 'object'
+        ? String((raw.organization as { name?: string }).name || '')
+        : String(raw.organizationName || '');
+    const status = String(raw.status || '').toUpperCase();
+
+    return {
+        id: String(raw.id || ''),
+        email: String(raw.email || ''),
+        full_name: raw.full_name ? String(raw.full_name) : raw.name ? String(raw.name) : null,
+        role: String(raw.role || 'USER').toUpperCase(),
+        organization_id: raw.organization_id ? String(raw.organization_id) : raw.organizationId ? String(raw.organizationId) : fallbackOrganizationId || null,
+        organization: organizationName ? { name: organizationName } : null,
+        created_at: String(raw.created_at || raw.createdAt || new Date().toISOString()),
+        last_sign_in_at: raw.last_sign_in_at
+            ? String(raw.last_sign_in_at)
+            : raw.last_login
+                ? String(raw.last_login)
+                : raw.lastLogin
+                    ? String(raw.lastLogin)
+                    : null,
+        is_active: typeof raw.is_active === 'boolean'
+            ? raw.is_active
+            : status === '' || status === 'ACTIVE',
+    };
+}
+
 export function useUsers(options: UseUsersOptions = {}) {
     const {
         filters,
@@ -37,27 +70,30 @@ export function useUsers(options: UseUsersOptions = {}) {
 
     const queryClient = useQueryClient();
     const { toast } = useToast();
-    
+    const supabase = useMemo(() => createClient(), []);
+    const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
+    const searchFilter = String(filters?.search || '');
+    const organizationFilter = filters?.organization?.[0] || '';
 
-    // Query key for caching
-    const queryKey = useMemo(() => 
-        ['admin', 'users', { filters, sortBy, sortOrder, pageSize, page }], 
-        [filters, sortBy, sortOrder, pageSize, page]
+    const queryKey = useMemo(
+        () => ['admin', 'users', searchFilter, organizationFilter, sortBy, sortOrder, pageSize, page],
+        [searchFilter, organizationFilter, sortBy, sortOrder, pageSize, page]
     );
 
-    // Fetch users using React Query
     const {
         data,
         isLoading: loading,
+        isFetching,
         error: queryError,
         refetch,
-    } = useQuery<{ users: AdminUser[]; total: number }>({
+    } = useQuery<UsersQueryResponse>({
         queryKey,
         queryFn: async () => {
             const params = new URLSearchParams();
             params.set('page', String(page));
             params.set('limit', String(pageSize));
-            if (filters?.search) params.set('search', String(filters.search));
+            if (searchFilter) params.set('search', searchFilter);
+            if (organizationFilter) params.set('organizationId', organizationFilter);
             const res = await fetch(`/api/superadmin/users?${params.toString()}`);
             const json = await res.json();
             if (!res.ok) throw new Error(json?.error || 'Error al obtener usuarios');
@@ -66,17 +102,40 @@ export function useUsers(options: UseUsersOptions = {}) {
                 total: json.total || 0,
             };
         },
-        staleTime: 5 * 60 * 1000, // 5 minutes - usuarios cambian con menos frecuencia
-        gcTime: 10 * 60 * 1000, // 10 minutes (antes cacheTime)
-        refetchOnWindowFocus: false, // No refetch al cambiar de tab
-        refetchOnMount: false, // No refetch si hay cache válido
+        staleTime: 60 * 1000,
+        gcTime: 10 * 60 * 1000,
+        refetchOnWindowFocus: false,
+        refetchOnMount: true,
     });
 
-    const users = data?.users || [];
+    useEffect(() => {
+        const invalidate = () => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+        };
+
+        const membersChannel = organizationFilter
+            ? supabase
+                .channel(`superadmin-users-${organizationFilter}`)
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'organization_members', filter: `organization_id=eq.${organizationFilter}` }, invalidate)
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, invalidate)
+            : supabase
+                .channel('superadmin-users')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, invalidate);
+
+        const channel = membersChannel.subscribe((status) => {
+            setIsRealtimeConnected(status === 'SUBSCRIBED');
+        });
+
+        return () => {
+            setIsRealtimeConnected(false);
+            void supabase.removeChannel(channel);
+        };
+    }, [organizationFilter, queryClient, supabase]);
+
+    const users = (data?.users || []).map((user) => normalizeAdminUser(user, organizationFilter));
     const totalCount = data?.total || 0;
     const error = queryError instanceof Error ? queryError.message : null;
 
-    // Mutation for updating a user
     const updateMutation = useMutation({
         mutationFn: async ({ id, updates }: { id: string; updates: Partial<AdminUser> }) => {
             const writableUpdates = { ...updates } as Record<string, unknown>;
@@ -93,22 +152,22 @@ export function useUsers(options: UseUsersOptions = {}) {
         },
         onMutate: async ({ id, updates }) => {
             await queryClient.cancelQueries({ queryKey: ['admin', 'users'] });
-            const previousData = queryClient.getQueryData<{ users: AdminUser[]; total: number }>(queryKey);
+            const previousData = queryClient.getQueryData<UsersQueryResponse>(queryKey);
 
-            queryClient.setQueryData<{ users: AdminUser[]; total: number }>(queryKey, (old) => {
+            queryClient.setQueryData<UsersQueryResponse>(queryKey, (old) => {
                 if (!old) return previousData || { users: [], total: 0 };
                 return {
                     ...old,
-                    users: old.users?.map((user: AdminUser) => 
-                        user.id === id ? { ...user, ...updates } : user
-                    ) || [],
+                    users: old.users.map((user) => (
+                        String(user.id) === id ? { ...user, ...updates } : user
+                    )),
                     total: old.total || 0,
                 };
             });
 
             return { previousData };
         },
-        onError: (err, variables, context) => {
+        onError: (err, _variables, context) => {
             queryClient.setQueryData(queryKey, context?.previousData);
             toast({
                 title: 'Error al actualizar usuario',
@@ -127,7 +186,6 @@ export function useUsers(options: UseUsersOptions = {}) {
         },
     });
 
-    // Mutation for deleting a user
     const deleteMutation = useMutation({
         mutationFn: async (id: string) => {
             const res = await fetch(`/api/superadmin/users/${id}`, { method: 'DELETE' });
@@ -137,20 +195,20 @@ export function useUsers(options: UseUsersOptions = {}) {
         },
         onMutate: async (id) => {
             await queryClient.cancelQueries({ queryKey: ['admin', 'users'] });
-            const previousData = queryClient.getQueryData<{ users: AdminUser[]; total: number }>(queryKey);
+            const previousData = queryClient.getQueryData<UsersQueryResponse>(queryKey);
 
-            queryClient.setQueryData<{ users: AdminUser[]; total: number }>(queryKey, (old) => {
+            queryClient.setQueryData<UsersQueryResponse>(queryKey, (old) => {
                 if (!old) return previousData || { users: [], total: 0 };
                 return {
                     ...old,
-                    users: old.users?.filter((user: AdminUser) => user.id !== id) || [],
-                    total: (old.total || 0) - 1,
+                    users: old.users.filter((user) => String(user.id) !== id),
+                    total: Math.max(0, (old.total || 0) - 1),
                 };
             });
 
             return { previousData };
         },
-        onError: (err, id, context) => {
+        onError: (err, _id, context) => {
             queryClient.setQueryData(queryKey, context?.previousData);
             toast({
                 title: 'Error al eliminar usuario',
@@ -169,7 +227,6 @@ export function useUsers(options: UseUsersOptions = {}) {
         },
     });
 
-    // Mutation for bulk updating users
     const bulkUpdateMutation = useMutation({
         mutationFn: async ({ ids, updates }: { ids: string[]; updates: Partial<AdminUser> }) => {
             const writableUpdates = { ...updates } as Record<string, unknown>;
@@ -181,7 +238,7 @@ export function useUsers(options: UseUsersOptions = {}) {
                 body: JSON.stringify({ operation: 'update', ids, updates: dbUpdates }),
             });
             const json = await res.json();
-            if (!res.ok) throw new Error(json?.error || 'Error en actualización masiva');
+            if (!res.ok) throw new Error(json?.error || 'Error en actualizacion masiva');
             return { ids, updates };
         },
         onSuccess: (_, { ids }) => {
@@ -193,14 +250,13 @@ export function useUsers(options: UseUsersOptions = {}) {
         },
         onError: (err) => {
             toast({
-                title: 'Error en actualización masiva',
+                title: 'Error en actualizacion masiva',
                 description: err instanceof Error ? err.message : 'Error desconocido',
                 variant: 'destructive',
             });
         }
     });
 
-    // Mutation for bulk deleting users
     const bulkDeleteMutation = useMutation({
         mutationFn: async (ids: string[]) => {
             const res = await fetch('/api/superadmin/users/bulk', {
@@ -209,7 +265,7 @@ export function useUsers(options: UseUsersOptions = {}) {
                 body: JSON.stringify({ operation: 'delete', ids }),
             });
             const json = await res.json();
-            if (!res.ok) throw new Error(json?.error || 'Error en eliminación masiva');
+            if (!res.ok) throw new Error(json?.error || 'Error en eliminacion masiva');
             return ids;
         },
         onSuccess: (_, ids) => {
@@ -221,7 +277,7 @@ export function useUsers(options: UseUsersOptions = {}) {
         },
         onError: (err) => {
             toast({
-                title: 'Error en eliminación masiva',
+                title: 'Error en eliminacion masiva',
                 description: err instanceof Error ? err.message : 'Error desconocido',
                 variant: 'destructive',
             });
@@ -244,7 +300,6 @@ export function useUsers(options: UseUsersOptions = {}) {
         return bulkDeleteMutation.mutateAsync(ids);
     }, [bulkDeleteMutation]);
 
-
     const changeUserRole = useCallback(async (id: string, role: string) => {
         return updateUser(id, { role });
     }, [updateUser]);
@@ -260,6 +315,8 @@ export function useUsers(options: UseUsersOptions = {}) {
     return {
         users,
         loading,
+        isFetching,
+        isRealtimeConnected,
         error,
         totalCount,
         refresh: refetch,

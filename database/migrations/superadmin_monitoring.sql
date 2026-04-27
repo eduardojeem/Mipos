@@ -21,12 +21,13 @@ CREATE INDEX IF NOT EXISTS idx_superadmin_settings_key
 
 -- Trigger para actualizar updated_at
 CREATE OR REPLACE FUNCTION update_superadmin_settings_updated_at()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+AS $$
 BEGIN
   NEW.updated_at = now();
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path = '';
 
 CREATE TRIGGER trigger_update_superadmin_settings_updated_at
   BEFORE UPDATE ON superadmin_settings

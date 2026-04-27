@@ -41,60 +41,51 @@ export function BulkActionsBar({
   }
 
   const confirmAction = async () => {
-    if (!action) return
+    if (!action) return;
 
-    setLoading(true)
+    setLoading(true);
     try {
-      const ids = Array.from(selectedIds)
-      let successCount = 0
-      let errorCount = 0
+      const ids = Array.from(selectedIds);
 
-      for (const id of ids) {
-        try {
-          if (action === 'delete') {
-            await api.delete(`/promotions/${id}`)
-          } else {
-            await api.patch(`/promotions/${id}`, {
-              isActive: action === 'activate'
-            })
-          }
-          successCount++
-        } catch (error) {
-          errorCount++
-        }
-      }
+      const results = await Promise.allSettled(
+        ids.map((id) => {
+          if (action === 'delete') return api.delete(`/promotions/${id}`);
+          return api.patch(`/promotions/${id}/status`, { isActive: action === 'activate' });
+        }),
+      );
+
+      const successCount = results.filter((r) => r.status === 'fulfilled').length;
+      const errorCount = results.filter((r) => r.status === 'rejected').length;
 
       if (successCount > 0) {
         toast({
           title: 'Acción completada',
           description: `${successCount} promoción(es) ${
-            action === 'delete' ? 'eliminada(s)' : 
+            action === 'delete' ? 'eliminada(s)' :
             action === 'activate' ? 'activada(s)' : 'desactivada(s)'
           } exitosamente${errorCount > 0 ? `. ${errorCount} fallaron.` : ''}`,
-        })
-      }
-
-      if (errorCount > 0 && successCount === 0) {
+        });
+      } else {
         toast({
           title: 'Error',
-          description: `No se pudieron procesar las promociones`,
+          description: 'No se pudieron procesar las promociones',
           variant: 'destructive',
-        })
+        });
       }
 
-      onRefresh()
-      onClearSelection()
+      onRefresh();
+      onClearSelection();
     } catch (error: any) {
       toast({
         title: 'Error',
         description: error?.message || 'Error al procesar la acción',
         variant: 'destructive',
-      })
+      });
     } finally {
-      setLoading(false)
-      setAction(null)
+      setLoading(false);
+      setAction(null);
     }
-  }
+  };
 
   return (
     <>

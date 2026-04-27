@@ -1,4 +1,5 @@
 import express from 'express';
+import cookieParser from 'cookie-parser';
 import { apiRateLimit } from './middleware/rate-limiter';
 import dotenv from 'dotenv';
 import { PrismaClient } from '@prisma/client';
@@ -38,6 +39,12 @@ import promotionsRoutes from './routes/promotions';
 import systemRoutes from './routes/system';
 import cashRoutes from './routes/cash';
 import sessionsRoutes from './routes/sessions';
+import organizationsRoutes from './routes/organizations';
+import plansRoutes from './routes/plans';
+import subscriptionsRoutes from './routes/subscriptions';
+import invoicesRoutes from './routes/invoices';
+import paymentsRoutes from './routes/payments';
+import webhookRoutes from './routes/webhooks';
 
 // Import middleware
 import { errorHandler, asyncHandler } from './middleware/errorHandler';
@@ -48,10 +55,13 @@ import { logger, requestLogger, errorLogger } from './middleware/logger';
 import { sanitizeInput, validateContentType } from './middleware/validation';
 import { performanceMiddleware, performanceMetricsHandler, healthCheckHandler } from './middleware/performance';
 
-// Load environment variables
+// Load environment variables.
+// Order matters: generic files first, app-local files last with override so real
+// backend credentials win over repo placeholders.
 dotenv.config({ path: '../../.env' });
-// Fallback to local .env if exists (overrides root)
-dotenv.config();
+dotenv.config({ path: '../../.env.local', override: true });
+dotenv.config({ path: '.env', override: true });
+dotenv.config({ path: '.env.local', override: true });
 
 // Initialize Prisma and Supabase clients
 // Use Supabase adapter when configured; otherwise fall back to PrismaClient.
@@ -82,6 +92,7 @@ let server: ReturnType<typeof app.listen> | null = null;
 
 // Apply security headers first
 app.use(applySecurityHeaders);
+app.use(cookieParser());
 
 // Performance monitoring
 app.use(performanceMiddleware);
@@ -108,6 +119,7 @@ app.get('/api/metrics', performanceMetricsHandler);
 app.use('/api/auth', authRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/system', systemRoutes);
+app.use('/api/webhooks', webhookRoutes);
 
 // Public product and category routes (specific endpoints)
 app.get('/api/products/public', asyncHandler(async (req, res) => {
@@ -224,7 +236,12 @@ app.use('/api/pricing', enhancedAuthMiddleware, pricingRoutes);
 app.use('/api/promotions', enhancedAuthMiddleware, promotionsRoutes);
 app.use('/api/products/barcode', enhancedAuthMiddleware, productsBarcodeRoutes);
 app.use('/api/cash', enhancedAuthMiddleware, cashRoutes);
-app.use('/api/sessions', enhancedAuthMiddleware, sessionsRoutes);
+app.use('/api/admin/sessions', enhancedAuthMiddleware, sessionsRoutes);
+app.use('/api/organizations', enhancedAuthMiddleware, organizationsRoutes);
+app.use('/api/plans', enhancedAuthMiddleware, plansRoutes);
+app.use('/api/subscriptions', enhancedAuthMiddleware, subscriptionsRoutes);
+app.use('/api/invoices', enhancedAuthMiddleware, invoicesRoutes);
+app.use('/api/payments', enhancedAuthMiddleware, paymentsRoutes);
 
 // Error handling middleware (must be last)
 app.use(errorLogger);

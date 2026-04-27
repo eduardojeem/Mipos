@@ -1,73 +1,57 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/components/ui/use-toast';
-
-interface AlertConfig {
-  globalMinThreshold: number;
-  globalMaxThreshold: number;
-  criticalThreshold: number;
-  warningThreshold: number;
-  enableEmailAlerts: boolean;
-  enablePushNotifications: boolean;
-  autoCreateOrders: boolean;
-  checkFrequency: 'hourly' | 'daily' | 'weekly';
-}
+import api from '@/lib/api';
+import { useCurrentOrganizationId } from '@/hooks/use-current-organization';
+import type { StockAlertConfig } from '@/lib/stock-alerts';
 
 export function useAlertConfig() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const organizationId = useCurrentOrganizationId();
 
-  // Fetch current config
-  const { data: config, isLoading } = useQuery({
-    queryKey: ['alert-config'],
+  const query = useQuery({
+    queryKey: ['stock-alerts-config', organizationId],
+    enabled: Boolean(organizationId),
+    staleTime: 300_000,
     queryFn: async () => {
-      // Mock config data
-      const mockConfig: AlertConfig = {
-        globalMinThreshold: 10,
-        globalMaxThreshold: 100,
-        criticalThreshold: 5,
-        warningThreshold: 20,
-        enableEmailAlerts: true,
-        enablePushNotifications: true,
-        autoCreateOrders: false,
-        checkFrequency: 'daily'
-      };
-      return mockConfig;
+      const response = await api.get<{ success: true; data: StockAlertConfig }>('/stock-alerts/config');
+      return response.data.data;
     },
-    staleTime: 300000, // 5 minutes
   });
 
-  // Update config mutation
   const updateConfigMutation = useMutation({
-    mutationFn: async (newConfig: AlertConfig) => {
-      // Mock API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      return { success: true, config: newConfig };
+    mutationFn: async (newConfig: StockAlertConfig) => {
+      const response = await api.put<{ success: true; data: StockAlertConfig }>(
+        '/stock-alerts/config',
+        newConfig
+      );
+
+      return response.data.data;
     },
-    onSuccess: (data) => {
-      queryClient.setQueryData(['alert-config'], data.config);
-      queryClient.invalidateQueries({ queryKey: ['stock-alerts'] });
-      queryClient.invalidateQueries({ queryKey: ['stock-alerts-stats'] });
+    onSuccess: (config) => {
+      queryClient.setQueryData(['stock-alerts-config', organizationId], config);
+      void queryClient.invalidateQueries({ queryKey: ['stock-alerts'] });
+      void queryClient.invalidateQueries({ queryKey: ['system-settings'] });
       toast({
-        title: 'Configuración actualizada',
-        description: 'La configuración de alertas ha sido guardada exitosamente.',
+        title: 'Configuracion actualizada',
+        description: 'La politica de alertas quedo sincronizada con Supabase.',
       });
     },
-    onError: (error: any) => {
+    onError: () => {
       toast({
         title: 'Error',
-        description: 'No se pudo guardar la configuración.',
+        description: 'No se pudo guardar la configuracion de alertas.',
         variant: 'destructive',
       });
     },
   });
 
   return {
-    config: config || null,
-    isLoading,
-    updateConfig: updateConfigMutation.mutate,
+    config: query.data || null,
+    isLoading: query.isLoading,
+    updateConfig: (config: StockAlertConfig) => updateConfigMutation.mutateAsync(config),
     isUpdating: updateConfigMutation.isPending,
   };
 }

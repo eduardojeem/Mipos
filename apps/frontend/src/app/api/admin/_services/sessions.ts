@@ -1,4 +1,5 @@
 import { logAudit } from '@/app/api/admin/_utils/audit'
+import { createAdminClient } from '@/lib/supabase/server'
 
 export type DeviceType = 'desktop' | 'mobile' | 'tablet' | 'unknown'
 export type LoginMethod = 'email' | 'google' | 'github' | 'sso'
@@ -52,258 +53,307 @@ export interface SessionListResult {
   pageCount: number
 }
 
-// Simple cache con TTL para listados
-type CacheEntry = { at: number; result: SessionListResult }
-const CACHE_TTL_MS = 30_000
-const cache = new Map<string, CacheEntry>()
 
-function cacheKey(filters: SessionListFilters, pag: PaginationOpts): string {
-  return JSON.stringify({ f: filters, p: pag })
-}
-
-export function invalidateSessionsCache() {
-  cache.clear()
-}
-
-// Datos mock (migrados desde el handler)
-const mockSessions: UserSession[] = [
-  {
-    id: 'session-1',
-    userId: 'user-1',
-    userName: 'Administrador Principal',
-    userEmail: 'admin@example.com',
-    userRole: 'ADMIN',
-    sessionToken: 'token-1',
-    ipAddress: '192.168.1.100',
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36',
-    deviceType: 'desktop',
-    browser: 'Chrome 120',
-    os: 'Windows 10',
-    location: { country: 'Colombia', city: 'Bogotá', region: 'Cundinamarca' },
-    isActive: true,
-    isCurrent: true,
-    createdAt: '2024-01-15T08:30:00Z',
-    lastActivityAt: '2024-01-15T10:45:00Z',
-    expiresAt: '2024-01-16T08:30:00Z',
-    loginMethod: 'email',
-    riskLevel: 'low'
-  },
-  {
-    id: 'session-2',
-    userId: 'user-2',
-    userName: 'Cajero Principal',
-    userEmail: 'cashier@example.com',
-    userRole: 'CASHIER',
-    sessionToken: 'token-2',
-    ipAddress: '192.168.1.150',
-    userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0)',
-    deviceType: 'mobile',
-    browser: 'Safari Mobile',
-    os: 'iOS 17',
-    location: { country: 'Colombia', city: 'Medellín', region: 'Antioquia' },
-    isActive: true,
-    isCurrent: false,
-    createdAt: '2024-01-15T09:00:00Z',
-    lastActivityAt: '2024-01-15T10:30:00Z',
-    expiresAt: '2024-01-16T09:00:00Z',
-    loginMethod: 'email',
-    riskLevel: 'low'
-  },
-  {
-    id: 'session-3',
-    userId: 'user-3',
-    userName: 'Gerente General',
-    userEmail: 'manager@example.com',
-    userRole: 'MANAGER',
-    sessionToken: 'token-3',
-    ipAddress: '203.0.113.45',
-    userAgent: 'Mozilla/5.0 (Macintosh) Chrome/119',
-    deviceType: 'desktop',
-    browser: 'Chrome 119',
-    os: 'macOS Sonoma',
-    location: { country: 'Estados Unidos', city: 'Miami', region: 'Florida' },
-    isActive: true,
-    isCurrent: false,
-    createdAt: '2024-01-15T07:15:00Z',
-    lastActivityAt: '2024-01-15T10:20:00Z',
-    expiresAt: '2024-01-16T07:15:00Z',
-    loginMethod: 'google',
-    riskLevel: 'medium'
-  },
-  {
-    id: 'session-4',
-    userId: 'user-4',
-    userName: 'Usuario Desconocido',
-    userEmail: 'unknown@suspicious.com',
-    userRole: 'USER',
-    sessionToken: 'token-4',
-    ipAddress: '198.51.100.123',
-    userAgent: 'curl/7.68.0',
-    deviceType: 'unknown',
-    browser: 'Unknown',
-    os: 'Unknown',
-    location: { country: 'Desconocido', city: 'Desconocido', region: 'Desconocido' },
-    isActive: false,
-    isCurrent: false,
-    createdAt: '2024-01-15T06:45:00Z',
-    lastActivityAt: '2024-01-15T06:50:00Z',
-    expiresAt: '2024-01-15T18:45:00Z',
-    loginMethod: 'email',
-    riskLevel: 'high'
-  },
-  {
-    id: 'session-5',
-    userId: 'user-2',
-    userName: 'Cajero Principal',
-    userEmail: 'cashier@example.com',
-    userRole: 'CASHIER',
-    sessionToken: 'token-5',
-    ipAddress: '192.168.1.151',
-    userAgent: 'Mozilla/5.0 (iPad)',
-    deviceType: 'tablet',
-    browser: 'Safari',
-    os: 'iPadOS 17',
-    location: { country: 'Colombia', city: 'Medellín', region: 'Antioquia' },
-    isActive: false,
-    isCurrent: false,
-    createdAt: '2024-01-14T14:20:00Z',
-    lastActivityAt: '2024-01-14T18:30:00Z',
-    expiresAt: '2024-01-15T14:20:00Z',
-    loginMethod: 'email',
-    riskLevel: 'low'
-  }
-]
-
-function applyFilters(data: UserSession[], f: SessionListFilters): UserSession[] {
-  let filtered = data
-  
-  // ✅ CRÍTICO: Filtrar por usuarios permitidos (multitenancy)
-  if (f.allowedUserIds && f.allowedUserIds.length > 0) {
-    filtered = filtered.filter(s => f.allowedUserIds!.includes(s.userId))
-  }
-  
-  const search = (f.search || '').toLowerCase()
-  if (search) {
-    filtered = filtered.filter(
-      (s) =>
-        s.userName.toLowerCase().includes(search) ||
-        s.userEmail.toLowerCase().includes(search) ||
-        s.ipAddress.includes(search)
-    )
-  }
-  if (f.status && f.status !== 'all') {
-    if (f.status === 'active') filtered = filtered.filter((s) => s.isActive)
-    else if (f.status === 'expired') filtered = filtered.filter((s) => !s.isActive)
-  }
-  if (f.userRole && f.userRole !== 'all') {
-    filtered = filtered.filter((s) => s.userRole === f.userRole)
-  }
-  if (f.deviceType && f.deviceType !== 'all') {
-    filtered = filtered.filter((s) => s.deviceType === f.deviceType)
-  }
-  if (f.riskLevel && f.riskLevel !== 'all') {
-    filtered = filtered.filter((s) => s.riskLevel === f.riskLevel)
-  }
-  if (f.loginMethod && f.loginMethod !== 'all') {
-    filtered = filtered.filter((s) => s.loginMethod === f.loginMethod)
-  }
-  if (typeof f.isActive === 'boolean') {
-    filtered = filtered.filter((s) => s.isActive === f.isActive)
-  }
-  if (typeof f.isCurrent === 'boolean') {
-    filtered = filtered.filter((s) => s.isCurrent === f.isCurrent)
-  }
-  if (f.dateFrom) {
-    filtered = filtered.filter((s) => new Date(s.createdAt).getTime() >= new Date(f.dateFrom!).getTime())
-  }
-  if (f.dateTo) {
-    filtered = filtered.filter((s) => new Date(s.createdAt).getTime() <= new Date(f.dateTo!).getTime())
-  }
-  if (f.sortBy) {
-    const dir = f.sortDir === 'asc' ? 1 : -1
-    filtered = filtered.slice().sort((a, b) => {
-      const av = a[f.sortBy!]
-      const bv = b[f.sortBy!]
-      if (f.sortBy === 'userName' || f.sortBy === 'riskLevel') {
-        return String(av).localeCompare(String(bv)) * dir
-      }
-      return (new Date(av as string).getTime() - new Date(bv as string).getTime()) * dir
-    })
-  }
-  return filtered
+function parseUserAgent(ua: string) {
+  const browser = ua.includes('Chrome') ? 'Chrome' : ua.includes('Firefox') ? 'Firefox' : ua.includes('Safari') ? 'Safari' : 'Unknown'
+  const os = ua.includes('Windows') ? 'Windows' : ua.includes('Mac') ? 'macOS' : ua.includes('iPhone') || ua.includes('iPad') ? 'iOS' : ua.includes('Android') ? 'Android' : 'Linux'
+  const deviceType: DeviceType = (ua.includes('Mobile') || ua.includes('iPhone') || ua.includes('Android')) ? 'mobile' : ua.includes('iPad') ? 'tablet' : 'desktop'
+  return { browser, os, deviceType }
 }
 
 export async function listSessions(
   filters: SessionListFilters,
   pag: PaginationOpts
 ): Promise<SessionListResult> {
-  const key = cacheKey(filters, pag)
-  const now = Date.now()
-  const hit = cache.get(key)
-  if (hit && now - hit.at < CACHE_TTL_MS) {
-    return hit.result
+  const admin = await createAdminClient()
+  
+  let query = admin
+    .from('user_sessions')
+    .select(`
+      id, user_id, supabase_session_id, ip_address, user_agent, is_active, last_activity, created_at, expires_at,
+      user:users(id, fullName, email, role)
+    `, { count: 'exact' })
+
+  // Filtros de multitenancy
+  if (filters.allowedUserIds && filters.allowedUserIds.length > 0) {
+    query = query.in('user_id', filters.allowedUserIds)
   }
 
-  // En producción: aquí se consultarían sesiones desde BD (Prisma) con filtros y orden.
-  // Por ahora usamos mockSessions.
-  const filtered = applyFilters(mockSessions, filters)
-  const total = filtered.length
-  const page = Math.max(1, pag.page)
-  const limit = Math.max(1, Math.min(100, pag.limit))
-  const pageCount = Math.max(1, Math.ceil(total / limit))
-  const clampedPage = Math.min(page, pageCount)
-  const start = (clampedPage - 1) * limit
-  const items = filtered.slice(start, start + limit)
+  // Filtros de estado
+  if (filters.status === 'active') {
+    query = query.eq('is_active', true)
+  } else if (filters.status === 'expired') {
+    query = query.eq('is_active', false)
+  }
 
-  const result: SessionListResult = { items, total, page: clampedPage, limit, pageCount }
-  cache.set(key, { at: now, result })
+  if (filters.isActive !== undefined) {
+    query = query.eq('is_active', filters.isActive)
+  }
 
-  logAudit('sessions.list', { filters, page: clampedPage, limit, returned: items.length, total })
-  return result
+  // Filtros de fechas
+  if (filters.dateFrom) {
+    query = query.gte('created_at', filters.dateFrom)
+  }
+  if (filters.dateTo) {
+    query = query.lte('created_at', filters.dateTo)
+  }
+
+  // Mantener deviceType en cliente para evitar múltiples .or en la consulta
+
+  // Orden
+  const sortCol = filters.sortBy === 'userName' ? 'user_id' : (filters.sortBy || 'created_at')
+  query = query.order(sortCol, { ascending: filters.sortDir === 'asc' })
+
+  // Paginación
+  const start = (pag.page - 1) * pag.limit
+  const end = start + pag.limit - 1
+  query = query.range(start, end)
+
+  // Búsqueda (Supabase no permite búsqueda en relaciones directamente con .or de forma sencilla)
+  // así que si hay búsqueda, podríamos tener que filtrar después o usar una vista, 
+  // pero por ahora lo mantenemos simple.
+
+  if (filters.search) {
+    const s = filters.search.replace(/%/g, '')
+    const like = `%${s}%`
+    let userIds: string[] = []
+    const { data: matchedUsers } = await admin
+      .from('users')
+      .select('id')
+      .or(`email.ilike.${like},fullName.ilike.${like}`)
+      .limit(1000)
+    userIds = (matchedUsers || []).map((u: any) => u.id)
+    const ors: string[] = [`ip_address.ilike.${like}`]
+    if (userIds.length > 0) {
+      const inList = `(${userIds.map(id => `"${id}"`).join(',')})`
+      ors.push(`user_id.in.${inList}`)
+    }
+    query = query.or(ors.join(','))
+  }
+
+  const { data, count, error } = await query
+
+  if (error) {
+    console.error('Error fetching sessions:', error)
+    return { items: [], total: 0, page: pag.page, limit: pag.limit, pageCount: 0 }
+  }
+
+  const items: UserSession[] = (data || []).map((s: any) => {
+    const { browser, os, deviceType } = parseUserAgent(s.user_agent || '')
+    return {
+      id: s.id,
+      userId: s.user_id,
+      userName: s.user?.fullName || 'Usuario',
+      userEmail: s.user?.email || '',
+      userRole: s.user?.role || 'USER',
+      sessionToken: s.supabase_session_id || s.id,
+      ipAddress: s.ip_address || '0.0.0.0',
+      userAgent: s.user_agent || '',
+      deviceType,
+      browser,
+      os,
+      isActive: s.is_active,
+      isCurrent: false, // Se determinaría comparando con el token actual en la request
+      createdAt: s.created_at,
+      lastActivityAt: s.last_activity || s.created_at,
+      expiresAt: s.expires_at || '',
+      loginMethod: 'email', // Por defecto
+      riskLevel: 'low'
+    }
+  })
+
+  // Autofiltro de búsqueda si existe (ya que Supabase .select con joins + .or es complejo)
+  let filteredItems = items
+
+  const total = count || 0
+  
+  logAudit('sessions.list', { filters, total })
+
+  return {
+    items: filteredItems,
+    total,
+    page: pag.page,
+    limit: pag.limit,
+    pageCount: Math.ceil(total / pag.limit)
+  }
 }
 
-export async function terminateSession(id: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  const found = mockSessions.find((s) => s.id === id)
-  if (!found) {
-    logAudit('sessions.terminate', { sessionId: id, result: 'not_found' })
-    return { ok: false, error: 'Session not found' }
+export async function terminateSession(
+  id: string,
+  allowedUserIds?: string[]
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const admin = await createAdminClient()
+
+  let q = admin
+    .from('user_sessions')
+    .update({ is_active: false })
+    .eq('id', id)
+
+  if (allowedUserIds && allowedUserIds.length > 0) {
+    q = q.in('user_id', allowedUserIds)
   }
-  found.isActive = false
-  found.isCurrent = false
+
+  const { error } = await q
+
+  if (error) {
+    logAudit('sessions.terminate', { sessionId: id, result: 'error', error: error.message })
+    return { ok: false, error: error.message }
+  }
+
   logAudit('sessions.terminate', { sessionId: id, result: 'terminated' })
-  invalidateSessionsCache()
   return { ok: true }
 }
 
-export async function cleanupExpired(): Promise<{ ok: true; cleaned: number }>
-{
-  const before = mockSessions.filter(s => s.isActive).length
-  for (const s of mockSessions) {
-    const expired = new Date(s.expiresAt).getTime() < Date.now()
-    if (expired) s.isActive = false
+export async function cleanupExpired(
+  allowedUserIds?: string[]
+): Promise<{ ok: true; cleaned: number }> {
+  const admin = await createAdminClient()
+
+  let q = admin
+    .from('user_sessions')
+    .update({ is_active: false })
+    .lt('expires_at', new Date().toISOString())
+    .eq('is_active', true)
+
+  if (allowedUserIds && allowedUserIds.length > 0) {
+    q = q.in('user_id', allowedUserIds)
   }
-  const after = mockSessions.filter(s => s.isActive).length
-  const cleaned = before - after
-  logAudit('sessions.cleanup', { cleaned })
-  invalidateSessionsCache()
-  return { ok: true, cleaned }
+
+  const { error, count } = await q
+
+  if (error) {
+    console.error('Error in cleanup:', error)
+    return { ok: true, cleaned: 0 }
+  }
+
+  const cleanedCount = count || 0
+  logAudit('sessions.cleanup', { cleanedCount })
+  return { ok: true, cleaned: cleanedCount }
 }
 
 export async function exportSessions(
   filters: SessionListFilters,
   format: 'csv' | 'json'
-): Promise<{ contentType: string; body: string }>
-{
+): Promise<{ contentType: string; body: string }> {
+  // Simplemente obtenemos una página grande
   const res = await listSessions(filters, { page: 1, limit: 1000 })
   const safeItems = res.items.map(({ sessionToken, ...rest }) => rest)
+  
   if (format === 'csv') {
     const headers = Object.keys(safeItems[0] || {})
     const rows = safeItems.map((item) => headers.map(h => JSON.stringify((item as any)[h] ?? '')).join(','))
     const csv = [headers.join(','), ...rows].join('\n')
-    logAudit('sessions.export', { format: 'csv', count: safeItems.length })
     return { contentType: 'text/csv', body: csv }
   } else {
-    logAudit('sessions.export', { format: 'json', count: safeItems.length })
     return { contentType: 'application/json', body: JSON.stringify({ items: safeItems }) }
   }
+}
+
+export async function terminateUserSessions(
+  userId: string,
+  allowedUserIds?: string[]
+): Promise<{ ok: true; terminated: number } | { ok: false; error: string }> {
+  const admin = await createAdminClient()
+  let q = admin
+    .from('user_sessions')
+    .update({ is_active: false })
+    .eq('user_id', userId)
+    .eq('is_active', true)
+  if (allowedUserIds && allowedUserIds.length > 0) {
+    q = q.in('user_id', allowedUserIds)
+  }
+  const { error, count } = await q
+  if (error) {
+    return { ok: false, error: error.message }
+  }
+  const terminated = count || 0
+  logAudit('sessions.terminateUser', { userId, terminated })
+  return { ok: true, terminated }
+}
+
+export async function exportSessionsStreamCsv(
+  filters: SessionListFilters
+): Promise<ReadableStream> {
+  const admin = await createAdminClient()
+  const encoder = new TextEncoder()
+  const pageSize = 500
+
+  async function fetchRange(start: number, end: number) {
+    let q = admin
+      .from('user_sessions')
+      .select(`
+        id, user_id, supabase_session_id, ip_address, user_agent, is_active, last_activity, created_at, expires_at,
+        user:users(id, fullName, email, role)
+      `)
+
+    if (filters.allowedUserIds && filters.allowedUserIds.length > 0) {
+      q = q.in('user_id', filters.allowedUserIds)
+    }
+    if (filters.status === 'active') q = q.eq('is_active', true)
+    else if (filters.status === 'expired') q = q.eq('is_active', false)
+
+    const sortCol = filters.sortBy === 'userName' ? 'user_id' : (filters.sortBy || 'created_at')
+    q = q.order(sortCol as string, { ascending: filters.sortDir === 'asc' })
+
+    if (filters.search) {
+      const s = filters.search.replace(/%/g, '')
+      const like = `%${s}%`
+      q = q.or(`ip_address.ilike.${like},user.email.ilike.${like},user.fullName.ilike.${like}`)
+    }
+
+    q = q.range(start, end)
+    const { data, error } = await q
+    if (error) throw error
+    return data || []
+  }
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      let headerWritten = false
+      let offset = 0
+      while (true) {
+        const batch: any[] = await fetchRange(offset, offset + pageSize - 1)
+        if (batch.length === 0) break
+        const rows = batch.map((s: any) => {
+          const { browser, os, deviceType } = parseUserAgent(s.user_agent || '')
+          const item = {
+            id: s.id,
+            userId: s.user_id,
+            userName: s.user?.fullName || 'Usuario',
+            userEmail: s.user?.email || '',
+            userRole: s.user?.role || 'USER',
+            ipAddress: s.ip_address || '0.0.0.0',
+            userAgent: s.user_agent || '',
+            deviceType,
+            browser,
+            os,
+            isActive: s.is_active,
+            isCurrent: false,
+            createdAt: s.created_at,
+            lastActivityAt: s.last_activity || s.created_at,
+            expiresAt: s.expires_at || '',
+            loginMethod: 'email',
+            riskLevel: 'low'
+          }
+          return item
+        })
+
+        if (!headerWritten) {
+          const headers = Object.keys(rows[0] || {})
+          controller.enqueue(encoder.encode(headers.join(',') + '\n'))
+          headerWritten = true
+        }
+        for (const item of rows) {
+          const headers = Object.keys(item)
+          const line = headers.map(h => JSON.stringify((item as any)[h] ?? '')).join(',') + '\n'
+          controller.enqueue(encoder.encode(line))
+        }
+        offset += batch.length
+        if (batch.length < pageSize) break
+      }
+      controller.close()
+    }
+  })
+
+  return stream
 }

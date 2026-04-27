@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, createContext, useContext } from 'react';
+import { useState, useEffect, useCallback, createContext, useContext, useMemo, useRef } from 'react';
 import { createClient } from '@/lib/supabase';
 import { User as SupabaseUser } from '@supabase/supabase-js';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
@@ -11,13 +11,17 @@ import { useSessionInvalidation } from './use-session-invalidation';
 
 // Create Auth Context
 const AuthContext = createContext<AuthContextType | null>(null);
+let lastResolvedRole: string | null = null;
+let lastResolvedUserId: string | null = null;
+const ROLE_PRIORITY = [USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN, USER_ROLES.MANAGER, USER_ROLES.CASHIER, USER_ROLES.EMPLOYEE, USER_ROLES.USER] as const;
 
 // Enhanced auth provider with improved fallback functionality and faster loading
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
+  const userRef = useRef<User | null>(null);
   const router = useRouter();
   // Start listening for session invalidation due to permission changes
   useSessionInvalidation();
@@ -40,13 +44,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .join(' ');
   }, []);
 
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
   // Enhanced fallback user creation with better functionality
   const createFallbackUser = useCallback((authUser: SupabaseUser): User => {
     const metadata = authUser.user_metadata || {};
     const appMetadata = authUser.app_metadata || {};
 
-    // Try to determine role from various sources
-    let role: string = USER_ROLES.CASHIER; // Default role with explicit type annotation
+    // Try to determine role from various sources — prioritize metadata over heuristics
+    let role: string = USER_ROLES.USER; // Default to USER, will be upgraded by profile API
 
     if (metadata.role && Object.values(USER_ROLES).includes(metadata.role)) {
       role = metadata.role;
@@ -56,6 +64,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       role = USER_ROLES.ADMIN;
     } else if (authUser.email?.includes('manager')) {
       role = USER_ROLES.MANAGER;
+    }
+
+    if (userRef.current?.id === authUser.id) {
+      role = pickStrongerRole(userRef.current.role, role);
     }
 
     // Extract name from various sources
@@ -74,6 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       createdAt: authUser.created_at || new Date().toISOString(),
       updatedAt: authUser.updated_at || new Date().toISOString(),
       lastLogin: authUser.last_sign_in_at,
+      organizationId: metadata.organization_id || metadata.organizationId || appMetadata.organization_id || appMetadata.organizationId || userRef.current?.organizationId,
     };
   }, [extractNameFromEmail]);
 
@@ -116,16 +129,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Track timeout id for cleanup
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     try {
-      // ⚡ OPTIMIZACIÓN: Timeout de 3 segundos para evitar esperas largas
+      // ⚡ OPTIMIZACIÓN: Timeout de 8 segundos (las respuestas pueden tardar ~10s bajo carga)
       const controller = new AbortController();
       timeoutId = setTimeout(() => {
         controller.abort('timeout'); // Proporcionar una razón para la cancelación
-      }, 3000);
+      }, 8000);
 
       // Fetch user profile via backend API to avoid client-side Supabase probe issues
+      const selectedOrganizationId = getSelectedOrganizationId();
       const response = await fetch('/api/auth/profile', {
         method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(selectedOrganizationId ? { 'x-organization-id': selectedOrganizationId } : {}),
+        },
         cache: 'no-store',
         signal: controller.signal,
       });
@@ -141,7 +158,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.warn('Profile API error, using fallback:', apiError);
         return createFallbackUser(authUser);
       }
-      const userData = data as { name?: string; role?: string; id?: string; email?: string; created_at?: string; updated_at?: string };
+      const userData = data as { 
+        name?: string; 
+        role?: string; 
+        id?: string; 
+        email?: string; 
+        created_at?: string; 
+        updated_at?: string;
+        organizationId?: string;
+        organization_id?: string;
+      };
       const name = userData.name || extractNameFromEmail(authUser.email || '');
       const role = normalizeRole(userData.role || USER_ROLES.CASHIER);
 
@@ -154,6 +180,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         createdAt: userData.created_at || new Date().toISOString(),
         updatedAt: userData.updated_at || new Date().toISOString(),
         lastLogin: authUser.last_sign_in_at,
+        organizationId: userData.organizationId || userData.organization_id,
       };
     } catch (err) {
       // Si es un AbortError por timeout, usar fallback silencioso sin ensuciar consola
@@ -170,18 +197,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [supabase, isDevMockMode, createFallbackUser, extractNameFromEmail]);
 
   // Refresh user data
-  const refreshUser = async (): Promise<void> => {
+  const refreshUser = useCallback(async (): Promise<void> => {
     try {
       setLoading(true);
       const { data: { session }, error } = await supabase.auth.getSession();
 
       if (error) {
         // Si Supabase no está configurado, usar usuario mock
-        const msg = (error?.message || '').toLowerCase();
-        if (isDevMockMode() && (msg.includes('supabase no configurado') || msg.includes('supabase not configured'))) {
+        const msg = (error?.message || '');
+        const lowerMsg = msg.toLowerCase();
+        
+        if (msg.includes('Invalid Refresh Token') || msg.includes('Refresh Token Not Found')) {
+             console.warn('Auth: Refresh token inválido en refreshUser, cerrando sesión.');
+             if (typeof window !== 'undefined') {
+                 const key = `sb-${process.env.NEXT_PUBLIC_SUPABASE_PROJECT_ID}-auth-token`;
+                 window.localStorage.removeItem(key);
+                 window.localStorage.removeItem('selected_organization');
+             }
+             setUser(null);
+             return;
+        }
+
+        if (isDevMockMode() && (lowerMsg.includes('supabase no configurado') || lowerMsg.includes('supabase not configured'))) {
           const mockAuthUser = createMockAuthUser();
           const fallbackUser = createFallbackUser(mockAuthUser);
-          setUser(fallbackUser);
+          setUser({ ...fallbackUser, role: normalizeRole(fallbackUser.role) });
         } else {
           throw error;
         }
@@ -189,12 +229,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (session?.user) {
         const userData = await fetchUserData(session.user);
-        setUser(userData);
+        setUser({ ...userData, role: normalizeRole(userData.role) });
       } else {
         if (isDevMockMode()) {
           const mockAuthUser = createMockAuthUser();
           const fallbackUser = createFallbackUser(mockAuthUser);
-          setUser(fallbackUser);
+          setUser({ ...fallbackUser, role: normalizeRole(fallbackUser.role) });
         } else {
           setUser(null);
         }
@@ -205,10 +245,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [supabase.auth, isDevMockMode, createMockAuthUser, createFallbackUser, fetchUserData]);
 
   // Sign in function
-  const signIn = async (email: string, password: string): Promise<void> => {
+  const signIn = useCallback(async (email: string, password: string): Promise<void> => {
     try {
       setLoading(true);
       setError(null);
@@ -246,7 +286,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } as unknown as SupabaseUser;
 
           const fallbackUser = createFallbackUser(mockAuthUser);
-          setUser(fallbackUser);
+          setUser({ ...fallbackUser, role: normalizeRole(fallbackUser.role) });
           // No lanzar error: tratamos el login como exitoso en modo desarrollo
         } else {
           throw error;
@@ -254,10 +294,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (data.user) {
-        const userData = await fetchUserData(data.user);
-        setUser(userData);
+        const fallbackUser = createFallbackUser(data.user);
+        setUser({ ...fallbackUser, role: normalizeRole(fallbackUser.role) });
+
+        void fetchUserData(data.user)
+          .then((userData) => {
+            setUser({ ...userData, role: normalizeRole(userData.role) });
+            try {
+              const uid = String(userData.id || data.user?.id);
+              const last = typeof window !== 'undefined' ? window.localStorage.getItem('last_user_id') : null;
+              if (typeof window !== 'undefined' && last && last !== uid) {
+                window.localStorage.removeItem('selected_organization');
+              }
+              if (typeof window !== 'undefined') {
+                window.localStorage.setItem('last_user_id', uid);
+              }
+            } catch {}
+          })
+          .catch((backgroundError) => {
+            console.warn('Background sign-in user fetch failed:', backgroundError);
+          });
+
         try {
-          const uid = String(userData.id || data.user.id);
+          const uid = String(fallbackUser.id || data.user.id);
           const last = typeof window !== 'undefined' ? window.localStorage.getItem('last_user_id') : null;
           if (typeof window !== 'undefined' && last && last !== uid) {
             window.localStorage.removeItem('selected_organization');
@@ -285,10 +344,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [supabase.auth, createFallbackUser, fetchUserData, extractNameFromEmail]);
 
   // Sign out function
-  const signOut = async (): Promise<void> => {
+  const signOut = useCallback(async (): Promise<void> => {
     try {
       setLoading(true);
       // Registrar actividad de cierre de sesión antes de invalidar la sesión
@@ -319,10 +378,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [supabase.auth, router]);
 
   // Sign up function
-  const signUp = async (email: string, password: string, userData?: Record<string, unknown>): Promise<void> => {
+  const signUp = useCallback(async (email: string, password: string, userData?: Record<string, unknown>): Promise<void> => {
     try {
       setLoading(true);
       setError(null);
@@ -342,7 +401,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Note: User will be null until email is confirmed
       if (data.user && data.user.email_confirmed_at) {
         const userDataResult = await fetchUserData(data.user);
-        setUser(userDataResult);
+        setUser({ ...userDataResult, role: normalizeRole(userDataResult.role) });
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error signing up';
@@ -351,10 +410,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [supabase.auth, fetchUserData]);
 
   // Reset password function
-  const resetPassword = async (email: string): Promise<void> => {
+  const resetPassword = useCallback(async (email: string): Promise<void> => {
     try {
       setLoading(true);
       setError(null);
@@ -373,7 +432,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [supabase.auth]);
 
   useEffect(() => {
     // Get initial session with timeout protection
@@ -395,6 +454,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (error) {
           const msg = error?.message || '';
           const isSupabaseUnconfigured = msg.includes('Supabase no configurado') || msg.toLowerCase().includes('supabase not configured');
+          const isInvalidRefreshToken = msg.includes('Invalid Refresh Token') || msg.includes('Refresh Token Not Found');
+
           if (isSupabaseUnconfigured) {
             // Modo desarrollo sin Supabase: manejar silenciosamente sin ensuciar la consola
             console.warn('Auth: Supabase no configurado, activando usuario mock en desarrollo');
@@ -402,10 +463,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (isDevMockMode()) {
               const mockAuthUser = createMockAuthUser();
               const fallbackUser = createFallbackUser(mockAuthUser);
-              setUser(fallbackUser);
+              setUser({ ...fallbackUser, role: normalizeRole(fallbackUser.role) });
             } else {
               setUser(null);
             }
+          } else if (isInvalidRefreshToken) {
+            // Token inválido/expirado irreversiblemente -> forzar logout limpio
+            console.warn('Auth: Refresh token inválido, cerrando sesión local.');
+            // Limpiar almacenamiento local de supabase si es posible
+            const key = `sb-${process.env.NEXT_PUBLIC_SUPABASE_PROJECT_ID}-auth-token`;
+            if (typeof window !== 'undefined') {
+               window.localStorage.removeItem(key);
+               // También limpiar nuestras keys
+               window.localStorage.removeItem('selected_organization');
+               window.localStorage.removeItem('last_user_id');
+            }
+            setUser(null);
+            setError(null); 
+            // Opcional: router.push('/auth/signin');
           } else {
             console.error('Error getting session:', error);
             setError(error.message);
@@ -440,7 +515,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (isDevMockMode()) {
             const mockAuthUser = createMockAuthUser();
             const fallbackUser = createFallbackUser(mockAuthUser);
-            setUser(fallbackUser);
+            setUser({ ...fallbackUser, role: normalizeRole(fallbackUser.role) });
           } else {
             setUser(null);
           }
@@ -454,7 +529,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (isDevMockMode()) {
             const mockAuthUser = createMockAuthUser();
             const fallbackUser = createFallbackUser(mockAuthUser);
-            setUser(fallbackUser);
+            setUser({ ...fallbackUser, role: normalizeRole(fallbackUser.role) });
           } else {
             setUser(null);
           }
@@ -478,11 +553,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (event === 'SIGNED_IN' && session?.user) {
             // Optimistic update
             const fallbackUser = createFallbackUser(session.user);
-            setUser(fallbackUser);
+            setUser({ ...fallbackUser, role: normalizeRole(fallbackUser.role) });
             
             // Background update
             fetchUserData(session.user).then((ud) => {
-              setUser(ud);
+              setUser({ ...ud, role: normalizeRole(ud.role) });
               try {
                 const uid = String(ud.id || session.user.id);
                 const last = typeof window !== 'undefined' ? window.localStorage.getItem('last_user_id') : null;
@@ -498,7 +573,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setUser(null);
           } else if (event === 'TOKEN_REFRESHED' && session?.user) {
             // Background update is enough for token refresh, but we can be safe
-            fetchUserData(session.user).then(setUser);
+            fetchUserData(session.user).then((ud) => {
+              setUser({ ...ud, role: normalizeRole(ud.role) });
+            });
           }
         } catch (err) {
           const msg = (err as Error)?.message || '';
@@ -517,7 +594,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, [supabase.auth, fetchUserData, createMockAuthUser, createFallbackUser, isDevMockMode]);
 
-  const value: AuthContextType = {
+  const value = useMemo<AuthContextType>(() => ({
     user,
     loading,
     error,
@@ -526,7 +603,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signUp,
     refreshUser,
     resetPassword,
-  };
+  }), [user, loading, error, signIn, signOut, signUp, refreshUser, resetPassword]);
 
   return (
     <AuthContext.Provider value={value}>
@@ -601,16 +678,55 @@ export function useIsFallbackMode() {
 // Unifica el origen del rol en frontend devolviendo un valor normalizado
 function normalizeRole(role?: string): string {
   const key = (role || '').toUpperCase();
-  if (key === USER_ROLES.SUPER_ADMIN || key === 'OWNER') return USER_ROLES.SUPER_ADMIN;
-  if (key === USER_ROLES.ADMIN) return USER_ROLES.ADMIN;
+  if (key === USER_ROLES.SUPER_ADMIN) return USER_ROLES.SUPER_ADMIN;
+  if (key === 'OWNER' || key === USER_ROLES.ADMIN) return USER_ROLES.ADMIN;
   if (key === USER_ROLES.MANAGER) return USER_ROLES.MANAGER;
   if (key === USER_ROLES.CASHIER) return USER_ROLES.CASHIER;
   if (key === USER_ROLES.EMPLOYEE) return USER_ROLES.EMPLOYEE;
   return USER_ROLES.USER;
 }
 
+function getRolePriority(role?: string | null): number {
+  const normalized = normalizeRole(role || undefined);
+  const index = ROLE_PRIORITY.indexOf(normalized as (typeof ROLE_PRIORITY)[number]);
+  return index === -1 ? ROLE_PRIORITY.length : index;
+}
+
+function pickStrongerRole(...roles: Array<string | null | undefined>): string {
+  const normalized = roles
+    .map((role) => normalizeRole(role || undefined))
+    .filter(Boolean);
+
+  return normalized.sort((a, b) => getRolePriority(a) - getRolePriority(b))[0] || USER_ROLES.USER;
+}
+
+function getSelectedOrganizationId(): string | undefined {
+  if (typeof window === 'undefined') return undefined;
+  try {
+    const raw = window.localStorage.getItem('selected_organization');
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw);
+    return typeof parsed?.id === 'string' ? parsed.id : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 // Devuelve el rol resuelto/normalizado sin volver a consultar
 export function useResolvedRole(): string {
   const { user } = useAuthContext();
-  return normalizeRole(user?.role);
+  const current = normalizeRole(user?.role);
+  if (!user?.id) {
+    lastResolvedRole = null;
+    lastResolvedUserId = null;
+    return current;
+  }
+  if (lastResolvedUserId && lastResolvedUserId !== user.id) {
+    lastResolvedRole = null;
+  }
+  lastResolvedUserId = user.id;
+  if (current && current !== USER_ROLES.USER) {
+    lastResolvedRole = pickStrongerRole(lastResolvedRole, current);
+  }
+  return lastResolvedRole || current;
 }

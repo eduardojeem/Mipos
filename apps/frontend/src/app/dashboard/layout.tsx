@@ -1,4 +1,6 @@
 import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
+import { createClient } from '@/lib/supabase/server';
 import DashboardClientLayout from './DashboardClientLayout';
 
 export const metadata: Metadata = {
@@ -14,10 +16,19 @@ export const metadata: Metadata = {
   },
 };
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect('/auth/signin?returnUrl=/dashboard');
+  }
+
   return <DashboardClientLayout>{children}</DashboardClientLayout>;
 }

@@ -1,14 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { assertAdmin } from '@/app/api/_utils/auth';
+import {
+  COMPANY_FEATURE_KEYS,
+  COMPANY_PERMISSIONS,
+  requireCompanyAccess,
+} from '@/app/api/_utils/company-authorization';
 
 export async function GET(request: NextRequest) {
-  const auth = await assertAdmin(request);
-  if (!auth.ok) {
-    return NextResponse.json(auth.body, { status: auth.status });
+  const access = await requireCompanyAccess(request, {
+    permission: COMPANY_PERMISSIONS.MANAGE_USERS,
+    feature: COMPANY_FEATURE_KEYS.ADMIN_PANEL,
+    allowedRoles: ['OWNER', 'ADMIN'],
+  });
+  if (!access.ok) {
+    return NextResponse.json(access.body, { status: access.status });
   }
 
-  const { userId, organizationId } = auth;
+  const { userId, companyId: organizationId } = access.context;
 
   try {
     const supabase = await createClient();
@@ -83,7 +91,7 @@ export async function GET(request: NextRequest) {
 
     let permissions: string[] = [];
     if (!rolesError && userRoles) {
-      permissions = userRoles.flatMap(ur => 
+      permissions = userRoles.flatMap((ur: any) => 
         (ur.roles as any)?.permissions?.map((p: any) => `${p.resource}.${p.action}`) || []
       );
     }
@@ -132,12 +140,16 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const auth = await assertAdmin(request);
-  if (!auth.ok) {
-    return NextResponse.json(auth.body, { status: auth.status });
+  const access = await requireCompanyAccess(request, {
+    permission: COMPANY_PERMISSIONS.MANAGE_USERS,
+    feature: COMPANY_FEATURE_KEYS.ADMIN_PANEL,
+    allowedRoles: ['OWNER', 'ADMIN'],
+  });
+  if (!access.ok) {
+    return NextResponse.json(access.body, { status: access.status });
   }
 
-  const { userId, organizationId } = auth;
+  const { userId, companyId: organizationId } = access.context;
 
   try {
     const supabase = await createClient();
@@ -204,12 +216,16 @@ export async function PUT(request: NextRequest) {
 
 // Endpoint para cambiar contraseña
 export async function PATCH(request: NextRequest) {
-  const auth = await assertAdmin(request);
-  if (!auth.ok) {
-    return NextResponse.json(auth.body, { status: auth.status });
+  const access = await requireCompanyAccess(request, {
+    permission: COMPANY_PERMISSIONS.MANAGE_USERS,
+    feature: COMPANY_FEATURE_KEYS.ADMIN_PANEL,
+    allowedRoles: ['OWNER', 'ADMIN'],
+  });
+  if (!access.ok) {
+    return NextResponse.json(access.body, { status: access.status });
   }
 
-  const { userId, organizationId } = auth;
+  const { userId, companyId: organizationId } = access.context;
 
   try {
     const supabase = await createClient();

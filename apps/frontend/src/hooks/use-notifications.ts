@@ -1,9 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { createClient } from '@/lib/supabase/client';
-
-const supabase = createClient();
+import { useState, useEffect, useCallback } from 'react';
 
 export type NotificationType =
     | 'sale'
@@ -21,7 +18,7 @@ export interface Notification {
     isRead: boolean;
     createdAt: Date;
     actionUrl?: string;
-    metadata?: Record<string, any>;
+    metadata?: Record<string, unknown>;
 }
 
 interface UseNotificationsOptions {
@@ -30,50 +27,17 @@ interface UseNotificationsOptions {
     maxNotifications?: number;
 }
 
-const defaultOptions: UseNotificationsOptions = {
-    autoRefresh: true,
-    refreshInterval: 30000, // 30 segundos
-    maxNotifications: 50
-};
-
-// Mock notifications for demo (se reemplazará con Supabase real)
-const mockNotifications: Notification[] = [
-    {
-        id: '1',
-        type: 'sale',
-        title: 'Nueva venta registrada',
-        message: 'Venta #12345 por $125.50',
-        isRead: false,
-        createdAt: new Date(Date.now() - 1000 * 60 * 5), // 5 min ago
-        actionUrl: '/dashboard/sales/12345'
-    },
-    {
-        id: '2',
-        type: 'stock_alert',
-        title: 'Alerta de stock bajo',
-        message: 'Producto "Lápiz Labial Rojo" tiene solo 3 unidades',
-        isRead: false,
-        createdAt: new Date(Date.now() - 1000 * 60 * 15), // 15 min ago
-        actionUrl: '/dashboard/products?filter=low-stock'
-    },
-    {
-        id: '3',
-        type: 'system',
-        title: 'Actualización disponible',
-        message: 'Nueva versión del sistema disponible',
-        isRead: true,
-        createdAt: new Date(Date.now() - 1000 * 60 * 60), // 1 hour ago
-        actionUrl: '/dashboard/settings'
-    }
-];
-
 export function useNotifications(options: UseNotificationsOptions = {}) {
-    const opts = useMemo(() => ({ ...defaultOptions, ...options }), [options]);
+    // Extraer primitivos — evita que un objeto nuevo en cada render
+    // cause loop infinito en useCallback/useEffect
+    const autoRefresh = options.autoRefresh ?? true;
+    const refreshInterval = options.refreshInterval ?? 30000;
+    const maxNotifications = options.maxNotifications ?? 50;
+
     const [notifications, setNotifications] = useState<Notification[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // Fetch notifications
     const fetchNotifications = useCallback(async () => {
         try {
             setIsLoading(true);
@@ -84,96 +48,48 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
             //   .from('notifications')
             //   .select('*')
             //   .order('created_at', { ascending: false })
-            //   .limit(opts.maxNotifications);
-
+            //   .limit(maxNotifications);
             // if (error) throw error;
+            // setNotifications(data ?? []);
 
-            // Por ahora usar mock data
-            await new Promise(resolve => setTimeout(resolve, 500)); // Simular latencia
-            setNotifications(mockNotifications);
-
+            void maxNotifications; // usado cuando se implemente Supabase
+            setNotifications([]);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Error fetching notifications');
             console.error('Error fetching notifications:', err);
         } finally {
             setIsLoading(false);
         }
-    }, [opts]);
+    }, [maxNotifications]);
 
-    // Mark notification as read
     const markAsRead = useCallback(async (notificationId: string) => {
         try {
-            // TODO: Actualizar en Supabase
-            // await supabase
-            //   .from('notifications')
-            //   .update({ is_read: true })
-            //   .eq('id', notificationId);
-
-            // Actualizar estado local
             setNotifications(prev =>
-                prev.map(notif =>
-                    notif.id === notificationId
-                        ? { ...notif, isRead: true }
-                        : notif
-                )
+                prev.map(n => n.id === notificationId ? { ...n, isRead: true } : n)
             );
         } catch (err) {
             console.error('Error marking notification as read:', err);
         }
     }, []);
 
-    // Mark all as read
     const markAllAsRead = useCallback(async () => {
         try {
-            const unreadIds = notifications
-                .filter(n => !n.isRead)
-                .map(n => n.id);
-
-            if (unreadIds.length === 0) return;
-
-            // TODO: Actualizar en Supabase
-            // await supabase
-            //   .from('notifications')
-            //   .update({ is_read: true })
-            //   .in('id', unreadIds);
-
-            // Actualizar estado local
-            setNotifications(prev =>
-                prev.map(notif => ({ ...notif, isRead: true }))
-            );
+            setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
         } catch (err) {
             console.error('Error marking all as read:', err);
         }
-    }, [notifications]);
+    }, []);
 
-    // Delete notification
     const deleteNotification = useCallback(async (notificationId: string) => {
         try {
-            // TODO: Eliminar en Supabase
-            // await supabase
-            //   .from('notifications')
-            //   .delete()
-            //   .eq('id', notificationId);
-
-            // Actualizar estado local
-            setNotifications(prev =>
-                prev.filter(notif => notif.id !== notificationId)
-            );
+            setNotifications(prev => prev.filter(n => n.id !== notificationId));
         } catch (err) {
             console.error('Error deleting notification:', err);
         }
     }, []);
 
-    // Clear all notifications
     const clearAll = useCallback(async () => {
         try {
-            // TODO: Eliminar en Supabase
-            // await supabase
-            //   .from('notifications')
-            //   .delete()
-            //   .neq('id', ''); // Delete all
-
-            // Actualizar estado local
             setNotifications([]);
         } catch (err) {
             console.error('Error clearing notifications:', err);
@@ -185,55 +101,18 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
         fetchNotifications();
     }, [fetchNotifications]);
 
-    // Auto-refresh
+    // Auto-refresh — usa primitivos, no el objeto options
     useEffect(() => {
-        if (!opts.autoRefresh) return;
-
-        const interval = setInterval(() => {
-            fetchNotifications();
-        }, opts.refreshInterval);
-
+        if (!autoRefresh) return;
+        const interval = setInterval(fetchNotifications, refreshInterval);
         return () => clearInterval(interval);
-    }, [opts.autoRefresh, opts.refreshInterval, fetchNotifications]);
+    }, [autoRefresh, refreshInterval, fetchNotifications]);
 
-    // Realtime subscription (cuando tengas tabla en Supabase)
-    useEffect(() => {
-        // TODO: Suscribirse a cambios en tiempo real
-        // const subscription = supabase
-        //   .channel('notifications')
-        //   .on('postgres_changes', {
-        //     event: '*',
-        //     schema: 'public',
-        //     table: 'notifications'
-        //   }, (payload) => {
-        //     if (payload.eventType === 'INSERT') {
-        //       setNotifications(prev => [payload.new as Notification, ...prev]);
-        //     } else if (payload.eventType === 'UPDATE') {
-        //       setNotifications(prev => 
-        //         prev.map(n => n.id === payload.new.id ? payload.new as Notification : n)
-        //       );
-        //     } else if (payload.eventType === 'DELETE') {
-        //       setNotifications(prev => 
-        //         prev.filter(n => n.id !== payload.old.id)
-        //       );
-        //     }
-        //   })
-        //   .subscribe();
-
-        // return () => {
-        //   subscription.unsubscribe();
-        // };
-    }, []);
-
-    // Calculate counts
     const unreadCount = notifications.filter(n => !n.isRead).length;
     const hasUnread = unreadCount > 0;
 
-    // Group by type
     const byType = notifications.reduce((acc, notif) => {
-        if (!acc[notif.type]) {
-            acc[notif.type] = [];
-        }
+        if (!acc[notif.type]) acc[notif.type] = [];
         acc[notif.type].push(notif);
         return acc;
     }, {} as Record<NotificationType, Notification[]>);
@@ -249,6 +128,6 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
         markAllAsRead,
         deleteNotification,
         clearAll,
-        refresh: fetchNotifications
+        refresh: fetchNotifications,
     };
 }

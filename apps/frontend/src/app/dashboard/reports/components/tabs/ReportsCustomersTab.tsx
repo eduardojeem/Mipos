@@ -8,7 +8,7 @@ import { ReportCard } from '../ReportCard';
 import { ChartCard } from '../ChartCard';
 import { DataTable, Column } from '../DataTable';
 import { PeriodComparison } from '../PeriodComparison';
-import { CustomerData } from '../../hooks/useReportData';
+import type { CustomerData } from '../../hooks/useOptimizedReportData';
 
 interface ReportsCustomersTabProps {
     data: CustomerData;

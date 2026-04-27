@@ -17,6 +17,7 @@ import {
 import { formatDate } from '@/lib/utils';
 import { useCurrencyFormatter } from '@/contexts/BusinessConfigContext';
 import { useToast } from '@/components/ui/use-toast';
+import { PermissionGuard } from '@/components/ui/permission-guard';
 import type { UICustomer } from '@/types/customer-page';
 
 interface CustomersTableRowProps {
@@ -49,7 +50,7 @@ export const CustomersTableRow = memo(function CustomersTableRow({
                 description: `${fieldName} copiado al portapapeles`,
             });
             setTimeout(() => setCopiedField(null), 2000);
-        } catch (err) {
+        } catch {
             toast({
                 title: 'Error',
                 description: 'No se pudo copiar al portapapeles',
@@ -98,10 +99,9 @@ export const CustomersTableRow = memo(function CustomersTableRow({
     return (
         <tr
             className={`
-                border-b transition-all duration-200 group
-                hover:bg-gradient-to-r hover:from-muted/50 hover:to-transparent
-                hover:shadow-sm
-                ${isSelected ? 'bg-primary/5 border-l-4 border-l-primary' : 'border-l-4 border-l-transparent'}
+                border-b transition-colors group
+                hover:bg-muted/50
+                ${isSelected ? 'bg-primary/5' : ''}
             `}
         >
             {/* Checkbox */}
@@ -110,21 +110,20 @@ export const CustomersTableRow = memo(function CustomersTableRow({
                     checked={isSelected}
                     onCheckedChange={() => onSelect(customer.id)}
                     aria-label={`Seleccionar ${customer.name}`}
-                    className="transition-transform group-hover:scale-110"
                 />
             </td>
 
             {/* Avatar & Name */}
             <td className="p-4">
                 <div className="flex items-center gap-3">
-                    <div className={`relative transition-transform group-hover:scale-105`}>
+                    <div className="relative">
                         <Avatar className={`h-10 w-10 ring-2 ${typeConfig.ringColor} ring-offset-2 ring-offset-background`}>
                             <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-sm font-semibold">
                                 {getInitials(customer.name)}
                             </AvatarFallback>
                         </Avatar>
                         {customer.customerType === 'vip' && (
-                            <div className="absolute -top-1 -right-1 animate-pulse">
+                            <div className="absolute -top-1 -right-1">
                                 <Sparkles className="h-3 w-3 text-yellow-500 fill-yellow-500" />
                             </div>
                         )}
@@ -178,6 +177,13 @@ export const CustomersTableRow = memo(function CustomersTableRow({
                 </div>
             </td>
 
+            {/* RUC */}
+            <td className="p-4">
+                <span className="text-sm font-mono text-muted-foreground">
+                    {customer.ruc || '—'}
+                </span>
+            </td>
+
             {/* Type */}
             <td className="p-4">
                 <Badge
@@ -185,7 +191,6 @@ export const CustomersTableRow = memo(function CustomersTableRow({
                         ${typeConfig.color} 
                         border shadow-sm
                         flex items-center gap-1.5 w-fit font-medium
-                        ${customer.customerType === 'vip' ? 'animate-pulse' : ''}
                     `}
                 >
                     {typeConfig.icon}
@@ -193,16 +198,18 @@ export const CustomersTableRow = memo(function CustomersTableRow({
                 </Badge>
             </td>
 
-            {/* Stats */}
+            {/* Orders */}
             <td className="p-4">
-                <div className="flex flex-col gap-1">
-                    <span className="text-sm font-semibold">
-                        {customer.totalOrders || 0} pedidos
-                    </span>
-                    <span className="text-sm font-mono text-muted-foreground">
-                        {fmtCurrency(customer.totalSpent || 0)}
-                    </span>
-                </div>
+                <span className="text-sm font-semibold">
+                    {customer.totalOrders || 0}
+                </span>
+            </td>
+
+            {/* Spent */}
+            <td className="p-4">
+                <span className="text-sm font-mono text-muted-foreground">
+                    {fmtCurrency(customer.totalSpent || 0)}
+                </span>
             </td>
 
             {/* Status */}
@@ -220,9 +227,21 @@ export const CustomersTableRow = memo(function CustomersTableRow({
                 {formatDate(customer.created_at)}
             </td>
 
+            {/* Last Purchase */}
+            <td className="p-4 text-sm text-muted-foreground">
+                {customer.lastPurchase ? formatDate(customer.lastPurchase) : '—'}
+            </td>
+
+            {/* Lifetime Value */}
+            <td className="p-4">
+                <span className="text-sm font-mono text-muted-foreground">
+                    {fmtCurrency(customer.lifetimeValue || 0)}
+                </span>
+            </td>
+
             {/* Inline Actions */}
             <td className="p-4">
-                <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                <div className="flex items-center gap-1">
                     <Button
                         variant="ghost"
                         size="sm"
@@ -232,24 +251,28 @@ export const CustomersTableRow = memo(function CustomersTableRow({
                     >
                         <Eye className="h-4 w-4" />
                     </Button>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onEdit(customer)}
-                        className="h-8 px-2 hover:bg-blue-500/10 hover:text-blue-600"
-                        title="Editar"
-                    >
-                        <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onDelete(customer.id)}
-                        className="h-8 px-2 hover:bg-destructive/10 hover:text-destructive"
-                        title="Eliminar"
-                    >
-                        <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <PermissionGuard permission="customers.edit" fallback={null} showError={false}>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => onEdit(customer)}
+                            className="h-8 px-2 hover:bg-blue-500/10 hover:text-blue-600"
+                            title="Editar"
+                        >
+                            <Edit className="h-4 w-4" />
+                        </Button>
+                    </PermissionGuard>
+                    <PermissionGuard permission="customers.delete" fallback={null} showError={false}>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => onDelete(customer.id)}
+                            className="h-8 px-2 hover:bg-destructive/10 hover:text-destructive"
+                            title="Eliminar"
+                        >
+                            <Trash2 className="h-4 w-4" />
+                        </Button>
+                    </PermissionGuard>
                 </div>
             </td>
         </tr>

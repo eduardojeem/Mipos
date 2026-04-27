@@ -37,7 +37,7 @@ export function PromotionFilters({
     <div className="flex flex-wrap gap-3">
       {/* Status Filter */}
       <Select value={statusFilter} onValueChange={setStatusFilter}>
-        <SelectTrigger className="w-[160px] h-12" aria-label="Filtrar por estado">
+        <SelectTrigger className="w-[160px] h-10" aria-label="Filtrar por estado">
           <Filter className="h-4 w-4 mr-2" />
           <SelectValue placeholder="Estado" />
         </SelectTrigger>
@@ -53,7 +53,7 @@ export function PromotionFilters({
       {/* Sort Dropdown */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" className="h-12 gap-2" aria-label="Ordenar">
+          <Button variant="outline" className="h-10 gap-2" aria-label="Ordenar">
             <ArrowUpDown className="h-4 w-4" />
             <span className="hidden sm:inline">Ordenar</span>
           </Button>
@@ -76,7 +76,7 @@ export function PromotionFilters({
         <Button
           variant={viewMode === 'grid' ? 'default' : 'ghost'}
           size="icon"
-          className="h-12 w-12 rounded-none"
+          className="h-10 w-10 rounded-none"
           onClick={() => setViewMode('grid')}
           aria-label="Vista de cuadrícula"
         >
@@ -85,7 +85,7 @@ export function PromotionFilters({
         <Button
           variant={viewMode === 'list' ? 'default' : 'ghost'}
           size="icon"
-          className="h-12 w-12 rounded-none"
+          className="h-10 w-10 rounded-none"
           onClick={() => setViewMode('list')}
           aria-label="Vista de lista"
         >

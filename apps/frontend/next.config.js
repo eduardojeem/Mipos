@@ -1,6 +1,12 @@
+const path = require('path')
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   transpilePackages: ['recharts'],
+  allowedDevOrigins: ['localhost', '*.localhost', '127.0.0.1'],
+
+  // Fix monorepo workspace root detection
+  outputFileTracingRoot: path.join(__dirname, '../../'),
 
   // Compiler optimizations (Next.js 15 compatible)
   compiler: {
@@ -26,6 +32,16 @@ const nextConfig = {
       {
         protocol: 'https',
         hostname: 'picsum.photos',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: '*.trae.ai',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'trae.ai',
         pathname: '/**',
       },
     ],

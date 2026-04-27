@@ -1,66 +1,64 @@
 import { NextRequest } from 'next/server';
-import { createClient } from '@/lib/supabase';
-
-/**
- * Organization utilities for multitenancy support
- * Provides server-side validation and extraction of organization context
- */
+import { createClient } from '@/lib/supabase/server';
 
 export interface OrganizationContext {
   organizationId: string;
   userId: string;
 }
 
-/**
- * Extrae y valida la organización del usuario desde el request
- * @param request - Next.js request object
- * @returns organization_id validado o null si no es válido
- */
-export async function getValidatedOrganizationId(
-  request: NextRequest
+async function getAuthenticatedUserId(
+  supabase: Awaited<ReturnType<typeof createClient>>
 ): Promise<string | null> {
-  const supabase = await createClient();
-  
-  // 1. Obtener usuario actual autenticado
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
-  if (authError || !user) {
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error || !user) {
     console.warn('Organization validation: No authenticated user found');
     return null;
   }
 
-  // 2. Intentar obtener organización del header
-  const requestedOrgId = request.headers.get('x-organization-id')?.trim();
-  
-  // 3. Si se especificó una organización, validar que el usuario pertenece a ella
-  if (requestedOrgId) {
-    const { data, error } = await supabase
-      .from('organization_members')
-      .select('organization_id')
-      .eq('user_id', user.id)
-      .eq('organization_id', requestedOrgId)
-      .single();
-    
-    if (error || !data) {
-      console.warn(
-        `Organization validation: User ${user.id} attempted to access org ${requestedOrgId} without permission`
-      );
-      return null;
-    }
-    
-    return requestedOrgId;
+  return user.id;
+}
+
+async function validateRequestedOrganizationId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  requestedOrgId: string
+): Promise<string | null> {
+  const normalizedOrgId = requestedOrgId.trim();
+  if (!normalizedOrgId) {
+    return null;
   }
 
-  // 4. Fallback: obtener la primera organización del usuario
+  const { data, error } = await supabase
+    .from('organization_members')
+    .select('organization_id')
+    .eq('user_id', userId)
+    .eq('organization_id', normalizedOrgId)
+    .single();
+
+  if (error || !data) {
+    console.warn(
+      `Organization validation: User ${userId} attempted to access org ${normalizedOrgId} without permission`
+    );
+    return null;
+  }
+
+  return normalizedOrgId;
+}
+
+async function getFallbackOrganizationId(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string
+): Promise<string | null> {
   const { data: memberData, error: memberError } = await supabase
     .from('organization_members')
     .select('organization_id')
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .limit(1)
     .single();
 
   if (memberError || !memberData) {
     console.warn(
-      `Organization validation: User ${user.id} has no organization memberships`
+      `Organization validation: User ${userId} has no organization memberships`
     );
     return null;
   }
@@ -68,85 +66,110 @@ export async function getValidatedOrganizationId(
   return memberData.organization_id;
 }
 
-/**
- * Middleware helper para requerir organización válida
- * Lanza un error si no se encuentra una organización válida
- * @param request - Next.js request object
- * @returns organization_id validado
- * @throws Error si no hay organización válida
- */
+export async function getValidatedOrganizationId(
+  request: NextRequest
+): Promise<string | null> {
+  const supabase = await createClient();
+  const userId = await getAuthenticatedUserId(supabase);
+
+  if (!userId) {
+    return null;
+  }
+
+  const requestedOrgId = request.headers.get('x-organization-id')?.trim();
+  if (requestedOrgId) {
+    const validatedOrgId = await validateRequestedOrganizationId(supabase, userId, requestedOrgId);
+    if (validatedOrgId) {
+      return validatedOrgId;
+    }
+  }
+
+  return getFallbackOrganizationId(supabase, userId);
+}
+
+export async function resolveOrganizationId(
+  request: NextRequest
+): Promise<string | null> {
+  const headerOrgId = request.headers.get('x-organization-id')?.trim();
+  if (headerOrgId) {
+    return headerOrgId;
+  }
+
+  const cookieOrgId = request.cookies.get('x-organization-id')?.value?.trim();
+  if (cookieOrgId) {
+    const supabase = await createClient();
+    const userId = await getAuthenticatedUserId(supabase);
+
+    if (!userId) {
+      return cookieOrgId;
+    }
+
+    const validatedOrgId = await validateRequestedOrganizationId(supabase, userId, cookieOrgId);
+    if (validatedOrgId) {
+      return validatedOrgId;
+    }
+
+    return getFallbackOrganizationId(supabase, userId);
+  }
+
+  return getValidatedOrganizationId(request);
+}
+
 export async function requireOrganization(request: NextRequest): Promise<string> {
   const orgId = await getValidatedOrganizationId(request);
-  
+
   if (!orgId) {
     throw new Error('No valid organization found for user');
   }
-  
+
   return orgId;
 }
 
-/**
- * Obtiene el contexto completo de organización y usuario
- * @param request - Next.js request object
- * @returns Objeto con organizationId y userId
- * @throws Error si no hay organización válida
- */
 export async function getOrganizationContext(
   request: NextRequest
 ): Promise<OrganizationContext> {
   const supabase = await createClient();
-  
-  const { data: { user }, error } = await supabase.auth.getUser();
-  if (error || !user) {
+  const userId = await getAuthenticatedUserId(supabase);
+
+  if (!userId) {
     throw new Error('User not authenticated');
   }
 
   const organizationId = await requireOrganization(request);
-  
+
   return {
     organizationId,
-    userId: user.id,
+    userId,
   };
 }
 
-/**
- * Verifica si un usuario pertenece a una organización específica
- * @param userId - ID del usuario
- * @param organizationId - ID de la organización
- * @returns true si el usuario pertenece a la organización
- */
 export async function userBelongsToOrganization(
   userId: string,
   organizationId: string
 ): Promise<boolean> {
   const supabase = await createClient();
-  
+
   const { data, error } = await supabase
     .from('organization_members')
     .select('organization_id')
     .eq('user_id', userId)
     .eq('organization_id', organizationId)
     .single();
-  
+
   return !error && !!data;
 }
 
-/**
- * Obtiene todas las organizaciones de un usuario
- * @param userId - ID del usuario
- * @returns Lista de IDs de organizaciones
- */
 export async function getUserOrganizations(userId: string): Promise<string[]> {
   const supabase = await createClient();
-  
+
   const { data, error } = await supabase
     .from('organization_members')
     .select('organization_id')
     .eq('user_id', userId);
-  
+
   if (error || !data) {
     return [];
   }
-  
-  return data.map((m: { organization_id: string }) => m.organization_id);
+
+  return data.map((member: { organization_id: string }) => member.organization_id);
 }

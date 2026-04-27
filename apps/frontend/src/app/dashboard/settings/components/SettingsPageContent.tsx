@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { AlertCircle, HelpCircle, FileText, Mail, User, Palette, Settings, Shield, ShoppingCart, CreditCard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -32,6 +33,7 @@ type HealthState = { ok: boolean; supabase?: { ok: boolean; storage?: boolean; a
 
 export default function SettingsPageContent() {
   const [activeTab, setActiveTab] = useState('profile');
+  const searchParams = useSearchParams();
   
 
   // Check for unsaved changes (this is a simplified version)
@@ -43,6 +45,10 @@ export default function SettingsPageContent() {
   const [health, setHealth] = useState<HealthState | null>(null);
 
   useEffect(() => {
+    const t = (searchParams?.get('tab') || '').trim();
+    if (t && ['profile','system','security','pos','notifications','appearance','billing'].includes(t)) {
+      setActiveTab(t);
+    }
     const loadHealth = async () => {
       try {
         const res = await fetch('/api/health');

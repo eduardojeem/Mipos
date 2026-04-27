@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase-admin';
 
 export async function POST(request: NextRequest) {
     try {
@@ -32,11 +33,17 @@ export async function POST(request: NextRequest) {
         }
 
         const supabase = await createClient();
+        let admin: any;
+        try {
+            admin = createAdminClient();
+        } catch (e) {
+            admin = null;
+        }
 
         // Verificar si el plan existe
         let planId = null;
         if (planSlug) {
-            const { data: plan, error: planError } = await supabase
+            const { data: plan, error: planError } = await (admin || supabase)
                 .from('saas_plans')
                 .select('id')
                 .eq('slug', planSlug)
@@ -90,12 +97,13 @@ export async function POST(request: NextRequest) {
             .replace(/^-+|-+$/g, '');
 
         // Crear organización
-        const { data: orgData, error: orgError } = await supabase
+        const clientForWrites = admin || supabase;
+        const { data: orgData, error: orgError } = await clientForWrites
             .from('organizations')
             .insert({
                 name: organizationName,
                 slug: `${orgSlug}-${Date.now()}`, // Asegurar unicidad
-                subscription_plan: planSlug?.toUpperCase() || 'FREE',
+                subscription_plan: (planSlug || 'free').toLowerCase(),
                 subscription_status: 'ACTIVE'
             })
             .select()
@@ -104,7 +112,9 @@ export async function POST(request: NextRequest) {
         if (orgError) {
             console.error('Organization creation error:', orgError);
             // Si falla la creación de la org, intentar eliminar el usuario creado
-            await supabase.auth.admin.deleteUser(authData.user.id).catch(console.error);
+            if (admin) {
+                await admin.auth.admin.deleteUser(authData.user.id).catch(console.error);
+            }
 
             return NextResponse.json({
                 success: false,
@@ -113,7 +123,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Agregar usuario como miembro de la organización
-        const { error: memberError } = await supabase
+        const { error: memberError } = await clientForWrites
             .from('organization_members')
             .insert({
                 organization_id: orgData.id,
@@ -131,7 +141,7 @@ export async function POST(request: NextRequest) {
             const periodEnd = new Date();
             periodEnd.setMonth(periodEnd.getMonth() + 1); // 1 mes de período inicial
 
-            const { error: subError } = await supabase
+            const { error: subError } = await clientForWrites
                 .from('saas_subscriptions')
                 .insert({
                     organization_id: orgData.id,

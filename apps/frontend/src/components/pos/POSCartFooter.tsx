@@ -117,6 +117,8 @@ export function POSCartFooter({
                                     {paymentMethod === 'CASH' && 'Efectivo'}
                                     {paymentMethod === 'CARD' && 'Tarjeta'}
                                     {paymentMethod === 'TRANSFER' && 'Transferencia'}
+                                    {paymentMethod === 'QR' && 'QR'}
+                                    {paymentMethod === 'MIXED' && 'Mixto'}
                                     {paymentMethod === 'OTHER' && 'Otro'}
                                 </span>
                             </div>

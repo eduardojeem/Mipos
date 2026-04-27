@@ -10,6 +10,10 @@ import { DEFAULT_IVA_RATE_PARAGUAY } from './constants'
  */
 export type DiscountType = 'PERCENTAGE' | 'FIXED_AMOUNT'
 
+export interface ExtendedProduct extends Product {
+  is_taxable?: boolean;
+}
+
 /**
  * Result of cart calculations including all totals and tax information
  */
@@ -86,7 +90,7 @@ const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
  */
 export function calculateCartWithIva(
   cart: CartItem[],
-  products: Product[],
+  products: ExtendedProduct[],
   discount: number,
   discountType: DiscountType,
   config?: BusinessConfig
@@ -94,75 +98,87 @@ export function calculateCartWithIva(
   // Check if tax is globally enabled
   const taxEnabled = config?.storeSettings?.taxEnabled ?? true;
   const globalTaxRate = config?.storeSettings?.taxRate ?? (DEFAULT_IVA_RATE_PARAGUAY / 100);
-  const taxIncludedInPrices = config?.storeSettings?.taxIncludedInPrices ?? false;
 
-  let subtotalWithoutIva = 0
-  let totalIva = 0
-  let subtotalWithIva = 0
-
-  const itemsWithIva: CartTotals['itemsWithIva'] = []
+  // Step 1: Calculate total with tax as the base for global discounts
+  let subtotalWithTax = 0;
+  const itemsWithIva: CartTotals['itemsWithIva'] = [];
 
   for (const item of cart) {
-    const product = products.find(p => p.id === item.product_id)
-
-    // Check if this product is taxable (default to true if not specified)
-    const isProductTaxable = (product as any)?.is_taxable ?? true;
-
-    // If tax is disabled globally OR product is not taxable, don't apply tax
+    const product = products.find(p => p.id === item.product_id);
+    const isProductTaxable = product?.is_taxable ?? true;
     const shouldApplyTax = taxEnabled && isProductTaxable;
+    const ivaRate = shouldApplyTax ? (product?.iva_rate ?? (globalTaxRate * 100)) : 0;
+    const ivaIncluded = product?.iva_included ?? config?.storeSettings?.taxIncludedInPrices ?? true;
+    
+    const rate = ivaRate / 100;
+    const itemTotal = item.total; // Original item subtotal (could be base or with-tax)
 
-    const ivaRate = shouldApplyTax
-      ? ((product as any)?.iva_rate ?? (globalTaxRate * 100))
-      : 0;
-
-    const ivaIncluded = (product as any)?.iva_included ?? taxIncludedInPrices
-
-    let itemSubtotalWithoutIva: number
-    let itemIvaAmount: number
-    let itemSubtotalWithIva: number
-
-    if (shouldApplyTax && ivaIncluded) {
-      itemSubtotalWithIva = item.total
-      itemSubtotalWithoutIva = itemSubtotalWithIva / (1 + (ivaRate / 100))
-      itemIvaAmount = itemSubtotalWithIva - itemSubtotalWithoutIva
-    } else if (shouldApplyTax && !ivaIncluded) {
-      itemSubtotalWithoutIva = item.total
-      itemIvaAmount = itemSubtotalWithoutIva * (ivaRate / 100)
-      itemSubtotalWithIva = itemSubtotalWithoutIva + itemIvaAmount
+    let itemSubtotalWithTax: number;
+    if (ivaIncluded || !shouldApplyTax) {
+      itemSubtotalWithTax = itemTotal;
     } else {
-      // No tax applied
-      itemSubtotalWithoutIva = item.total
-      itemIvaAmount = 0
-      itemSubtotalWithIva = item.total
+      itemSubtotalWithTax = itemTotal * (1 + rate);
     }
 
-    subtotalWithoutIva += itemSubtotalWithoutIva
-    totalIva += itemIvaAmount
-    subtotalWithIva += itemSubtotalWithIva
+    subtotalWithTax += itemSubtotalWithTax;
 
     itemsWithIva.push({
       ...item,
-      subtotal_without_iva: itemSubtotalWithoutIva,
-      iva_amount: itemIvaAmount,
+      subtotal_without_iva: ivaIncluded ? (itemTotal / (1 + rate)) : itemTotal,
+      iva_amount: ivaIncluded ? (itemTotal - (itemTotal / (1 + rate))) : (itemTotal * rate),
       iva_rate: ivaRate,
-    })
+    });
   }
 
-  const discountAmount = discountType === 'PERCENTAGE'
-    ? (subtotalWithIva * discount) / 100
-    : discount
+  // Step 2: Apply global discount to the total-with-tax
+  let discountAmount = 0;
+  if (discountType === 'PERCENTAGE') {
+    discountAmount = (subtotalWithTax * discount) / 100;
+  } else {
+    discountAmount = Math.min(discount, subtotalWithTax);
+  }
 
-  const total = Math.max(0, subtotalWithIva - discountAmount)
+  const finalTotalWithTax = Math.max(0, subtotalWithTax - discountAmount);
+  const discountRatio = subtotalWithTax > 0 ? (finalTotalWithTax / subtotalWithTax) : 0;
+
+  // Step 3: Extract proportional tax and base from the final total
+  let finalTaxAmount = 0;
+  let finalSubtotalWithoutTax = 0;
+
+  for (const item of itemsWithIva) {
+    const product = products.find(p => p.id === item.product_id);
+    const ivaIncluded = product?.iva_included ?? config?.storeSettings?.taxIncludedInPrices ?? true;
+    const rate = item.iva_rate / 100;
+    
+    // We apply the global discount ratio to this item's contribution to the total
+    const itemOriginalWithTax = ivaIncluded ? item.total : (item.total * (1 + rate));
+    const itemFinalWithTax = itemOriginalWithTax * discountRatio;
+    
+    const itemBase = itemFinalWithTax / (1 + rate);
+    const itemTax = itemFinalWithTax - itemBase;
+    
+    finalTaxAmount += itemTax;
+    finalSubtotalWithoutTax += itemBase;
+  }
+
+  // Step 4: Apply legal rounding
+  let total = finalTotalWithTax;
+  const currency = config?.storeSettings?.currency || 'PYG';
+  
+  if (currency === 'PYG') {
+    const unit = 50; // NEAREST 50
+    total = Math.round(finalTotalWithTax / unit) * unit;
+  }
 
   return {
-    subtotal: round2(subtotalWithoutIva),
-    subtotalWithIva: round2(subtotalWithIva),
+    subtotal: round2(finalSubtotalWithoutTax),
+    subtotalWithIva: round2(subtotalWithTax),
     discountAmount: round2(discountAmount),
-    taxAmount: round2(totalIva),
+    taxAmount: round2(finalTaxAmount),
     total: round2(total),
     itemCount: cart.reduce((sum, item) => sum + item.quantity, 0),
     itemsWithIva,
-  }
+  };
 }
 
 /**

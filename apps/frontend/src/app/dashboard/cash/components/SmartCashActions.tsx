@@ -1,6 +1,6 @@
 "use client";
 
-import React, { memo, useState } from "react";
+import React, { memo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +11,6 @@ import {
   Plus, 
   RefreshCw, 
   Download, 
-  Settings, 
   Clock,
   AlertTriangle,
   CheckCircle,
@@ -19,7 +18,7 @@ import {
   Calculator
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { useToast } from "@/components/ui/use-toast";
 
 interface SmartCashActionsProps {
@@ -137,14 +136,6 @@ export const SmartCashActions = memo<SmartCashActionsProps>(({
   sessionStats
 }) => {
   const { toast } = useToast();
-  const [showAdvanced, setShowAdvanced] = useState(false);
-
-  const handleQuickAction = (action: string) => {
-    toast({
-      title: "Acción rápida",
-      description: `Ejecutando: ${action}`,
-    });
-  };
 
   const getSessionStatus = () => {
     if (sessionOpen) {
@@ -202,13 +193,6 @@ export const SmartCashActions = memo<SmartCashActionsProps>(({
                   Sync: {lastSyncAt.toLocaleTimeString()}
                 </span>
               )}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowAdvanced(!showAdvanced)}
-              >
-                <Settings className="h-4 w-4" />
-              </Button>
             </div>
           </CardTitle>
         </CardHeader>
@@ -292,7 +276,7 @@ export const SmartCashActions = memo<SmartCashActionsProps>(({
             )}
 
             <ActionButton
-              onClick={() => handleQuickAction("Reporte rápido")}
+              onClick={() => toast({ title: "Reportes", description: "Ve a la pestaña Reportes para ver estadísticas detalladas." })}
               icon={TrendingUp}
               variant="ghost"
               size="sm"
@@ -300,55 +284,6 @@ export const SmartCashActions = memo<SmartCashActionsProps>(({
               Reporte
             </ActionButton>
           </div>
-
-          {/* Acciones avanzadas */}
-          <AnimatePresence>
-            {showAdvanced && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.2 }}
-              >
-                <Separator />
-                <div className="space-y-3">
-                  <h4 className="text-sm font-medium text-muted-foreground">Acciones Avanzadas</h4>
-                  <div className="grid grid-cols-2 gap-2">
-                    <ActionButton
-                      onClick={() => handleQuickAction("Arqueo completo")}
-                      disabled={!sessionOpen}
-                      variant="outline"
-                      size="sm"
-                    >
-                      Arqueo Completo
-                    </ActionButton>
-                    <ActionButton
-                      onClick={() => handleQuickAction("Conciliación")}
-                      disabled={!sessionOpen}
-                      variant="outline"
-                      size="sm"
-                    >
-                      Conciliación
-                    </ActionButton>
-                    <ActionButton
-                      onClick={() => handleQuickAction("Backup datos")}
-                      variant="outline"
-                      size="sm"
-                    >
-                      Backup Datos
-                    </ActionButton>
-                    <ActionButton
-                      onClick={() => handleQuickAction("Configuración")}
-                      variant="outline"
-                      size="sm"
-                    >
-                      Configuración
-                    </ActionButton>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </CardContent>
       </Card>
 

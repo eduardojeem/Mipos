@@ -10,12 +10,24 @@ export interface OfflineCartItem {
 export interface OfflineSale {
   id: string;
   user_id: string;
+  organization_id: string;
   customer_id?: string;
   total_amount: number;
   tax_amount: number;
   discount_amount: number;
   payment_method: string;
+  payment_details?: {
+    primaryMethod?: string;
+    payments?: Array<{
+      type: string;
+      amount: number;
+      details?: {
+        reference?: string;
+      };
+    }>;
+  };
   status: string;
+  notes?: string;
   created_at: string;
   updated_at: string;
   items?: Array<{

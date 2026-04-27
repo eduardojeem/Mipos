@@ -8,7 +8,7 @@ import { ReportCard } from '../ReportCard';
 import { PeriodComparison } from '../PeriodComparison';
 import { ChartCard } from '../ChartCard';
 import { DataTable, Column } from '../DataTable';
-import { FinancialData } from '../../hooks/useReportData';
+import type { FinancialData } from '../../hooks/useOptimizedReportData';
 
 interface ReportsFinancialTabProps {
     data: FinancialData;

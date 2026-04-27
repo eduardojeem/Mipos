@@ -1,7 +1,6 @@
 "use client";
 
-import React from 'react';
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useCache, globalCache } from './use-cache';
 import { getCacheConfig } from './use-cache-config';
 import { api } from '@/lib/api';
@@ -19,6 +18,7 @@ export interface ReportFilter {
   supplierId?: string;
   userId?: string;
   status?: string;
+  organizationId?: string;
 }
 
 export interface SalesReportData {
@@ -181,9 +181,6 @@ export interface ComparisonReportData {
 export type ReportType = 'sales' | 'inventory' | 'customers' | 'financial' | 'compare';
 export type ExportFormat = 'pdf' | 'excel' | 'csv' | 'json';
 
-// API functions
-const API_BASE = '/api/reports';
-
 // Helper to serialize filters into a stable cache key string
 function ensureDefaultDateRange(filters: ReportFilter = {}): ReportFilter {
   const end = filters.endDate ? new Date(filters.endDate) : new Date();
@@ -208,6 +205,7 @@ function serializeFilters(filters: ReportFilter = {}): string {
     ['supplierId', applied.supplierId],
     ['userId', applied.userId],
     ['status', applied.status],
+    ['organizationId', applied.organizationId],
   ];
   return entries
     .filter(([, v]) => v !== undefined && v !== '')
@@ -245,6 +243,7 @@ async function fetchReport<T>(
   if (appliedFilters.supplierId) params.supplierId = appliedFilters.supplierId;
   if (appliedFilters.userId) params.userId = appliedFilters.userId;
   if (appliedFilters.status) params.status = appliedFilters.status;
+  if (appliedFilters.organizationId) params.organizationId = appliedFilters.organizationId;
   // Gate para fast-path con Supabase: usar si está activo
   const selectedSource = getSelectedSource();
   const useSupabaseSource = isSupabaseActive() && (
@@ -361,6 +360,7 @@ async function exportReport(
         supplierId: filters.supplierId,
         userId: filters.userId,
         status: filters.status,
+        organizationId: filters.organizationId,
       };
       const maxRetries = 3;
       let attempt = 0;
@@ -540,6 +540,8 @@ async function fetchComparisonReport(
     const val = aVal ?? bVal;
     if (val) params[key] = String(val);
   });
+  
+  if (periodA.organizationId) params.organizationId = periodA.organizationId;
 
   const selectedSource = getSelectedSource();
   if (isSupabaseActive() && selectedSource === 'supabase') {
@@ -694,6 +696,7 @@ export function useReportExport() {
         customerId: periodA.customerId ?? periodB.customerId,
         supplierId: periodA.supplierId ?? periodB.supplierId,
         userId: periodA.userId ?? periodB.userId,
+        organizationId: periodA.organizationId ?? periodB.organizationId,
       };
       const response = await api.get('/reports/export', {
         params,

@@ -29,6 +29,14 @@
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
+    --brand-primary: 0 0% 9%;
+    --brand-secondary: 0 0% 3.9%;
+    --brand-accent: 0 0% 96.1%;
+    --brand-background: 0 0% 100%;
+    --brand-foreground: 0 0% 3.9%;
+    --brand-primary-foreground: 0 0% 98%;
+    --brand-secondary-foreground: 0 0% 98%;
+    --brand-accent-foreground: 0 0% 9%;
   }
 
   /* 🌙 Modern Dark Mode - Unified & Elegant */
@@ -227,6 +235,68 @@
     background: rgba(51, 65, 85, 0.5);
   }
 
+}
+
+html.no-transitions *,
+html.no-transitions *::before,
+html.no-transitions *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0s !important;
+  scroll-behavior: auto !important;
+}
+
+html[data-glassmorphism="false"] [class*="backdrop-blur"] {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html[data-glassmorphism="false"] .glass,
+html[data-glassmorphism="false"] .glass-card,
+html[data-glassmorphism="false"] .glass-effect,
+html[data-glassmorphism="false"] .glass-dark,
+html[data-glassmorphism="false"] .glass-dark-card {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background: hsl(var(--card)) !important;
+  border-color: hsl(var(--border)) !important;
+  box-shadow: none !important;
+}
+
+html[data-gradients="false"] .gradient-bg,
+html[data-gradients="false"] .gradient-bg-subtle,
+html[data-gradients="false"] [class*="bg-gradient-to-"] {
+  background-image: none !important;
+}
+
+html[data-gradients="false"] .gradient-bg,
+html[data-gradients="false"] .gradient-bg-subtle {
+  background-color: hsl(var(--card)) !important;
+}
+
+html[data-gradients="false"] .btn-gradient,
+html[data-gradients="false"] button[class*="bg-gradient-to-"],
+html[data-gradients="false"] a[class*="bg-gradient-to-"] {
+  background-image: none !important;
+  background-color: hsl(var(--primary)) !important;
+  color: hsl(var(--primary-foreground)) !important;
+  border-color: transparent !important;
+}
+
+html[data-gradients="false"] .gradient-text {
+  background-image: none !important;
+  color: hsl(var(--foreground)) !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+
+html[data-gradients="false"] .gradient-text-primary {
+  background-image: none !important;
+  color: hsl(var(--primary)) !important;
+  -webkit-text-fill-color: currentColor !important;
+}
+
+html[data-shadows="false"] [class*="shadow"] {
+  box-shadow: none !important;
 }
 
 /* ---------------------------------------------------------

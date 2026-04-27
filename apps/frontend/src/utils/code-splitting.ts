@@ -282,11 +282,11 @@ export class IntelligentPreloader {
       MainDashboard: () => import('../components/dashboard/MainDashboard'),
       CustomerAnalytics: () => import('../components/dashboard/CustomerAnalytics'),
       StockAlerts: () => import('../components/dashboard/StockAlerts'),
-      ProductCatalog: () => import('../components/products/ProductCatalog'),
-      ProductForm: () => import('../components/products/ProductForm'),
-      ProductDetails: () => import('../components/products/ProductDetails'),
-      SalesManagement: () => import('../components/sales/SalesManagement'),
-      POSSystem: () => import('../components/sales/POSSystem'),
+      ProductCatalog: () => import('../components/products/ProductManager'),
+      ProductForm: () => import('../components/products/ProductManager'),
+      ProductDetails: () => import('../components/products/ProductManager'),
+      SalesManagement: () => import('../components/pos/OptimizedPOSLayout'),
+      POSSystem: () => import('../components/pos/OptimizedPOSLayout'),
       InventoryManagement: () => import('../components/inventory/InventoryManagement'),
       CustomerManagement: () => import('../components/customers/CustomerManagement'),
       ReportsHub: () => import('../components/reports/ReportsHub'),
@@ -356,15 +356,15 @@ export const createLazyRoute = (routePath: string) => {
       case 'StockAlerts':
         return import('../components/dashboard/StockAlerts').then(m => ({ default: m.default }));
       case 'ProductCatalog':
-        return import('../components/products/ProductCatalog').then(m => ({ default: m.default }));
+        return import('../components/products/ProductManager').then(m => ({ default: m.default }));
       case 'ProductForm':
-        return import('../components/products/ProductForm').then(m => ({ default: m.default }));
+        return import('../components/products/ProductManager').then(m => ({ default: m.default }));
       case 'ProductDetails':
-        return import('../components/products/ProductDetails').then(m => ({ default: m.default }));
+        return import('../components/products/ProductManager').then(m => ({ default: m.default }));
       case 'SalesManagement':
-        return import('../components/sales/SalesManagement').then(m => ({ default: m.default }));
+        return import('../components/pos/OptimizedPOSLayout').then(m => ({ default: m.default }));
       case 'POSSystem':
-        return import('../components/sales/POSSystem').then(m => ({ default: m.default }));
+        return import('../components/pos/OptimizedPOSLayout').then(m => ({ default: m.default }));
       case 'InventoryManagement':
         return import('../components/inventory/InventoryManagement').then(m => ({ default: m.default }));
       case 'CustomerManagement':

@@ -1,46 +1,43 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient, UseQueryResult } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { useToast } from '@/components/ui/use-toast';
 import api from '@/lib/api';
 
-// ✅ Proper TypeScript interfaces (no 'any')
-interface ReturnItem {
-  id: string;
+export interface ReturnItem {
+  id?: string;
+  originalSaleItemId?: string | null;
   productId: string;
   productName: string;
+  sku?: string;
   quantity: number;
   unitPrice: number;
   reason?: string;
-  product?: {
-    id: string;
-    name: string;
-    sku: string;
-  };
 }
 
-interface Return {
+export interface Return {
   id: string;
   returnNumber: string;
   saleId: string;
-  originalSaleId: string;
+  originalSaleId?: string;
   customerId: string | null;
   customerName: string;
+  customerEmail?: string;
+  customerPhone?: string;
   items: ReturnItem[];
   totalAmount: number;
-  total: number;
   reason: string;
-  status: 'pending' | 'approved' | 'completed' | 'rejected';
+  notes?: string;
+  /** UI-facing status — 'processed' covers both 'processed' and 'completed' from the backend */
+  status: 'pending' | 'approved' | 'processed' | 'completed' | 'rejected';
   refundMethod: string;
+  processedAt?: string | null;
+  processedBy?: string;
   createdAt: string;
   updatedAt: string;
-  processedAt?: string;
-  processedBy?: string;
-  notes?: string;
 }
 
-interface ReturnsStats {
+export interface ReturnsStats {
   totalReturns: number;
   totalAmount: number;
   pendingReturns: number;
@@ -55,11 +52,38 @@ interface ReturnsStats {
   returnRate: number;
 }
 
-interface PaginationInfo {
+export interface PaginationInfo {
   page: number;
   limit: number;
   total: number;
   totalPages: number;
+  hasNext?: boolean;
+  hasPrev?: boolean;
+}
+
+export interface ReturnFilters {
+  search?: string;
+  status?: string;
+  customerId?: string;
+  startDate?: string;
+  endDate?: string;
+  originalSaleId?: string;
+  refundMethod?: string;
+}
+
+export interface CreateReturnData {
+  originalSaleId: string;
+  customerId?: string;
+  reason: string;
+  notes?: string;
+  refundMethod?: 'cash' | 'card' | 'bank_transfer' | 'other';
+  items: Array<{
+    originalSaleItemId: string;
+    productId: string;
+    quantity: number;
+    unitPrice: number;
+    reason?: string;
+  }>;
 }
 
 interface ReturnsResponse {
@@ -67,28 +91,52 @@ interface ReturnsResponse {
   pagination: PaginationInfo;
 }
 
-interface ReturnFilters {
-  search?: string;
-  status?: string;
-  customerId?: string;
-  startDate?: string;
-  endDate?: string;
-  originalSaleId?: string;
+function getApiErrorMessage(error: unknown, fallback: string) {
+  const typedError = error as {
+    response?: {
+      data?: {
+        error?: string;
+        message?: string;
+      };
+    };
+    message?: string;
+  };
+
+  return (
+    typedError.response?.data?.error ||
+    typedError.response?.data?.message ||
+    typedError.message ||
+    fallback
+  );
 }
 
-interface CreateReturnData {
-  saleId: string;
-  customerId?: string;
-  reason: string;
-  notes?: string;
-  items: Array<{
-    productId: string;
-    quantity: number;
-    reason?: string;
-  }>;
+/**
+ * Normalize the backend status (COMPLETED/APPROVED/etc.) to the UI-facing
+ * lowercase value. Backend uses `COMPLETED` for fully processed returns while
+ * the UI refers to them as `processed`.
+ */
+function normalizeStatus(status: string): Return['status'] {
+  const lower = status.toLowerCase();
+  if (lower === 'completed') return 'processed';
+  return lower as Return['status'];
 }
 
-// ✅ Updated hook with pagination support
+/**
+ * Map a UI-facing status to the value the backend expects.
+ * `processed` on the UI side means `COMPLETED` in the backend.
+ */
+function toBackendStatus(status: string): string {
+  if (status === 'processed' || status === 'completed') return 'COMPLETED';
+  return status.toUpperCase();
+}
+
+function normalizeReturn(raw: any): Return {
+  return {
+    ...raw,
+    status: normalizeStatus(raw.status || 'pending'),
+  };
+}
+
 export function useReturns(
   filters: ReturnFilters = {},
   page: number = 1,
@@ -97,62 +145,46 @@ export function useReturns(
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Fetch returns with pagination
+  // Translate UI filter status to backend status before querying
+  const apiFilters = {
+    ...filters,
+    status:
+      filters.status === 'processed' || filters.status === 'completed'
+        ? 'COMPLETED'
+        : filters.status?.toUpperCase(),
+  };
+
   const {
     data: returnsData,
     isLoading,
-    error
+    error,
+    isFetching,
   }: UseQueryResult<ReturnsResponse> = useQuery({
     queryKey: ['returns', filters, page, limit],
     queryFn: async () => {
-      console.log('🔍 [useReturns] Fetching returns with params:', { filters, page, limit });
-      try {
-        const response = await api.get('/returns', {
-          params: { ...filters, page, limit }
-        });
-        console.log('🔍 [useReturns] Response:', response.data);
-        return response.data;
-      } catch (err: any) {
-        console.error('🔍 [useReturns] Error fetching returns:', err);
-        console.error('🔍 [useReturns] Error details:', {
-          message: err.message,
-          response: err.response?.data,
-          status: err.response?.status,
-          url: err.config?.url
-        });
-        throw err;
-      }
+      const response = await api.get('/returns', {
+        params: { ...apiFilters, page, limit },
+      });
+      const data = response.data as { returns: any[]; pagination: PaginationInfo };
+      return {
+        returns: (data.returns || []).map(normalizeReturn),
+        pagination: data.pagination,
+      };
     },
-    staleTime: 30000, // 30 seconds
-    retry: false, // Disable retry to see errors immediately
+    staleTime: 30_000,
+    retry: 1,
   });
 
-  // Fetch stats
-  const {
-    data: stats
-  }: UseQueryResult<ReturnsStats> = useQuery({
+  const { data: stats }: UseQueryResult<ReturnsStats> = useQuery({
     queryKey: ['returns-stats', filters],
     queryFn: async () => {
-      console.log('🔍 [useReturns] Fetching stats with filters:', filters);
-      try {
-        const response = await api.get('/returns/stats', { params: filters });
-        console.log('🔍 [useReturns] Stats response:', response.data);
-        return response.data;
-      } catch (err: any) {
-        console.error('🔍 [useReturns] Error fetching stats:', err);
-        console.error('🔍 [useReturns] Stats error details:', {
-          message: err.message,
-          response: err.response?.data,
-          status: err.response?.status
-        });
-        throw err;
-      }
+      const response = await api.get('/returns/stats', { params: filters });
+      return response.data as ReturnsStats;
     },
-    staleTime: 60000, // 1 minute
-    retry: false,
+    staleTime: 60_000,
+    retry: 1,
   });
 
-  // Create return mutation
   const createReturnMutation = useMutation({
     mutationFn: async (returnData: CreateReturnData) => {
       const response = await api.post('/returns', returnData);
@@ -163,22 +195,22 @@ export function useReturns(
       queryClient.invalidateQueries({ queryKey: ['returns-stats'] });
       toast({
         title: 'Devolución creada',
-        description: 'La devolución ha sido creada exitosamente.',
+        description: 'La devolución fue registrada exitosamente.',
       });
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast({
-        title: 'Error',
-        description: error.response?.data?.message || 'Error al crear la devolución.',
+        title: 'Error al crear devolución',
+        description: getApiErrorMessage(error, 'No se pudo crear la devolución.'),
         variant: 'destructive',
       });
     },
   });
 
-  // Update return status mutation
   const updateReturnMutation = useMutation({
+    // ✅ FIX: correct endpoint is PATCH /returns/:id/status
     mutationFn: async ({ id, status, notes }: { id: string; status: string; notes?: string }) => {
-      const backendStatus = status === 'processed' ? 'COMPLETED' : String(status).toUpperCase();
+      const backendStatus = toBackendStatus(status);
       const response = await api.patch(`/returns/${id}/status`, { status: backendStatus, notes });
       return response.data;
     },
@@ -186,29 +218,27 @@ export function useReturns(
       queryClient.invalidateQueries({ queryKey: ['returns'] });
       queryClient.invalidateQueries({ queryKey: ['returns-stats'] });
 
-      const statusMessages: Record<string, string> = {
-        approved: 'Devolución aprobada',
-        rejected: 'Devolución rechazada',
-        processed: 'Devolución procesada',
-        COMPLETED: 'Devolución procesada'
+      const messages: Record<string, string> = {
+        approved: 'Devolución aprobada exitosamente.',
+        rejected: 'Devolución rechazada.',
+        processed: 'Devolución procesada y stock actualizado.',
+        completed: 'Devolución procesada y stock actualizado.',
       };
 
-      const msgKey = variables.status === 'processed' ? 'processed' : variables.status;
       toast({
-        title: statusMessages[msgKey] || 'Estado actualizado',
-        description: 'El estado de la devolución ha sido actualizado.',
+        title: 'Estado actualizado',
+        description: messages[variables.status] || 'El estado fue actualizado.',
       });
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast({
-        title: 'Error',
-        description: error.response?.data?.message || 'Error al actualizar la devolución.',
+        title: 'Error al actualizar',
+        description: getApiErrorMessage(error, 'No se pudo actualizar el estado.'),
         variant: 'destructive',
       });
     },
   });
 
-  // Process return mutation - uses new endpoint
   const processReturnMutation = useMutation({
     mutationFn: async (id: string) => {
       const response = await api.post(`/returns/${id}/process`);
@@ -217,16 +247,16 @@ export function useReturns(
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['returns'] });
       queryClient.invalidateQueries({ queryKey: ['returns-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['inventory'] }); // Update inventory
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
       toast({
         title: 'Devolución procesada',
-        description: 'La devolución ha sido procesada y el inventario actualizado.',
+        description: 'La devolución fue procesada y el inventario fue actualizado.',
       });
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast({
-        title: 'Error',
-        description: error.response?.data?.message || 'Error al procesar la devolución.',
+        title: 'Error al procesar',
+        description: getApiErrorMessage(error, 'No se pudo procesar la devolución.'),
         variant: 'destructive',
       });
     },
@@ -237,16 +267,14 @@ export function useReturns(
     pagination: returnsData?.pagination,
     stats: stats || null,
     isLoading,
+    isFetching,
     error,
-    createReturn: createReturnMutation.mutate,
+    createReturn: (data: CreateReturnData) => createReturnMutation.mutateAsync(data),
     updateReturn: (id: string, status: string, notes?: string) =>
-      updateReturnMutation.mutate({ id, status, notes }),
-    processReturn: processReturnMutation.mutate,
+      updateReturnMutation.mutateAsync({ id, status, notes }),
+    processReturn: (id: string) => processReturnMutation.mutateAsync(id),
     isCreating: createReturnMutation.isPending,
     isUpdating: updateReturnMutation.isPending,
     isProcessing: processReturnMutation.isPending,
   };
 }
-
-// Export types for use in components
-export type { Return, ReturnItem, ReturnsStats, ReturnFilters, PaginationInfo, CreateReturnData };

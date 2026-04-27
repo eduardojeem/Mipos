@@ -49,6 +49,7 @@ export const saleCreateSchema = z.object({
         'CASH',
         'CARD',
         'TRANSFER',
+        'QR',
         'MIXED',
         'OTHER'
     ]),
@@ -150,6 +151,7 @@ export const saleSearchSchema = z.object({
         'CASH',
         'CARD',
         'TRANSFER',
+        'QR',
         'MIXED',
         'OTHER',
         'ALL'

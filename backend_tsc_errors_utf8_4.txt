@@ -1,0 +1,1 @@
+apps/backend/src/services/queue.service.ts(121,21): error TS2552: Cannot find name 'redisConnection'. Did you mean 'connection'?

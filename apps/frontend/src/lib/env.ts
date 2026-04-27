@@ -36,12 +36,15 @@ export function isSupabaseActive(): boolean {
 
 // Habilita auth/mock cuando Supabase no está configurado o se fuerza explícitamente
 export function isMockAuthEnabled(): boolean {
-  return false;
+  const explicit = (process.env.NEXT_PUBLIC_MOCK_AUTH || process.env.MOCK_AUTH || '').toLowerCase()
+  return explicit === 'true'
 }
 
 // Resumen del modo de entorno para propagar en cabeceras
 export function getEnvMode(): 'prod' | 'mock' {
-  return 'prod';
+  if (isMockAuthEnabled()) return 'mock'
+  if (!isSupabaseActive()) return 'mock'
+  return 'prod'
 }
 
 export function getSupabaseConfig(): { url: string; anonKey: string } | null {

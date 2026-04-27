@@ -6,9 +6,6 @@
  */
 
 import { PrismaClient } from '@prisma/client'
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
-import { cache } from 'react'
 
 const prisma = new PrismaClient()
 
@@ -53,14 +50,9 @@ export class RoleManager {
    */
   async getCurrentUser(): Promise<UserWithRoles | null> {
     try {
-      const supabase = createServerComponentClient({ cookies: () => (cookies as any)() })
-      const { data: { session } } = await supabase.auth.getSession()
-
-      if (!session?.user) {
-        return null
-      }
-
-      return await this.getUserWithRoles(session.user.id)
+      // NOTE: This was previously using next/headers which is invalid in Express.
+      // The backend gets the user via the enhanced-auth middleware.
+      return null;
     } catch (error) {
       console.error('Error getting current user:', error)
       return null
@@ -543,8 +535,8 @@ export class RoleManager {
   }
 }
 
-// Cached version for server components
-export const getRoleManager = cache(() => RoleManager.getInstance())
+// Non-cached version for backend
+export const getRoleManager = () => RoleManager.getInstance()
 
 // Helper functions for common operations
 export async function getCurrentUserPermissions(): Promise<string[]> {

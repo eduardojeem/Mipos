@@ -4,6 +4,7 @@ import { prisma, supabase } from '../index';
 import { asyncHandler, createError } from '../middleware/errorHandler';
 import { EnhancedAuthenticatedRequest, requirePermission, requireAnyPermission, hasPermission } from '../middleware/enhanced-auth';
 import { criticalOperationsRateLimit, apiRateLimit } from '../middleware/rate-limiter';
+import { getEffectiveOrganizationId } from '../middleware/multi-tenant'; // NUEVO
 
 // Define UserRole type since it's not exported from @prisma/client
 type UserRole = 'ADMIN' | 'CASHIER' | 'MANAGER' | 'EMPLOYEE';
@@ -37,11 +38,19 @@ router.get('/', requirePermission('users', 'read'), asyncHandler(async (req, res
   const { page, limit, search, role, status } = querySchema.parse(req.query);
   const skip = (page - 1) * limit;
 
+  // NUEVO: Obtener organización efectiva
+  const organizationId = getEffectiveOrganizationId(req as EnhancedAuthenticatedRequest);
+
   const where: any = {};
+  
+  // NUEVO: Filtrar por organización
+  if (organizationId) {
+    where.organizationId = organizationId;
+  }
 
   if (search) {
     where.OR = [
-      { name: { contains: search, mode: 'insensitive' } },
+      { fullName: { contains: search, mode: 'insensitive' } },
       { email: { contains: search, mode: 'insensitive' } }
     ];
   }
@@ -63,6 +72,7 @@ router.get('/', requirePermission('users', 'read'), asyncHandler(async (req, res
         fullName: true,
         role: true,
         status: true,
+        organizationId: true,  // NUEVO
         createdAt: true,
         _count: {
           select: {
@@ -71,6 +81,8 @@ router.get('/', requirePermission('users', 'read'), asyncHandler(async (req, res
           }
         }
       },
+      skip,
+      take: limit,
       orderBy: { createdAt: 'desc' }
     }),
     prisma.user.count({ where })
@@ -142,6 +154,22 @@ router.get('/:id', requirePermission('users', 'read'), asyncHandler(async (req, 
 // Create user (requires users:create permission) - Rate limited for critical operations
 router.post('/', criticalOperationsRateLimit, requirePermission('users', 'create'), asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
   const { email, password, name, role } = createUserSchema.parse(req.body);
+  
+  // NUEVO: Obtener organización del usuario autenticado
+  const organizationId = req.user?.organizationId;
+  
+  // NUEVO: Validar que se especifica organización o usar la del usuario
+  const targetOrgId = req.body.organizationId || organizationId;
+  
+  if (!targetOrgId) {
+    throw createError('Se requiere especificar una organización', 400);
+  }
+  
+  // NUEVO: Validar acceso a la organización
+  const isSuperAdmin = req.user?.roles?.some(r => r.name === 'SUPER_ADMIN');
+  if (!isSuperAdmin && targetOrgId !== organizationId) {
+    throw createError('No puedes crear usuarios en otra organización', 403);
+  }
 
   // Create user in Supabase Auth
   const { data: authData, error: authError } = await supabase.auth.admin.createUser({
@@ -165,8 +193,8 @@ router.post('/', criticalOperationsRateLimit, requirePermission('users', 'create
         id: authData.user.id,
         email,
         fullName: name,
-        role: role as UserRole
-        // isActive field doesn't exist in schema
+        role: role as UserRole,
+        organizationId: targetOrgId  // NUEVO
       }
     });
 
@@ -184,13 +212,19 @@ router.put('/:id', criticalOperationsRateLimit, requirePermission('users', 'upda
   const validatedData = updateUserSchema.parse(req.body);
   const { name, role } = validatedData;
 
-  // Check if user exists
+  // NUEVO: Verificar que el usuario pertenece a la organización
   const existingUser = await prisma.user.findUnique({
-    where: { id }
+    where: { id },
+    select: { id: true, organizationId: true }
   });
 
   if (!existingUser) {
     throw createError('User not found', 404);
+  }
+  
+  const isSuperAdmin = req.user?.roles?.some(r => r.name === 'SUPER_ADMIN');
+  if (!isSuperAdmin && existingUser.organizationId !== req.user?.organizationId) {
+    throw createError('No puedes editar usuarios de otra organización', 403);
   }
 
   const updatedUser = await prisma.user.update({
@@ -211,18 +245,20 @@ router.delete('/:id', criticalOperationsRateLimit, requirePermission('users', 'd
     throw createError('Cannot delete your own account', 400);
   }
 
-  // Check if user exists
+  // NUEVO: Verificar que el usuario pertenece a la organización
   const user = await prisma.user.findUnique({
-    where: { id }
+    where: { id },
+    select: { id: true, organizationId: true }
   });
 
   if (!user) {
     throw createError('User not found', 404);
   }
-
-  // Note: Since SupabasePrismaAdapter doesn't support include, 
-  // we'll skip the sales/purchases check for now
-  // In a full implementation, you'd need separate queries to check relations
+  
+  const isSuperAdmin = req.user?.roles?.some(r => r.name === 'SUPER_ADMIN');
+  if (!isSuperAdmin && user.organizationId !== req.user?.organizationId) {
+    throw createError('No puedes eliminar usuarios de otra organización', 403);
+  }
 
   // Delete from database first
   await prisma.user.delete({
@@ -237,16 +273,22 @@ router.delete('/:id', criticalOperationsRateLimit, requirePermission('users', 'd
 
 // Get user statistics (requires reports:view permission)
 router.get('/stats/overview', requirePermission('reports', 'view'), asyncHandler(async (req, res) => {
+  // NUEVO: Filtrar por organización
+  const organizationId = getEffectiveOrganizationId(req as EnhancedAuthenticatedRequest);
+  const where: any = organizationId ? { organizationId } : {};
+
   const [totalUsers, usersByRole, activeUsers] = await Promise.all([
-    prisma.user.count(),
+    prisma.user.count({ where }),
     prisma.user.groupBy({
       by: ['role'],
+      where,
       _count: {
         id: true
       }
     }),
     prisma.user.count({
       where: {
+        ...where,
         sales: {
           some: {
             date: {

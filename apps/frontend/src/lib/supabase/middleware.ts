@@ -2,9 +2,11 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import type { Database } from '../../types/supabase';
 import { isSupabaseActive, isMockAuthEnabled } from '../env';
+import { ACCESS_SECTIONS, canPlanAccessSection } from '@/lib/access-policy';
 
 type UserMetadata = { role?: string };
 type ProfileRole = { role?: string | null };
+
 async function insertAuditLog(
   client: unknown,
   payload: { user_id: string | null; action: string; resource: string; details: Record<string, unknown> }
@@ -15,10 +17,88 @@ async function insertAuditLog(
   } catch {}
 }
 
-// Verificación de configuración y modo mock centralizada en '@/lib/env'
+/**
+ * Helper function to retrieve the user's highest role.
+ * Checks metadata, then users table, then user_roles & roles tables.
+ * Optimized: runs users table + user_roles in parallel when possible.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getUserRoles(supabase: any, user: any): Promise<{ primaryRole: string; hasAdminRole: boolean }> {
+  const meta = (user?.user_metadata ?? {}) as UserMetadata;
+  const metaRole = String(meta.role || '').toUpperCase();
+
+  // Run both DB lookups in parallel instead of sequentially
+  const [profileResult, rolesResult] = await Promise.allSettled([
+    supabase.from('users').select('role').eq('id', user.id).single(),
+    supabase.from('user_roles').select('role:roles(name)').eq('user_id', user.id).eq('is_active', true),
+  ]);
+
+  // Extract profile role
+  const profileRole = profileResult.status === 'fulfilled'
+    ? String(((profileResult.value as { data?: ProfileRole | null })?.data ?? {})?.role || '').toUpperCase()
+    : '';
+
+  // Extract RBAC role names
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rbacNames: string[] = rolesResult.status === 'fulfilled'
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ? (Array.isArray((rolesResult.value as any)?.data) ? (rolesResult.value as any).data : [])
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .map((r: any) => String(r?.role?.name || '').toUpperCase())
+        .filter(Boolean)
+    : [];
+
+  // Determine primary role: DB profile > RBAC > metadata
+  const ADMIN_ROLES = ['ADMIN', 'SUPER_ADMIN', 'OWNER'];
+  const KNOWN_ROLES = ['ADMIN', 'SUPER_ADMIN', 'OWNER', 'MANAGER', 'CASHIER'];
+
+  let primaryRole = profileRole || metaRole;
+  let hasAdminRole = ADMIN_ROLES.includes(primaryRole);
+
+  if (!hasAdminRole && rbacNames.length > 0) {
+    const adminRbac = rbacNames.find((n: string) => ADMIN_ROLES.includes(n));
+    if (adminRbac) {
+      primaryRole = adminRbac;
+      hasAdminRole = true;
+    } else {
+      const knownRbac = rbacNames.find((n: string) => KNOWN_ROLES.includes(n));
+      if (knownRbac && !primaryRole) {
+        primaryRole = knownRbac;
+      }
+    }
+  }
+
+  return { primaryRole, hasAdminRole };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getUserOrganizationPlan(supabase: any, userId: string): Promise<string | null> {
+  try {
+    const { data: membership } = await supabase
+      .from('organization_members')
+      .select('organization:organizations(subscription_plan)')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (membership as any)?.organization?.subscription_plan || null;
+  } catch {
+    return null;
+  }
+}
+
+function buildSignInRedirectUrl(request: NextRequest): URL {
+  const url = request.nextUrl.clone();
+  const returnUrl = `${request.nextUrl.pathname}${request.nextUrl.search}`;
+  url.pathname = '/auth/signin';
+  if (returnUrl && returnUrl !== '/auth/signin') {
+    url.searchParams.set('returnUrl', returnUrl);
+  }
+  return url;
+}
 
 export async function updateSession(request: NextRequest) {
-  // Detectar configuración y modo mock de Supabase
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const hasSupabaseEnv = isSupabaseActive();
@@ -26,7 +106,6 @@ export async function updateSession(request: NextRequest) {
 
   let supabaseResponse = NextResponse.next({ request });
 
-  // Si no hay configuración válida de Supabase, permitir paso sin redirección
   if (!hasSupabaseEnv) {
     return supabaseResponse;
   }
@@ -57,192 +136,118 @@ export async function updateSession(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  const publicPaths = ['/home', '/inicio', '/onboarding', '/offers', '/'];
+  const publicPaths = ['/home', '/inicio', '/onboarding', '/offers', '/catalog', '/orders/track', '/'];
   const isPublic = publicPaths.some((p) => path === p || path.startsWith(p + '/'));
 
-  if (!user && path.startsWith('/dashboard')) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/auth/signin';
-    return NextResponse.redirect(url);
-  }
-  if (!user && !isPublic && !request.nextUrl.pathname.startsWith('/auth') && !request.nextUrl.pathname.startsWith('/api')) {
-    // En modo mock/desarrollo, permitir paso sin redirigir
-    if (isMockAuth) {
-      return supabaseResponse;
+  // --- Unauthenticated user checks ---
+  if (!user) {
+    if (path.startsWith('/dashboard') || path.startsWith('/admin')) {
+      return NextResponse.redirect(buildSignInRedirectUrl(request));
     }
-    // no user, redirect to login page
-    const url = request.nextUrl.clone();
-    url.pathname = '/auth/signin';
-    return NextResponse.redirect(url);
+    if (!isPublic && !path.startsWith('/auth') && !path.startsWith('/api')) {
+      if (isMockAuth) return supabaseResponse;
+      return NextResponse.redirect(buildSignInRedirectUrl(request));
+    }
+    // API admin/reports without auth
+    if (path.startsWith('/api/admin') && !isMockAuth) {
+      await insertAuditLog(supabase, {
+        user_id: null, action: 'access_denied', resource: 'admin_api',
+        details: { path, role: null, method: request.method },
+      });
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
+    if (path.startsWith('/api/reports') && !isMockAuth) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
+    return supabaseResponse;
   }
 
-  // Protección adicional: bloquear acceso a /admin si el rol no es ADMIN/SUPER_ADMIN
-  if (user && request.nextUrl.pathname.startsWith('/admin')) {
-    // Consultar rol desde BD con fallback a metadata
-    const meta = (user?.user_metadata ?? {}) as UserMetadata;
-    let role = String(meta.role || '').toUpperCase();
-    try {
-      const { data: profile } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-      const profileRole = (profile ?? {}) as ProfileRole | null;
-      const dbRole = String(profileRole?.role || '').toUpperCase();
-      role = dbRole || role;
-    } catch {
-      // Ignore DB errors, keep metadata fallback
-    }
-    const isAdmin = role === 'ADMIN' || role === 'SUPER_ADMIN';
-    // En modo mock, permitir paso para desarrollo; fuera de mock, redirigir si no tiene rol
-    if (!isAdmin && !isMockAuth) {
-      // Log de auditoría para acceso denegado a página de admin
+  // --- Authenticated user: determine role ONCE ---
+  const needsRoleCheck =
+    path.startsWith('/admin') ||
+    path.startsWith('/api/admin') ||
+    path.startsWith('/dashboard') ||
+    path.startsWith('/api/reports');
+
+  if (!needsRoleCheck || isMockAuth) {
+    return supabaseResponse;
+  }
+
+  // Single role lookup for the entire middleware
+  const { primaryRole, hasAdminRole } = await getUserRoles(supabase, user);
+
+  // --- /admin pages ---
+  if (path.startsWith('/admin')) {
+    if (!hasAdminRole) {
       await insertAuditLog(supabase, {
-        user_id: user?.id ?? null,
-        action: 'access_denied',
-        resource: 'admin_page',
-        details: {
-          path: request.nextUrl.pathname,
-          role,
-          method: request.method,
-        },
+        user_id: user.id, action: 'access_denied', resource: 'admin_page',
+        details: { path, role: primaryRole || null, method: request.method },
       });
       const url = request.nextUrl.clone();
       url.pathname = '/403';
       return NextResponse.redirect(url);
     }
+    // ADMIN (not SUPER_ADMIN/OWNER) needs plan check
+    if (primaryRole === 'ADMIN') {
+      const plan = await getUserOrganizationPlan(supabase, user.id);
+      if (!canPlanAccessSection(plan || undefined, ACCESS_SECTIONS.ADMIN_PANEL)) {
+        const url = request.nextUrl.clone();
+        url.pathname = '/dashboard';
+        return NextResponse.redirect(url);
+      }
+    }
+    return supabaseResponse;
   }
 
-  // Proteger endpoints /api/admin/* con respuestas JSON apropiadas
-  if (request.nextUrl.pathname.startsWith('/api/admin')) {
-    // Requerir autenticación incluso si normalmente se permitirían rutas /api
-    if (!user && !isMockAuth) {
-      // Log de auditoría para API admin no autorizada
+  // --- /api/admin endpoints ---
+  if (path.startsWith('/api/admin')) {
+    if (!hasAdminRole) {
       await insertAuditLog(supabase, {
-        user_id: null,
-        action: 'access_denied',
-        resource: 'admin_api',
-        details: {
-          path: request.nextUrl.pathname,
-          role: null,
-          method: request.method,
-        },
-      });
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-    }
-    // Verificar rol ADMIN/SUPER_ADMIN usando BD con fallback a metadata
-    const meta = (user?.user_metadata ?? {}) as UserMetadata;
-    let role = String(meta.role || '').toUpperCase();
-    try {
-      const { data: profile } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', user?.id ?? '')
-        .single();
-      const profileRole = (profile ?? {}) as ProfileRole | null;
-      const dbRole = String(profileRole?.role || '').toUpperCase();
-      role = dbRole || role;
-    } catch {
-      // Ignore DB errors, keep metadata fallback
-    }
-    const isAdmin = role === 'ADMIN' || role === 'SUPER_ADMIN';
-    if (!isAdmin && !isMockAuth) {
-      // Log de auditoría para API admin con rol insuficiente
-      await insertAuditLog(supabase, {
-        user_id: user?.id ?? null,
-        action: 'access_denied',
-        resource: 'admin_api',
-        details: {
-          path: request.nextUrl.pathname,
-          role,
-          method: request.method,
-        },
+        user_id: user.id, action: 'access_denied', resource: 'admin_api',
+        details: { path, role: primaryRole, method: request.method },
       });
       return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
     }
+    if (primaryRole === 'ADMIN') {
+      const plan = await getUserOrganizationPlan(supabase, user.id);
+      if (!canPlanAccessSection(plan || undefined, ACCESS_SECTIONS.ADMIN_PANEL)) {
+        return NextResponse.json({ error: 'Tu plan no incluye acceso a administracion' }, { status: 403 });
+      }
+    }
+    return supabaseResponse;
   }
 
-  // Proteger acceso a reportes por rol (ADMIN/MANAGER). Evitar Prisma en runtime Edge.
-  if (user && request.nextUrl.pathname.startsWith('/dashboard/reports')) {
-    // Obtener rol desde metadata con fallback a BD (tabla users)
-    const meta = (user?.user_metadata ?? {}) as UserMetadata;
-    let role = String(meta.role || '').toUpperCase();
-    try {
-      const { data: profile } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-      const profileRole = (profile ?? {}) as ProfileRole | null;
-      const dbRole = String(profileRole?.role || '').toUpperCase();
-      role = dbRole || role;
-    } catch {
-      // Ignorar errores de BD; mantener metadata
-    }
-    const allowedRoles = ['ADMIN', 'MANAGER'];
-    const canViewReports = allowedRoles.includes(role);
-    if (!canViewReports && !isMockAuth) {
+  // --- /dashboard/reports ---
+  if (path.startsWith('/dashboard/reports')) {
+    const allowedRoles = ['ADMIN', 'MANAGER', 'SUPER_ADMIN', 'OWNER'];
+    if (!allowedRoles.includes(primaryRole)) {
       const url = request.nextUrl.clone();
       url.pathname = '/403';
       url.searchParams.set('reason', 'reports.view');
       return NextResponse.redirect(url);
     }
+    return supabaseResponse;
   }
 
-  if (user && request.nextUrl.pathname.startsWith('/dashboard') && !request.nextUrl.pathname.startsWith('/dashboard/reports')) {
-    const meta = (user?.user_metadata ?? {}) as UserMetadata;
-    let role = String(meta.role || '').toUpperCase();
-    try {
-      const { data: profile } = await supabase
-        .from('users')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-      const profileRole = (profile ?? {}) as ProfileRole | null;
-      const dbRole = String(profileRole?.role || '').toUpperCase();
-      role = dbRole || role;
-    } catch { }
-    const allowedRoles = ['ADMIN', 'MANAGER', 'CASHIER', 'SUPER_ADMIN'];
-    const canViewDashboard = allowedRoles.includes(role);
-    if (!canViewDashboard && !isMockAuth) {
+  // --- /dashboard (non-reports) ---
+  if (path.startsWith('/dashboard')) {
+    const allowedRoles = ['ADMIN', 'MANAGER', 'CASHIER', 'SUPER_ADMIN', 'OWNER'];
+    if (!allowedRoles.includes(primaryRole)) {
       const url = request.nextUrl.clone();
       url.pathname = '/home';
       return NextResponse.redirect(url);
     }
+    return supabaseResponse;
   }
 
-  // Proteger API de reportes por rol (ADMIN/MANAGER)
-  if (request.nextUrl.pathname.startsWith('/api/reports')) {
-    if (!user && !isMockAuth) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+  // --- /api/reports ---
+  if (path.startsWith('/api/reports')) {
+    const allowedRoles = ['ADMIN', 'MANAGER', 'SUPER_ADMIN', 'OWNER'];
+    if (!allowedRoles.includes(primaryRole)) {
+      return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
     }
-    if (user && !isMockAuth) {
-      const meta = (user?.user_metadata ?? {}) as UserMetadata;
-      let role = String(meta.role || '').toUpperCase();
-      try {
-        const { data: profile } = await supabase
-          .from('users')
-          .select('role')
-          .eq('id', user?.id ?? '')
-          .single();
-        const profileRole = (profile ?? {}) as ProfileRole | null;
-        const dbRole = String(profileRole?.role || '').toUpperCase();
-        role = dbRole || role;
-      } catch { }
-      const allowedRoles = ['ADMIN', 'MANAGER'];
-      if (!allowedRoles.includes(role)) {
-        return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
-      }
-    }
+    return supabaseResponse;
   }
-
-  // IMPORTANT: You *must* return the supabaseResponse object as it is. If you're
-  // creating a new response object with NextResponse.next() make sure to:
-  // 1. Pass the request in it, like so:
-  //    const myNewResponse = NextResponse.next({ request })
-  // 2. Copy over the cookies, like so:
-  //    myNewResponse.cookies.setAll(supabaseResponse.cookies.getAll())
-  // 3. Change the myNewResponse object instead of the supabaseResponse object
 
   return supabaseResponse;
 }

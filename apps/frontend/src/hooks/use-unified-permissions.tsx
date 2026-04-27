@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { useState, useEffect, createContext, useContext, useCallback } from 'react';
+import { useState, useEffect, createContext, useContext, useCallback, useRef } from 'react';
 import { useAuthContext } from '@/hooks/use-auth';
 import { 
   User, 
@@ -25,12 +25,33 @@ export function useUnifiedPermissions(): PermissionContextType {
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const lastGood = useRef<{ user: UserWithRoles; roles: Role[]; permissions: Permission[] } | null>(null);
   
   const { user: authUser } = useAuthContext();
+  const enableMock = process.env.NODE_ENV !== 'production' && (process.env.NEXT_PUBLIC_ENABLE_MOCK_ADMIN === 'true');
 
   // Load user permissions and roles
   const loadUserPermissions = useCallback(async () => {
     if (!authUser) {
+      if (enableMock) {
+        const mockUser: UserWithRoles = {
+          id: 'mock-user',
+          email: 'mock@example.com',
+          name: 'Mock Admin',
+          role: USER_ROLES.SUPER_ADMIN,
+          status: 'active',
+          createdAt: new Date().toISOString(),
+          roles: [
+            { id: USER_ROLES.SUPER_ADMIN, name: USER_ROLES.SUPER_ADMIN, isSystemRole: true, isActive: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+          ],
+          permissions: []
+        } as UserWithRoles;
+        setUser(mockUser);
+        setPermissions([]);
+        setRoles(mockUser.roles);
+        setLoading(false);
+        return;
+      }
       setUser(null);
       setPermissions([]);
       setRoles([]);
@@ -45,8 +66,8 @@ export function useUnifiedPermissions(): PermissionContextType {
       // Helper to normalize role names to our constants
       const normalizeRole = (r?: string) => {
         const key = (r || '').toUpperCase();
-        if (key === 'SUPER_ADMIN' || key === 'OWNER') return USER_ROLES.SUPER_ADMIN;
-        if (key === 'ADMIN') return USER_ROLES.ADMIN;
+        if (key === 'SUPER_ADMIN') return USER_ROLES.SUPER_ADMIN;
+        if (key === 'OWNER' || key === 'ADMIN') return USER_ROLES.ADMIN;
         if (key === 'MANAGER') return USER_ROLES.MANAGER;
         if (key === 'CASHIER') return USER_ROLES.CASHIER;
         if (key === 'EMPLOYEE') return USER_ROLES.EMPLOYEE;
@@ -63,7 +84,7 @@ export function useUnifiedPermissions(): PermissionContextType {
             profileUser = profileJson.data;
           }
         }
-      } catch (e) {
+      } catch {
         // ignore and fallback
       }
 
@@ -73,34 +94,44 @@ export function useUnifiedPermissions(): PermissionContextType {
           id: authUser.id,
           email: authUser.email || '',
           name: authUser.email?.split('@')[0] || 'Usuario',
-          role: normalizeRole((authUser as any)?.role || (authUser as any)?.app_metadata?.role || (authUser as any)?.user_metadata?.role || 'USER'),
+          role: normalizeRole(
+            String(
+              (authUser as SupabaseUser & { role?: string })?.role ??
+              (authUser as SupabaseUser & { app_metadata?: { role?: string } })?.app_metadata?.role ??
+              (authUser as SupabaseUser).user_metadata?.role ??
+              'USER'
+            )
+          ),
           status: 'active',
           createdAt: (authUser as SupabaseUser).created_at || new Date().toISOString(),
           updatedAt: (authUser as SupabaseUser).updated_at || (authUser as SupabaseUser).created_at,
           lastLogin: (authUser as SupabaseUser).last_sign_in_at,
-          avatar: (authUser as SupabaseUser).user_metadata?.avatar_url || '',
-          phone: (authUser as SupabaseUser).user_metadata?.phone || ''
+          avatar: String((authUser as SupabaseUser).user_metadata?.avatar_url ?? ''),
+          phone: String((authUser as SupabaseUser).user_metadata?.phone ?? '')
         };
       } else {
         profileUser.role = normalizeRole(profileUser.role);
       }
 
+      // profileUser is guaranteed non-null from here on
+      const resolvedUser = profileUser!;
+
       // Derive roles array from normalized role
       const derivedRoles: Role[] = [
         {
-          id: profileUser.role,
-          name: profileUser.role,
+          id: resolvedUser.role,
+          name: resolvedUser.role,
           isSystemRole: false,
           isActive: true,
-          createdAt: profileUser.createdAt,
-          updatedAt: profileUser.updatedAt
+          createdAt: resolvedUser.createdAt,
+          updatedAt: resolvedUser.updatedAt
         }
       ];
 
       // Fetch permissions via backend route
       const fetchedPermissions: Permission[] = [];
       try {
-        const permResp = await fetch(`/api/users/${profileUser.id}/permissions`, { cache: 'no-store' });
+        const permResp = await fetch(`/api/users/${resolvedUser.id}/permissions`, { cache: 'no-store' });
         if (permResp.ok) {
           const permJson = (await permResp.json()) as { success: boolean; permissions?: Array<{ id: string; name?: string; resource?: string; action?: string }> };
           if (permJson.success && Array.isArray(permJson.permissions)) {
@@ -110,18 +141,18 @@ export function useUnifiedPermissions(): PermissionContextType {
               resource: p.resource || '',
               action: p.action || '',
               isActive: true,
-              createdAt: profileUser!.createdAt,
-              updatedAt: profileUser!.updatedAt
+              createdAt: resolvedUser.createdAt,
+              updatedAt: resolvedUser.updatedAt
             }));
             fetchedPermissions.push(...mapped);
           }
         }
-      } catch (e) {
+      } catch {
         // keep empty permissions on error
       }
 
       const userWithRoles: UserWithRoles = {
-        ...profileUser,
+        ...resolvedUser,
         roles: derivedRoles,
         permissions: fetchedPermissions
       } as UserWithRoles;
@@ -129,6 +160,7 @@ export function useUnifiedPermissions(): PermissionContextType {
       setUser(userWithRoles);
       setRoles(derivedRoles);
       setPermissions(fetchedPermissions);
+      lastGood.current = { user: userWithRoles, roles: derivedRoles, permissions: fetchedPermissions };
 
       // Computed flags
       // These will be also exposed via context selectors
@@ -136,33 +168,38 @@ export function useUnifiedPermissions(): PermissionContextType {
       console.error('Error loading permissions:', err);
       setError(err instanceof Error ? err.message : 'Error loading permissions');
 
-      // Minimal fallback
-      const fallbackUser: UserWithRoles = {
-        id: authUser.id,
-        email: authUser.email || '',
-        name: authUser.email?.split('@')[0] || 'Usuario',
-        role: USER_ROLES.USER,
-        status: 'active',
-        createdAt: (authUser as SupabaseUser).created_at || new Date().toISOString(),
-        roles: [
-          {
-            id: USER_ROLES.USER,
-            name: USER_ROLES.USER,
-            isSystemRole: false,
-            isActive: true,
-            createdAt: (authUser as SupabaseUser).created_at || new Date().toISOString(),
-            updatedAt: (authUser as SupabaseUser).updated_at || (authUser as SupabaseUser).created_at
-          }
-        ],
-        permissions: []
-      };
-      setUser(fallbackUser);
-      setRoles(fallbackUser.roles);
-      setPermissions([]);
+      if (lastGood.current) {
+        setUser(lastGood.current.user);
+        setRoles(lastGood.current.roles);
+        setPermissions(lastGood.current.permissions);
+      } else {
+        const fallbackUser: UserWithRoles = {
+          id: authUser.id,
+          email: authUser.email || '',
+          name: authUser.email?.split('@')[0] || 'Usuario',
+          role: USER_ROLES.USER,
+          status: 'active',
+          createdAt: (authUser as SupabaseUser).created_at || new Date().toISOString(),
+          roles: [
+            {
+              id: USER_ROLES.USER,
+              name: USER_ROLES.USER,
+              isSystemRole: false,
+              isActive: true,
+              createdAt: (authUser as SupabaseUser).created_at || new Date().toISOString(),
+              updatedAt: (authUser as SupabaseUser).updated_at || (authUser as SupabaseUser).created_at
+            }
+          ],
+          permissions: []
+        };
+        setUser(fallbackUser);
+        setRoles(fallbackUser.roles);
+        setPermissions([]);
+      }
     } finally {
       setLoading(false);
     }
-  }, [authUser]);
+  }, [authUser, enableMock]);
 
   // Load permissions on auth user change
   useEffect(() => {

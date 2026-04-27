@@ -1,23 +1,6 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { createClient } from '@/lib/supabase';
-import { useToast } from '@/components/ui/use-toast';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
-
-// Helper to get current organization ID
-const getOrganizationId = (): string | null => {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = window.localStorage.getItem('selected_organization');
-    if (!raw) return null;
-    if (raw.startsWith('{')) {
-      const parsed = JSON.parse(raw);
-      return parsed?.id || parsed?.organization_id || null;
-    }
-    return raw;
-  } catch {
-    return null;
-  }
-};
+import { useCurrentOrganizationId } from '@/hooks/use-current-organization';
 
 export interface Order {
   id: string;
@@ -30,13 +13,14 @@ export interface Order {
   shipping_cost: number;
   total: number;
   payment_method: string;
-  payment_status: string;
+  payment_status?: string;
   status: string;
   notes?: string;
   order_source: string;
   created_at: string;
   updated_at: string;
   order_items: OrderItem[];
+  order_status_history?: OrderStatusHistoryEntry[];
   organization_id: string;
 }
 
@@ -53,11 +37,20 @@ export interface OrderItem {
   };
 }
 
+export interface OrderStatusHistoryEntry {
+  id: string;
+  status: string;
+  notes?: string;
+  changed_at: string;
+  changed_by?: string;
+}
+
 export interface OrderListParams {
   page?: number;
   limit?: number;
   status?: string;
   search?: string;
+  dateRange?: 'today' | 'week' | 'month' | 'year' | 'all';
   sortBy?: 'created_at' | 'total' | 'status';
   sortOrder?: 'asc' | 'desc';
 }
@@ -71,171 +64,351 @@ export interface OrderStats {
   delivered: number;
   cancelled: number;
   todayRevenue: number;
+  todayOrders: number;
   avgOrderValue: number;
 }
 
-export function useOptimizedOrders(params: OrderListParams = {}) {
-  const supabase = createClient();
-  
-  const memoizedParams = useMemo(() => ({
+export interface OrderPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface OrderListResponse {
+  orders: Order[];
+  pagination: OrderPagination;
+}
+
+export interface DashboardCreateOrderInput {
+  items: Array<{
+    productId: string;
+    quantity: number;
+    unitPrice: number;
+  }>;
+  selectedCustomerId?: string | null;
+  newCustomer?: {
+    name: string;
+    email?: string | null;
+    phone?: string | null;
+    address?: string | null;
+  } | null;
+  paymentMethod: 'CASH' | 'CARD' | 'TRANSFER' | 'DIGITAL_WALLET';
+  notes?: string | null;
+  shippingCost?: number | null;
+}
+
+type ApiEnvelope<T> = {
+  success: boolean;
+  data: T;
+  error?: string;
+  details?: string;
+  message?: string;
+};
+
+const NO_ORGANIZATION_KEY = 'no-organization';
+
+export const orderKeys = {
+  root: ['orders'] as const,
+  all: (organizationId?: string | null) =>
+    [...orderKeys.root, organizationId || NO_ORGANIZATION_KEY] as const,
+  lists: (organizationId?: string | null) => [...orderKeys.all(organizationId), 'list'] as const,
+  list: (organizationId: string | null | undefined, params: Required<OrderListParams>) =>
+    [...orderKeys.lists(organizationId), params] as const,
+  stats: (organizationId?: string | null) => [...orderKeys.all(organizationId), 'stats'] as const,
+  detail: (organizationId: string | null | undefined, orderId: string) =>
+    [...orderKeys.all(organizationId), 'detail', orderId] as const,
+};
+
+function buildHeaders(organizationId: string, init?: RequestInit, includeJson = false): Headers {
+  const headers = new Headers(init?.headers);
+  headers.set('x-organization-id', organizationId);
+
+  if (includeJson && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  return headers;
+}
+
+async function parseJsonResponse<T>(response: Response, fallbackMessage: string): Promise<T> {
+  let payload: ApiEnvelope<T> | null = null;
+
+  try {
+    payload = (await response.json()) as ApiEnvelope<T>;
+  } catch {
+    throw new Error(fallbackMessage);
+  }
+
+  if (!response.ok || !payload?.success) {
+    throw new Error(payload?.error || payload?.details || fallbackMessage);
+  }
+
+  return payload.data;
+}
+
+async function fetchOrderData<T>(
+  input: string,
+  organizationId: string,
+  init?: RequestInit,
+  fallbackMessage: string = 'No se pudo cargar la informacion de pedidos'
+): Promise<T> {
+  const response = await fetch(input, {
+    ...init,
+    headers: buildHeaders(organizationId, init, false),
+    credentials: 'same-origin',
+  });
+
+  return parseJsonResponse<T>(response, fallbackMessage);
+}
+
+function normalizeOrderListParams(params: OrderListParams): Required<OrderListParams> {
+  return {
     page: params.page || 1,
     limit: params.limit || 20,
     status: params.status || 'ALL',
     search: params.search || '',
+    dateRange: params.dateRange || 'all',
     sortBy: params.sortBy || 'created_at',
-    sortOrder: params.sortOrder || 'desc'
-  }), [params.page, params.limit, params.status, params.search, params.sortBy, params.sortOrder]);
+    sortOrder: params.sortOrder || 'desc',
+  };
+}
+
+function normalizeOrderItem(item: Partial<OrderItem>): OrderItem {
+  const unitPrice = Number(item.unit_price || 0);
+  const quantity = Number(item.quantity || 0);
+
+  return {
+    id: String(item.id || ''),
+    product_id: String(item.product_id || ''),
+    product_name: String(item.product_name || item.products?.name || 'Producto'),
+    quantity,
+    unit_price: unitPrice,
+    subtotal: Number(item.subtotal || unitPrice * quantity),
+    products: item.products
+      ? {
+          name: String(item.products.name || item.product_name || 'Producto'),
+          image_url: item.products.image_url,
+        }
+      : undefined,
+  };
+}
+
+function normalizeOrderStatusHistoryEntry(
+  entry: Partial<OrderStatusHistoryEntry>
+): OrderStatusHistoryEntry {
+  return {
+    id: String(entry.id || ''),
+    status: String(entry.status || 'PENDING'),
+    notes: entry.notes ? String(entry.notes) : '',
+    changed_at: String(entry.changed_at || ''),
+    changed_by: entry.changed_by ? String(entry.changed_by) : '',
+  };
+}
+
+function normalizeOrder(order: Partial<Order>): Order {
+  return {
+    id: String(order.id || ''),
+    order_number: String(order.order_number || order.id || ''),
+    customer_name: String(order.customer_name || 'Cliente'),
+    customer_email: String(order.customer_email || ''),
+    customer_phone: String(order.customer_phone || ''),
+    customer_address: order.customer_address ? String(order.customer_address) : '',
+    subtotal: Number(order.subtotal || 0),
+    shipping_cost: Number(order.shipping_cost || 0),
+    total: Number(order.total || 0),
+    payment_method: String(order.payment_method || 'CASH'),
+    payment_status: String(order.payment_status || 'PENDING'),
+    status: String(order.status || 'PENDING'),
+    notes: order.notes ? String(order.notes) : '',
+    order_source: String(order.order_source || 'MANUAL'),
+    created_at: String(order.created_at || ''),
+    updated_at: String(order.updated_at || order.created_at || ''),
+    order_items: Array.isArray(order.order_items)
+      ? order.order_items.map((item) => normalizeOrderItem(item))
+      : [],
+    order_status_history: Array.isArray(order.order_status_history)
+      ? order.order_status_history
+          .map((entry) => normalizeOrderStatusHistoryEntry(entry))
+          .sort((left, right) => {
+            const leftTime = left.changed_at ? new Date(left.changed_at).getTime() : 0;
+            const rightTime = right.changed_at ? new Date(right.changed_at).getTime() : 0;
+            return rightTime - leftTime;
+          })
+      : [],
+    organization_id: String(order.organization_id || ''),
+  };
+}
+
+export function useOptimizedOrders(params: OrderListParams = {}) {
+  const organizationId = useCurrentOrganizationId();
+  const memoizedParams = useMemo(() => normalizeOrderListParams(params), [params]);
 
   return useQuery({
-    queryKey: ['orders', memoizedParams],
-    queryFn: async () => {
-      const orgId = getOrganizationId();
-      if (!orgId) return { orders: [], pagination: { total: 0, page: 1, limit: 20, totalPages: 0 } };
+    queryKey: orderKeys.list(organizationId, memoizedParams),
+    queryFn: async (): Promise<OrderListResponse> => {
+      const searchParams = new URLSearchParams({
+        page: String(memoizedParams.page),
+        limit: String(memoizedParams.limit),
+        status: memoizedParams.status,
+        dateRange: memoizedParams.dateRange,
+        sortBy: memoizedParams.sortBy,
+        sortOrder: memoizedParams.sortOrder,
+      });
 
-      let query = supabase
-        .from('orders')
-        .select(`
-          *,
-          order_items (*)
-        `, { count: 'exact' })
-        .eq('organization_id', orgId);
-
-      // Filters
-      if (memoizedParams.status && memoizedParams.status !== 'ALL') {
-        query = query.eq('status', memoizedParams.status);
+      if (memoizedParams.search.trim()) {
+        searchParams.set('search', memoizedParams.search.trim());
       }
 
-      if (memoizedParams.search) {
-        // Simple search on customer name or order number
-        query = query.or(`customer_name.ilike.%${memoizedParams.search}%,order_number.ilike.%${memoizedParams.search}%,customer_email.ilike.%${memoizedParams.search}%`);
-      }
-
-      // Sorting
-      query = query.order(memoizedParams.sortBy, { ascending: memoizedParams.sortOrder === 'asc' });
-
-      // Pagination
-      const from = (memoizedParams.page - 1) * memoizedParams.limit;
-      const to = from + memoizedParams.limit - 1;
-      query = query.range(from, to);
-
-      const { data, count, error } = await query;
-
-      if (error) throw error;
+      const data = await fetchOrderData<{
+        orders: Order[];
+        pagination: OrderPagination;
+      }>(
+        `/api/orders?${searchParams.toString()}`,
+        organizationId!,
+        undefined,
+        'No se pudo cargar la lista de pedidos'
+      );
 
       return {
-        orders: (data as any[]) || [],
-        pagination: {
-          page: memoizedParams.page,
-          limit: memoizedParams.limit,
-          total: count || 0,
-          totalPages: Math.ceil((count || 0) / memoizedParams.limit)
-        }
+        orders: (data.orders || []).map((order) => normalizeOrder(order)),
+        pagination: data.pagination,
       };
     },
-    enabled: !!getOrganizationId(),
-    staleTime: 30 * 1000, // 30s
-    refetchInterval: 60 * 1000 // 1m
+    enabled: Boolean(organizationId),
+    placeholderData: keepPreviousData,
+    staleTime: 2 * 60 * 1000,
+    gcTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 }
 
 export function useOrderStats() {
-  const supabase = createClient();
+  const organizationId = useCurrentOrganizationId();
 
   return useQuery({
-    queryKey: ['orders-stats'],
-    queryFn: async (): Promise<OrderStats> => {
-      const orgId = getOrganizationId();
-      if (!orgId) return { total: 0, pending: 0, confirmed: 0, preparing: 0, shipped: 0, delivered: 0, cancelled: 0, todayRevenue: 0, avgOrderValue: 0 };
+    queryKey: orderKeys.stats(organizationId),
+    queryFn: () =>
+      fetchOrderData<OrderStats>(
+        '/api/orders/stats',
+        organizationId!,
+        undefined,
+        'No se pudo cargar el resumen de pedidos'
+      ),
+    enabled: Boolean(organizationId),
+    staleTime: 2 * 60 * 1000,
+    gcTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+}
 
-      // We can do this in one query if we fetch all ID/Status/Total, but might be heavy.
-      // Better to do a few counts or use an RPC if available. 
-      // For now, let's use separate counts for key statuses as it's safer without RPC.
-      
-      const todayStart = new Date();
-      todayStart.setHours(0,0,0,0);
+export function useOrderDetail(orderId?: string | null) {
+  const organizationId = useCurrentOrganizationId();
 
-      const [
-        { count: total },
-        { count: pending },
-        { count: confirmed },
-        { count: preparing },
-        { count: shipped },
-        { count: delivered },
-        { count: cancelled },
-        { data: todayOrders }
-      ] = await Promise.all([
-        supabase.from('orders').select('*', { count: 'exact', head: true }).eq('organization_id', orgId),
-        supabase.from('orders').select('*', { count: 'exact', head: true }).eq('organization_id', orgId).eq('status', 'PENDING'),
-        supabase.from('orders').select('*', { count: 'exact', head: true }).eq('organization_id', orgId).eq('status', 'CONFIRMED'),
-        supabase.from('orders').select('*', { count: 'exact', head: true }).eq('organization_id', orgId).eq('status', 'PREPARING'),
-        supabase.from('orders').select('*', { count: 'exact', head: true }).eq('organization_id', orgId).eq('status', 'SHIPPED'),
-        supabase.from('orders').select('*', { count: 'exact', head: true }).eq('organization_id', orgId).eq('status', 'DELIVERED'),
-        supabase.from('orders').select('*', { count: 'exact', head: true }).eq('organization_id', orgId).eq('status', 'CANCELLED'),
-        supabase.from('orders').select('total').eq('organization_id', orgId).gte('created_at', todayStart.toISOString()).neq('status', 'CANCELLED')
-      ]);
+  return useQuery({
+    queryKey: orderKeys.detail(organizationId, orderId || 'unknown'),
+    queryFn: async (): Promise<Order> => {
+      if (!orderId) {
+        throw new Error('Pedido no encontrado');
+      }
 
-      const todayRevenue = todayOrders?.reduce((sum, o) => sum + (o.total || 0), 0) || 0;
-      
-      // Avg order value (needs total revenue of all time? or today? Let's assume today for "avg ticket" usually, or simple avg of fetched page? 
-      // The interface implies a general stat. Let's calculate from a small sample or if we have a total revenue aggregate.
-      // For speed, let's just return 0 or do a quick agg if needed. 
-      // Actually, let's calculate based on today's orders for "Avg Ticket Today" which is useful.
-      const avgOrderValue = todayOrders && todayOrders.length > 0 ? todayRevenue / todayOrders.length : 0;
+      const data = await fetchOrderData<{ order: Order }>(
+        `/api/orders/${orderId}`,
+        organizationId!,
+        undefined,
+        'No se pudo cargar el detalle del pedido'
+      );
 
-      return {
-        total: total || 0,
-        pending: pending || 0,
-        confirmed: confirmed || 0,
-        preparing: preparing || 0,
-        shipped: shipped || 0,
-        delivered: delivered || 0,
-        cancelled: cancelled || 0,
-        todayRevenue,
-        avgOrderValue
-      };
+      return normalizeOrder(data.order);
     },
-    enabled: !!getOrganizationId(),
-    staleTime: 60 * 1000
+    enabled: Boolean(organizationId && orderId),
+    staleTime: 30 * 1000,
+    gcTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 }
 
 export function useUpdateOrderStatus() {
-  const supabase = createClient();
+  const organizationId = useCurrentOrganizationId();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ orderId, status }: { orderId: string, status: string }) => {
-      const orgId = getOrganizationId();
-      if (!orgId) throw new Error('No organization selected');
+    mutationFn: async ({ orderId, status }: { orderId: string; status: string }) => {
+      if (!organizationId) {
+        throw new Error('No se encontro una organizacion activa');
+      }
 
-      const { data, error } = await supabase
-        .from('orders')
-        .update({ status })
-        .eq('id', orderId)
-        .eq('organization_id', orgId)
-        .select()
-        .single();
+      const response = await fetch(`/api/orders/${orderId}`, {
+        method: 'PATCH',
+        headers: buildHeaders(organizationId, undefined, true),
+        credentials: 'same-origin',
+        body: JSON.stringify({ status }),
+      });
 
-      if (error) throw error;
-      return data;
+      return parseJsonResponse<{ order: Order }>(
+        response,
+        'No se pudo actualizar el estado del pedido'
+      );
+    },
+    onSuccess: ({ order }, { orderId }) => {
+      queryClient.setQueryData(
+        orderKeys.detail(organizationId, orderId),
+        (currentOrder: Order | undefined) =>
+          currentOrder
+            ? normalizeOrder({
+                ...currentOrder,
+                ...order,
+                order_items: currentOrder.order_items,
+                order_status_history: currentOrder.order_status_history,
+              })
+            : currentOrder
+      );
+      queryClient.invalidateQueries({ queryKey: orderKeys.detail(organizationId, orderId) });
+      queryClient.invalidateQueries({ queryKey: orderKeys.lists(organizationId) });
+      queryClient.invalidateQueries({ queryKey: orderKeys.stats(organizationId) });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-optimized-summary'] });
+    },
+  });
+}
+
+export function useCreateDashboardOrder() {
+  const organizationId = useCurrentOrganizationId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: DashboardCreateOrderInput) => {
+      if (!organizationId) {
+        throw new Error('No se encontro una organizacion activa');
+      }
+
+      const response = await fetch('/api/orders/admin', {
+        method: 'POST',
+        headers: buildHeaders(organizationId, undefined, true),
+        credentials: 'same-origin',
+        body: JSON.stringify(payload),
+      });
+
+      return parseJsonResponse<{
+        order: {
+          id: string;
+          orderNumber: string;
+          status: string;
+          total: number;
+          createdAt: string;
+        };
+      }>(response, 'No se pudo crear la orden');
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
-      queryClient.invalidateQueries({ queryKey: ['orders-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-optimized-summary'] }); // Update main dashboard too
-      
-      toast({
-        title: 'Estado actualizado',
-        description: 'El pedido ha sido actualizado correctamente'
-      });
+      queryClient.invalidateQueries({ queryKey: orderKeys.all(organizationId) });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['products-list'] });
+      queryClient.invalidateQueries({ queryKey: ['products-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['product-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-optimized-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['sales-summary-optimized'] });
+      queryClient.invalidateQueries({ queryKey: ['recent-sales-optimized'] });
+      queryClient.invalidateQueries({ queryKey: ['sales'] });
     },
-    onError: (error) => {
-      toast({
-        title: 'Error',
-        description: 'No se pudo actualizar el pedido: ' + error.message,
-        variant: 'destructive'
-      });
-    }
   });
 }

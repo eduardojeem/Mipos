@@ -240,16 +240,16 @@ export class PollingFallbackService {
       // ❌ DISABLED: Auto-start polling causes 404 errors
       // The app uses Supabase Realtime directly, polling is not needed
       if (!isRealtimeConnected && !this.state.isActive) {
-        console.warn('[PollingFallback] Real-time disconnected (polling fallback disabled - using Supabase Realtime only)');
-        // this.start(); // Disabled to prevent 404 errors on non-existent API endpoints
+        // Silenced: polling fallback is intentionally disabled
+        // console.warn('[PollingFallback] Real-time disconnected (polling fallback disabled - using Supabase Realtime only)');
       } else if (isRealtimeConnected && this.state.isActive) {
         console.log('[PollingFallback] Real-time reconnected, stopping polling fallback');
         this.stop();
       }
     };
 
-    // Check every 10 seconds
-    setInterval(checkRealtimeStatus, 10000);
+    // Check every 60 seconds (reduced from 10s to avoid log noise)
+    setInterval(checkRealtimeStatus, 60000);
 
     // Initial check
     setTimeout(checkRealtimeStatus, 1000);

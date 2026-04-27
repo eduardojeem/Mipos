@@ -5,14 +5,31 @@ import { asyncHandler, createError } from '../middleware/errorHandler';
 import { EnhancedAuthenticatedRequest, enhancedAuthMiddleware, requirePermission } from '../middleware/enhanced-auth';
 import { validateBody, validateQuery, validateParams, commonSchemas, sanitize } from '../middleware/input-validator';
 // ✅ Import new helpers
-import { normalizeReturn, buildReturnWhere, calculateReturnStats, validateStatusTransition } from './helpers/return-helpers';
+import {
+  normalizeReturn,
+  buildReturnWhere,
+  calculateReturnStats,
+  normalizeRefundMethodToDb,
+  normalizeReturnStatusToDb,
+  validateStatusTransition
+} from './helpers/return-helpers';
 import { syncReturnToExternalSystem } from './helpers/external-sync';
 import { RETURNS_CONFIG } from '../config/returns-config';
+import { getOperationalContext } from './helpers/operational-context';
+import { findScopedOpenCashSession } from './helpers/cash-session-context';
 // Temporary: Using console until logger API is fixed
 const logger = console;
 
 // ✅ Improved helper function with proper error handling and balance validation
-async function createCashMovementForReturn(tx: any, returnId: string, amount: number, refundMethod: string, userId: string, organizationId: string) {
+async function createCashMovementForReturn(
+  tx: any,
+  returnId: string,
+  amount: number,
+  refundMethod: string,
+  userId: string,
+  organizationId: string,
+  operationalContext?: ReturnType<typeof getOperationalContext>,
+) {
   // Only create cash movement for cash refunds
   if (refundMethod !== 'CASH') {
     logger.info('Skipping cash movement for non-cash refund', { refundMethod, returnId });
@@ -25,9 +42,11 @@ async function createCashMovementForReturn(tx: any, returnId: string, amount: nu
   }
 
   // Get current open cash session
-  const openSession = await tx.cashSession.findFirst({
-    where: { status: 'OPEN', organizationId }
-  });
+  const openSession =
+    await findScopedOpenCashSession(organizationId, operationalContext) ||
+    await tx.cashSession.findFirst({
+      where: { status: 'OPEN', organizationId }
+    });
 
   if (!openSession) {
     logger.warn('No open cash session for cash refund', { returnId });
@@ -40,7 +59,9 @@ async function createCashMovementForReturn(tx: any, returnId: string, amount: nu
     _sum: { amount: true }
   });
 
-  const balance = (currentBalance._sum.amount || 0) + openSession.initialAmount;
+  const balance =
+    Number(currentBalance._sum.amount || 0) +
+    Number((openSession as any).openingAmount ?? (openSession as any).opening_amount ?? (openSession as any).initialAmount ?? 0);
 
   if (balance < amount) {
     throw createError(
@@ -69,14 +90,119 @@ async function createCashMovementForReturn(tx: any, returnId: string, amount: nu
 
 const router = express.Router();
 
+const safeIdSchema = z.string()
+  .min(1, 'ID is required')
+  .max(128, 'ID too long')
+  .regex(/^[A-Za-z0-9_-]+$/, 'Invalid ID format')
+  .transform(val => sanitize.string(val));
+
+const returnIdParamSchema = z.object({
+  id: safeIdSchema
+});
+
+const returnStatusSchema = z.string()
+  .min(1, 'Status is required')
+  .transform(value => normalizeReturnStatusToDb(value))
+  .refine((value): value is string => Boolean(value), 'Invalid return status');
+
+const refundMethodSchema = z.string()
+  .min(1, 'Refund method is required')
+  .transform(value => normalizeRefundMethodToDb(value))
+  .refine((value): value is string => Boolean(value), 'Invalid refund method');
+
+function resolveRequestOrganizationId(req: EnhancedAuthenticatedRequest): string | null {
+  const headerOrgId = String(req.headers['x-organization-id'] || '').trim();
+  const userOrgId = String((req.user as any)?.organizationId || '').trim();
+  return headerOrgId || userOrgId || null;
+}
+
+function requireRequestOrganizationId(req: EnhancedAuthenticatedRequest): string {
+  const organizationId = resolveRequestOrganizationId(req);
+  if (!organizationId) {
+    throw createError('Organization header missing', 400);
+  }
+  return organizationId;
+}
+
+function groupReturnItemsByProduct(
+  returnItems: Array<{ productId: string; quantity: number; product?: { name?: string | null } | null }>
+) {
+  const totals = new Map<string, { quantity: number; productName: string }>();
+
+  for (const item of returnItems) {
+    const productId = String(item.productId || '').trim();
+    if (!productId) {
+      continue;
+    }
+
+    const current = totals.get(productId);
+    totals.set(productId, {
+      quantity: (current?.quantity || 0) + Number(item.quantity || 0),
+      productName: item.product?.name || current?.productName || 'este producto',
+    });
+  }
+
+  return totals;
+}
+
+async function validateReturnProcessingStock(
+  tx: any,
+  organizationId: string,
+  productTotals: Map<string, { quantity: number; productName: string }>
+) {
+  const productIds = Array.from(productTotals.keys());
+  const products = await tx.product.findMany({
+    where: {
+      id: { in: productIds },
+      organizationId,
+    },
+  });
+
+  const productsById = new Map<string, any>(
+    products.map((product: any) => [String(product.id), product])
+  );
+
+  for (const [productId, entry] of productTotals) {
+    const product = productsById.get(productId);
+    if (!product) {
+      throw createError(`Producto ${productId} no encontrado`, 404);
+    }
+
+    const maxStock = (product as any).maxStockQuantity || 999999;
+    const newStock = product.stockQuantity + entry.quantity;
+
+    if (newStock > maxStock) {
+      throw createError(
+        `No se pueden devolver ${entry.quantity} unidades de ${entry.productName}. ` +
+          `Excedería la capacidad máxima de stock (${maxStock}).`,
+        400
+      );
+    }
+  }
+}
+
+async function claimApprovedReturnCompletion(tx: any, id: string, organizationId: string) {
+  const claimResult = await tx.return.updateMany({
+    where: {
+      id,
+      organizationId,
+      status: 'APPROVED',
+    },
+    data: {
+      status: 'COMPLETED' as any,
+      updatedAt: new Date(),
+    },
+  });
+
+  if (claimResult.count !== 1) {
+    throw createError('Return already processed or no longer approved', 409);
+  }
+}
+
 // ✅ Enhanced validation schemas using config constants
 const enhancedReturnItemSchema = z.object({
-  originalSaleItemId: z.string()
-    .uuid('Invalid original sale item ID format')
-    .transform(val => sanitize.string(val)),
-  productId: z.string()
-    .uuid('Invalid product ID format')
-    .transform(val => sanitize.string(val)),
+  originalSaleItemId: safeIdSchema,
+  productId: safeIdSchema,
   quantity: z.number()
     .int('Quantity must be an integer')
     .min(RETURNS_CONFIG.validation.minQuantityPerItem, 'Quantity must be at least 1')
@@ -91,13 +217,8 @@ const enhancedReturnItemSchema = z.object({
 });
 
 const enhancedCreateReturnSchema = z.object({
-  originalSaleId: z.string()
-    .uuid('Invalid original sale ID format')
-    .transform(val => sanitize.string(val)),
-  customerId: z.string()
-    .uuid('Invalid customer ID format')
-    .optional()
-    .transform(val => val ? sanitize.string(val) : val),
+  originalSaleId: safeIdSchema,
+  customerId: safeIdSchema.optional(),
   items: z.array(enhancedReturnItemSchema)
     .min(1, 'At least one item is required')
     .max(RETURNS_CONFIG.validation.maxItemsPerReturn, 'Too many items in return'),
@@ -105,12 +226,12 @@ const enhancedCreateReturnSchema = z.object({
     .min(1, 'Return reason is required')
     .max(RETURNS_CONFIG.validation.maxReasonLength, 'Return reason too long')
     .transform(val => sanitize.string(val)),
-  refundMethod: z.enum(['CASH', 'CARD', 'TRANSFER', 'OTHER'])
+  refundMethod: refundMethodSchema
     .default('CASH')
 });
 
 const enhancedUpdateReturnStatusSchema = z.object({
-  status: z.enum(['PENDING', 'APPROVED', 'REJECTED', 'COMPLETED']),
+  status: returnStatusSchema,
   notes: z.string()
     .max(RETURNS_CONFIG.validation.maxNotesLength, 'Notes too long')
     .optional()
@@ -131,20 +252,20 @@ const enhancedQuerySchema = z.object({
     .datetime('Invalid end date format')
     .optional()
     .transform(val => val ? sanitize.string(val) : val),
-  customerId: z.string()
-    .uuid('Invalid customer ID format')
+  customerId: safeIdSchema.optional(),
+  status: z.string()
+    .max(32, 'Invalid status')
     .optional()
-    .transform(val => val ? sanitize.string(val) : val),
-  status: z.enum(['PENDING', 'APPROVED', 'REJECTED', 'COMPLETED'])
-    .optional(),
-  originalSaleId: z.string()
-    .uuid('Invalid original sale ID format')
-    .optional()
-    .transform(val => val ? sanitize.string(val) : val),
+    .transform(val => val ? normalizeReturnStatusToDb(val) || val : val),
+  originalSaleId: safeIdSchema.optional(),
   search: z.string()
     .max(100, 'Search term too long')
     .optional()
-    .transform(val => val ? sanitize.string(val) : val)
+    .transform(val => val ? sanitize.string(val) : val),
+  refundMethod: z.string()
+    .max(32, 'Invalid refund method')
+    .optional()
+    .transform(val => val ? normalizeRefundMethodToDb(val) || val : val)
 }).refine(data => {
   if (data.startDate && data.endDate) {
     return new Date(data.startDate) <= new Date(data.endDate);
@@ -168,43 +289,15 @@ router.get('/',
     logger.info('🔍 [GET /returns] Request received', { query: req.query, user: req.user?.id });
     
     // ✅ FIX: organizationId por defecto si no existe en req.user
-    const organizationId = (req.user as any)?.organizationId || 'default-org';
+    const organizationId = requireRequestOrganizationId(req);
     logger.info('🔍 [GET /returns] Using organizationId:', organizationId);
     
-    const { page, limit, startDate, endDate, customerId, status, originalSaleId } = req.query;
+    const { page, limit } = req.query;
     const pageNum = typeof page === 'number' ? page : (page ? parseInt(String(page), 10) : 1);
     const limitNum = typeof limit === 'number' ? limit : (limit ? parseInt(String(limit), 10) : 10);
     const skip = (pageNum - 1) * limitNum;
 
-    const where: any = { organizationId };
-
-    const toDate = (v: unknown) => new Date(String(v));
-    if (startDate && endDate) {
-      where.createdAt = {
-        gte: toDate(startDate),
-        lte: toDate(endDate)
-      };
-    } else if (startDate) {
-      where.createdAt = {
-        gte: toDate(startDate)
-      };
-    } else if (endDate) {
-      where.createdAt = {
-        lte: toDate(endDate)
-      };
-    }
-
-    if (customerId) {
-      where.customerId = customerId;
-    }
-
-    if (status) {
-      where.status = status;
-    }
-
-    if (originalSaleId) {
-      where.originalSaleId = originalSaleId;
-    }
+    const where = buildReturnWhere({ ...req.query, organizationId } as any);
 
     logger.info('🔍 [GET /returns] Query where:', where);
 
@@ -216,20 +309,7 @@ router.get('/',
           skip,
           take: limitNum,
           orderBy: { createdAt: 'desc' },
-          select: {
-            id: true,
-            returnNumber: true,
-            originalSaleId: true,
-            customerId: true,
-            status: true,
-            reason: true,
-            refundMethod: true,
-            totalAmount: true,
-            createdAt: true,
-            updatedAt: true,
-            processedAt: true,
-            notes: true,
-            // Solo campos necesarios de relaciones
+          include: {
             customer: {
               select: {
                 id: true,
@@ -237,12 +317,7 @@ router.get('/',
               }
             },
             returnItems: {
-              select: {
-                id: true,
-                productId: true,
-                quantity: true,
-                unitPrice: true,
-                reason: true,
+              include: {
                 product: {
                   select: {
                     id: true,
@@ -265,18 +340,7 @@ router.get('/',
       });
 
       // ✅ Transformar datos para incluir customerName
-      const transformedReturns = returns.map(ret => ({
-        ...ret,
-        customerName: ret.customer?.name || 'Cliente sin nombre',
-        items: ret.returnItems.map(item => ({
-          id: item.id,
-          productId: item.productId,
-          productName: item.product?.name || 'Producto desconocido',
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          reason: item.reason
-        }))
-      }));
+      const transformedReturns = returns.map(normalizeReturn);
 
       const totalPages = Math.ceil(total / limitNum);
 
@@ -301,11 +365,11 @@ router.get('/',
 router.get('/:id',
   enhancedAuthMiddleware,
   requirePermission('returns', 'read'),
-  validateParams(commonSchemas.id),
+  validateParams(returnIdParamSchema),
   asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
     const { id } = req.params;
     // ✅ FIX: organizationId por defecto si no existe en req.user
-    const organizationId = (req.user as any)?.organizationId || 'default-org';
+    const organizationId = requireRequestOrganizationId(req);
 
     const returnRecord = await prisma.return.findFirst({
       where: { id, organizationId },
@@ -377,18 +441,26 @@ router.post('/',
     const { originalSaleId, customerId, items, reason, refundMethod } = req.body;
     const userId = req.user!.id;
     // ✅ FIX: organizationId por defecto si no existe en req.user
-    const organizationId = (req.user as any)?.organizationId || 'default-org';
+    const organizationId = requireRequestOrganizationId(req);
 
     // Verify original sale exists
     const originalSale = await prisma.sale.findFirst({
       where: { id: originalSaleId, organizationId },
-      include: {
-        saleItems: {
-          include: {
-            returnItems: true
+        include: {
+          saleItems: {
+            include: {
+              returnItems: {
+                include: {
+                  return: {
+                    select: {
+                      status: true
+                    }
+                  }
+                }
+              }
+            }
           }
         }
-      }
     });
 
     if (!originalSale) {
@@ -417,7 +489,14 @@ router.post('/',
       }
 
       // Check if quantity being returned doesn't exceed available quantity
-      const alreadyReturned = originalSaleItem.returnItems.reduce((sum, ri) => sum + ri.quantity, 0);
+      const alreadyReturned = originalSaleItem.returnItems.reduce((sum, ri) => {
+        const returnStatus = normalizeReturnStatusToDb(ri.return?.status);
+        if (returnStatus !== 'APPROVED' && returnStatus !== 'COMPLETED') {
+          return sum;
+        }
+
+        return sum + ri.quantity;
+      }, 0);
       const availableToReturn = originalSaleItem.quantity - alreadyReturned;
 
       if (item.quantity > availableToReturn) {
@@ -629,13 +708,14 @@ router.post('/',
 router.patch('/:id/status',
   enhancedAuthMiddleware,
   requirePermission('returns', 'update'),
-  validateParams(commonSchemas.id),
+  validateParams(returnIdParamSchema),
   validateBody(enhancedUpdateReturnStatusSchema),
   asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
     const { id } = req.params;
     const { status, notes } = req.body;
     // ✅ FIX: organizationId por defecto si no existe en req.user
-    const organizationId = (req.user as any)?.organizationId || 'default-org';
+    const organizationId = requireRequestOrganizationId(req);
+    const operationalContext = getOperationalContext(req);
 
     const returnRecord = await prisma.return.findFirst({
       where: { id, organizationId },
@@ -711,6 +791,71 @@ router.patch('/:id/status',
 
     // Handle status transitions
     const updatedReturn = await prisma.$transaction(async (tx) => {
+      if (status === 'COMPLETED' && returnRecord.status !== 'COMPLETED') {
+        const productTotals = groupReturnItemsByProduct(returnRecord.returnItems);
+        await validateReturnProcessingStock(tx, organizationId, productTotals);
+        await claimApprovedReturnCompletion(tx, id, organizationId);
+
+        await tx.auditLog.create({
+          data: {
+            action: 'RETURN_STATUS_CHANGE',
+            entityType: 'RETURN',
+            entityId: id,
+            userId: req.user!.id,
+            userEmail: req.user!.email || 'unknown',
+            userRole: req.user!.roles?.[0]?.name || 'USER',
+            ipAddress: req.ip || '0.0.0.0',
+            metadata: JSON.stringify({
+              oldStatus: returnRecord.status,
+              newStatus: status,
+              notes: notes || null,
+              timestamp: new Date().toISOString()
+            })
+          }
+        });
+
+        for (const [productId, entry] of productTotals) {
+          await tx.product.update({
+            where: { id: productId },
+            data: {
+              stockQuantity: {
+                increment: entry.quantity
+              }
+            }
+          });
+        }
+
+        for (const item of returnRecord.returnItems) {
+          await tx.inventoryMovement.create({
+            data: {
+              productId: item.productId,
+              type: 'RETURN',
+              quantity: item.quantity,
+              reason: `Return from sale - ${returnRecord.reason}`,
+              referenceId: returnRecord.id
+            }
+          });
+        }
+
+        const refundTotal = returnRecord.returnItems.reduce(
+          (sum, item) => sum + (item.quantity * item.unitPrice),
+          0
+        );
+
+        await createCashMovementForReturn(
+          tx,
+          returnRecord.id,
+          refundTotal,
+          returnRecord.refundMethod,
+          req.user!.id,
+          organizationId,
+          operationalContext
+        );
+
+        return tx.return.findUnique({
+          where: { id }
+        });
+      }
       // ✅ MEJORA: Registrar cambio de estado en auditoría
       await tx.auditLog.create({
         data: {
@@ -718,6 +863,9 @@ router.patch('/:id/status',
           entityType: 'RETURN',
           entityId: id,
           userId: req.user!.id,
+          userEmail: req.user!.email || 'unknown',
+          userRole: req.user!.roles?.[0]?.name || 'USER',
+          ipAddress: req.ip || '0.0.0.0',
           metadata: JSON.stringify({
             oldStatus: returnRecord.status,
             newStatus: status,
@@ -768,7 +916,7 @@ router.patch('/:id/status',
         );
 
         // Create cash movement for cash refunds
-        await createCashMovementForReturn(tx, returnRecord.id, total, returnRecord.refundMethod, req.user!.id, organizationId);
+        await createCashMovementForReturn(tx, returnRecord.id, total, returnRecord.refundMethod, req.user!.id, organizationId, operationalContext);
       }
 
       return updated;
@@ -883,12 +1031,13 @@ router.patch('/:id/status',
 router.delete('/:id',
   enhancedAuthMiddleware,
   requirePermission('returns', 'delete'),
-  validateParams(commonSchemas.id),
+  validateParams(returnIdParamSchema),
   asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
     const { id } = req.params;
+    const organizationId = requireRequestOrganizationId(req);
 
-    const returnRecord = await prisma.return.findUnique({
-      where: { id }
+    const returnRecord = await prisma.return.findFirst({
+      where: { id, organizationId }
     });
 
     if (!returnRecord) {
@@ -899,8 +1048,8 @@ router.delete('/:id',
       throw createError('Can only delete pending returns', 400);
     }
 
-    await prisma.return.delete({
-      where: { id }
+    await prisma.return.deleteMany({
+      where: { id, organizationId }
     });
 
     res.json({ message: 'Return deleted successfully' });
@@ -923,7 +1072,8 @@ router.get('/stats',
   })),
   asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
     const filters = req.query;
-    const where = buildReturnWhere(filters);
+    const organizationId = requireRequestOrganizationId(req);
+    const where = buildReturnWhere({ ...filters, organizationId });
 
     const stats = await calculateReturnStats(prisma, where);
 
@@ -937,11 +1087,12 @@ router.get('/stats',
 router.post('/:id/process',
   enhancedAuthMiddleware,
   requirePermission('returns', 'update'),
-  validateParams(commonSchemas.id),
+  validateParams(returnIdParamSchema),
   asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
     const { id } = req.params;
     // ✅ FIX: organizationId por defecto si no existe en req.user
-    const organizationId = (req.user as any)?.organizationId || 'default-org';
+    const organizationId = requireRequestOrganizationId(req);
+    const operationalContext = getOperationalContext(req);
 
     const returnRecord = await prisma.return.findFirst({
       where: { id, organizationId },
@@ -965,6 +1116,69 @@ router.post('/:id/process',
 
     // Process return in transaction
     const processedReturn = await prisma.$transaction(async (tx) => {
+      const productTotals = groupReturnItemsByProduct(returnRecord.returnItems);
+      await validateReturnProcessingStock(tx, organizationId, productTotals);
+      await claimApprovedReturnCompletion(tx, id, organizationId);
+
+      await tx.auditLog.create({
+        data: {
+          action: 'RETURN_PROCESSED',
+          entityType: 'RETURN',
+          entityId: id,
+          userId: req.user!.id,
+          userEmail: req.user!.email || 'unknown',
+          userRole: req.user!.roles?.[0]?.name || 'USER',
+          ipAddress: req.ip || '0.0.0.0',
+          metadata: JSON.stringify({
+            status: 'COMPLETED',
+            itemsCount: returnRecord.returnItems.length,
+            totalAmount: returnRecord.returnItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0),
+            timestamp: new Date().toISOString()
+          })
+        }
+      });
+
+      for (const [productId, entry] of productTotals) {
+        await tx.product.update({
+          where: { id: productId },
+          data: {
+            stockQuantity: {
+              increment: entry.quantity
+            }
+          }
+        });
+      }
+
+      for (const item of returnRecord.returnItems) {
+        await tx.inventoryMovement.create({
+          data: {
+            productId: item.productId,
+            type: 'RETURN' as any,
+            quantity: item.quantity,
+            reason: `Return from sale - ${returnRecord.reason}`,
+            referenceId: returnRecord.id
+          }
+        });
+      }
+
+      const refundTotal = returnRecord.returnItems.reduce(
+        (sum, item) => sum + (item.quantity * item.unitPrice),
+        0
+      );
+
+      await createCashMovementForReturn(
+        tx,
+        returnRecord.id,
+        refundTotal,
+        returnRecord.refundMethod,
+        req.user!.id,
+        organizationId,
+        operationalContext
+      );
+
+      return tx.return.findUnique({
+        where: { id }
+      });
       // ✅ MEJORA CRÍTICA: Validar stock antes de procesar
       for (const item of returnRecord.returnItems) {
         const product = await tx.product.findUnique({
@@ -995,6 +1209,9 @@ router.post('/:id/process',
           entityType: 'RETURN',
           entityId: id,
           userId: req.user!.id,
+          userEmail: req.user!.email || 'unknown',
+          userRole: req.user!.roles?.[0]?.name || 'USER',
+          ipAddress: req.ip || '0.0.0.0',
           metadata: JSON.stringify({
             status: 'COMPLETED',
             itemsCount: returnRecord.returnItems.length,
@@ -1054,7 +1271,8 @@ router.post('/:id/process',
         total,
         returnRecord.refundMethod,
         req.user!.id,
-        organizationId
+        organizationId,
+        operationalContext
       );
 
       return updated;

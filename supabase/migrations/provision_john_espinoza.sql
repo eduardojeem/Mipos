@@ -51,7 +51,8 @@ END $$;
 
 -- 2. Update Trigger Function to handle future signup
 CREATE OR REPLACE FUNCTION public.handle_new_user_saas()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+AS $$
 DECLARE
     default_org_id UUID;
     new_org_id UUID;
@@ -106,4 +107,4 @@ BEGIN
 
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = '';

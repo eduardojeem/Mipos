@@ -1,6 +1,7 @@
 -- Update is_super_admin function to check both user_roles table and users.role column
 CREATE OR REPLACE FUNCTION public.is_super_admin()
-RETURNS BOOLEAN AS $$
+RETURNS BOOLEAN
+AS $$
 BEGIN
     -- Check user_roles table (RBAC)
     IF EXISTS (
@@ -26,4 +27,4 @@ BEGIN
 
     RETURN FALSE;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = '';

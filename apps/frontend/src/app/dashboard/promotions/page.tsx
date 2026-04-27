@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Plus, Search, Download, RefreshCw, FileSpreadsheet, FileJson } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card, CardContent } from '@/components/ui/card';
@@ -21,6 +21,7 @@ import { Pagination } from './components/Pagination';
 import CarouselEditor from './components/CarouselEditor';
 import CarouselAuditLog from './components/CarouselAuditLog';
 import api from '@/lib/api';
+import { getSelectedOrganizationId } from '@/lib/organization-context';
 import * as XLSX from 'xlsx';
 import {
   DropdownMenu,
@@ -46,6 +47,15 @@ interface Promotion {
 
 const logger = createLogger('PromotionsPage');
 
+function deriveProductCounts(promotions: Promotion[]): Record<string, number> {
+  return promotions.reduce<Record<string, number>>((acc, promotion) => {
+    acc[promotion.id] = Array.isArray(promotion.applicableProducts)
+      ? promotion.applicableProducts.length
+      : 0;
+    return acc;
+  }, {});
+}
+
 export default function PromotionsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
@@ -70,33 +80,53 @@ export default function PromotionsPage() {
   const storeLoading = useStore(s => s.loading);
   const storeError = useStore(s => s.error);
 
-  const emptyToastShown = useRef(false);
-
   // ✅ Declarar fetchProductCounts antes de usarla
   const fetchProductCounts = useCallback(async () => {
     try {
       setLoadingCounts(true);
 
       const ids = storeItems.map((p: Promotion) => p.id);
+      const fallbackCounts = deriveProductCounts(storeItems);
+      if (ids.length === 0) {
+        setProductCounts(fallbackCounts);
+        return;
+      }
       logger.log('Fetching counts for IDs:', ids);
 
       try {
-        // Intentar usar el endpoint batch
-        const response = await api.post('/promotions/batch/product-counts', {
-          ids
-        });
+        const orgId = getSelectedOrganizationId();
+        const headers = orgId ? { 'x-organization-id': orgId } : {};
+        const chunkSize = 100;
+        const chunks = Array.from(
+          { length: Math.ceil(ids.length / chunkSize) },
+          (_, index) => ids.slice(index * chunkSize, (index + 1) * chunkSize),
+        );
 
-        console.log('[ProductCounts] Response:', response.data);
+        const responses = await Promise.all(
+          chunks.map((chunk) => api.post(
+            '/promotions/batch/product-counts',
+            { ids: chunk },
+            { headers },
+          ))
+        );
 
-        if (response.data?.success) {
-          setProductCounts(response.data.counts);
-          logger.log('Counts set:', response.data.counts);
+        const mergedCounts = responses.reduce<Record<string, number>>((acc, response) => {
+          if (response.data?.success && response.data?.counts) {
+            Object.assign(acc, response.data.counts);
+          }
+          return acc;
+        }, {});
+
+        if (Object.keys(mergedCounts).length > 0) {
+          setProductCounts(mergedCounts);
+          logger.log('Counts set:', mergedCounts);
           return;
         }
+        setProductCounts(fallbackCounts);
       } catch (batchError: unknown) {
-        logger.log('Batch endpoint failed, skipping mock counts', batchError);
+        logger.log('Batch endpoint failed, using promotion payload counts', batchError);
         // No usar datos mock; mantener counts vacíos para reflejar estado real
-        setProductCounts({});
+        setProductCounts(fallbackCounts);
       }
     } catch (error) {
       logger.error('Failed to fetch:', error);
@@ -112,9 +142,7 @@ export default function PromotionsPage() {
 
   // ✅ Fetch product counts después de cargar promociones
   useEffect(() => {
-    if (storeItems.length > 0) {
-      fetchProductCounts().catch(console.error);
-    }
+    fetchProductCounts().catch(console.error);
   }, [storeItems, fetchProductCounts]);
 
   // ✅ Memoizar función de status para evitar recalcular
@@ -165,15 +193,8 @@ export default function PromotionsPage() {
     setCurrentPage(1);
   }, [searchTerm, statusFilter, sortBy]);
 
-  useEffect(() => {
-    if (!storeLoading && storeItems.length === 0 && !emptyToastShown.current) {
-      toast({
-        title: 'Aún no hay promociones',
-        description: 'Crea tu primera promoción para atraer clientes y aumentar tus ventas.',
-      });
-      emptyToastShown.current = true;
-    }
-  }, [storeLoading, storeItems, toast]);
+  // Only show the empty toast once per session, and only if there are truly no promotions
+  // (not just filtered results) — removed to avoid annoying users on every load
 
   const exportToExcel = () => {
     const data = filteredPromotions.map((p: Promotion) => ({

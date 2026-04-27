@@ -16,25 +16,12 @@ import { formatDate, formatCurrency } from '@/lib/utils';
 import { useToast } from '@/components/ui/use-toast';
 import { getErrorMessage } from '@/lib/api-helpers';
 import { createLogger } from '@/lib/logger';
+import type { Promotion } from '@/lib/validation/promotion-validation';
 import { PromotionDetailsDialog } from './PromotionDetailsDialog';
 import { EditPromotionDialog } from './EditPromotionDialog';
 import { DuplicatePromotionDialog } from './DuplicatePromotionDialog';
 import { ConfirmDeleteDialog } from './ConfirmDeleteDialog';
 import api from '@/lib/api';
-
-interface Promotion {
-  id: string;
-  name: string;
-  description: string;
-  discountType: 'PERCENTAGE' | 'FIXED_AMOUNT';
-  discountValue: number;
-  startDate: string;
-  endDate: string;
-  isActive: boolean;
-  usageCount?: number;
-  usageLimit?: number;
-  applicableProducts?: any[];
-}
 
 interface PromotionCardProps {
   promotion: Promotion;
@@ -54,9 +41,6 @@ export const PromotionCard = memo(function PromotionCard({
   onToggleSelect
 }: PromotionCardProps) {
   const { toast } = useToast();
-
-  // ✅ Debug log (development only)
-  logger.log(`${promotion.name} - productCount:`, productCount);
 
   // ✅ Loading states consolidados
   const [loadingStates, setLoadingStates] = useState({
@@ -117,7 +101,12 @@ export const PromotionCard = memo(function PromotionCard({
 
       onRefresh();
     } catch (error: any) {
-      logger.error(`Failed to toggle promotion ${promotion.id}:`, error);
+      logger.error(`Failed to toggle promotion ${promotion.id}:`, {
+        message: getErrorMessage(error),
+        code: error?.code,
+        status: error?.response?.status,
+        details: error?.response?.data,
+      });
 
       toast({
         title: 'Error',
@@ -143,7 +132,12 @@ export const PromotionCard = memo(function PromotionCard({
 
       onRefresh();
     } catch (error: any) {
-      logger.error(`Failed to delete promotion ${promotion.id}:`, error);
+      logger.error(`Failed to delete promotion ${promotion.id}:`, {
+        message: getErrorMessage(error),
+        code: error?.code,
+        status: error?.response?.status,
+        details: error?.response?.data,
+      });
 
       toast({
         title: 'Error',
@@ -238,7 +232,7 @@ export const PromotionCard = memo(function PromotionCard({
 
       <CardContent className="space-y-4">
         <p className="text-sm text-slate-600 dark:text-slate-400 line-clamp-2">
-          {promotion.description}
+          {promotion.description || 'Sin descripcion'}
         </p>
 
         <div className="flex items-center gap-4 pt-3 border-t border-slate-200 dark:border-slate-800">

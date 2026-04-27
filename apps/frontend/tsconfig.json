@@ -22,9 +22,6 @@
         "name": "next"
       }
     ],
-    "types": [
-      "vitest/globals"
-    ],
     "baseUrl": ".",
     "paths": {
       "@/*": [

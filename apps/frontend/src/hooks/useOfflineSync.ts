@@ -1,6 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { offlineStorage, getOfflineStorageStatus, OfflineTransaction, formatOfflineStorageSize, OfflineCartItem, OfflineSale } from '@/lib/pos/offline-storage';
-import { createClient } from '@/lib/supabase/client';
+import { offlineStorage, getOfflineStorageStatus, OfflineTransaction, formatOfflineStorageSize, OfflineSale } from '@/lib/pos/offline-storage';
 import { toast } from 'sonner';
 
 interface SyncOptions {
@@ -57,50 +56,29 @@ export function useOfflineSync(options: Partial<SyncOptions> = {}): UseOfflineSy
   }, []);
 
   const syncSaleTransaction = useCallback(async (transaction: OfflineTransaction & { type: 'sale' }): Promise<boolean> => {
-    const supabase = createClient();
     const saleData = transaction.data as OfflineSale;
     
-    const { data: existingSale } = await supabase
-      .from('sales')
-      .select('id')
-      .eq('id', saleData.id)
-      .single();
+    // We use the same API proxy to ensure all backend logic (stock, cash, rounding) is applied
+    const response = await fetch('/api/pos/sales', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(saleData.organization_id ? { 'x-organization-id': saleData.organization_id } : {})
+      },
+      body: JSON.stringify({
+        items: saleData.items?.map(item => ({
+          productId: item.product_id,
+          quantity: item.quantity
+        })) || [],
+        paymentMethod: saleData.payment_method,
+        customerId: saleData.customer_id,
+        notes: `${saleData.notes || ''} (Sync Offline: ${saleData.id})`.trim()
+      })
+    });
 
-    if (existingSale) {
-      offlineStorage.updateTransactionStatus(transaction.id, 'synced');
-      return true;
-    }
-
-    const { error: saleError } = await supabase
-      .from('sales')
-      .insert([{
-        id: saleData.id,
-        user_id: saleData.user_id,
-        customer_id: saleData.customer_id,
-        total_amount: saleData.total_amount,
-        tax_amount: saleData.tax_amount,
-        discount_amount: saleData.discount_amount,
-        payment_method: saleData.payment_method,
-        status: saleData.status,
-        created_at: saleData.created_at,
-        updated_at: saleData.updated_at
-      }]);
-
-    if (saleError) throw saleError;
-
-    if (saleData.items && saleData.items.length > 0) {
-      const { error: itemsError } = await supabase
-        .from('sale_items')
-        .insert(saleData.items.map(item => ({
-          sale_id: saleData.id,
-          product_id: item.product_id,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-          total_price: item.total_price,
-          discount_amount: item.discount_amount || 0
-        })));
-
-      if (itemsError) throw itemsError;
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }));
+      throw new Error(errorData.error || `Error HTTP: ${response.status}`);
     }
 
     offlineStorage.updateTransactionStatus(transaction.id, 'synced');
@@ -108,7 +86,7 @@ export function useOfflineSync(options: Partial<SyncOptions> = {}): UseOfflineSy
   }, []);
 
   const syncCartTransaction = useCallback(async (transaction: OfflineTransaction & { type: 'cart' }): Promise<boolean> => {
-    const cartData = transaction.data as OfflineCartItem[];
+    // Cart sync is currently just a placeholder/local status update
     offlineStorage.updateTransactionStatus(transaction.id, 'synced');
     return true;
   }, []);

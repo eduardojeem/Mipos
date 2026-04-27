@@ -8,19 +8,9 @@ import { Edit, Trash2, Power, Calendar, Percent } from 'lucide-react';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { useToast } from '@/components/ui/use-toast';
 import api from '@/lib/api';
-
-interface Promotion {
-  id: string;
-  name: string;
-  description: string;
-  discountType: 'PERCENTAGE' | 'FIXED_AMOUNT';
-  discountValue: number;
-  startDate: string;
-  endDate: string;
-  isActive: boolean;
-  usageCount?: number;
-  usageLimit?: number;
-}
+import type { Promotion } from '@/lib/validation/promotion-validation';
+import { EditPromotionDialog } from './EditPromotionDialog';
+import { ConfirmDeleteDialog } from './ConfirmDeleteDialog';
 
 interface PromotionListItemProps {
   promotion: Promotion;
@@ -31,6 +21,9 @@ interface PromotionListItemProps {
 export function PromotionListItem({ promotion, productCount = 0, onRefresh }: PromotionListItemProps) {
   const { toast } = useToast();
   const [isToggling, setIsToggling] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const getStatus = () => {
     const now = new Date();
@@ -87,9 +80,8 @@ export function PromotionListItem({ promotion, productCount = 0, onRefresh }: Pr
   };
 
   const handleDelete = async () => {
-    if (!confirm('¿Estás seguro de eliminar esta promoción?')) return;
-    
     try {
+      setIsDeleting(true);
       await api.delete(`/promotions/${promotion.id}`);
       toast({
         title: 'Promoción eliminada',
@@ -102,6 +94,9 @@ export function PromotionListItem({ promotion, productCount = 0, onRefresh }: Pr
         description: 'No se pudo eliminar la promoción',
         variant: 'destructive',
       });
+    } finally {
+      setIsDeleting(false);
+      setIsDeleteOpen(false);
     }
   };
 
@@ -168,6 +163,7 @@ export function PromotionListItem({ promotion, productCount = 0, onRefresh }: Pr
               variant="outline"
               size="sm"
               className="gap-2"
+              onClick={() => setIsEditOpen(true)}
               aria-label="Editar"
             >
               <Edit className="h-4 w-4" />
@@ -177,7 +173,7 @@ export function PromotionListItem({ promotion, productCount = 0, onRefresh }: Pr
             <Button
               variant="outline"
               size="sm"
-              onClick={handleDelete}
+              onClick={() => setIsDeleteOpen(true)}
               className="gap-2 text-red-600 hover:text-red-700"
               aria-label="Eliminar"
             >
@@ -187,6 +183,24 @@ export function PromotionListItem({ promotion, productCount = 0, onRefresh }: Pr
           </div>
         </div>
       </CardContent>
+
+      <EditPromotionDialog
+        promotion={promotion}
+        open={isEditOpen}
+        onOpenChange={setIsEditOpen}
+        onSuccess={() => {
+          onRefresh();
+          toast({ title: 'Promoción actualizada', description: 'Los cambios se guardaron exitosamente' });
+        }}
+      />
+
+      <ConfirmDeleteDialog
+        open={isDeleteOpen}
+        promotionName={promotion.name}
+        onConfirm={handleDelete}
+        onCancel={() => setIsDeleteOpen(false)}
+        loading={isDeleting}
+      />
     </Card>
   );
 }

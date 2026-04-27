@@ -2,19 +2,7 @@
 
 import { PromotionCard } from './PromotionCard';
 import { PromotionListItem } from './PromotionListItem';
-
-interface Promotion {
-  id: string;
-  name: string;
-  description: string;
-  discountType: 'PERCENTAGE' | 'FIXED_AMOUNT';
-  discountValue: number;
-  startDate: string;
-  endDate: string;
-  isActive: boolean;
-  usageCount?: number;
-  usageLimit?: number;
-}
+import type { Promotion } from '@/lib/validation/promotion-validation';
 
 interface PromotionsListProps {
   promotions: Promotion[];
@@ -22,19 +10,24 @@ interface PromotionsListProps {
   onRefresh: () => void;
   selectedIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
-  productCounts?: Record<string, number>; // ✅ Nueva prop
-  loadingCounts?: boolean; // ✅ Nueva prop
+  productCounts?: Record<string, number>;
+  loadingCounts?: boolean;
 }
 
-export function PromotionsList({ 
-  promotions, 
-  viewMode, 
+export function PromotionsList({
+  promotions,
+  viewMode,
   onRefresh,
   selectedIds = new Set(),
   onToggleSelect,
-  productCounts = {}, // ✅ Default value
-  loadingCounts = false, // ✅ Default value
+  productCounts = {},
+  loadingCounts = false,
 }: PromotionsListProps) {
+  void loadingCounts;
+
+  const getProductCount = (promotion: Promotion) =>
+    productCounts[promotion.id] ?? promotion.applicableProducts?.length ?? 0;
+
   if (viewMode === 'grid') {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -42,7 +35,7 @@ export function PromotionsList({
           <PromotionCard
             key={promotion.id}
             promotion={promotion}
-            productCount={productCounts[promotion.id] || 0} // ✅ Pasar count
+            productCount={getProductCount(promotion)}
             onRefresh={onRefresh}
             isSelected={selectedIds.has(promotion.id)}
             onToggleSelect={onToggleSelect}
@@ -58,7 +51,7 @@ export function PromotionsList({
         <PromotionListItem
           key={promotion.id}
           promotion={promotion}
-          productCount={productCounts[promotion.id] || 0} // ✅ Pasar count
+          productCount={getProductCount(promotion)}
           onRefresh={onRefresh}
         />
       ))}

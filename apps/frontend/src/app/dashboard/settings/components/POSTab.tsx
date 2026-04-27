@@ -24,8 +24,10 @@ export function POSTab() {
 
   const handleSave = () => {
     if (Object.keys(localSettings).length > 0) {
-      updateSystemSettings.mutate(localSettings);
-      setLocalSettings({});
+      const changes = { ...localSettings };
+      updateSystemSettings.mutate(changes, {
+        onSuccess: () => setLocalSettings({}),
+      });
     }
   };
 
@@ -312,7 +314,8 @@ export function POSTab() {
                     min="1"
                     max="100"
                     className="bg-background border-none h-11"
-                    defaultValue={1}
+                    value={currentSettings.loyalty_points_per_purchase || 1}
+                    onChange={(e) => updateSetting('loyalty_points_per_purchase' as keyof SystemSettings, parseInt(e.target.value) || 1)}
                     placeholder="1 punto por cada ₲1000"
                   />
                 </div>
@@ -326,7 +329,8 @@ export function POSTab() {
                     min="10"
                     max="10000"
                     className="bg-background border-none h-11"
-                    defaultValue={100}
+                    value={currentSettings.loyalty_points_for_reward || 100}
+                    onChange={(e) => updateSetting('loyalty_points_for_reward' as keyof SystemSettings, parseInt(e.target.value) || 100)}
                     placeholder="100 puntos = ₲10,000 descuento"
                   />
                 </div>

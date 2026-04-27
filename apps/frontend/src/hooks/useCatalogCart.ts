@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useToast } from '@/components/ui/use-toast';
+import { useTenantPublicRouting } from '@/hooks/useTenantPublicRouting';
 import type { Product } from '@/types';
 
 export interface CatalogCartItem {
@@ -20,13 +21,20 @@ const MAX_TOTAL_ITEMS = 50;
  */
 export function useCatalogCart() {
     const { toast } = useToast();
+    const { tenantStorageScope } = useTenantPublicRouting();
     const [cart, setCart] = useState<CatalogCartItem[]>([]);
     const [isHydrated, setIsHydrated] = useState(false);
+    const cartStorageKey = useMemo(
+        () => tenantStorageScope === 'default' ? 'catalog_cart' : `catalog_cart_${tenantStorageScope}`,
+        [tenantStorageScope]
+    );
+    const cartUpdateEventName = 'catalog_cart_updated';
 
     // Cargar carrito desde localStorage al montar
     useEffect(() => {
+        setIsHydrated(false);
         try {
-            const savedCart = localStorage.getItem('catalog_cart');
+            const savedCart = localStorage.getItem(cartStorageKey);
             if (savedCart) {
                 const parsed = JSON.parse(savedCart);
                 const rawCart = Array.isArray(parsed) ? parsed : [];
@@ -54,22 +62,30 @@ export function useCatalogCart() {
                     })
                     .filter(Boolean);
                 setCart(sanitized as CatalogCartItem[]);
+            } else {
+                setCart([]);
             }
         } catch (error) {
             console.error('Error loading cart from localStorage:', error);
+            setCart([]);
         } finally {
             setIsHydrated(true);
         }
-    }, []);
+    }, [cartStorageKey]);
 
     // Guardar carrito en localStorage cuando cambie
     useEffect(() => {
         if (!isHydrated) return;
 
         try {
-            localStorage.setItem('catalog_cart', JSON.stringify(cart));
+            localStorage.setItem(cartStorageKey, JSON.stringify(cart));
             try {
-                const evt = new CustomEvent('catalog_cart_updated', { detail: cart });
+                const evt = new CustomEvent(cartUpdateEventName, {
+                    detail: {
+                        key: cartStorageKey,
+                        cart,
+                    },
+                });
                 window.dispatchEvent(evt);
             } catch {}
         } catch (error) {
@@ -82,14 +98,14 @@ export function useCatalogCart() {
                 });
             }
         }
-    }, [cart, isHydrated, toast]);
+    }, [cart, isHydrated, toast, cartStorageKey]);
 
     // Sincronizar entre pestañas
     useEffect(() => {
         const handleStorage = (e: StorageEvent) => {
-            if (e.key === 'catalog_cart' && e.newValue) {
+            if (e.key === cartStorageKey) {
                 try {
-                    const parsed = JSON.parse(e.newValue);
+                    const parsed = e.newValue ? JSON.parse(e.newValue) : [];
                     setCart(Array.isArray(parsed) ? parsed : []);
                 } catch (error) {
                     console.error('Error parsing cart from storage event:', error);
@@ -101,17 +117,17 @@ export function useCatalogCart() {
         const handleLocalUpdate = (e: Event) => {
             try {
                 const detail = (e as CustomEvent).detail;
-                if (Array.isArray(detail)) {
-                    setCart(detail);
+                if (detail?.key === cartStorageKey && Array.isArray(detail.cart)) {
+                    setCart(detail.cart);
                 }
             } catch {}
         };
-        window.addEventListener('catalog_cart_updated', handleLocalUpdate as EventListener);
+        window.addEventListener(cartUpdateEventName, handleLocalUpdate as EventListener);
         return () => {
             window.removeEventListener('storage', handleStorage);
-            window.removeEventListener('catalog_cart_updated', handleLocalUpdate as EventListener);
+            window.removeEventListener(cartUpdateEventName, handleLocalUpdate as EventListener);
         };
-    }, []);
+    }, [cartStorageKey]);
 
     const addToCart = useCallback((product: Product, quantity: number = 1) => {
         const maxQty = Math.max(0, Number(product.stock_quantity || 0));

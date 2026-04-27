@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/server';
+import { requireOrganization } from '@/lib/organization';
 
-// POST /api/products/bulk-delete - Delete multiple products
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await requireOrganization(request);
     const body = await request.json();
-    const { ids } = body;
+    const ids = Array.isArray(body?.ids)
+      ? body.ids.map((id: unknown) => String(id || '').trim()).filter(Boolean)
+      : [];
 
-    if (!Array.isArray(ids) || ids.length === 0) {
+    if (!ids.length) {
       return NextResponse.json(
         { error: 'Product IDs array is required' },
         { status: 400 }
@@ -21,13 +24,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = await createClient();
+    const supabase = await createAdminClient();
 
-    // Check which products exist
-    const { data: existingProducts } = await supabase
+    const { data: existingProducts, error: existingProductsError } = await supabase
       .from('products')
       .select('id, name')
+      .eq('organization_id', orgId)
       .in('id', ids);
+
+    if (existingProductsError) {
+      throw existingProductsError;
+    }
 
     if (!existingProducts || existingProducts.length === 0) {
       return NextResponse.json(
@@ -36,32 +43,37 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const existingIds = existingProducts.map((p: { id: string }) => p.id);
+    const existingIds = existingProducts.map((product: { id: string }) => product.id);
 
-    // Check which products have sales history
-    const { data: productsWithSales } = await supabase
+    const { data: productsWithSales, error: productsWithSalesError } = await supabase
       .from('sale_items')
       .select('product_id')
       .in('product_id', existingIds);
 
-    const idsWithSales = new Set((productsWithSales?.map((item: { product_id: string }) => item.product_id) || []));
+    if (productsWithSalesError) {
+      throw productsWithSalesError;
+    }
+
+    const idsWithSales = new Set(
+      (productsWithSales || []).map((item: { product_id: string }) => item.product_id)
+    );
     const idsToDeactivate = existingIds.filter((id: string) => idsWithSales.has(id));
     const idsToDelete = existingIds.filter((id: string) => !idsWithSales.has(id));
 
     const results = {
       deleted: 0,
       deactivated: 0,
-      errors: [] as string[]
+      errors: [] as string[],
     };
 
-    // Deactivate products with sales history
     if (idsToDeactivate.length > 0) {
       const { error: deactivateError } = await supabase
         .from('products')
-        .update({ 
+        .update({
           is_active: false,
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         })
+        .eq('organization_id', orgId)
         .in('id', idsToDeactivate);
 
       if (deactivateError) {
@@ -71,11 +83,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Delete products without sales history
     if (idsToDelete.length > 0) {
       const { error: deleteError } = await supabase
         .from('products')
         .delete()
+        .eq('organization_id', orgId)
         .in('id', idsToDelete);
 
       if (deleteError) {
@@ -92,16 +104,14 @@ export async function POST(request: NextRequest) {
       success: !hasErrors || totalProcessed > 0,
       results,
       message: `Processed ${totalProcessed} products. ${results.deleted} deleted, ${results.deactivated} deactivated.`,
-      ...(hasErrors && { errors: results.errors })
+      ...(hasErrors ? { errors: results.errors } : {}),
     });
-
   } catch (error) {
     console.error('Bulk delete products error:', error);
-    
     return NextResponse.json(
-      { 
+      {
         error: 'Failed to delete products',
-        details: error instanceof Error ? error.message : 'Unknown error'
+        details: error instanceof Error ? error.message : 'Unknown error',
       },
       { status: 500 }
     );

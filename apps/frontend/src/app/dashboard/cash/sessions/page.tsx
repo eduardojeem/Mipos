@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, cn } from "@/lib/utils";
 import { formatDateTime } from "@/lib/date-utils";
-import { Clock, RefreshCw, CheckCircle, XCircle, Download, List, ChevronUp, ChevronDown } from "lucide-react";
+import { Activity, AlertCircle, Clock, RefreshCw, CheckCircle, XCircle, Download, List } from "lucide-react";
 import { UnifiedPermissionGuard, WithPermission } from "@/components/auth/UnifiedPermissionGuard";
 import { Pagination } from "@/components/ui/Pagination";
 import { usePagination } from "@/hooks/usePagination";
@@ -26,6 +26,8 @@ import { useSessionsRealtime } from "./hooks/useSessionsRealtime";
 import { Input } from "@/components/ui/input";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger, DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useDebounce } from "use-debounce";
+import { useCurrentOrganizationId } from "@/hooks/use-current-organization";
 
 
 
@@ -35,7 +37,11 @@ type CashCount = {
   total: number;
 };
 
-const apiBase = process.env.NEXT_PUBLIC_API_BASE ?? "";
+type SessionCount = {
+  denomination: number | string;
+  quantity?: number | string | null;
+  total?: number | string | null;
+};
 
 export default function SessionsPage() {
   const queryClient = useQueryClient();
@@ -43,6 +49,7 @@ export default function SessionsPage() {
   const { exportToCSV } = useExportSessions();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const organizationId = useCurrentOrganizationId();
 
   // Filtros
   const [filterStatus, setFilterStatus] = useState<string>("all");
@@ -56,6 +63,33 @@ export default function SessionsPage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'openedAt' | 'closedAt' | 'status'>('openedAt');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [localSearch, setLocalSearch] = useState("");
+  const [visibleCols, setVisibleCols] = useState<Record<string, boolean>>({
+    status: true,
+    openingAmount: true,
+    totalSold: true,
+    actualCash: true,
+    systemExpected: true,
+    discrepancyAmount: true,
+    users: true,
+    dates: true,
+    actions: true,
+  });
+
+  const colLabels: Record<string, string> = {
+    status: "Estado",
+    openingAmount: "Monto apertura",
+    totalSold: "Ventas",
+    actualCash: "Efectivo real",
+    systemExpected: "Esperado",
+    discrepancyAmount: "Diferencia",
+    users: "Usuario",
+    dates: "Fecha",
+    actions: "Acciones",
+  };
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsSession, setDetailsSession] = useState<CashSession | null>(null);
+  const [debouncedSearch] = useDebounce(localSearch, 350);
 
   // Paginación
   const { pagination, controls, setTotal } = usePagination({ initialLimit: 15 });
@@ -67,6 +101,7 @@ export default function SessionsPage() {
       from: filterFrom || undefined,
       to: filterTo || undefined,
       userId: filterUser !== "all" ? filterUser : undefined,
+      search: debouncedSearch || undefined,
       showHistory,
     },
     page: pagination.page,
@@ -75,28 +110,14 @@ export default function SessionsPage() {
     orderDir: sortDir,
   });
 
-  useSessionsRealtime(true);
-
-  const [localSearch, setLocalSearch] = useState("");
-  const [visibleCols, setVisibleCols] = useState<Record<string, boolean>>({ status: true, openingAmount: true, closingAmount: true, systemExpected: true, discrepancyAmount: true, counts: true, users: true, dates: true, actions: true });
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const [detailsSession, setDetailsSession] = useState<CashSession | null>(null);
+  useSessionsRealtime(Boolean(organizationId));
 
   const { data: usersRes } = useQuery({
-    queryKey: ["usersOptionsSessions"],
+    queryKey: ["usersOptionsSessions", organizationId ?? "no-org"],
+    enabled: Boolean(organizationId),
     queryFn: async () => {
-      try {
-        const supabase = createClient();
-        const { data, error } = await supabase
-          .from('users')
-          .select('id, email, full_name')
-          .order('created_at', { ascending: false });
-        if (error) throw error;
-        return { source: 'supabase', users: data || [] } as any;
-      } catch {
-        const res = await api.get('/users');
-        return { source: 'api', users: (res?.data?.data || res?.data?.users || []) } as any;
-      }
+      const res = await api.get('/users');
+      return { source: 'api', users: (res?.data?.data || res?.data?.users || []) } as any;
     },
     staleTime: 300_000,
   });
@@ -133,6 +154,7 @@ export default function SessionsPage() {
     const f = sp.get('from') || undefined;
     const t = sp.get('to') || undefined;
     const u = sp.get('user') || undefined;
+    const q = sp.get('search') || '';
     const p = parseInt(sp.get('page') || '1', 10);
     const l = parseInt(sp.get('limit') || String(pagination.limit), 10);
     const ob = (sp.get('orderBy') as any) || undefined;
@@ -141,6 +163,7 @@ export default function SessionsPage() {
     if (f) setFilterFrom(f);
     if (t) setFilterTo(t);
     if (u) setFilterUser(u);
+    setLocalSearch(q);
     if (!Number.isNaN(p) && p > 0) controls.goToPage(p);
     if (!Number.isNaN(l) && l > 0) controls.setLimit(l);
     if (ob === 'openedAt' || ob === 'closedAt' || ob === 'status') setSortBy(ob);
@@ -148,8 +171,12 @@ export default function SessionsPage() {
   }, [searchParams]);
 
   React.useEffect(() => {
-    updateUrl({ status: filterStatus !== 'all' ? filterStatus : undefined, from: filterFrom || undefined, to: filterTo || undefined, user: filterUser !== 'all' ? filterUser : undefined, page: pagination.page, limit: pagination.limit, orderBy: sortBy, orderDir: sortDir });
-  }, [filterStatus, filterFrom, filterTo, filterUser, pagination.page, pagination.limit, sortBy, sortDir, updateUrl]);
+    updateUrl({ status: filterStatus !== 'all' ? filterStatus : undefined, from: filterFrom || undefined, to: filterTo || undefined, user: filterUser !== 'all' ? filterUser : undefined, search: debouncedSearch || undefined, page: pagination.page, limit: pagination.limit, orderBy: sortBy, orderDir: sortDir });
+  }, [filterStatus, filterFrom, filterTo, filterUser, debouncedSearch, pagination.page, pagination.limit, sortBy, sortDir, updateUrl]);
+
+  React.useEffect(() => {
+    controls.goToPage(1);
+  }, [debouncedSearch, controls.goToPage]);
 
   const handleSort = React.useCallback((key: 'openedAt' | 'closedAt' | 'status') => {
     if (sortBy === key) {
@@ -186,6 +213,7 @@ export default function SessionsPage() {
     setFilterFrom("");
     setFilterTo("");
     setFilterUser("all");
+    setLocalSearch("");
     controls.goToPage(1);
   };
 
@@ -206,7 +234,8 @@ export default function SessionsPage() {
     };
 
     sessions.forEach((s) => {
-      if (s.discrepancyAmount) stats.totalDiscrepancy += Math.abs(s.discrepancyAmount);
+      const discrepancy = s.summary?.differenceAmount ?? s.discrepancyAmount;
+      if (discrepancy) stats.totalDiscrepancy += Math.abs(discrepancy);
       const status = (s.status || '').toUpperCase();
       if (status === "OPEN") stats.open++;
       else if (status === "CLOSED") stats.closed++;
@@ -230,46 +259,38 @@ export default function SessionsPage() {
       minWidth: 140,
     },
     {
-      key: 'closingAmount',
-      header: 'Cierre',
-      render: (s: CashSession) => s.closingAmount ? formatCurrency(s.closingAmount) : '-',
+      key: 'totalSold',
+      header: 'Ventas',
+      render: (s: CashSession) => <span className="font-medium">{formatCurrency(s.summary?.totalSold || 0)}</span>,
       minWidth: 140,
     },
     {
       key: 'systemExpected',
       header: 'Esperado',
-      render: (s: CashSession) => s.systemExpected ? formatCurrency(s.systemExpected) : '-',
+      render: (s: CashSession) => s.systemExpected != null ? formatCurrency(s.systemExpected) : '-',
+      minWidth: 140,
+    },
+    {
+      key: 'actualCash',
+      header: 'Real',
+      render: (s: CashSession) => {
+        const actualCash = s.summary?.actualCash ?? s.closingAmount;
+        return actualCash != null ? formatCurrency(actualCash) : '-';
+      },
       minWidth: 140,
     },
     {
       key: 'discrepancyAmount',
-      header: 'Discrepancia',
+      header: 'Diferencia',
       render: (s: CashSession) => (
         <div className="space-y-1">
-          {getDiscrepancyBadge(s.discrepancyAmount)}
-          {s.discrepancyAmount ? (
-            <div className="text-xs text-muted-foreground">{formatCurrency(s.discrepancyAmount)}</div>
+          {getDiscrepancyBadge(s.summary?.differenceAmount ?? s.discrepancyAmount)}
+          {(s.summary?.differenceAmount ?? s.discrepancyAmount) ? (
+            <div className="text-xs text-muted-foreground">{formatCurrency((s.summary?.differenceAmount ?? s.discrepancyAmount) || 0)}</div>
           ) : null}
         </div>
       ),
       minWidth: 160,
-    },
-    {
-      key: 'counts',
-      header: 'Conteo',
-      render: (s: CashSession) => {
-        const counts = (s as any).counts || [];
-        if (Array.isArray(counts) && counts.length > 0) {
-          const total = counts.reduce((sum: number, c: any) => sum + Number(c.total || 0), 0);
-          return formatCurrency(total);
-        }
-        return (
-          <Button variant="outline" size="sm" onClick={() => openCountModal(s)}>
-            Sin conteo
-          </Button>
-        );
-      },
-      minWidth: 140,
     },
     {
       key: 'users',
@@ -302,14 +323,14 @@ export default function SessionsPage() {
       header: 'Acciones',
       render: (s: CashSession) => (
         <div className="flex gap-2">
-          <WithPermission resource="cash" action="update">
+          <WithPermission resource="cash" action="close">
             <Button
               variant="outline"
               size="sm"
               onClick={() => openCountModal(s)}
-              disabled={false}
+              disabled={(s.status || '').toUpperCase() !== 'OPEN'}
             >
-              Conteo
+              Arqueo
             </Button>
           </WithPermission>
           <Button
@@ -351,17 +372,6 @@ export default function SessionsPage() {
     );
   };
 
-  const visibleSessions = useMemo(() => {
-    const q = localSearch.trim().toLowerCase();
-    if (!q) return sessions;
-    return sessions.filter(s => {
-      const opened = (s.openedByUser?.fullName || s.openedByUser?.email || '').toLowerCase();
-      const closed = (s.closedByUser?.fullName || s.closedByUser?.email || '').toLowerCase();
-      const notes = (s.notes || '').toLowerCase();
-      return opened.includes(q) || closed.includes(q) || notes.includes(q) || s.status.toLowerCase().includes(q);
-    });
-  }, [sessions, localSearch]);
-
   const getDiscrepancyBadge = (discrepancy: number | null | undefined) => {
     if (discrepancy == null) return null;
     const abs = Math.abs(discrepancy);
@@ -381,33 +391,17 @@ export default function SessionsPage() {
     setCounts(newCounts);
   };
 
-  const loadCountsForSession = async (sessionId: string) => {
-    try {
-      const supabase = createClient();
-      const { data } = await supabase
-        .from('cash_counts')
-        .select('denomination, quantity, total')
-        .eq('session_id', sessionId);
-      const existingCounts = counts.map(c => {
-        const match = Array.isArray(data) ? data.find((ec: any) => Number(ec.denomination) === c.denomination) : null;
-        return match ? { ...c, quantity: Number(match.quantity) || 0, total: Number(match.total) || (c.denomination * (Number(match.quantity) || 0)) } : c;
-      });
-      setCounts(existingCounts);
-    } catch {
-      setCounts(counts.map(c => ({ ...c, quantity: 0, total: 0 })));
-    }
-  };
-
-  const openCountModal = async (session: CashSession) => {
+  const openCountModal = (session: CashSession) => {
     setSelectedSession(session);
-    if (Array.isArray(session.counts) && session.counts.length > 0) {
+    const sessionCounts = Array.isArray(session.counts) ? (session.counts as SessionCount[]) : [];
+    if (sessionCounts.length > 0) {
       const existingCounts = counts.map(c => {
-        const match = session.counts!.find(ec => Number(ec.denomination) === c.denomination);
+        const match = sessionCounts.find((ec) => Number(ec.denomination) === c.denomination);
         return match ? { ...c, quantity: Number(match.quantity) || 0, total: Number(match.total) || (c.denomination * (Number(match.quantity) || 0)) } : c;
       });
       setCounts(existingCounts);
     } else {
-      await loadCountsForSession(session.id);
+      setCounts(counts.map(c => ({ ...c, quantity: 0, total: 0 })));
     }
     setShowCountModal(true);
   };
@@ -441,9 +435,10 @@ export default function SessionsPage() {
   return (
     <UnifiedPermissionGuard resource="cash" action="read">
       <div className="space-y-6" style={{ contentVisibility: 'auto', containIntrinsicSize: '1200px' }}>
-        <div className="flex items-center justify-between">
+        {/* Cabecera principal */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
+            <h1 className="flex items-center gap-2 text-2xl font-bold">
               <Clock className="h-6 w-6" />
               Sesiones de Caja
             </h1>
@@ -451,7 +446,7 @@ export default function SessionsPage() {
               Historial completo de aperturas y cierres de caja
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant={showHistory ? "default" : "outline"}
               size="sm"
@@ -479,87 +474,81 @@ export default function SessionsPage() {
               <RefreshCw className={cn("h-4 w-4 mr-2", loadingSessions && "animate-spin")} />
               {loadingSessions ? "Actualizando..." : "Actualizar"}
             </Button>
-            <div className="hidden sm:flex items-center gap-2">
-              <Input value={localSearch} onChange={e => setLocalSearch(e.target.value)} placeholder="Buscar usuario, estado, notas" className="w-64" />
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm">Columnas</Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  <DropdownMenuLabel>Visibilidad</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {Object.keys(visibleCols).map(k => (
-                    <DropdownMenuCheckboxItem key={k} checked={visibleCols[k]} onCheckedChange={(v) => setVisibleCols(prev => ({ ...prev, [k]: Boolean(v) }))}>{k}</DropdownMenuCheckboxItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-            <Button
-              variant={filterStatus === "OPEN" ? "default" : "outline"}
-              size="sm"
-              onClick={() => { setFilterStatus("OPEN"); controls.goToPage(1); }}
-              disabled={loadingSessions}
-            >
-              Abiertas
-            </Button>
-            <Button
-              variant={filterStatus === "CLOSED" ? "default" : "outline"}
-              size="sm"
-              onClick={() => { setFilterStatus("CLOSED"); controls.goToPage(1); }}
-              disabled={loadingSessions}
-            >
-              Cerradas
-            </Button>
-            <Button
-              variant={filterStatus === "CANCELLED" ? "default" : "outline"}
-              size="sm"
-              onClick={() => { setFilterStatus("CANCELLED"); controls.goToPage(1); }}
-              disabled={loadingSessions}
-            >
-              Canceladas
-            </Button>
-            <Button
-              variant={filterUser !== "all" ? "default" : "outline"}
-              size="sm"
-              onClick={() => { if (currentUserId) { setFilterUser(currentUserId); controls.goToPage(1); } }}
-              disabled={loadingSessions || !currentUserId}
-            >
-              Mis sesiones
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => updateUrl({ status: filterStatus !== 'all' ? filterStatus : undefined, from: filterFrom || undefined, to: filterTo || undefined, user: filterUser !== 'all' ? filterUser : undefined, page: pagination.page, limit: pagination.limit, orderBy: sortBy, orderDir: sortDir })}
-            >
-              Guardar estado
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">Columnas</Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuLabel>Visibilidad de columnas</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {Object.keys(visibleCols).map(k => (
+                  <DropdownMenuCheckboxItem
+                    key={k}
+                    checked={visibleCols[k]}
+                    onCheckedChange={(v) => setVisibleCols(prev => ({ ...prev, [k]: Boolean(v) }))}
+                  >
+                    {colLabels[k] || k}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
+        </div>
+
+        {/* Barra de búsqueda */}
+        <div className="flex items-center gap-2">
+          <Input
+            value={localSearch}
+            onChange={e => setLocalSearch(e.target.value)}
+            placeholder="Buscar por estado, notas o ID de sesión..."
+            className="max-w-md"
+          />
         </div>
 
         {/* Estadísticas */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-4">
-              <div className="text-2xl font-bold">{sessionStats.total}</div>
-              <p className="text-xs text-muted-foreground">Total Sesiones</p>
+          <Card className="border-slate-200/70 bg-gradient-to-br from-slate-50 to-background dark:border-slate-800 dark:from-slate-900/50">
+            <CardContent className="flex items-center gap-3 p-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 ring-2 ring-slate-200/50 dark:bg-slate-800 dark:ring-slate-700/50">
+                <Activity className="h-5 w-5 text-slate-600 dark:text-slate-400" />
+              </div>
+              <div>
+                <div className="text-2xl font-bold">{sessionStats.total}</div>
+                <p className="text-xs text-muted-foreground">Total Sesiones</p>
+              </div>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="text-2xl font-bold text-green-600">{sessionStats.open}</div>
-              <p className="text-xs text-muted-foreground">Abiertas</p>
+          <Card className="border-emerald-200/50 bg-gradient-to-br from-emerald-50/50 to-background dark:border-emerald-900/30 dark:from-emerald-900/20">
+            <CardContent className="flex items-center gap-3 p-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 ring-2 ring-emerald-200/50 dark:bg-emerald-900/50 dark:ring-emerald-800/50">
+                <CheckCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{sessionStats.open}</div>
+                <p className="text-xs text-muted-foreground">Abiertas</p>
+              </div>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="text-2xl font-bold text-blue-600">{sessionStats.closed}</div>
-              <p className="text-xs text-muted-foreground">Cerradas</p>
+          <Card className="border-blue-200/50 bg-gradient-to-br from-blue-50/50 to-background dark:border-blue-900/30 dark:from-blue-900/20">
+            <CardContent className="flex items-center gap-3 p-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-100 ring-2 ring-blue-200/50 dark:bg-blue-900/50 dark:ring-blue-800/50">
+                <XCircle className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{sessionStats.closed}</div>
+                <p className="text-xs text-muted-foreground">Cerradas</p>
+              </div>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="text-2xl font-bold text-red-600">{formatCurrency(sessionStats.totalDiscrepancy)}</div>
-              <p className="text-xs text-muted-foreground">Total Discrepancias</p>
+          <Card className="border-rose-200/50 bg-gradient-to-br from-rose-50/50 to-background dark:border-rose-900/30 dark:from-rose-900/20">
+            <CardContent className="flex items-center gap-3 p-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-100 ring-2 ring-rose-200/50 dark:bg-rose-900/50 dark:ring-rose-800/50">
+                <AlertCircle className="h-5 w-5 text-rose-600 dark:text-rose-400" />
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-rose-600 dark:text-rose-400">{formatCurrency(sessionStats.totalDiscrepancy)}</div>
+                <p className="text-xs text-muted-foreground">Total Discrepancias</p>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -587,6 +576,45 @@ export default function SessionsPage() {
           defaultExpanded={false}
         />
 
+        {/* Filtros rápidos de fecha — siempre visibles */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-muted-foreground">Fecha rápida:</span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 rounded-full px-3 text-xs"
+            onClick={() => { const d = new Date(); setFilterFrom(d.toISOString().split('T')[0]); setFilterTo(d.toISOString().split('T')[0]); controls.goToPage(1); }}
+          >
+            Hoy
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 rounded-full px-3 text-xs"
+            onClick={() => { const d = new Date(); const from = new Date(); from.setDate(d.getDate() - 7); setFilterFrom(from.toISOString().split('T')[0]); setFilterTo(d.toISOString().split('T')[0]); controls.goToPage(1); }}
+          >
+            Últimos 7 días
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 rounded-full px-3 text-xs"
+            onClick={() => { const d = new Date(); const from = new Date(); from.setDate(d.getDate() - 30); setFilterFrom(from.toISOString().split('T')[0]); setFilterTo(d.toISOString().split('T')[0]); controls.goToPage(1); }}
+          >
+            Últimos 30 días
+          </Button>
+          {(filterFrom || filterTo) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 rounded-full px-3 text-xs text-muted-foreground"
+              onClick={() => { setFilterFrom(''); setFilterTo(''); controls.goToPage(1); }}
+            >
+              Limpiar fecha
+            </Button>
+          )}
+        </div>
+
         {/* Tabla de sesiones */}
         <Card>
           <CardHeader>
@@ -596,21 +624,21 @@ export default function SessionsPage() {
             {loadingSessions ? (
               <TableSkeleton rows={10} columns={8} />
             ) : sessions.length === 0 ? (
-              <div className="text-sm text-gray-600 text-center py-8">No se encontraron sesiones</div>
+              <div className="flex flex-col items-center gap-3 py-14 text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted ring-4 ring-muted/50">
+                  <Clock className="h-6 w-6 text-muted-foreground/60" />
+                </div>
+                <div>
+                  <p className="font-medium text-muted-foreground">No se encontraron sesiones</p>
+                  <p className="mt-1 text-sm text-muted-foreground/70">
+                    Prueba ajustando los filtros o cambiando el rango de fechas
+                  </p>
+                </div>
+              </div>
             ) : (
               <div className="overflow-x-auto">
-                <div className="flex items-center gap-2 mb-2">
-                  <Button variant={sortBy === 'status' ? 'default' : 'outline'} size="sm" onClick={() => handleSort('status')}>Estado {sortBy === 'status' ? (sortDir === 'asc' ? <ChevronUp className="h-3 w-3 ml-1" /> : <ChevronDown className="h-3 w-3 ml-1" />) : null}</Button>
-                  <Button variant={sortBy === 'closedAt' ? 'default' : 'outline'} size="sm" onClick={() => handleSort('closedAt')}>Cierre {sortBy === 'closedAt' ? (sortDir === 'asc' ? <ChevronUp className="h-3 w-3 ml-1" /> : <ChevronDown className="h-3 w-3 ml-1" />) : null}</Button>
-                  <Button variant={sortBy === 'openedAt' ? 'default' : 'outline'} size="sm" onClick={() => handleSort('openedAt')}>Fecha {sortBy === 'openedAt' ? (sortDir === 'asc' ? <ChevronUp className="h-3 w-3 ml-1" /> : <ChevronDown className="h-3 w-3 ml-1" />) : null}</Button>
-                </div>
-                <div className="flex items-center gap-2 mb-2">
-                  <Button variant="outline" size="sm" onClick={() => { const d = new Date(); const from = new Date(d.getFullYear(), d.getMonth(), d.getDate()); const to = d; setFilterFrom(from.toISOString().split('T')[0]); setFilterTo(to.toISOString().split('T')[0]); controls.goToPage(1); }}>Hoy</Button>
-                  <Button variant="outline" size="sm" onClick={() => { const d = new Date(); const from = new Date(); from.setDate(d.getDate() - 7); setFilterFrom(from.toISOString().split('T')[0]); setFilterTo(d.toISOString().split('T')[0]); controls.goToPage(1); }}>Últimos 7 días</Button>
-                  <Button variant="outline" size="sm" onClick={() => { const d = new Date(); const from = new Date(); from.setDate(d.getDate() - 30); setFilterFrom(from.toISOString().split('T')[0]); setFilterTo(d.toISOString().split('T')[0]); controls.goToPage(1); }}>Últimos 30 días</Button>
-                </div>
                 <VirtualizedTable<CashSession>
-                  data={visibleSessions}
+                  data={sessions}
                   columns={sessionsColumns as any}
                   height={560}
                   itemHeight={68}
@@ -643,7 +671,7 @@ export default function SessionsPage() {
           isSaving={saveCountsMutation.isPending}
         />
         <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-          <DialogContent>
+          <DialogContent className="max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Detalle de Sesión</DialogTitle>
             </DialogHeader>
@@ -660,16 +688,68 @@ export default function SessionsPage() {
                   </div>
                   <div>
                     <div className="text-muted-foreground">Cierre</div>
-                    <div>{detailsSession.closingAmount != null ? formatCurrency(detailsSession.closingAmount) : '-'}</div>
+                    <div>{detailsSession.summary?.actualCash != null ? formatCurrency(detailsSession.summary.actualCash) : detailsSession.closingAmount != null ? formatCurrency(detailsSession.closingAmount) : '-'}</div>
                   </div>
                   <div>
                     <div className="text-muted-foreground">Esperado</div>
-                    <div>{detailsSession.systemExpected != null ? formatCurrency(detailsSession.systemExpected) : '-'}</div>
+                    <div>{detailsSession.summary?.expectedCash != null ? formatCurrency(detailsSession.summary.expectedCash) : detailsSession.systemExpected != null ? formatCurrency(detailsSession.systemExpected) : '-'}</div>
                   </div>
                   <div>
                     <div className="text-muted-foreground">Diferencia</div>
-                    <div>{detailsSession.discrepancyAmount != null ? formatCurrency(detailsSession.discrepancyAmount) : '-'}</div>
+                    <div>{detailsSession.summary?.differenceAmount != null ? formatCurrency(detailsSession.summary.differenceAmount) : detailsSession.discrepancyAmount != null ? formatCurrency(detailsSession.discrepancyAmount) : '-'}</div>
                   </div>
+                  <div>
+                    <div className="text-muted-foreground">Ventas del turno</div>
+                    <div>{formatCurrency(detailsSession.summary?.totalSold || 0)}</div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground">Ingresos manuales</div>
+                    <div>{formatCurrency(detailsSession.summary?.manualIn || 0)}</div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground">Egresos manuales</div>
+                    <div>{formatCurrency(detailsSession.summary?.manualOut || 0)}</div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground">Devoluciones</div>
+                    <div>{formatCurrency(detailsSession.summary?.refunds || 0)}</div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground">Sucursal</div>
+                    <div>{detailsSession.branchId || '-'}</div>
+                  </div>
+                  <div>
+                    <div className="text-muted-foreground">Caja / POS</div>
+                    <div>{detailsSession.posId || '-'}</div>
+                  </div>
+                </div>
+                {detailsSession.notes ? (
+                  <div>
+                    <div className="text-sm font-medium mb-2">Notas</div>
+                    <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                      {detailsSession.notes}
+                    </div>
+                  </div>
+                ) : null}
+                <div>
+                  <div className="text-sm font-medium mb-2">Metodos de pago</div>
+                  {Array.isArray(detailsSession.summary?.paymentMethods) && detailsSession.summary.paymentMethods.length > 0 ? (
+                    <div className="space-y-2">
+                      {detailsSession.summary.paymentMethods.map((method) => (
+                        <div key={method.method} className="flex items-center justify-between text-sm border rounded-md px-3 py-2">
+                          <div>
+                            <div className="font-medium">{method.label}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {method.count} operaciones{method.affectsCash ? ' • impacta efectivo' : ''}
+                            </div>
+                          </div>
+                          <div className="font-medium">{formatCurrency(method.amount)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">Sin ventas registradas</div>
+                  )}
                 </div>
                 <div>
                   <div className="text-sm font-medium mb-2">Conteos</div>

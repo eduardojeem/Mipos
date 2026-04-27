@@ -1,70 +1,118 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-// (removed conflicting import; local createAdminClient is defined below)
-import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase-admin';
+import { getValidatedOrganizationId } from '@/lib/organization';
+import { carouselCache, getCarouselCacheKey, type CarouselPayload } from './cache';
 
 export const dynamic = 'force-dynamic';
 
-type CarouselPayload = { success: boolean; ids: string[] }
-type CachedEntry = { expiresAt: number; payload: CarouselPayload }
-const carouselCache = new Map<string, CachedEntry>()
+async function resolveCarouselContext(request: NextRequest) {
+  const supabaseAuth = await createClient();
+  const {
+    data: { user },
+    error,
+  } = await supabaseAuth.auth.getUser();
 
-// Create admin client with service role key for bypassing RLS
-function createAdminClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-  if (!supabaseUrl || !supabaseServiceKey) {
-    throw new Error('Missing Supabase configuration')
+  if (error || !user) {
+    return {
+      user: null,
+      organizationId: null,
+      response: NextResponse.json(
+        { success: false, message: 'No autorizado' },
+        { status: 401 },
+      ),
+    };
   }
 
-  return createSupabaseClient(supabaseUrl, supabaseServiceKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    }
-  })
+  const organizationId = await getValidatedOrganizationId(request);
+  if (!organizationId) {
+    return {
+      user,
+      organizationId: null,
+      response: NextResponse.json(
+        { success: false, message: 'No se pudo resolver la organizacion activa' },
+        { status: 400 },
+      ),
+    };
+  }
+
+  return {
+    user,
+    organizationId,
+    response: null,
+  };
 }
 
-export async function GET() {
+async function validatePromotionIds(
+  supabase: ReturnType<typeof createAdminClient>,
+  organizationId: string,
+  ids: string[],
+) {
+  if (ids.length === 0) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('promotions')
+    .select('id')
+    .eq('organization_id', organizationId)
+    .in('id', ids);
+
+  if (error) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: 'Error al validar las promociones seleccionadas',
+        error: error.message,
+        code: error.code,
+        details: error.details,
+      },
+      { status: 500 },
+    );
+  }
+
+  if ((data || []).length !== ids.length) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: 'Algunas promociones no pertenecen a la organizacion activa',
+      },
+      { status: 400 },
+    );
+  }
+
+  return null;
+}
+
+export async function GET(request: NextRequest) {
   try {
-    const cached = carouselCache.get('ids')
+    const context = await resolveCarouselContext(request);
+    if (context.response) {
+      return context.response;
+    }
+
+    const organizationId = context.organizationId as string;
+    const cacheKey = getCarouselCacheKey(organizationId);
+    const cached = carouselCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
-      return NextResponse.json(cached.payload, { headers: { 'x-cache': 'HIT' } })
+      return NextResponse.json(cached.payload, { headers: { 'x-cache': 'HIT' } });
     }
 
-    console.log('[API/Carousel] GET request - fetching from Supabase')
-
-    // Use admin client to ensure we can read the carousel even if RLS is strict
-    let supabase;
-    try {
-      supabase = createAdminClient()
-    } catch (err) {
-      console.error('[API/Carousel] Failed to create admin client:', err)
-      return NextResponse.json(
-        { success: false, message: 'Error de configuración', error: String(err) },
-        { status: 500 }
-      )
-    }
-
+    const supabase = createAdminClient();
     const { data, error } = await supabase
       .from('promotions_carousel')
       .select('promotion_id, position')
-      .order('position', { ascending: true })
+      .eq('organization_id', organizationId)
+      .order('position', { ascending: true });
 
     if (error) {
-      console.error('[API/Carousel] Supabase error:', error)
-
-      // If table doesn't exist, return empty list instead of error
-      // Check code 42P01 (Postgres), PGRST205 (PostgREST) or message content
       if (
-        error.code === '42P01' || 
-        error.code === 'PGRST205' || 
-        error.message?.includes('does not exist') || 
+        error.code === '42P01' ||
+        error.code === 'PGRST205' ||
+        error.message?.includes('does not exist') ||
         error.message?.includes('schema cache')
       ) {
-        console.warn('[API/Carousel] Table promotions_carousel does not exist or schema cache is stale. Returning empty list.')
-        return NextResponse.json({ success: true, ids: [] })
+        return NextResponse.json({ success: true, ids: [] });
       }
 
       return NextResponse.json(
@@ -74,234 +122,185 @@ export async function GET() {
           error: error.message,
           code: error.code,
           details: error.details,
-          hint: error.hint
+          hint: error.hint,
         },
-        { status: 500 }
-      )
+        { status: 500 },
+      );
     }
 
-    const ids = (data || []).map((r: { promotion_id: string }) => String(r.promotion_id))
-    console.log('[API/Carousel] Loaded carousel IDs:', ids)
+    const ids = (data || []).map((row: { promotion_id: string }) => String(row.promotion_id));
+    const payload: CarouselPayload = { success: true, ids };
+    carouselCache.set(cacheKey, { expiresAt: Date.now() + 60_000, payload });
 
-    const payload = { success: true, ids }
-    carouselCache.set('ids', { expiresAt: Date.now() + 60_000, payload })
-
-    return NextResponse.json(payload, { headers: { 'x-cache': 'MISS' } })
-
+    return NextResponse.json(payload, { headers: { 'x-cache': 'MISS' } });
   } catch (error) {
-    console.error('[API/Carousel] Critical Error:', error)
-    return NextResponse.json({ success: false, message: 'Error interno', error: String(error) }, { status: 500 })
+    console.error('[API/Carousel] GET error:', error);
+    return NextResponse.json(
+      {
+        success: false,
+        message: 'Error interno',
+        error: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    );
   }
 }
 
 export async function PUT(request: NextRequest) {
-  console.log('[API/Carousel] ========== PUT REQUEST START ==========')
   try {
-    console.log('[API/Carousel] PUT request received')
-
-    // Log environment variables (without exposing full keys)
-    const envCheck = {
-      hasSupabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
-      hasServiceKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-      supabaseUrlPrefix: process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 20)
+    const context = await resolveCarouselContext(request);
+    if (context.response) {
+      return context.response;
     }
-    console.log('[API/Carousel] Environment check:', envCheck)
 
-    if (!envCheck.hasSupabaseUrl || !envCheck.hasServiceKey) {
-      console.error('[API/Carousel] CRITICAL: Missing environment variables!')
+    const user = context.user!;
+    const organizationId = context.organizationId as string;
+    const body = await request.json();
+    const ids: string[] = Array.isArray(body?.ids) ? body.ids.map((id: unknown) => String(id)) : [];
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const invalidIds = ids.filter((id) => !uuidRegex.test(id));
+    if (invalidIds.length > 0) {
       return NextResponse.json(
         {
           success: false,
-          message: 'Configuración del servidor incompleta. Reinicia el servidor después de configurar las variables de entorno.',
-          details: envCheck
+          message: 'IDs invalidos detectados. Solo se permiten promociones reales.',
         },
-        { status: 500 }
-      )
+        { status: 400 },
+      );
     }
 
-    // Get user for audit log
-    const supabaseAuth = await createClient()
-    const { data: { user } } = await supabaseAuth.auth.getUser()
-
-    if (!user) {
-      console.log('[API/Carousel] No user found - unauthorized')
-      return NextResponse.json(
-        { success: false, message: 'No autorizado' },
-        { status: 401 }
-      )
-    }
-
-    console.log('[API/Carousel] User authenticated:', user.id)
-
-    const body = await request.json()
-    const ids: string[] = Array.isArray(body?.ids) ? body.ids.map((x: unknown) => String(x)) : []
-
-    console.log('[API/Carousel] PUT request with ids:', ids)
-
-    // Validate UUID format
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const invalidIds = ids.filter(id => !uuidRegex.test(id));
-
-    if (invalidIds.length > 0) {
-      return NextResponse.json(
-        { success: false, message: 'IDs inválidos detectados. Solo se permiten promociones reales.' },
-        { status: 400 }
-      )
-    }
-
-    // Validate max 10 items
     if (ids.length > 10) {
       return NextResponse.json(
-        { success: false, message: 'Máximo 10 elementos permitidos en el carrusel' },
-        { status: 400 }
-      )
+        {
+          success: false,
+          message: 'Maximo 10 elementos permitidos en el carrusel',
+        },
+        { status: 400 },
+      );
     }
 
-    // Check for duplicates
-    const uniqueIds = new Set(ids);
-    if (uniqueIds.size !== ids.length) {
+    if (new Set(ids).size !== ids.length) {
       return NextResponse.json(
-        { success: false, message: 'No se permiten promociones duplicadas en el carrusel' },
-        { status: 400 }
-      )
+        {
+          success: false,
+          message: 'No se permiten promociones duplicadas en el carrusel',
+        },
+        { status: 400 },
+      );
     }
 
-    // Use admin client to bypass RLS
-    let supabase;
-    try {
-      console.log('[API/Carousel] Creating admin client...')
-      supabase = createAdminClient()
-      console.log('[API/Carousel] Admin client created successfully')
-    } catch (clientError) {
-      console.error('[API/Carousel] Error creating admin client:', clientError)
-      return NextResponse.json(
-        { success: false, message: 'Error de configuración del servidor', error: String(clientError) },
-        { status: 500 }
-      )
+    const supabase = createAdminClient();
+    const validationResponse = await validatePromotionIds(supabase, organizationId, ids);
+    if (validationResponse) {
+      return validationResponse;
     }
 
-    // Get current state for audit log
-    const { data: existingData } = await supabase
+    const { data: existingData, error: existingError } = await supabase
       .from('promotions_carousel')
       .select('promotion_id')
-      .order('position', { ascending: true })
+      .eq('organization_id', organizationId)
+      .order('position', { ascending: true });
 
-    const previousState = existingData ? existingData.map((r: { promotion_id: string }) => String(r.promotion_id)) : []
-    const newState = ids
+    if (existingError && existingError.code !== '42P01') {
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'Error al leer el carrusel actual',
+          error: existingError.message,
+          code: existingError.code,
+          details: existingError.details,
+        },
+        { status: 500 },
+      );
+    }
 
-    // Delete ALL existing carousel items using a simple approach
-    // Since we're using service_role, we can delete without conditions
-    console.log('[API/Carousel] Deleting all existing carousel items...')
+    const previousState = (existingData || []).map((row: { promotion_id: string }) =>
+      String(row.promotion_id),
+    );
 
     const { error: deleteError, count: deletedCount } = await supabase
       .from('promotions_carousel')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000') // Delete all (dummy condition that's always true)
+      .delete({ count: 'exact' })
+      .eq('organization_id', organizationId);
 
     if (deleteError) {
-      console.error('[API/Carousel] Delete error:', deleteError)
-      // If table doesn't exist, that's okay - continue
-      if (deleteError.code !== '42P01') {
-        return NextResponse.json(
-          {
-            success: false,
-            message: 'Error al limpiar el carrusel anterior',
-            error: deleteError.message,
-            code: deleteError.code,
-            details: deleteError.details,
-            hint: 'Verifica que el SUPABASE_SERVICE_ROLE_KEY esté configurado correctamente'
-          },
-          { status: 500 }
-        )
-      }
+      console.error('[API/Carousel] Delete error:', deleteError);
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'Error al limpiar el carrusel anterior',
+          error: deleteError.message,
+          code: deleteError.code,
+          details: deleteError.details,
+        },
+        { status: 500 },
+      );
     }
 
-    console.log('[API/Carousel] Deleted', deletedCount || 0, 'existing items')
+    console.log('[API/Carousel] Deleted items:', deletedCount || 0);
 
-    // Insert new carousel items
     if (ids.length > 0) {
-      console.log('[API/Carousel] Inserting new carousel items:', ids.length)
-      const rows = ids.map((id, idx) => ({
-        promotion_id: id,
-        position: idx,
-      }))
+      const rows = ids.map((promotionId, index) => ({
+        promotion_id: promotionId,
+        position: index + 1,
+        organization_id: organizationId,
+      }));
 
       const { error: insertError } = await supabase
         .from('promotions_carousel')
-        .insert(rows)
+        .insert(rows);
 
       if (insertError) {
-        console.error('[API/Carousel] Insert error:', insertError)
+        console.error('[API/Carousel] Insert error:', insertError);
         return NextResponse.json(
           {
             success: false,
             message: 'Error al guardar el carrusel',
             error: insertError.message,
             code: insertError.code,
-            details: insertError.details
+            details: insertError.details,
           },
-          { status: 500 }
-        )
+          { status: 500 },
+        );
       }
-      console.log('[API/Carousel] Successfully inserted new items')
-    } else {
-      console.log('[API/Carousel] No items to insert (clearing carousel)')
     }
 
-    // Log to audit table
-    try {
-      const ip = request.headers.get('x-forwarded-for') || 'unknown'
-      const userAgent = request.headers.get('user-agent') || 'unknown'
+    const action =
+      previousState.length === ids.length &&
+      previousState.every((id) => ids.includes(id)) &&
+      JSON.stringify(previousState) !== JSON.stringify(ids)
+        ? 'REORDER_CAROUSEL'
+        : 'UPDATE_CAROUSEL';
 
-      // Check if it's a reorder or an update
-      // Reorder: same items, different order
-      // Update: items added or removed
-      const isReorder =
-        previousState.length === newState.length &&
-        previousState.every(id => newState.includes(id)) &&
-        JSON.stringify(previousState) !== JSON.stringify(newState);
+    const { error: auditError } = await supabase.from('audit_logs').insert({
+      user_id: user.id || null,
+      table_name: 'promotions_carousel',
+      record_id: 'carousel',
+      action,
+      organization_id: organizationId,
+      changes: {
+        previous_state: previousState,
+        new_state: ids,
+      },
+    });
 
-      const action = isReorder ? 'REORDER' : 'UPDATE';
-
-      const { error: rpcError } = await supabase.rpc('log_carousel_change', {
-        p_user_id: user.id,
-        p_action: action,
-        p_previous_state: JSON.stringify(previousState),
-        p_new_state: JSON.stringify(newState),
-        p_ip_address: ip,
-        p_user_agent: userAgent,
-        p_metadata: { source: 'dashboard' }
-      })
-
-      if (rpcError) {
-        console.error('[API/Carousel] Audit RPC error:', rpcError)
-      }
-
-    } catch (auditError) {
-      console.error('[API/Carousel] Audit log error:', auditError)
-      // Don't fail the request if audit fails, but log it
+    if (auditError) {
+      console.error('[API/Carousel] Audit log error:', auditError);
     }
 
-    console.log('[API/Carousel] Carousel saved successfully')
+    carouselCache.delete(getCarouselCacheKey(organizationId));
 
-    // Clear cache
-    carouselCache.delete('ids')
-
-    return NextResponse.json({ success: true, ids })
+    return NextResponse.json({ success: true, ids });
   } catch (error) {
-    console.error('[API/Carousel] ========== CRITICAL PUT ERROR ==========')
-    console.error('[API/Carousel] Error type:', error?.constructor?.name)
-    console.error('[API/Carousel] Error message:', error instanceof Error ? error.message : String(error))
-    console.error('[API/Carousel] Error stack:', error instanceof Error ? error.stack : 'No stack trace')
-    console.error('[API/Carousel] Full error object:', error)
-
-    return NextResponse.json({
-      success: false,
-      message: 'Error interno del servidor',
-      error: error instanceof Error ? error.message : String(error),
-      type: error?.constructor?.name
-    }, { status: 500 })
-  } finally {
-    console.log('[API/Carousel] ========== PUT REQUEST END ==========')
+    console.error('[API/Carousel] PUT error:', error);
+    return NextResponse.json(
+      {
+        success: false,
+        message: 'Error interno del servidor',
+        error: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    );
   }
 }

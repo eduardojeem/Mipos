@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { isMockAuthEnabled } from '@/lib/env';
+import { getUserOrganizationId } from '@/app/api/_utils/organization';
 
 // Schema de validación para productos
 const productSchema = z.object({
@@ -28,9 +29,16 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
     const { searchParams } = new URL(request.url);
-    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    let orgId = (request.headers.get('x-organization-id') || '').trim();
     if (!orgId) {
-      return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.id) {
+        const resolved = await getUserOrganizationId(user.id);
+        if (resolved) orgId = resolved;
+      }
+      if (!orgId) {
+        return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
+      }
     }
     
     // Parámetros de consulta
@@ -38,53 +46,73 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '25');
     const search = searchParams.get('search') || '';
     const categoryId = searchParams.get('categoryId') || '';
-    const sortBy = searchParams.get('sortBy') || 'updated_at';
+    const rawSortBy = searchParams.get('sortBy') || 'updated_at';
     const sortOrder = searchParams.get('sortOrder') || 'desc';
-    
-    // Construir consulta
-    let query = supabase
-      .from('products')
-      .select(`
-        *,
-        category:categories(id, name),
-        supplier:suppliers(id, name)
-      `);
+    const lowStockOnly = searchParams.get('lowStock') === 'true';
 
-    query = query.eq('organization_id', orgId);
-    
-    // Aplicar filtros
-    if (search) {
-      query = query.or(`name.ilike.%${search}%,sku.ilike.%${search}%,description.ilike.%${search}%`);
-    }
-    
-    if (categoryId) {
-      query = query.eq('category_id', categoryId);
-    }
-    
-    // Aplicar ordenamiento
-    query = query.order(sortBy, { ascending: sortOrder === 'asc' });
-    
-    // Aplicar paginación
+    // Whitelist valid DB columns to prevent Supabase errors
+    const VALID_SORT_COLUMNS = new Set(['name', 'sale_price', 'stock_quantity', 'updated_at', 'created_at', 'sku']);
+    const sortBy = VALID_SORT_COLUMNS.has(rawSortBy) ? rawSortBy : 'updated_at';
+
     const from = (page - 1) * limit;
     const to = from + limit - 1;
-    query = query.range(from, to);
-    
-    const { data: products, error, count } = await query;
-    
+
+    // Build base query — try with category join first, fallback without it
+    const buildQuery = (withJoin: boolean) => {
+      let q = supabase
+        .from('products')
+        .select(withJoin ? '*, category:categories(id, name)' : '*', { count: 'exact' })
+        .eq('organization_id', orgId);
+
+      if (search) q = q.or(`name.ilike.%${search}%,sku.ilike.%${search}%,description.ilike.%${search}%`);
+      if (categoryId) q = q.eq('category_id', categoryId);
+      q = q.order(sortBy, { ascending: sortOrder === 'asc' });
+      if (lowStockOnly) {
+        q = q.limit(Math.max(limit * 4, 200));
+      } else {
+        q = q.range(from, to);
+      }
+      return q;
+    };
+
+    let { data: products, error, count } = await buildQuery(true);
+
+    // If join fails (missing FK or RLS on categories), retry without it
     if (error) {
-      console.error('Error fetching products:', error);
-      return NextResponse.json(
-        { error: 'Error al obtener productos', details: error.message },
-        { status: 500 }
-      );
+      console.warn('[products] Join query failed, retrying without category join:', error.message);
+      const fallback = await buildQuery(false);
+      if (fallback.error) {
+        console.error('[products] Fallback query also failed:', fallback.error.message, fallback.error.hint);
+        return NextResponse.json(
+          { error: 'Error al obtener productos', details: fallback.error.message },
+          { status: 500 }
+        );
+      }
+      products = fallback.data;
+      count = fallback.count;
     }
     
+    const rawProducts = products || [];
+    const filteredProducts = lowStockOnly
+      ? rawProducts.filter((product: any) => {
+          const stockQuantity = Number(product?.stock_quantity ?? 0);
+          const minStock = Number(product?.min_stock ?? 0);
+          return stockQuantity <= minStock;
+        })
+      : rawProducts;
+
+    const paginatedProducts = lowStockOnly
+      ? filteredProducts.slice((page - 1) * limit, page * limit)
+      : filteredProducts;
+
+    const total = lowStockOnly ? filteredProducts.length : (count || 0);
+
     return NextResponse.json({
-      products: products || [],
-      total: count || 0,
+      products: paginatedProducts,
+      total,
       page,
       limit,
-      totalPages: Math.ceil((count || 0) / limit)
+      totalPages: Math.ceil(total / limit)
     });
     
   } catch (error) {

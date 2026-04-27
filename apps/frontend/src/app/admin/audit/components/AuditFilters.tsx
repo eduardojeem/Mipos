@@ -105,7 +105,7 @@ export function AuditFilters({ filters, onFiltersChange, theme }: AuditFiltersPr
   ).length;
 
   return (
-    <Card className={theme === 'dark' ? 'bg-gray-800 border-gray-700' : ''}>
+    <Card className="rounded-3xl border-border/60 bg-background/80 shadow-sm overflow-hidden">
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center space-x-2">
@@ -242,7 +242,7 @@ export function AuditFilters({ filters, onFiltersChange, theme }: AuditFiltersPr
 
         {/* Filtros expandidos */}
         {isExpanded && (
-          <div className="space-y-4 pt-4 border-t">
+          <div className="space-y-4 pt-4 border-t border-border/50">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium flex items-center gap-1">

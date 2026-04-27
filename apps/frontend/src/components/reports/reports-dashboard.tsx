@@ -1,13 +1,13 @@
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { AxiosError } from 'axios';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DatePicker } from '@/components/ui/date-picker';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   BarChart3Icon,
@@ -28,7 +28,7 @@ import { CustomerReport } from './customer-report';
 import { AdvancedAnalytics } from './advanced-analytics';
 import { ComparisonReport } from './comparison-report';
 import { useReports, ReportFilter, DATE_PRESETS, useReportExport, type ReportType } from '@/hooks/use-reports';
-import { formatCurrency, formatNumber } from '@/lib/utils';
+import { formatNumber } from '@/lib/utils';
 import { useCurrencyFormatter } from '@/contexts/BusinessConfigContext';
 import { formatPercentage } from './chart-components';
 import { NoDataAvailable } from '@/components/ui/empty-state';
@@ -39,27 +39,34 @@ import { isSupabaseActive } from '@/lib/env';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 import { usePlanPermissions } from '@/hooks/use-plan-permissions';
 import { Lock } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { useAuth, useIsAdmin } from '@/hooks/use-auth';
+import { useUserOrganizations } from '@/hooks/use-user-organizations';
 
 export const ReportsDashboard: React.FC = () => {
   const fmtCurrency = useCurrencyFormatter();
+  const { user } = useAuth();
+  const isAdmin = useIsAdmin();
+  const { organizations } = useUserOrganizations(user?.id);
+  const [currentOrganization, setCurrentOrganization] = useState<string | null>(null);
+
   const [activeTab, setActiveTab] = useState('overview');
   const [filters, setFilters] = useState<ReportFilter>(() => {
     // Default to current month
-    return DATE_PRESETS.thisMonth.getValue();
+    const defaultDates = DATE_PRESETS.thisMonth.getValue();
+    return {
+      ...defaultDates,
+      organizationId: user?.organizationId || undefined
+    };
   });
 
-  // ✅ NUEVO: Estado para organizaciones y rol de usuario
-  const [organizations, setOrganizations] = useState<Array<{ id: string; name: string }>>([]);
-  const [currentOrganization, setCurrentOrganization] = useState<string | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  const { sales, inventory, customer, financial, isLoading, error, refetchAll } = useReports(filters);
+  const { sales, inventory, customer, financial, isLoading, refetchAll } = useReports(filters);
   const { exportReport, isExporting } = useReportExport();
   const { toast } = useToast();
   const { canExportReports } = usePlanPermissions();
 
   // Fuente de datos y estado de conexión
-  const REPORTS_SOURCE: 'supabase' | 'backend' = ((process.env.NEXT_PUBLIC_REPORTS_SOURCE || process.env.REPORTS_SOURCE || 'backend') as any);
+  const REPORTS_SOURCE = (process.env.NEXT_PUBLIC_REPORTS_SOURCE || process.env.REPORTS_SOURCE || 'backend') as 'supabase' | 'backend';
   const [dataSource, setDataSource] = useState<'supabase' | 'backend'>(REPORTS_SOURCE);
   const [connectionType, setConnectionType] = useState<string>('unknown');
   useEffect(() => {
@@ -75,7 +82,7 @@ export const ReportsDashboard: React.FC = () => {
       const resolved = (fromQs === 'supabase' || fromQs === 'backend') ? fromQs : (stored === 'supabase' || stored === 'backend') ? stored : REPORTS_SOURCE;
       setDataSource(resolved as 'supabase' | 'backend');
     } catch { }
-  }, []);
+  }, [REPORTS_SOURCE]);
   const handleSourceChange = (next: 'supabase' | 'backend') => {
     if (next === 'supabase' && !isSupabaseActive()) {
       toast({
@@ -120,7 +127,7 @@ export const ReportsDashboard: React.FC = () => {
         }
       }
     }
-  }, [bgJob?.status]);
+  }, [bgJob?.status, bgJob?.result?.filename]);
 
   // Historial de exportaciones
   const { jobs, loading: jobsLoading, error: jobsError, refresh: refreshJobs } = useExportJobs(30);
@@ -154,7 +161,8 @@ export const ReportsDashboard: React.FC = () => {
       toast({ title: 'Éxito', description: `Reporte exportado en formato ${format.toUpperCase()}` });
     } catch (error) {
       console.error('Error exporting report:', error);
-      const message = (error as any)?.response?.data?.message || (error as Error)?.message || 'No se pudo exportar el reporte';
+      const axiosError = error as AxiosError<{ message: string }>;
+      const message = axiosError.response?.data?.message || (error as Error).message || 'No se pudo exportar el reporte';
       toast({ title: 'Error', description: message, variant: 'destructive' });
     }
   };
@@ -177,7 +185,8 @@ export const ReportsDashboard: React.FC = () => {
       setTimeout(() => { refreshJobs(); }, 1000);
     } catch (error) {
       console.error('Error encolando exportación:', error);
-      const message = (error as any)?.response?.data?.message || (error as Error)?.message || 'No se pudo encolar la exportación';
+      const axiosError = error as AxiosError<{ message: string }>;
+      const message = axiosError.response?.data?.message || (error as Error).message || 'No se pudo encolar la exportación';
       toast({ title: 'Error', description: message, variant: 'destructive' });
     }
   };
@@ -219,6 +228,39 @@ export const ReportsDashboard: React.FC = () => {
     }
   };
 
+  // Actualizar filtros cuando cambia la organización o el usuario inicial
+  useEffect(() => {
+    if (currentOrganization) {
+      setFilters(prev => ({ ...prev, organizationId: currentOrganization }));
+    } else if (user?.organizationId) {
+      setFilters(prev => ({ ...prev, organizationId: user.organizationId }));
+    }
+  }, [currentOrganization, user?.organizationId]);
+
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1
+      }
+    }
+  };
+
+  const overviewMetrics = {
+    totalSales: sales.data?.summary?.totalSales || 0,
+    totalOrders: sales.data?.summary?.totalOrders || 0,
+    totalProducts: inventory.data?.summary?.totalProducts || 0,
+    inventoryValue: inventory.data?.summary?.totalValue || 0,
+    lowStockItems: inventory.data?.summary?.lowStockItems || 0,
+    outOfStockItems: inventory.data?.summary?.outOfStockItems || 0,
+    totalCustomers: customer.data?.summary?.totalCustomers || 0,
+    activeCustomers: customer.data?.summary?.activeCustomers || 0,
+    totalRevenue: financial.data?.summary?.totalRevenue || 0,
+    netProfit: financial.data?.summary?.netProfit || 0,
+    profitMargin: financial.data?.summary?.profitMargin || 0,
+  };
+
   const handleFiltersChange = useCallback((newFilters: ReportFilter) => {
     setFilters(newFilters);
   }, []);
@@ -227,65 +269,13 @@ export const ReportsDashboard: React.FC = () => {
     refetchAll();
   }, [refetchAll]);
 
-  // ✅ NUEVO: Funciones para organizaciones
-  const checkUserRole = async () => {
-    try {
-      const response = await fetch('/api/auth/profile')
-      const data = await response.json()
-      if (data.success && data.data) {
-        const userRole = data.data.role
-        setIsAdmin(userRole === 'ADMIN' || userRole === 'SUPER_ADMIN')
-      }
-    } catch (error) {
-      console.error('Error checking user role:', error)
-    }
-  }
-
-  const loadOrganizations = async () => {
-    try {
-      const response = await fetch('/api/admin/organizations')
-      const data = await response.json()
-      if (data.success && data.organizations) {
-        setOrganizations(data.organizations)
-        if (data.organizations.length > 0 && !currentOrganization) {
-          setCurrentOrganization(data.organizations[0].id)
-        }
-      }
-    } catch (error) {
-      console.error('Error loading organizations:', error)
-    }
-  }
-
-  // ✅ NUEVO: useEffect para cargar datos iniciales
-  useEffect(() => {
-    checkUserRole()
-    loadOrganizations()
-  }, [])
-
-  // ✅ NUEVO: Actualizar filtros cuando cambia la organización
-  useEffect(() => {
-    if (currentOrganization) {
-      setFilters(prev => ({ ...prev, organizationId: currentOrganization }))
-    }
-  }, [currentOrganization])
-
-  // Overview metrics
-  const overviewMetrics = {
-    totalSales: sales.data?.summary.totalSales || 0,
-    totalOrders: sales.data?.summary.totalOrders || 0,
-    totalProducts: inventory.data?.summary.totalProducts || 0,
-    inventoryValue: inventory.data?.summary.totalValue || 0,
-    lowStockItems: inventory.data?.summary.lowStockItems || 0,
-    outOfStockItems: inventory.data?.summary.outOfStockItems || 0,
-    totalCustomers: customer.data?.summary.totalCustomers || 0,
-    activeCustomers: customer.data?.summary.activeCustomers || 0,
-    totalRevenue: financial.data?.summary.totalRevenue || 0,
-    netProfit: financial.data?.summary.netProfit || 0,
-    profitMargin: financial.data?.summary.profitMargin || 0,
-  };
-
   return (
-    <div className="space-y-6">
+    <motion.div 
+      className="space-y-6"
+      initial="hidden"
+      animate="visible"
+      variants={containerVariants}
+    >
       {/* Header */}
       <TooltipProvider>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sticky top-14 z-20 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 py-2">
@@ -338,16 +328,16 @@ export const ReportsDashboard: React.FC = () => {
                   </TooltipContent>
                 </Tooltip>
               )}
-              {/* ✅ NUEVO: Selector de organización - Solo visible para admins */}
+              {/* Selector de organización - Solo visible para admins */}
               {isAdmin && organizations.length > 0 && (
                 <Select 
-                  value={currentOrganization || 'all'} 
+                  value={currentOrganization || (user?.organizationId ? user.organizationId : 'all')} 
                   onValueChange={(value) => {
                     setCurrentOrganization(value === 'all' ? null : value)
                   }}
                 >
-                  <SelectTrigger className="w-64 bg-slate-800/50 border-slate-700">
-                    <Building2 className="w-4 h-4 mr-2" />
+                  <SelectTrigger className="w-64 bg-slate-800/10 border-slate-700/50 backdrop-blur-sm hover:bg-slate-800/20 transition-all">
+                    <Building2 className="w-4 h-4 mr-2 text-primary" />
                     <SelectValue placeholder="Organización" />
                   </SelectTrigger>
                   <SelectContent>
@@ -879,6 +869,6 @@ export const ReportsDashboard: React.FC = () => {
           )}
         </CardContent>
       </Card>
-    </div>
+    </motion.div>
   );
 };

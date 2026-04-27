@@ -173,7 +173,7 @@ export function AuditSearch({ onSearch, theme }: AuditSearchProps) {
 
   return (
     <div className="relative">
-      <Card className={theme === 'dark' ? 'bg-gray-800 border-gray-700' : ''}>
+      <Card className="rounded-3xl border-border/60 bg-background/80 shadow-sm overflow-hidden">
         <CardContent className="p-4">
           <div className="relative">
             <div className="flex items-center gap-2">
@@ -242,11 +242,7 @@ export function AuditSearch({ onSearch, theme }: AuditSearchProps) {
       {showSuggestions && (query.length >= 2 || recentSearches.length > 0) && (
         <div
           ref={suggestionsRef}
-          className={`absolute top-full left-0 right-0 z-50 mt-1 rounded-md border shadow-lg ${
-            theme === 'dark' 
-              ? 'bg-gray-800 border-gray-700' 
-              : 'bg-white border-gray-200'
-          }`}
+          className="absolute top-full left-0 right-0 z-50 mt-2 rounded-2xl border border-border/60 shadow-xl bg-background/95 backdrop-blur-sm overflow-hidden"
         >
           <div className="max-h-80 overflow-y-auto">
             {/* Sugerencias de autocompletado */}
@@ -259,7 +255,7 @@ export function AuditSearch({ onSearch, theme }: AuditSearchProps) {
                 {suggestions.map((suggestion, index) => (
                   <button
                     key={index}
-                    className={`w-full flex items-center gap-3 px-3 py-2 text-left rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
+                    className="w-full flex items-center gap-3 px-3 py-2 text-left rounded-xl hover:bg-muted/50 transition-colors"
                     onClick={() => handleSuggestionSelect(suggestion)}
                   >
                     {getSuggestionIcon(suggestion.type)}

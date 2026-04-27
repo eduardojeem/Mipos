@@ -34,7 +34,7 @@ describe('Session invalidation endpoints', () => {
 
   test('Invalidate all sessions for a user', async () => {
     const res = await request(app)
-      .post(`/api/sessions/invalidate/user/${userId}`)
+      .post(`/api/admin/sessions/user/${userId}/terminate`)
       .set('Content-Type', 'application/json')
       .send({});
 
@@ -50,9 +50,9 @@ describe('Session invalidation endpoints', () => {
     });
 
     const res = await request(app)
-      .post('/api/sessions/invalidate/session')
+      .post(`/api/admin/sessions/${session.id}/terminate`)
       .set('Content-Type', 'application/json')
-      .send({ sessionId: session.id });
+      .send({});
 
     expect(res.status).toBe(200);
     const updated = await prisma.userSession.findUnique({ where: { id: session.id } });

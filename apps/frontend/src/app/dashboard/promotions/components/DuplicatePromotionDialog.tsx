@@ -1,6 +1,7 @@
+
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,6 +51,11 @@ export function DuplicatePromotionDialog({
   const [copyProducts, setCopyProducts] = useState(true)
   const { toast } = useToast()
 
+  useEffect(() => {
+    if (!open || !promotion) return
+    setNewName((prev) => (prev.trim() ? prev : `${promotion.name} (Copia)`))
+  }, [open, promotion])
+
   const handleDuplicate = async () => {
     if (!promotion) return
 
@@ -64,36 +70,13 @@ export function DuplicatePromotionDialog({
 
     setLoading(true)
     try {
-      // 1. Create new promotion
-      const createResponse = await api.post('/promotions', {
+      const duplicateResponse = await api.post(`/promotions/${promotion.id}/duplicate`, {
         name: newName,
-        description: promotion.description,
-        discountType: promotion.discountType,
-        discountValue: promotion.discountValue,
-        startDate: promotion.startDate,
-        endDate: promotion.endDate,
-        minPurchaseAmount: promotion.minPurchaseAmount || 0,
-        maxDiscountAmount: promotion.maxDiscountAmount || 0,
-        usageLimit: promotion.usageLimit || 0,
+        copyProducts,
       })
 
-      if (!createResponse.data?.success) {
-        throw new Error('Error al crear la promoción')
-      }
-
-      const newPromotionId = createResponse.data.data.id
-
-      // 2. Copy products if requested
-      if (copyProducts) {
-        const productsResponse = await api.get(`/promotions/${promotion.id}/products`)
-        
-        if (productsResponse.data?.success && productsResponse.data.data.length > 0) {
-          const productIds = productsResponse.data.data.map((p: any) => p.id)
-          
-          await api.post(`/promotions/${newPromotionId}/products`, {
-            productIds
-          })
-        }
+      if (!duplicateResponse.data?.success) {
+        throw new Error(duplicateResponse.data?.message || 'No se pudo duplicar la promoción')
       }
 
       toast({

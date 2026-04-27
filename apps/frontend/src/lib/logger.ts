@@ -46,8 +46,12 @@ class Logger {
         return { name: a.name, message: a.message, stack: a.stack };
       }
       if (typeof a === 'object' && a !== null) {
+        const maybeSerializable = a as { toJSON?: () => unknown };
         try {
-          return JSON.stringify(a);
+          const serialized = typeof maybeSerializable.toJSON === 'function'
+            ? maybeSerializable.toJSON()
+            : a;
+          return JSON.stringify(serialized);
         } catch {
           return String(a);
         }

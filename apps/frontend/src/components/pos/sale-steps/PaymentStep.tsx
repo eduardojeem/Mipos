@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { CreditCard, Banknote, Smartphone, Wallet } from 'lucide-react';
+import { CreditCard, Banknote, Smartphone, Wallet, QrCode } from 'lucide-react';
 import { useCurrencyFormatter } from '@/contexts/BusinessConfigContext';
 import { PaymentMethod } from '@/types';
 import { cn } from '@/lib/utils';
@@ -42,6 +42,7 @@ export function PaymentStep({
     { value: PaymentMethod.CASH, label: 'Efectivo', icon: Banknote, color: 'bg-green-500' },
     { value: PaymentMethod.CARD, label: 'Tarjeta', icon: CreditCard, color: 'bg-blue-500' },
     { value: PaymentMethod.TRANSFER, label: 'Transferencia', icon: Smartphone, color: 'bg-purple-500' },
+    { value: PaymentMethod.QR, label: 'QR', icon: QrCode, color: 'bg-amber-500' },
     { value: PaymentMethod.OTHER, label: 'Otro', icon: Wallet, color: 'bg-gray-500' },
   ];
 
@@ -146,10 +147,10 @@ export function PaymentStep({
         )}
 
         {/* Transfer payment details */}
-        {selectedPaymentMethod === PaymentMethod.TRANSFER && (
+        {(selectedPaymentMethod === PaymentMethod.TRANSFER || selectedPaymentMethod === PaymentMethod.QR) && (
           <div className="space-y-3 p-4 bg-muted/50 rounded-lg">
             <div className="space-y-2">
-              <Label>Referencia de transferencia</Label>
+              <Label>Referencia de transferencia / QR</Label>
               <Input
                 type="text"
                 value={transferReference}
@@ -158,7 +159,7 @@ export function PaymentStep({
                 maxLength={50}
               />
               <p className="text-xs text-muted-foreground">
-                Ingresa el número de referencia o comprobante de la transferencia
+                Ingresa el número de referencia o comprobante de la transferencia o del pago QR
               </p>
             </div>
           </div>

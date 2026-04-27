@@ -9,8 +9,7 @@ import type { Database } from '../../types/supabase';
 export async function createAdminClient() {
   const cfg = getSupabaseAdminConfig();
   if (!cfg) {
-    console.warn('⚠️ Supabase Service Role Key no configurado, intentando usar cliente normal.');
-    return createClient();
+    throw new Error('Missing Supabase Service Role Key (SUPABASE_SERVICE_ROLE_KEY)');
   }
 
   return createSupabaseClient<Database>(cfg.url, cfg.serviceRoleKey, {
@@ -23,7 +22,7 @@ export async function createAdminClient() {
 
 const createMockAuth = () => ({
   getSession: async () => ({ data: { session: null }, error: null }),
-  onAuthStateChange: (_handler: any) => ({
+  onAuthStateChange: (_handler: unknown) => ({
     data: { subscription: { unsubscribe: () => { } } }
   }),
   signInWithPassword: async () => ({ data: { user: null, session: null }, error: new Error('Supabase no configurado') }),
@@ -68,6 +67,7 @@ const createMockFrom = () => ({
   update: () => createMockFrom(),
   delete: () => createMockFrom(),
   maybeSingle: async () => ({ data: null, error: null }),
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   then: (fn: any) => Promise.resolve({ data: [], error: null }).then(fn),
 });
 
@@ -82,6 +82,7 @@ export async function createClient() {
     return {
       auth: createMockAuth(),
       from: () => createMockFrom(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any;
   }
 
@@ -105,7 +106,9 @@ export async function createClient() {
   });
 
   const originalFrom = client.from.bind(client);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   client.from = ((table: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const target: any = originalFrom(table);
     const methods = [
       'or','lt','lte','gt','gte','neq','is','filter','like','ilike',
@@ -114,10 +117,12 @@ export async function createClient() {
       'eq','in','order','limit','single','maybeSingle','upsert','insert',
       'update','delete'
     ];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const patch = (obj: any) => {
       methods.forEach((name) => {
         const fn = obj[name];
         if (typeof fn === 'function') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           obj[name] = (...args: any[]) => {
             const res = fn.apply(obj, args);
             return typeof res === 'object' ? patch(res) : res;
@@ -129,6 +134,7 @@ export async function createClient() {
       return obj;
     };
     return patch(target);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   }) as any;
 
   if (typeof client.from !== 'function') {
@@ -140,6 +146,7 @@ export async function createClient() {
     return {
       auth: createMockAuth(),
       from: () => createMockFrom(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any;
   }
 

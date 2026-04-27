@@ -202,7 +202,8 @@ END $$;
 
 -- 9. Trigger to auto-assign Super Admin on signup for specific email
 CREATE OR REPLACE FUNCTION public.handle_new_user_saas()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+AS $$
 DECLARE
     default_org_id UUID;
     super_admin_role_id TEXT;
@@ -232,7 +233,7 @@ BEGIN
 
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = '';
 
 -- Recreate trigger (drop first to ensure clean state)
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;

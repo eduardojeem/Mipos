@@ -6,7 +6,10 @@ import { usePathname } from 'next/navigation';
 import { ShoppingCart, Menu } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
+import { useResolvedRole } from '@/hooks/use-auth';
+import { usePlanPermissions } from '@/hooks/use-plan-permissions';
 import { useBusinessConfig } from '@/contexts/BusinessConfigContext';
+import { useSystemSettings } from '@/app/dashboard/settings/hooks/useOptimizedSettings';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { navigation as sidebarNavigation, type NavItem as SidebarNavItem } from '@/components/dashboard/sidebar';
@@ -16,12 +19,24 @@ export function MobileSidebar() {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const { user } = useAuth();
+  const resolvedRole = useResolvedRole();
+  const { permissions, isPlanResolved } = usePlanPermissions();
   const { config } = useBusinessConfig();
+  const { data: systemSettings } = useSystemSettings();
+  const businessName = config.businessName?.trim() || systemSettings?.business_name?.trim() || 'Mi empresa';
 
   const filteredNavigation: SidebarNavItem[] = sidebarNavigation.filter(item => {
-    const userRole = user?.role || 'CASHIER';
-    if (!item.roles) return true;
-    return item.roles.includes(userRole) || (userRole === 'SUPER_ADMIN' && item.roles.includes('ADMIN'));
+    const userRole = resolvedRole || user?.role || 'CASHIER';
+    const hasRole = !item.roles || item.roles.includes(userRole) || (userRole === 'SUPER_ADMIN' && item.roles.includes('ADMIN'));
+    if (!hasRole) return false;
+
+    if (isPlanResolved && item.href === '/dashboard/reports' && !permissions.can_access_analytics) return false;
+    if (isPlanResolved && item.category === 'admin' && !permissions.can_access_admin_panel && userRole !== 'SUPER_ADMIN') {
+      if (item.href === '/dashboard/settings') return true;
+      return false;
+    }
+
+    return true;
   });
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
@@ -81,7 +96,7 @@ export function MobileSidebar() {
                 </div>
                 <div>
                   <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-                    {config.businessName || 'BeautyPOS'}
+                    {businessName}
                   </h1>
                 </div>
               </div>

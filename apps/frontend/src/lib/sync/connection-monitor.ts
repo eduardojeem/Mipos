@@ -66,7 +66,7 @@ export class ConnectionMonitor {
 
   constructor(config: Partial<ConnectionConfig> = {}) {
     this.config = {
-      heartbeatInterval: 5000, // 5 seconds
+      heartbeatInterval: 30000, // 30 seconds
       qualityCheckInterval: 30000, // 30 seconds
       reconnectInterval: 2000, // 2 seconds
       maxReconnectAttempts: 10,

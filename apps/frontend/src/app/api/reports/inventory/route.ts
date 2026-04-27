@@ -1,19 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getValidatedOrganizationId } from '@/lib/organization';
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const category = searchParams.get('category');
     const productId = searchParams.get('productId');
-    const branchId = searchParams.get('branchId');
+    const onlyLowStock = (searchParams.get('onlyLowStock') || '').toLowerCase() === 'true';
+    const stockLimitRaw = Number.parseInt(searchParams.get('stockLimit') || '50', 10);
+    const stockLimit = Number.isFinite(stockLimitRaw) ? Math.min(200, Math.max(1, stockLimitRaw)) : 50;
 
-    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    const orgId = ((await getValidatedOrganizationId(request)) || '').trim();
     if (!orgId) {
       return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
     }
 
     const supabase = await createClient();
+
+    const { data: rpcData, error: rpcError } = await (supabase as any).rpc('get_inventory_report', {
+      p_org_id: orgId,
+      p_category_id: category || null,
+      p_product_id: productId || null,
+      p_stock_limit: stockLimit,
+      p_only_low_stock: onlyLowStock,
+    });
+
+    if (!rpcError && rpcData) {
+      return NextResponse.json(rpcData);
+    }
 
     // Build products query with filters
     let productsQuery = supabase
@@ -25,7 +40,7 @@ export async function GET(request: NextRequest) {
         min_stock,
         sale_price,
         category_id,
-        categories (
+        category:categories!products_category_id_fkey (
           name
         )
       `)
@@ -34,7 +49,6 @@ export async function GET(request: NextRequest) {
     // Apply filters
     if (category) productsQuery = productsQuery.eq('category_id', category);
     if (productId) productsQuery = productsQuery.eq('id', productId);
-    if (branchId) productsQuery = productsQuery.eq('branch_id', branchId);
 
     const { data: productsData, error: productsError } = await productsQuery;
 
@@ -88,7 +102,7 @@ export async function GET(request: NextRequest) {
     const categoryBreakdown = new Map<string, { count: number; value: number }>();
     
     (productsData || []).forEach((product: any) => {
-      const categoryName = product.categories?.name || 'Sin categoría';
+      const categoryName = product.category?.name || 'Sin categoría';
       const price = Number(product.sale_price || 0);
       const stock = Number(product.stock_quantity || 0);
       const value = price * stock;

@@ -1,0 +1,33 @@
+apps/backend/src/config/cache.ts(1,24): error TS2305: Module '"@prisma/client"' has no exported member 'Product'.
+apps/backend/src/config/cache.ts(1,33): error TS2305: Module '"@prisma/client"' has no exported member 'Category'.
+apps/backend/src/config/cache.ts(1,43): error TS2305: Module '"@prisma/client"' has no exported member 'Sale'.
+apps/backend/src/config/cache.ts(1,49): error TS2305: Module '"@prisma/client"' has no exported member 'User'.
+apps/backend/src/middleware/enhanced-auth.ts(5,10): error TS2305: Module '"@prisma/client"' has no exported member 'UserRole_New'.
+apps/backend/src/middleware/errorHandler.ts(18,47): error TS2694: Namespace '"E:/mipos/Mipos-main/apps/backend/node_modules/.prisma/client/default".Prisma' has no exported member 'PrismaClientKnownRequestError'.
+apps/backend/src/middleware/errorHandler.ts(41,31): error TS2339: Property 'PrismaClientKnownRequestError' does not exist on type 'typeof Prisma'.
+apps/backend/src/routes/customers.ts(157,44): error TS2339: Property 'totalSpent' does not exist on type 'unknown'.
+apps/backend/src/routes/customers.ts(158,50): error TS2339: Property 'lastPurchaseDate' does not exist on type 'unknown'.
+apps/backend/src/routes/helpers/supplier-helpers.ts(39,79): error TS2694: Namespace '"E:/mipos/Mipos-main/apps/backend/node_modules/.prisma/client/default".Prisma' has no exported member 'QueryMode'.
+apps/backend/src/routes/invoices.ts(76,23): error TS2347: Untyped function calls may not accept type arguments.
+apps/backend/src/routes/payments.ts(62,23): error TS2347: Untyped function calls may not accept type arguments.
+apps/backend/src/routes/sales.ts(833,19): error TS2339: Property 'id' does not exist on type 'unknown'.
+apps/backend/src/routes/sales.ts(834,21): error TS2339: Property 'name' does not exist on type 'unknown'.
+apps/backend/src/routes/sales.ts(835,20): error TS2339: Property 'sku' does not exist on type 'unknown'.
+apps/backend/src/routes/sales.ts(836,26): error TS2339: Property 'salePrice' does not exist on type 'unknown'.
+apps/backend/src/routes/subscriptions.ts(59,23): error TS2347: Untyped function calls may not accept type arguments.
+apps/backend/src/routes/suppliers.ts(190,29): error TS2339: Property 'total' does not exist on type 'unknown'.
+apps/backend/src/routes/suppliers.ts(192,34): error TS2339: Property 'count' does not exist on type 'unknown'.
+apps/backend/src/services/loyalty.ts(874,58): error TS2339: Property 'sql' does not exist on type 'typeof Prisma'.
+apps/backend/src/services/loyalty.ts(874,128): error TS2339: Property 'sql' does not exist on type 'typeof Prisma'.
+apps/backend/src/services/loyalty.ts(875,39): error TS2347: Untyped function calls may not accept type arguments.
+apps/backend/src/services/loyalty.ts(875,105): error TS2339: Property 'sql' does not exist on type 'typeof Prisma'.
+apps/backend/src/services/loyalty.ts(887,58): error TS2339: Property 'sql' does not exist on type 'typeof Prisma'.
+apps/backend/src/services/loyalty.ts(887,125): error TS2339: Property 'sql' does not exist on type 'typeof Prisma'.
+apps/backend/src/services/loyalty.ts(888,42): error TS2347: Untyped function calls may not accept type arguments.
+apps/backend/src/services/loyalty.ts(888,107): error TS2339: Property 'sql' does not exist on type 'typeof Prisma'.
+apps/backend/src/services/reports.ts(1004,30): error TS2347: Untyped function calls may not accept type arguments.
+apps/backend/src/services/reports.ts(1008,30): error TS2347: Untyped function calls may not accept type arguments.
+apps/backend/src/services/reports.ts(1071,30): error TS2347: Untyped function calls may not accept type arguments.
+apps/backend/src/services/reports.ts(1075,30): error TS2347: Untyped function calls may not accept type arguments.
+apps/backend/src/services/reports.ts(1082,31): error TS2347: Untyped function calls may not accept type arguments.
+apps/backend/src/services/reports.ts(1086,31): error TS2347: Untyped function calls may not accept type arguments.

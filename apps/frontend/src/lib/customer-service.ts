@@ -233,13 +233,14 @@ class CustomerService {
       // Transform Supabase data to UICustomer format
       const uiCustomers: UICustomer[] = customers.map((customer: any) => {
         const totalSpent = Number(customer.total_purchases) || 0;
+        const totalOrders = Number(customer.total_orders) || 0;
 
         return {
           ...customer,
           customerCode: customer.customer_code || this.generateCustomerCode(customer.name),
           customerType: this.mapCustomerTypeToUI(customer.customer_type),
-          totalSpent: totalSpent,
-          totalOrders: Number(customer.total_orders) || 0,
+          totalSpent,
+          totalOrders,
           lastPurchase: customer.last_purchase || '',
           birthDate: customer.birth_date || '',
           notes: customer.notes || '',
@@ -311,8 +312,8 @@ class CustomerService {
         ...customer,
         customerCode: customer.customer_code || this.generateCustomerCode(customer.name),
         customerType: this.mapCustomerTypeToUI(customer.customer_type),
-        totalSpent: customer.total_purchases || 0,
-        totalOrders: 0,
+        totalSpent: Number(customer.total_purchases) || 0,
+        totalOrders: Number(customer.total_orders) || 0,
         lastPurchase: customer.last_purchase || '',
         birthDate: customer.birth_date || '',
         notes: customer.notes || '',
@@ -330,11 +331,17 @@ class CustomerService {
   // Obtener historial de compras del cliente
   async getPurchaseHistory(customerId: string, limit: number = 10): Promise<{ data?: PurchaseHistoryItem[]; error?: string }> {
     try {
+      const orgId = this.getOrganizationId();
+      if (!orgId) {
+        return { error: 'No organization selected' };
+      }
+
       // First, get the sales
       const { data: sales, error: salesError } = await this.supabase
         .from('sales')
         .select('id, total, payment_method, created_at, status')
         .eq('customer_id', customerId)
+        .eq('organization_id', orgId)
         .order('created_at', { ascending: false })
         .limit(limit);
 
@@ -368,6 +375,7 @@ class CustomerService {
         const { data: products, error: productsError } = await this.supabase
           .from('products')
           .select('id, name')
+          .eq('organization_id', orgId)
           .in('id', uniqueProductIds);
 
         if (!productsError && products) {
@@ -424,6 +432,7 @@ class CustomerService {
         phone: customerData.phone,
         address: customerData.address,
         tax_id: customerData.tax_id,
+        ruc: (customerData as any).ruc,
         customer_code: (customerData as any).customerCode ?? customerData.customer_code ?? this.generateCustomerCode(customerData.name || ''),
         customer_type: this.mapCustomerTypeToDBencoding(customerType),
         status: customerData.status || 'active',
@@ -459,6 +468,7 @@ class CustomerService {
 
       const uiCustomer: UICustomer = {
         ...customer,
+        ruc: customer.ruc,
         customerCode: customer.customer_code || this.generateCustomerCode(customer.name),
         customerType: this.mapCustomerTypeToUI(customer.customer_type),
         totalSpent: 0,
@@ -490,6 +500,7 @@ class CustomerService {
       if (customerData.phone !== undefined) updateData.phone = customerData.phone;
       if (customerData.address !== undefined) updateData.address = customerData.address;
       if (customerData.tax_id !== undefined) updateData.tax_id = customerData.tax_id;
+      if ((customerData as any).ruc !== undefined) updateData.ruc = (customerData as any).ruc;
       if ((customerData as any).customerCode !== undefined || customerData.customer_code !== undefined) {
         updateData.customer_code = (customerData as any).customerCode ?? customerData.customer_code;
       }
@@ -537,10 +548,11 @@ class CustomerService {
 
       const uiCustomer: UICustomer = {
         ...customer,
+        ruc: customer.ruc,
         customerCode: customer.customer_code || this.generateCustomerCode(customer.name),
         customerType: this.mapCustomerTypeToUI(customer.customer_type),
-        totalSpent: customer.total_purchases || 0,
-        totalOrders: 0,
+        totalSpent: Number(customer.total_purchases) || 0,
+        totalOrders: Number(customer.total_orders) || 0,
         lastPurchase: customer.last_purchase || '',
         birthDate: customer.birth_date || '',
         notes: customer.notes || '',

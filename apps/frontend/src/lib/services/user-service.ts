@@ -106,37 +106,35 @@ class UserService {
   // Mapea permisos básicos por rol para compatibilidad en el cliente
   private getRolePermissions(role?: string): string[] {
     const map: Record<string, string[]> = {
+      OWNER: [
+        'manage_company',
+        'manage_billing',
+        'manage_users',
+        'view_reports',
+        'edit_products',
+        'create_sales',
+        'update_stock'
+      ],
       ADMIN: [
-        'users:read', 'users:write',
-        'products:read', 'products:write',
-        'sales:read', 'sales:write',
-        'inventory:read', 'inventory:write',
-        'reports:read', 'reports:export',
-        'settings:read'
+        'manage_users',
+        'view_reports',
+        'edit_products',
+        'create_sales',
+        'update_stock'
       ],
-      MANAGER: [
-        'users:read',
-        'products:read', 'products:write',
-        'sales:read', 'sales:write',
-        'inventory:read', 'inventory:write',
-        'reports:read', 'reports:export',
-        'settings:read'
+      SELLER: [
+        'create_sales',
+        'view_products',
+        'view_customers'
       ],
-      EMPLOYEE: [
-        'products:read',
-        'sales:read', 'sales:write',
-        'inventory:read'
-      ],
-      CASHIER: [
-        'products:read',
-        'sales:read', 'sales:write'
-      ],
-      VIEWER: [
-        'products:read', 'sales:read', 'inventory:read'
+      WAREHOUSE: [
+        'view_products',
+        'update_stock',
+        'create_purchase'
       ]
     }
-    const key = (role || 'VIEWER').toUpperCase()
-    return map[key] || []
+    const key = (role || 'SELLER').toUpperCase()
+    return map[key] || map.SELLER
   }
 
   // Función auxiliar para transformar datos de Supabase al formato esperado
@@ -170,7 +168,7 @@ class UserService {
       full_name: name,
       email: apiUser.email,
       phone: apiUser.phone,
-      role: apiUser.role || 'VIEWER',
+      role: apiUser.role || 'SELLER',
       status: statusText,
       department: undefined,
       job_position: undefined,
@@ -194,7 +192,7 @@ class UserService {
       firstName: nameParts[0] || '',
       lastName: nameParts.slice(1).join(' ') || '',
       isActive: statusText === 'ACTIVE',
-      permissions: this.getRolePermissions(apiUser.role || 'VIEWER'),
+      permissions: this.getRolePermissions(apiUser.role || 'SELLER'),
       loginCount: 0,
       profileImage: undefined,
       createdAt: apiUser.createdAt,
@@ -218,7 +216,8 @@ class UserService {
         limit,
         search: filters?.search,
         role: filters?.role && filters.role !== 'all' ? filters.role : undefined,
-        source: 'auth',
+        organizationId: (filters as any)?.organizationId,
+        source: 'auto',
       })
       const users = (apiUsers || []).map(u => this.transformApiUser(u))
       const totalPages = Math.ceil((total || users.length) / limit)
@@ -798,14 +797,14 @@ export const isUserActive = (user: User): boolean => {
 
 export const getUserRoleDisplayName = (roleId: string): string => {
   const roleMap: Record<string, string> = {
+    'OWNER': 'Owner',
     'ADMIN': 'Administrador',
-    'MANAGER': 'Gerente',
-    'CASHIER': 'Cajero',
-    'EMPLOYEE': 'Empleado'
+    'SELLER': 'Vendedor',
+    'WAREHOUSE': 'Deposito'
   }
   return roleMap[roleId] || roleId
 }
 
 export const canUserPerformAction = (user: User, permission: string): boolean => {
-  return (user.permissions?.includes(permission) ?? false) || user.role === 'ADMIN'
+  return (user.permissions?.includes(permission) ?? false) || user.role === 'ADMIN' || user.role === 'OWNER'
 }

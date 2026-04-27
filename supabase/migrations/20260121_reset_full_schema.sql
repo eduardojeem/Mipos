@@ -359,7 +359,8 @@ CREATE TRIGGER update_sales_updated_at BEFORE UPDATE ON sales FOR EACH ROW EXECU
 CREATE TRIGGER update_returns_updated_at BEFORE UPDATE ON returns FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE OR REPLACE FUNCTION is_admin()
-RETURNS BOOLEAN AS $$
+RETURNS BOOLEAN
+AS $$
 BEGIN
     IF EXISTS (
         SELECT 1 FROM users WHERE id = auth.uid() AND role = 'ADMIN'
@@ -378,10 +379,11 @@ BEGIN
     END IF;
     RETURN FALSE;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = '';
 
 CREATE OR REPLACE FUNCTION has_permission(resource_name TEXT, action_name TEXT)
-RETURNS BOOLEAN AS $$
+RETURNS BOOLEAN
+AS $$
 BEGIN
     IF is_admin() THEN
         RETURN TRUE;
@@ -401,14 +403,15 @@ BEGIN
         AND p.action = action_name
     );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = '';
 
 CREATE OR REPLACE FUNCTION current_user_id()
-RETURNS UUID AS $$
+RETURNS UUID
+AS $$
 BEGIN
     RETURN auth.uid();
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = '';
 
 INSERT INTO roles (name, display_name, description, is_system_role) VALUES
 ('ADMIN', 'Administrador', 'Acceso completo al sistema', TRUE),

@@ -6,6 +6,7 @@ CREATE OR REPLACE FUNCTION public.exec_sql(sql text)
 RETURNS json
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = ''
 AS $$
 DECLARE
     result json;

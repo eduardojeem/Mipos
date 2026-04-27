@@ -289,6 +289,40 @@ export function StoreSettingsForm({ config, onUpdate }: StoreSettingsFormProps) 
                 />
                 <Label htmlFor="printReceipts">Imprimir recibos</Label>
               </div>
+
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="autoPrintOnSale"
+                checked={config.storeSettings.autoPrintOnSale || false}
+                onCheckedChange={(checked) => handleStoreSettingsChange('autoPrintOnSale', checked)}
+              />
+              <Label htmlFor="autoPrintOnSale">Imprimir ticket automáticamente al finalizar venta</Label>
+            </div>
+
+            <div className="flex items-center gap-6">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="autoShareWhatsApp"
+                  checked={Boolean(config.storeSettings.autoShareReceipt?.whatsapp)}
+                  onCheckedChange={(checked) => {
+                    const next = { ...(config.storeSettings.autoShareReceipt || {}), whatsapp: checked };
+                    onUpdate({ storeSettings: { ...config.storeSettings, autoShareReceipt: next } });
+                  }}
+                />
+                <Label htmlFor="autoShareWhatsApp">Enviar comprobante por WhatsApp automáticamente</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="autoShareEmail"
+                  checked={Boolean(config.storeSettings.autoShareReceipt?.email)}
+                  onCheckedChange={(checked) => {
+                    const next = { ...(config.storeSettings.autoShareReceipt || {}), email: checked };
+                    onUpdate({ storeSettings: { ...config.storeSettings, autoShareReceipt: next } });
+                  }}
+                />
+                <Label htmlFor="autoShareEmail">Enviar comprobante por Email automáticamente</Label>
+              </div>
+            </div>
             </div>
 
             <div className="space-y-3">

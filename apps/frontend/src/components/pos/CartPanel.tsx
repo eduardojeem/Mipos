@@ -15,6 +15,8 @@ interface CartItem {
 interface CartPanelProps {
   items: CartItem[];
   total: number;
+  subtotal: number;
+  taxAmount: number;
   onUpdateQuantity: (itemId: string, quantity: number) => void;
   onRemoveItem: (itemId: string) => void;
   onClearCart: () => void;
@@ -26,6 +28,8 @@ interface CartPanelProps {
 export default function CartPanel({
   items,
   total,
+  subtotal,
+  taxAmount,
   onUpdateQuantity,
   onRemoveItem,
   onClearCart,
@@ -44,9 +48,7 @@ export default function CartPanel({
   };
 
   // Calculate subtotal and tax for the new footer structure
-  // Assuming tax is 0 for now, or needs to be passed as a prop
-  const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const tax = 0; // Placeholder, adjust as needed
+  // Using values passed from OptimizedPOSLayout (calculateCartWithIva)
 
   return (
     <div
@@ -174,8 +176,8 @@ export default function CartPanel({
               <span className="text-gray-900 dark:text-white font-bold">{formatCurrency(subtotal)}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-gray-400 dark:text-slate-500 font-medium">Impuestos</span>
-              <span className="text-gray-900 dark:text-white font-bold">{formatCurrency(tax)}</span>
+              <span className="text-gray-400 dark:text-slate-500 font-medium">IVA (10%)</span>
+              <span className="text-gray-900 dark:text-white font-bold">{formatCurrency(taxAmount)}</span>
             </div>
             <div className="pt-3 border-t border-gray-100 dark:border-slate-800 flex justify-between items-center">
               <span className="text-lg font-black text-gray-900 dark:text-white uppercase tracking-wider">Total</span>

@@ -8,7 +8,7 @@ import { assertSuperAdmin } from '@/app/api/_utils/auth';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await assertSuperAdmin(request);
   if (!('ok' in auth) || auth.ok === false) {
@@ -17,7 +17,7 @@ export async function GET(
 
   try {
     const supabase = await createClient();
-    const { id } = params;
+    const { id } = await params;
 
     // Obtener plantilla
     const { data: template, error: templateError } = await supabase
@@ -52,7 +52,7 @@ export async function GET(
  */
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await assertSuperAdmin(request);
   if (!('ok' in auth) || auth.ok === false) {
@@ -61,7 +61,7 @@ export async function PUT(
 
   try {
     const supabase = await createClient();
-    const { id } = params;
+    const { id } = await params;
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('User not found'); // Should be caught by assertSuperAdmin
 
@@ -141,34 +141,18 @@ export async function PUT(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await assertSuperAdmin(request);
+    if (!('ok' in auth) || auth.ok === false) {
+      return NextResponse.json(auth.body, { status: auth.status });
+    }
+
     const supabase = await createClient();
-    const { id } = params;
+    const { id } = await params;
 
-    // Verificar autenticación
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
-    }
-
-    // Verificar que es SUPER_ADMIN
-    const { data: userData, error: userError } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', user.id)
-      .single();
-
-    if (userError || userData?.role !== 'SUPER_ADMIN') {
-      return NextResponse.json(
-        { error: 'No tienes permisos de SuperAdmin' },
-        { status: 403 }
-      );
-    }
+    const { data: { user } } = await supabase.auth.getUser();
 
     // Obtener info de la plantilla antes de eliminar para el audit log
     const { data: template } = await supabase
@@ -197,7 +181,7 @@ export async function DELETE(
         action: 'email_template.deleted',
         entity_type: 'email_template',
         entity_id: id,
-        user_id: user.id,
+        user_id: user?.id,
         metadata: {
           template_name: template?.name,
           template_slug: template?.slug,

@@ -1,12 +1,12 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
+import { useBusinessConfigData } from '@/contexts/BusinessConfigContext'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -62,32 +62,20 @@ interface Invoice {
   notes?: string;
 }
 
-const mockCustomers: Customer[] = [
-  {
-    id: '1',
-    name: 'Juan Pérez',
-    email: 'juan@email.com',
-    address: 'Calle Principal 123, Ciudad',
-    phone: '+1234567890',
-    taxId: '12345678-9'
-  },
-  {
-    id: '2',
-    name: 'María García',
-    email: 'maria@email.com',
-    address: 'Avenida Central 456, Ciudad',
-    phone: '+0987654321',
-    taxId: '98765432-1'
-  }
-];
-
 export function InvoiceGenerator() {
   const [invoice, setInvoice] = useState<Invoice>({
     id: '',
     number: `INV-${Date.now()}`,
     date: new Date().toISOString().split('T')[0],
     dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    customer: mockCustomers[0],
+    customer: {
+      id: '',
+      name: '',
+      email: '',
+      address: '',
+      phone: '',
+      taxId: ''
+    },
     items: [
       {
         id: '1',
@@ -154,15 +142,20 @@ export function InvoiceGenerator() {
     setTimeout(calculateTotals, 0);
   };
 
+  const { config } = useBusinessConfigData();
   const calculateTotals = () => {
     setInvoice(prev => {
       const subtotal = prev.items.reduce((sum, item) => sum + item.total, 0);
-      const taxAmount = (subtotal - prev.discount) * (prev.tax / 100);
-      const total = subtotal - prev.discount + taxAmount;
-      
+      const taxEnabled = config?.storeSettings?.taxEnabled ?? true;
+      const taxRate = (prev.tax ?? ((config?.storeSettings?.taxRate ?? 0.10) * 100)) / 100;
+      const taxIncluded = config?.storeSettings?.taxIncludedInPrices ?? true;
+      const discountAmt = Math.max(0, prev.discount || 0);
+      const baseSubtotal = subtotal;
+      const taxAmount = taxEnabled ? (taxIncluded ? (baseSubtotal - (baseSubtotal / (1 + taxRate))) : ((Math.max(0, baseSubtotal - discountAmt)) * taxRate)) : 0;
+      const total = taxIncluded ? Math.max(0, baseSubtotal - discountAmt) : Math.max(0, baseSubtotal - discountAmt + taxAmount);
       return {
         ...prev,
-        subtotal,
+        subtotal: baseSubtotal,
         total
       };
     });
@@ -254,27 +247,69 @@ export function InvoiceGenerator() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <Label htmlFor="customer">Cliente</Label>
-                <Select
-                  value={invoice.customer.id}
-                  onValueChange={(value) => {
-                    const customer = mockCustomers.find(c => c.id === value);
-                    if (customer) {
-                      setInvoice(prev => ({ ...prev, customer }));
-                    }
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {mockCustomers.map(customer => (
-                      <SelectItem key={customer.id} value={customer.id}>
-                        {customer.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="customerName">Nombre</Label>
+                <Input
+                  id="customerName"
+                  value={invoice.customer.name}
+                  onChange={(e) =>
+                    setInvoice((prev) => ({
+                      ...prev,
+                      customer: { ...prev.customer, name: e.target.value },
+                    }))
+                  }
+                />
+              </div>
+              <div>
+                <Label htmlFor="customerEmail">Email</Label>
+                <Input
+                  id="customerEmail"
+                  value={invoice.customer.email}
+                  onChange={(e) =>
+                    setInvoice((prev) => ({
+                      ...prev,
+                      customer: { ...prev.customer, email: e.target.value },
+                    }))
+                  }
+                />
+              </div>
+              <div>
+                <Label htmlFor="customerPhone">Teléfono</Label>
+                <Input
+                  id="customerPhone"
+                  value={invoice.customer.phone}
+                  onChange={(e) =>
+                    setInvoice((prev) => ({
+                      ...prev,
+                      customer: { ...prev.customer, phone: e.target.value },
+                    }))
+                  }
+                />
+              </div>
+              <div>
+                <Label htmlFor="customerAddress">Dirección</Label>
+                <Input
+                  id="customerAddress"
+                  value={invoice.customer.address}
+                  onChange={(e) =>
+                    setInvoice((prev) => ({
+                      ...prev,
+                      customer: { ...prev.customer, address: e.target.value },
+                    }))
+                  }
+                />
+              </div>
+              <div>
+                <Label htmlFor="customerTaxId">Documento fiscal</Label>
+                <Input
+                  id="customerTaxId"
+                  value={invoice.customer.taxId || ''}
+                  onChange={(e) =>
+                    setInvoice((prev) => ({
+                      ...prev,
+                      customer: { ...prev.customer, taxId: e.target.value },
+                    }))
+                  }
+                />
               </div>
             </CardContent>
           </Card>

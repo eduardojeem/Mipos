@@ -5,6 +5,7 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { ThemeProvider, useTheme } from 'next-themes';
 import { useBusinessConfig } from '@/contexts/BusinessConfigContext';
 import { useUserSettings } from '@/app/dashboard/settings/hooks/useOptimizedSettings';
+import type { UserSettings } from '@/app/dashboard/settings/hooks/useOptimizedSettings';
 import { AuthProvider as OldAuthProvider } from '@/hooks/use-auth';
 import { AuthProvider } from '@/components/auth/AuthProvider';
 import { PermissionsProvider } from '@/hooks/use-permissions';
@@ -12,7 +13,7 @@ import { PermissionProvider } from '@/components/ui/permission-guard';
 import { UnifiedPermissionsProvider } from '@/hooks/use-unified-permissions';
 import { BusinessConfigProvider } from '@/contexts/BusinessConfigContext';
 import { WebsiteConfigProvider } from '@/contexts/WebsiteConfigContext';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { LoadingOverlay } from '@/components/ui/unified-error-loading';
 import { useStore } from '@/store';
 import { registerServiceWorker } from '@/lib/register-sw';
@@ -96,6 +97,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
       );
 
       if (isNextInternal) {
+        return originalFetch(input, init);
+      }
+      const isExternal = typeof urlStr === 'string' && /^https?:\/\//.test(urlStr) && !urlStr.startsWith(window.location.origin) && !(apiUrl && urlStr.startsWith(apiUrl));
+      if (isExternal) {
         return originalFetch(input, init);
       }
       
@@ -214,13 +219,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
                 ? createMergedAbortSignal([init.signal, timeoutController.signal])
                 : timeoutController.signal;
 
-              const response = await originalFetch(input as RequestInfo | URL, {
-                ...init,
+              const initWithSignal: RequestInit = {
+                ...(init ?? {}),
                 signal: mergedSignal,
-                // Ensure keepalive is not used with AbortSignal in older browsers/environments if needed
-                // but generally Next.js polyfills this. 
-                // Fix: explicit casting to any to avoid type conflict with RequestInit
-              } as any);
+              };
+              const response = await originalFetch(input as RequestInfo | URL, initWithSignal);
 
               // Clear timeout on successful response
               if (timeoutId !== null) {
@@ -570,21 +573,38 @@ function ThemeRuntime() {
   const { theme, setTheme } = useTheme();
   const { config } = useBusinessConfig();
   const { data: userSettings } = useUserSettings();
+  const lastSyncedServerTheme = useRef<UserSettings['theme'] | null>(null);
+
+  useEffect(() => {
+    const serverTheme = userSettings?.theme;
+    if (!serverTheme || serverTheme === lastSyncedServerTheme.current) {
+      return;
+    }
+
+    lastSyncedServerTheme.current = serverTheme;
+    setTheme(serverTheme);
+  }, [setTheme, userSettings?.theme]);
   
   // Aplicar opciones avanzadas: intensidad, tono, programación
   useEffect(() => {
     try {
       const root = document.documentElement;
+      const isDark =
+        theme === 'dark' ||
+        (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
       // 1. Priorizar settings del usuario (servidor), fallback a localStorage
-      const settings = userSettings || {
+      const settings: Partial<UserSettings> = userSettings || {
         theme_dark_intensity: 'normal',
         theme_dark_tone: 'blue',
         theme_smooth_transitions: true,
         primary_color: 'blue',
         border_radius: '0.5',
         enable_animations: true,
-        dashboard_layout: 'comfortable'
+        dashboard_layout: 'comfortable',
+        enable_glassmorphism: true,
+        enable_gradients: true,
+        enable_shadows: true,
       };
 
       // Si el usuario tiene un tema explícito guardado en DB, sincronizar next-themes
@@ -626,7 +646,7 @@ function ThemeRuntime() {
 
       // 4. Intensidad Oscura (OLED/AMOLED)
       root.classList.remove('oled');
-      if (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      if (isDark) {
         if (settings.theme_dark_intensity === 'black') {
           root.classList.add('oled');
           root.style.setProperty('--background', '0 0% 0%');
@@ -644,15 +664,27 @@ function ThemeRuntime() {
           root.style.removeProperty('--border');
           root.style.removeProperty('--muted');
         }
+      } else {
+        root.style.removeProperty('--background');
+        root.style.removeProperty('--card');
+        root.style.removeProperty('--border');
+        root.style.removeProperty('--muted');
       }
 
       // 5. Animaciones
       root.classList.toggle('theme-smooth', !!settings.enable_animations);
       if (!settings.enable_animations) {
         root.style.setProperty('--transition-duration', '0s');
+        root.classList.add('no-transitions');
       } else {
         root.style.removeProperty('--transition-duration');
+        root.classList.remove('no-transitions');
       }
+
+      // 6. Efectos Visuales (Glassmorphism, Gradients, Shadows)
+      root.setAttribute('data-glassmorphism', settings.enable_glassmorphism ? 'true' : 'false');
+      root.setAttribute('data-gradients', settings.enable_gradients ? 'true' : 'false');
+      root.setAttribute('data-shadows', settings.enable_shadows ? 'true' : 'false');
 
       // Caché simple de assets oscuros (logo/favicon de negocio)
       try {
@@ -667,7 +699,7 @@ function ThemeRuntime() {
     } catch (e) {
       console.error('Error applying theme:', e);
     }
-  }, [theme, setTheme, config, userSettings]);
+  }, [theme, config, userSettings]);
 
   return null;
 }

@@ -12,6 +12,7 @@ import { reportsRateLimit } from '../middleware/rate-limiter';
 import { validateQuery, sanitize } from '../middleware/input-validator';
 import { exportQueueService, ExportJob } from '../services/export-queue';
 import { v4 as uuidv4 } from 'uuid';
+import { getEffectiveOrganizationId } from '../middleware/multi-tenant';
 
 const router = Router();
 
@@ -85,7 +86,7 @@ router.get('/',
       customerId: queryParams.customerId,
       supplierId: queryParams.supplierId,
       userId: queryParams.userId,
-      status: queryParams.status
+      organizationId: getEffectiveOrganizationId(req as EnhancedAuthenticatedRequest)
     };
     
     logger.info('Generating report via GET endpoint', { 
@@ -150,7 +151,14 @@ router.post('/export/enqueue',
   async (req, res) => {
     try {
       const body = exportEnqueueSchema.parse(req.body);
-      const job = exportQueueService.enqueue(body.type, body.format, body.filters);
+      
+      // Inject organizationId into filters
+      const filters = {
+        ...body.filters,
+        organizationId: getEffectiveOrganizationId(req as EnhancedAuthenticatedRequest)
+      };
+
+      const job = exportQueueService.enqueue(body.type, body.format, filters);
       res.json({ success: true, jobId: job.id, status: job.status, progress: job.progress });
     } catch (error) {
       logger.error('Error enqueuing export job', {
@@ -278,6 +286,7 @@ router.get('/compare',
   async (req, res) => {
   try {
     const params = compareQuerySchema.parse(req.query);
+    const orgId = getEffectiveOrganizationId(req as EnhancedAuthenticatedRequest);
 
     const filtersA: ReportFilter = {
       startDate: new Date(params.start_date_a),
@@ -287,6 +296,7 @@ router.get('/compare',
       customerId: params.customerId,
       supplierId: params.supplierId,
       userId: params.userId,
+      organizationId: orgId
     };
 
     const filtersB: ReportFilter = {
@@ -297,6 +307,7 @@ router.get('/compare',
       customerId: params.customerId,
       supplierId: params.supplierId,
       userId: params.userId,
+      organizationId: orgId
     };
 
     logger.info('Generating comparison report', {
@@ -345,7 +356,10 @@ router.post('/sales',
   requirePermission('reports', 'view'),
   async (req, res) => {
   try {
-    const filters = reportFilterSchema.parse(req.body);
+    const filters = {
+      ...reportFilterSchema.parse(req.body),
+      organizationId: (req as EnhancedAuthenticatedRequest).user?.organizationId
+    };
     
     logger.info('Generating sales report', { 
       userId: (req as EnhancedAuthenticatedRequest).user?.id, 
@@ -387,7 +401,10 @@ router.post('/inventory',
   requirePermission('inventory', 'read'),
   async (req, res) => {
   try {
-    const filters = reportFilterSchema.parse(req.body);
+    const filters = {
+      ...reportFilterSchema.parse(req.body),
+      organizationId: (req as EnhancedAuthenticatedRequest).user?.organizationId
+    };
     
     logger.info('Generating inventory report', { 
       userId: (req as EnhancedAuthenticatedRequest).user?.id, 
@@ -429,7 +446,10 @@ router.post('/customers',
   requirePermission('customers', 'read'),
   async (req, res) => {
   try {
-    const filters = reportFilterSchema.parse(req.body);
+    const filters = {
+      ...reportFilterSchema.parse(req.body),
+      organizationId: (req as EnhancedAuthenticatedRequest).user?.organizationId
+    };
     
     logger.info('Generating customer report', { 
       userId: (req as EnhancedAuthenticatedRequest).user?.id, 
@@ -471,7 +491,10 @@ router.post('/financial',
   requirePermission('reports', 'view'),
   async (req, res) => {
   try {
-    const filters = reportFilterSchema.parse(req.body);
+    const filters = {
+      ...reportFilterSchema.parse(req.body),
+      organizationId: (req as EnhancedAuthenticatedRequest).user?.organizationId
+    };
     
     logger.info('Generating financial report', { 
       userId: (req as EnhancedAuthenticatedRequest).user?.id, 
@@ -587,7 +610,10 @@ router.post('/inventory/export/:format',
   try {
     const { format } = req.params;
     const exportFormat = exportFormatSchema.parse(format);
-    const filters = reportFilterSchema.parse(req.body);
+    const filters = {
+      ...reportFilterSchema.parse(req.body),
+      organizationId: (req as EnhancedAuthenticatedRequest).user?.organizationId
+    };
     
     logger.info('Exporting inventory report', { 
       userId: (req as EnhancedAuthenticatedRequest).user?.id, 

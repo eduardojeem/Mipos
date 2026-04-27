@@ -195,7 +195,7 @@ router.get('/summary', requirePermission('inventory', 'read'), asyncHandler(asyn
     prisma.product.count({
       where: {
         stockQuantity: {
-          lte: 'min_stock',
+          lte: 10,
           gt: 0
         }
       }
@@ -238,7 +238,7 @@ router.get('/low-stock', asyncHandler(async (req, res) => {
   const products = await prisma.product.findMany({
     where: {
       stockQuantity: {
-        lte: 'min_stock'
+        lte: 10
       }
     },
     include: {

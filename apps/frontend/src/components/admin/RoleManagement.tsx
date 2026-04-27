@@ -167,6 +167,8 @@ export default function RoleManagement() {
     userCount: r.userCount ?? 0,
     createdAt: r.createdAt || new Date().toISOString(),
     updatedAt: r.updatedAt || r.createdAt || new Date().toISOString(),
+    organizationId: r.organizationId || null,
+    organizationName: r.organizationName || null,
   })
 
   const mapPermissionCategory = (c: any): PermissionCategory => ({
@@ -262,19 +264,7 @@ export default function RoleManagement() {
         roleService.getPermissionsByCategory(),
       ])
 
-      const mappedRoles = apiRoles.map((r: any) => {
-        const role = mapRole(r)
-        // Agregar información de organización si está disponible
-        const orgFilter = currentOrganization && currentOrganization !== 'all' ? currentOrganization : null
-        if (orgFilter) {
-          role.organizationId = orgFilter
-          const org = organizations.find(o => o.id === orgFilter)
-          if (org) {
-            role.organizationName = org.name
-          }
-        }
-        return role
-      })
+      const mappedRoles = apiRoles.map((r: any) => mapRole(r))
       const mappedCategories = apiCategories.map(mapPermissionCategory)
       const flatPermissions = mappedCategories.flatMap(c => c.permissions)
 

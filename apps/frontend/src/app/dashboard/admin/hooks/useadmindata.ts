@@ -67,7 +67,7 @@ export function useAdminData() {
           totalRevenue: revenue,
         });
       } catch (err: any) {
-        setError(err?.message || 'Error cargando datos de administración');
+        setError(err?.message || 'Error cargando datos de administracion');
       } finally {
         setLoading(false);
       }

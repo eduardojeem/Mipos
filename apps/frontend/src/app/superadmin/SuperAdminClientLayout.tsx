@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
+import { usePermissionsContext } from "@/hooks/use-unified-permissions";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -21,11 +22,14 @@ import {
   Crown,
   Sparkles,
   Mail,
+  LayoutDashboard,
+  UserCog,
+  FileText,
+  TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SuperAdminThemeToggle } from "./components/SuperAdminThemeToggle";
 import { useSuperAdminPrefetch } from "./hooks/usePrefetch";
-import { SuperAdminGuard } from "./components/SuperAdminGuard";
 
 interface SuperAdminLayoutProps {
   children: React.ReactNode;
@@ -46,6 +50,18 @@ const navigationItems: NavItem[] = [
     href: "/superadmin",
     icon: BarChart3,
     description: "Vista general del sistema",
+  },
+  {
+    title: "Panel Admin",
+    href: "/admin",
+    icon: UserCog,
+    description: "Administración de negocio",
+  },
+  {
+    title: "Dashboard Ventas",
+    href: "/dashboard",
+    icon: LayoutDashboard,
+    description: "Panel de ventas y operaciones",
   },
   {
     title: "Organizaciones",
@@ -93,10 +109,31 @@ const navigationItems: NavItem[] = [
     description: "Planes y límites del sistema",
   },
   {
+    title: "Suscripciones",
+    href: "/superadmin/subscriptions",
+    icon: CreditCard,
+    badge: "Nuevo",
+    description: "Gestión de suscripciones activas",
+  },
+  {
+    title: "Facturas",
+    href: "/superadmin/invoices",
+    icon: FileText,
+    badge: "Nuevo",
+    description: "Facturación y pagos",
+  },
+  {
     title: "Facturación",
     href: "/superadmin/billing",
     icon: CreditCard,
-    description: "Suscripciones y pagos",
+    description: "Suscripciones y pagos (legacy)",
+  },
+  {
+    title: "Métricas SaaS",
+    href: "/superadmin/saas-metrics",
+    icon: TrendingUp,
+    badge: "Nuevo",
+    description: "KPIs y métricas del negocio",
   },
   {
     title: "Monitoreo",
@@ -129,7 +166,9 @@ const navigationItems: NavItem[] = [
 
 export default function SuperAdminClientLayout({ children }: SuperAdminLayoutProps) {
   const { user, signOut } = useAuth();
+  const { isAdmin, isManager } = usePermissionsContext();
   const router = useRouter();
+  const pathname = usePathname();
   const [activeItem, setActiveItem] = useState<string>("");
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -143,6 +182,51 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
       router.push("/auth/signin");
     }
   }, [user, router]);
+
+  const visibleNavigationItems = useMemo(
+    () =>
+      navigationItems.filter((item) => {
+        if (item.href === "/admin") return isAdmin || isManager;
+        if (item.href === "/dashboard") return isAdmin || isManager;
+        return true;
+      }),
+    [isAdmin, isManager]
+  );
+
+  useEffect(() => {
+    setActiveItem(pathname || "");
+
+    const matchingParents = visibleNavigationItems
+      .filter((item) => item.children && item.children.some((child) => pathname?.startsWith(child.href)))
+      .map((item) => item.title);
+
+    if (matchingParents.length === 0) return;
+    setExpandedItems((prev) => {
+      const next = new Set(prev);
+      matchingParents.forEach((title) => next.add(title));
+      return next;
+    });
+  }, [pathname, visibleNavigationItems]);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem("superadmin_sidebar_expanded");
+      if (!stored) return;
+      const parsed = JSON.parse(stored);
+      if (!Array.isArray(parsed)) return;
+      setExpandedItems(new Set(parsed.filter((v) => typeof v === "string")));
+    } catch {
+      return;
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("superadmin_sidebar_expanded", JSON.stringify(Array.from(expandedItems)));
+    } catch {
+      return;
+    }
+  }, [expandedItems]);
 
   const toggleExpanded = (title: string) => {
     const newExpanded = new Set(expandedItems);
@@ -168,8 +252,7 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
   }
 
   return (
-    <SuperAdminGuard>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 relative overflow-hidden transition-colors duration-500">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 relative overflow-hidden transition-colors duration-500">
         {/* Animated Background Elements */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute -top-40 -right-40 w-80 h-80 bg-slate-400/20 dark:bg-slate-600/10 rounded-full blur-3xl animate-pulse transition-colors duration-500"></div>
@@ -218,14 +301,14 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
             {/* Navigation */}
             <ScrollArea className="flex-1 px-3 py-6">
               <nav className="space-y-1">
-                {navigationItems.map((item) => (
+                {visibleNavigationItems.map((item) => (
                   <div key={item.title} className="group">
                     <Button
                       variant="ghost"
                       className={cn(
                         "w-full justify-start gap-3 h-auto py-3 px-4 transition-all duration-200",
                         !isCollapsed && "text-left",
-                        activeItem === item.href &&
+                        (activeItem === item.href || (item.children && item.children.some((c) => activeItem.startsWith(c.href)))) &&
                         "bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-800 dark:to-slate-700 border border-slate-300 dark:border-slate-600 shadow-md",
                         "hover:bg-gradient-to-r hover:from-slate-50 hover:to-slate-100 dark:hover:from-slate-800 dark:hover:to-slate-700 hover:scale-[1.02] hover:shadow-sm",
                       )}
@@ -233,7 +316,6 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
                         if (item.children) {
                           toggleExpanded(item.title);
                         } else {
-                          setActiveItem(item.href);
                           router.push(item.href);
                         }
                       }}
@@ -241,7 +323,7 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
                       <div
                         className={cn(
                           "p-2 rounded-xl transition-all duration-200",
-                          activeItem === item.href
+                          (activeItem === item.href || (item.children && item.children.some((c) => activeItem.startsWith(c.href))))
                             ? "bg-gradient-to-br from-slate-600 to-slate-700 shadow-lg shadow-slate-500/25"
                             : "bg-slate-100 dark:bg-slate-800 group-hover:bg-gradient-to-br group-hover:from-slate-600 group-hover:to-slate-700",
                         )}
@@ -249,7 +331,7 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
                         <item.icon
                           className={cn(
                             "h-5 w-5 transition-colors",
-                            activeItem === item.href
+                            (activeItem === item.href || (item.children && item.children.some((c) => activeItem.startsWith(c.href))))
                               ? "text-white"
                               : "text-slate-600 dark:text-slate-400 group-hover:text-white",
                           )}
@@ -302,7 +384,6 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
                               "hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:translate-x-1",
                             )}
                             onClick={() => {
-                              setActiveItem(child.href);
                               router.push(child.href);
                             }}
                           >
@@ -415,6 +496,5 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
         </div>
       </div>
     </div>
-    </SuperAdminGuard>
   );
 }

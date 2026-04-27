@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { getUserOrganizationId } from '@/app/api/_utils/organization'
 import { isMockAuthEnabled } from '@/lib/env'
 import { logAudit } from '@/app/api/admin/_utils/audit'
 
@@ -16,6 +17,19 @@ export interface RoleValidationResult {
   userId?: string
   userRole?: string
   permissions?: string[]
+}
+
+function normalizeString(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+
+  const lowered = trimmed.toLowerCase()
+  if (lowered === 'undefined' || lowered === 'null') {
+    return null
+  }
+
+  return trimmed
 }
 
 /**
@@ -72,6 +86,7 @@ export async function validateRole(
 
   try {
     const supabase = await createClient()
+    const adminSupabase = await createAdminClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
     if (authError || !user) {
@@ -84,7 +99,7 @@ export async function validateRole(
     }
 
     // Obtener el rol del usuario
-    const { data: profile, error: profileError } = await supabase
+    const { data: profile, error: profileError } = await adminSupabase
       .from('users')
       .select('role')
       .eq('id', user.id)
@@ -99,13 +114,31 @@ export async function validateRole(
       }
     }
 
-    const userRole = (profile as any)?.role ?? (user.user_metadata as any)?.role
+    let userRole = (profile as any)?.role ?? (user.user_metadata as any)?.role
     if (!userRole) {
-      logAudit('auth.denied', { mode: 'prod', reason: 'no_role', userId: user.id, url: request.url })
-      return {
-        ok: false,
-        status: 403,
-        body: { error: 'Usuario sin rol asignado' }
+      const headerOrgId = normalizeString(
+        request.headers.get('x-organization-id') || request.headers.get('X-Organization-Id')
+      )
+      let orgId = headerOrgId || ''
+      if (!orgId) {
+        orgId = await getUserOrganizationId(user.id) || ''
+      }
+      if (orgId) {
+        const { data: omRow } = await adminSupabase
+          .from('organization_members')
+          .select('role_id, role:roles(name, is_active)')
+          .eq('user_id', user.id)
+          .eq('organization_id', orgId)
+          .maybeSingle()
+        userRole = (omRow as any)?.role?.name || null
+      }
+      if (!userRole) {
+        logAudit('auth.denied', { mode: 'prod', reason: 'no_role', userId: user.id, url: request.url })
+        return {
+          ok: false,
+          status: 403,
+          body: { error: 'Usuario sin rol asignado' }
+        }
       }
     }
 
@@ -142,13 +175,27 @@ export async function validateRole(
         }
       }
 
-      const { data: rolePermissions, error: permissionsError } = await supabase
+      const { data: roleRec, error: roleLookupError } = await adminSupabase
         .from('roles')
-        .select('permissions')
+        .select('id, is_active')
         .eq('name', normalizedUserRole)
         .single()
 
-      if (permissionsError || !rolePermissions) {
+      if (roleLookupError || !roleRec || roleRec.is_active === false) {
+        logAudit('auth.error', { mode: 'prod', reason: 'role_lookup_error', url: request.url, error: roleLookupError?.message })
+        return {
+          ok: false,
+          status: 500,
+          body: { error: 'Error consultando rol del usuario' }
+        }
+      }
+
+      const { data: rpRows, error: permissionsError } = await adminSupabase
+        .from('role_permissions')
+        .select('permission_id, permissions:permissions(name, is_active)')
+        .eq('role_id', (roleRec as any).id)
+
+      if (permissionsError) {
         logAudit('auth.error', { mode: 'prod', reason: 'permissions_query_error', url: request.url, error: permissionsError?.message })
         return {
           ok: false,
@@ -157,14 +204,28 @@ export async function validateRole(
         }
       }
 
-      const userPermissions = (rolePermissions as any).permissions || []
+      const rawPerms = (rpRows || [])
+        .map((row: any) => row.permissions?.is_active ? row.permissions?.name : null)
+        .filter((name: string | null) => !!name)
+      const userPermissions = rawPerms
+        .flatMap((name: string) => {
+          const n = String(name).trim()
+          const variants = [n]
+          if (n.includes(':')) variants.push(n.replace(/:/g, '.'))
+          if (n.includes('.')) variants.push(n.replace(/\./g, ':'))
+          return variants
+        })
       const requiredPermissions = requirement.permissions
 
       if (requirement.requireAllPermissions) {
         // Requiere TODOS los permisos
-        const hasAllPermissions = requiredPermissions.every(perm =>
-          userPermissions.includes(perm)
-        )
+        const hasAllPermissions = requiredPermissions.every(perm => {
+          const p = String(perm).trim()
+          const variants = [p]
+          if (p.includes(':')) variants.push(p.replace(/:/g, '.'))
+          if (p.includes('.')) variants.push(p.replace(/\./g, ':'))
+          return variants.some(v => userPermissions.includes(v))
+        })
         if (!hasAllPermissions) {
           logAudit('auth.denied', {
             mode: 'prod',
@@ -182,9 +243,13 @@ export async function validateRole(
         }
       } else {
         // Requiere AL MENOS UN permiso
-        const hasAnyPermission = requiredPermissions.some(perm =>
-          userPermissions.includes(perm)
-        )
+        const hasAnyPermission = requiredPermissions.some(perm => {
+          const p = String(perm).trim()
+          const variants = [p]
+          if (p.includes(':')) variants.push(p.replace(/:/g, '.'))
+          if (p.includes('.')) variants.push(p.replace(/\./g, ':'))
+          return variants.some(v => userPermissions.includes(v))
+        })
         if (!hasAnyPermission) {
           logAudit('auth.denied', {
             mode: 'prod',
@@ -257,7 +322,7 @@ export async function requirePOSPermissions(
   permissions: string[]
 ): Promise<RoleValidationResult> {
   return validateRole(request, {
-    roles: ['ADMIN', 'SUPER_ADMIN', 'MANAGER', 'CASHIER'],
+    roles: ['ADMIN', 'SUPER_ADMIN', 'MANAGER', 'CASHIER', 'SELLER'],
     permissions,
     requireAllPermissions: false
   })

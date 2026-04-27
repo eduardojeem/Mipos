@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, X, Save, HelpCircle } from 'lucide-react';
 import { toast } from '@/lib/toast';
 
@@ -45,13 +46,14 @@ interface PlanModalProps {
 
 export function PlanModal({ isOpen, onClose, onSave, plan }: PlanModalProps) {
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [formData, setFormData] = useState<Plan>({
     name: '',
     slug: '',
     description: '',
     price_monthly: 0,
     price_yearly: 0,
-    currency: 'USD',
+    currency: 'PYG',
     trial_days: 0,
     is_active: true,
     features: [],
@@ -84,7 +86,7 @@ export function PlanModal({ isOpen, onClose, onSave, plan }: PlanModalProps) {
         description: '',
         price_monthly: 0,
         price_yearly: 0,
-        currency: 'USD',
+        currency: 'PYG',
         trial_days: 0,
         is_active: true,
         features: [],
@@ -96,10 +98,42 @@ export function PlanModal({ isOpen, onClose, onSave, plan }: PlanModalProps) {
         },
       });
     }
+    setErrors({});
   }, [plan, isOpen]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const currencyUpper = useMemo(() => String(formData.currency || 'PYG').toUpperCase(), [formData.currency]);
+
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    const nextErrors: Record<string, string> = {};
+    const name = String(formData.name || '').trim();
+    const slug = String(formData.slug || '').trim();
+    const priceMonthly = Number(formData.price_monthly);
+    const priceYearly = Number(formData.price_yearly);
+    const trialDays = Number(formData.trial_days);
+
+    if (!name) nextErrors.name = 'El nombre es requerido.';
+    if (!plan?.id) {
+      if (!slug) nextErrors.slug = 'El slug es requerido.';
+      if (slug && !/^[A-Za-z0-9_-]+$/.test(slug)) nextErrors.slug = 'Usa solo letras, números, guiones y _.';
+    }
+
+    if (!Number.isFinite(priceMonthly) || priceMonthly < 0) nextErrors.price_monthly = 'Precio mensual inválido.';
+    if (!Number.isFinite(priceYearly) || priceYearly < 0) nextErrors.price_yearly = 'Precio anual inválido.';
+
+    if (Number.isFinite(priceMonthly) && Number.isFinite(priceYearly) && priceMonthly >= 0 && priceYearly >= 0) {
+      if (priceYearly > priceMonthly * 12) nextErrors.price_yearly = 'El anual no puede superar 12 meses del mensual.';
+    }
+
+    if (!Number.isFinite(trialDays) || trialDays < 0) nextErrors.trial_days = 'Días de prueba inválidos.';
+
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
+      toast.error('Revisa el formulario', { description: 'Hay campos inválidos o incompletos.' });
+      return;
+    }
+
+    setErrors({});
     setLoading(true);
 
     try {
@@ -122,9 +156,7 @@ export function PlanModal({ isOpen, onClose, onSave, plan }: PlanModalProps) {
       onSave();
       onClose();
     } catch (error) {
-      toast.error('Error', {
-        description: error instanceof Error ? error.message : 'Error desconocido',
-      });
+      toast.error('No se pudo guardar', { description: error instanceof Error ? error.message : 'Error desconocido' });
     } finally {
       setLoading(false);
     }
@@ -162,21 +194,29 @@ export function PlanModal({ isOpen, onClose, onSave, plan }: PlanModalProps) {
               <Input
                 id="name"
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={(e) => {
+                  setFormData({ ...formData, name: e.target.value })
+                  if (errors.name) setErrors({ ...errors, name: '' })
+                }}
                 placeholder="Ej: Professional"
                 required
               />
+              {errors.name ? <p className="text-xs text-rose-600">{errors.name}</p> : null}
             </div>
             <div className="space-y-2">
               <Label htmlFor="slug">Slug (Identificador)</Label>
               <Input
                 id="slug"
                 value={formData.slug}
-                onChange={(e) => setFormData({ ...formData, slug: e.target.value.toUpperCase() })}
+                onChange={(e) => {
+                  setFormData({ ...formData, slug: e.target.value.toUpperCase() })
+                  if (errors.slug) setErrors({ ...errors, slug: '' })
+                }}
                 placeholder="Ej: PROFESSIONAL"
                 required
                 disabled={!!plan}
               />
+              {errors.slug ? <p className="text-xs text-rose-600">{errors.slug}</p> : null}
             </div>
           </div>
 
@@ -191,26 +231,51 @@ export function PlanModal({ isOpen, onClose, onSave, plan }: PlanModalProps) {
             />
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="price_monthly">Precio Mensual ($)</Label>
+              <Label htmlFor="price_monthly">Precio Mensual</Label>
               <Input
                 id="price_monthly"
                 type="number"
                 value={formData.price_monthly}
-                onChange={(e) => setFormData({ ...formData, price_monthly: parseFloat(e.target.value) })}
+                onChange={(e) => {
+                  const n = Number(e.target.value)
+                  setFormData({ ...formData, price_monthly: Number.isFinite(n) ? n : 0 })
+                  if (errors.price_monthly) setErrors({ ...errors, price_monthly: '' })
+                }}
                 required
               />
+              {errors.price_monthly ? <p className="text-xs text-rose-600">{errors.price_monthly}</p> : null}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="price_yearly">Precio Anual ($)</Label>
+              <Label htmlFor="price_yearly">Precio Anual</Label>
               <Input
                 id="price_yearly"
                 type="number"
                 value={formData.price_yearly}
-                onChange={(e) => setFormData({ ...formData, price_yearly: parseFloat(e.target.value) })}
+                onChange={(e) => {
+                  const n = Number(e.target.value)
+                  setFormData({ ...formData, price_yearly: Number.isFinite(n) ? n : 0 })
+                  if (errors.price_yearly) setErrors({ ...errors, price_yearly: '' })
+                }}
                 required
               />
+              {errors.price_yearly ? <p className="text-xs text-rose-600">{errors.price_yearly}</p> : null}
+            </div>
+            <div className="space-y-2">
+              <Label>Moneda</Label>
+              <Select
+                value={currencyUpper}
+                onValueChange={(v) => setFormData({ ...formData, currency: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Moneda" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="PYG">PYG</SelectItem>
+                  <SelectItem value="USD">USD</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="trial_days">Días de Prueba</Label>
@@ -218,8 +283,13 @@ export function PlanModal({ isOpen, onClose, onSave, plan }: PlanModalProps) {
                 id="trial_days"
                 type="number"
                 value={formData.trial_days}
-                onChange={(e) => setFormData({ ...formData, trial_days: parseInt(e.target.value) })}
+                onChange={(e) => {
+                  const n = Number(e.target.value)
+                  setFormData({ ...formData, trial_days: Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0 })
+                  if (errors.trial_days) setErrors({ ...errors, trial_days: '' })
+                }}
               />
+              {errors.trial_days ? <p className="text-xs text-rose-600">{errors.trial_days}</p> : null}
             </div>
           </div>
 
@@ -283,7 +353,11 @@ export function PlanModal({ isOpen, onClose, onSave, plan }: PlanModalProps) {
                 value={newFeature.name}
                 onChange={(e) => setNewFeature({ ...newFeature, name: e.target.value })}
                 placeholder="Nueva característica..."
-                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addFeature())}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter') return
+                  e.preventDefault()
+                  addFeature()
+                }}
               />
               <Button type="button" variant="outline" onClick={addFeature}>
                 <Plus className="h-4 w-4" />

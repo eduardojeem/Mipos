@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import api from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -64,8 +65,6 @@ type CashSession = {
   }>;
 };
 
-const apiBase = process.env.NEXT_PUBLIC_API_BASE ?? "";
-
 export function CashAlerts() {
   const [alerts, setAlerts] = useState<CashAlert[]>([]);
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -81,9 +80,8 @@ export function CashAlerts() {
   } = useQuery({
     queryKey: ["cashSessionsAll"],
     queryFn: async () => {
-      const res = await fetch(`${apiBase}/api/cash/sessions`);
-      if (!res.ok) throw new Error(`Error ${res.status}`);
-      return res.json();
+      const res = await api.get('/cash/sessions');
+      return res.data;
     },
     refetchOnWindowFocus: false,
     refetchInterval: 30_000, // Check every 30 seconds
@@ -285,18 +283,18 @@ export function CashAlerts() {
 
   if (unacknowledgedAlerts.length === 0 && acknowledgedAlerts.length === 0) {
     return (
-      <Card className="border-green-200 bg-green-50">
+      <Card className="border-green-300 bg-green-100 dark:bg-green-900/20 dark:border-green-800">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <CheckCircle className="h-5 w-5 text-green-600" />
+          <CardTitle className="flex items-center gap-2 text-green-800 dark:text-green-300">
+            <CheckCircle className="h-5 w-5 text-green-700 dark:text-green-400" />
             Estado de Caja
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="text-center py-4">
-            <CheckCircle className="h-12 w-12 text-green-600 mx-auto mb-2" />
-            <p className="text-sm text-green-700 font-medium">Todo en orden</p>
-            <p className="text-xs text-green-600 mt-1">No hay alertas activas</p>
+            <CheckCircle className="h-12 w-12 text-green-700 dark:text-green-400 mx-auto mb-2" />
+            <p className="text-sm text-green-800 dark:text-green-300 font-medium">Todo en orden</p>
+            <p className="text-xs text-green-700 dark:text-green-400 mt-1">No hay alertas activas</p>
           </div>
         </CardContent>
       </Card>

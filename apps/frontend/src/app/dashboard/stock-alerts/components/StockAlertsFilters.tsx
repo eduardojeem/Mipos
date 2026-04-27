@@ -1,13 +1,16 @@
 'use client';
 
-import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { 
-  Select, SelectContent, SelectItem, 
-  SelectTrigger, SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from '@/components/ui/select';
-import { Search, X, Filter } from 'lucide-react';
+import type { StockAlertFilterOption } from '@/lib/stock-alerts';
+import { Search, X } from 'lucide-react';
 
 interface StockAlertsFiltersProps {
   filters: {
@@ -21,80 +24,88 @@ interface StockAlertsFiltersProps {
     setSupplier: (supplier: string) => void;
     resetFilters: () => void;
   };
+  categories: StockAlertFilterOption[];
+  suppliers: StockAlertFilterOption[];
+  alertCount: number;
 }
 
-export function StockAlertsFilters({ filters }: StockAlertsFiltersProps) {
-  const hasActiveFilters = 
-    filters.searchTerm || 
-    filters.severity !== 'all' || 
+export function StockAlertsFilters({
+  filters,
+  categories,
+  suppliers,
+  alertCount,
+}: StockAlertsFiltersProps) {
+  const hasActiveFilters =
+    Boolean(filters.searchTerm) ||
+    filters.severity !== 'all' ||
     filters.category !== 'all' ||
     filters.supplier !== 'all';
 
   return (
-    <div className="flex flex-col sm:flex-row gap-2">
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Buscar productos..."
-          value={filters.searchTerm}
-          onChange={(e) => filters.setSearchTerm(e.target.value)}
-          className="pl-8 w-full sm:w-64"
-        />
+    <div className="flex w-full flex-col gap-3">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+        <div className="relative min-w-0 flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por nombre, SKU o proveedor"
+            value={filters.searchTerm}
+            onChange={(event) => filters.setSearchTerm(event.target.value)}
+            className="pl-9"
+          />
+        </div>
+
+        <Select value={filters.severity} onValueChange={filters.setSeverity}>
+          <SelectTrigger className="w-full lg:w-[150px]">
+            <SelectValue placeholder="Severidad" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas</SelectItem>
+            <SelectItem value="critical">Criticas</SelectItem>
+            <SelectItem value="low">Bajo minimo</SelectItem>
+            <SelectItem value="warning">Advertencia</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={filters.category} onValueChange={filters.setCategory}>
+          <SelectTrigger className="w-full lg:w-[180px]">
+            <SelectValue placeholder="Categoria" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas</SelectItem>
+            {categories.map((category) => (
+              <SelectItem key={category.value} value={category.value}>
+                {category.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {suppliers.length > 0 && (
+          <Select value={filters.supplier} onValueChange={filters.setSupplier}>
+            <SelectTrigger className="w-full lg:w-[180px]">
+              <SelectValue placeholder="Proveedor" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              {suppliers.map((supplier) => (
+                <SelectItem key={supplier.value} value={supplier.value}>
+                  {supplier.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        {hasActiveFilters && (
+          <Button variant="ghost" size="icon" onClick={filters.resetFilters} aria-label="Limpiar filtros">
+            <X className="h-4 w-4" />
+          </Button>
+        )}
       </div>
 
-      {/* Severity Filter */}
-      <Select value={filters.severity} onValueChange={filters.setSeverity}>
-        <SelectTrigger className="w-full sm:w-40">
-          <SelectValue placeholder="Severidad" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">Todas</SelectItem>
-          <SelectItem value="critical">Crítico</SelectItem>
-          <SelectItem value="low">Bajo</SelectItem>
-          <SelectItem value="warning">Advertencia</SelectItem>
-        </SelectContent>
-      </Select>
-
-      {/* Category Filter */}
-      <Select value={filters.category} onValueChange={filters.setCategory}>
-        <SelectTrigger className="w-full sm:w-40">
-          <SelectValue placeholder="Categoría" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">Todas</SelectItem>
-          <SelectItem value="makeup">Maquillaje</SelectItem>
-          <SelectItem value="skincare">Cuidado de la piel</SelectItem>
-          <SelectItem value="haircare">Cuidado del cabello</SelectItem>
-          <SelectItem value="fragrance">Fragancias</SelectItem>
-          <SelectItem value="tools">Herramientas</SelectItem>
-        </SelectContent>
-      </Select>
-
-      {/* Supplier Filter */}
-      <Select value={filters.supplier} onValueChange={filters.setSupplier}>
-        <SelectTrigger className="w-full sm:w-40">
-          <SelectValue placeholder="Proveedor" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">Todos</SelectItem>
-          <SelectItem value="supplier1">Proveedor 1</SelectItem>
-          <SelectItem value="supplier2">Proveedor 2</SelectItem>
-          <SelectItem value="supplier3">Proveedor 3</SelectItem>
-        </SelectContent>
-      </Select>
-
-      {/* Clear Filters */}
-      {hasActiveFilters && (
-        <Button 
-          variant="ghost" 
-          size="sm"
-          onClick={filters.resetFilters}
-          className="px-2"
-        >
-          <X className="h-4 w-4" />
-        </Button>
-      )}
+      <p className="text-xs text-muted-foreground">
+        {alertCount.toLocaleString()} alertas visibles
+      </p>
     </div>
   );
 }

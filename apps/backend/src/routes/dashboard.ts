@@ -1,72 +1,76 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/errorHandler';
-import { AuthenticatedRequest } from '../middleware/auth';
 import { EnhancedAuthenticatedRequest, requirePermission } from '../middleware/enhanced-auth';
 import { prisma } from '../index';
 import { cache, cacheConfig } from '../config/cache';
+import { getEffectiveOrganizationId } from '../middleware/multi-tenant';
+
+const router = Router();
 
 // Type definitions for aggregation results
 interface TopProductItem {
-  productId: string;
+  product_id: string;
   totalQuantity: number;
   totalRevenue: number;
 }
 
-const router = Router();
-
 // Get dashboard statistics
 router.get('/stats', requirePermission('dashboard', 'read'), asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
+  const orgId = getEffectiveOrganizationId(req);
+  if (!orgId) {
+    res.status(400).json({ success: false, message: 'Organización no especificada' });
+    return;
+  }
+
   const today = new Date();
   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
   const startOfLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
   const endOfLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
 
   try {
-    const cached = cache.get<any>(cacheConfig.keys.dashboardStats);
-    if (cached) {
-      return res.json({ success: true, data: cached });
-    }
-    // Run independent queries in parallel
+    const cacheKey = `${cacheConfig.keys.dashboardStats}:${orgId}`;
+    const cached = cache.get<any>(cacheKey);
+    if (cached) return res.json({ success: true, data: cached });
+
     const [thisMonthAgg, lastMonthAgg, totalCustomersCount, topProductsRaw] = await Promise.all([
       // 1. This Month Totals
       prisma.sale.aggregate({
-        where: { createdAt: { gte: startOfMonth.toISOString() } },
+        where: { 
+          organizationId: orgId,
+          createdAt: { gte: startOfMonth.toISOString() } 
+        },
         _sum: { total: true },
         _count: { id: true },
       }),
       // 2. Last Month Totals
       prisma.sale.aggregate({
-        where: { createdAt: { gte: startOfLastMonth.toISOString(), lte: endOfLastMonth.toISOString() } },
+        where: { 
+          organizationId: orgId,
+          createdAt: { gte: startOfLastMonth.toISOString(), lte: endOfLastMonth.toISOString() } 
+        },
         _sum: { total: true },
         _count: { id: true },
       }),
       // 3. Total Customers
-      prisma.customer.count(),
+      prisma.customer.count({ where: { organizationId: orgId } }),
       // 4. Top Products (Optimized Raw Query)
       prisma.$queryRaw<any[]>`
         SELECT 
-          si.product_id as "productId", 
+          si.product_id, 
           SUM(si.quantity)::int as "totalQuantity", 
           SUM(si.quantity * si.unit_price)::float as "totalRevenue"
         FROM sale_items si
         JOIN sales s ON s.id = si.sale_id
-        WHERE s.created_at >= ${startOfMonth}
+        WHERE s.organization_id = ${orgId} AND s.created_at >= ${startOfMonth}
         GROUP BY si.product_id
         ORDER BY "totalQuantity" DESC
         LIMIT 10
       `
     ]);
 
-    // Process Top Products
-    const topProducts: TopProductItem[] = topProductsRaw.map(p => ({
-      productId: p.productId,
-      totalQuantity: p.totalQuantity || 0,
-      totalRevenue: p.totalRevenue || 0
-    }));
-
-    // Fetch details for top products
-    const productIds = topProducts.map(tp => tp.productId).filter(Boolean);
-    let productsById = new Map<string, { id: string; name: string; sku: string | null; salePrice: number }>();
+    const topProductsRawTyped = topProductsRaw as TopProductItem[];
+    const productIds = topProductsRawTyped.map(p => p.product_id);
+    let productsById = new Map();
 
     if (productIds.length > 0) {
       try {
@@ -75,100 +79,107 @@ router.get('/stats', requirePermission('dashboard', 'read'), asyncHandler(async 
           select: { id: true, name: true, sku: true, salePrice: true }
         });
         productsById = new Map(products.map(p => [p.id, { id: p.id, name: p.name, sku: p.sku ?? null, salePrice: p.salePrice }]));
-      } catch (e) {
-        console.warn('⚠️ Dashboard Stats: Error fetching product details', e);
+      } catch (err) {
+        console.error('Error fetching product details for top products:', err);
       }
     }
 
-    const topProductsWithDetails = topProducts.map(item => {
-      const product = item.productId ? productsById.get(item.productId) : undefined;
-      return {
-        id: product?.id ?? item.productId ?? '',
-        name: product?.name ?? 'Producto desconocido',
-        sku: product?.sku ?? '',
-        salePrice: product?.salePrice ?? 0,
-        totalQuantity: item.totalQuantity,
-        totalRevenue: item.totalRevenue
-      };
-    });
-
-    const stats = {
-      thisMonthSales: {
-        total: thisMonthAgg._sum.total || 0,
-        count: thisMonthAgg._count.id || 0
+    const payload = {
+      thisMonth: {
+        revenue: thisMonthAgg._sum.total || 0,
+        orders: thisMonthAgg._count.id || 0,
       },
-      lastMonthSales: {
-        total: lastMonthAgg._sum.total || 0,
-        count: lastMonthAgg._count.id || 0
+      lastMonth: {
+        revenue: lastMonthAgg._sum.total || 0,
+        orders: lastMonthAgg._count.id || 0,
       },
-      topProducts: topProductsWithDetails,
-      totalCustomers: totalCustomersCount
+      customers: totalCustomersCount,
+      topProducts: topProductsRawTyped.map(item => ({
+        ...item,
+        name: productsById.get(item.product_id)?.name || 'Producto Desconocido',
+        sku: productsById.get(item.product_id)?.sku || null,
+        salePrice: productsById.get(item.product_id)?.salePrice || 0,
+      }))
     };
 
-    cache.set(cacheConfig.keys.dashboardStats, stats, cacheConfig.ttl.short);
-    res.json({ success: true, data: stats });
-
+    cache.set(cacheKey, payload, 300); // 5 min
+    res.json({ success: true, data: payload });
   } catch (error) {
     console.error('Error fetching dashboard stats:', error);
-    res.status(500).json({ success: false, error: 'Error al obtener estadísticas del dashboard' });
+    res.status(500).json({ success: false, message: 'Error al obtener estadísticas' });
   }
 }));
 
 // Get today's summary
 router.get('/today', requirePermission('dashboard', 'read'), asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
+  const orgId = getEffectiveOrganizationId(req);
+  if (!orgId) {
+    res.status(400).json({ success: false, message: 'Organización no especificada' });
+    return;
+  }
+
   const today = new Date();
   const startOfDay = new Date(today.setHours(0, 0, 0, 0));
   const endOfDay = new Date(today.setHours(23, 59, 59, 999));
 
   try {
-    // Optimized: Use aggregate instead of fetching all rows
     const [salesAgg, paymentMethodsRaw] = await Promise.all([
       prisma.sale.aggregate({
-        where: { createdAt: { gte: startOfDay.toISOString(), lte: endOfDay.toISOString() } },
+        where: { 
+          organizationId: orgId,
+          createdAt: { gte: startOfDay, lte: endOfDay } 
+        },
         _sum: { total: true },
         _count: { id: true }
       }),
       prisma.sale.groupBy({
         by: ['paymentMethod'],
-        where: { createdAt: { gte: startOfDay.toISOString(), lte: endOfDay.toISOString() } },
+        where: { 
+          organizationId: orgId,
+          createdAt: { gte: startOfDay, lte: endOfDay } 
+        },
         _sum: { total: true },
         _count: { id: true }
       })
     ]);
 
-    const summary = {
-      totalRevenue: salesAgg._sum.total || 0,
-      salesCount: salesAgg._count.id || 0,
-      paymentMethods: paymentMethodsRaw.map(pm => ({
-        method: pm.paymentMethod,
-        total: pm._sum.total || 0,
-        count: pm._count.id || 0
+    const payload = {
+      revenue: salesAgg._sum.total || 0,
+      orders: salesAgg._count.id || 0,
+      paymentMethods: paymentMethodsRaw.map(m => ({
+        method: m.paymentMethod,
+        total: m._sum.total || 0,
+        count: m._count.id || 0
       }))
     };
 
-    res.json({ success: true, data: summary });
+    res.json({ success: true, data: payload });
   } catch (error) {
     console.error('Error fetching today summary:', error);
-    res.status(500).json({ success: false, error: 'Error al obtener resumen del día' });
+    res.status(500).json({ success: false, message: 'Error al obtener resumen de hoy' });
   }
 }));
 
 router.get('/summary', requirePermission('dashboard', 'read'), asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
+  const orgId = getEffectiveOrganizationId(req);
+  if (!orgId) {
+    res.status(400).json({ success: false, message: 'Organización no especificada' });
+    return;
+  }
+
   try {
     const range = String((req.query.range as string) || '30d');
-    const cacheKey = `dashboard:summary:${range}`;
+    const cacheKey = `dashboard:summary:${orgId}:${range}`;
     const cached = cache.get<any>(cacheKey);
-    if (cached) {
-      return res.json({ success: true, data: cached });
-    }
-    // Run all 3 heavy analytical queries in parallel
+    if (cached) return res.json({ success: true, data: cached });
+
     const [daily, categories, totals] = await Promise.all([
       prisma.$queryRaw<any[]>`
         SELECT date_trunc('day', created_at) AS day,
                COUNT(*)::int AS orders,
                COALESCE(SUM(total), 0)::float AS revenue
         FROM sales
-        WHERE created_at >= NOW() - INTERVAL '30 days'
+        WHERE organization_id = ${orgId} AND created_at >= NOW() - INTERVAL '30 days'
         GROUP BY day
         ORDER BY day ASC
       `,
@@ -179,7 +190,7 @@ router.get('/summary', requirePermission('dashboard', 'read'), asyncHandler(asyn
         JOIN sales s ON s.id = si.sale_id
         JOIN products p ON p.id = si.product_id
         JOIN categories c ON c.id = p.category_id
-        WHERE s.created_at >= NOW() - INTERVAL '30 days'
+        WHERE s.organization_id = ${orgId} AND s.created_at >= NOW() - INTERVAL '30 days'
         GROUP BY c.name
         ORDER BY value DESC
         LIMIT 10
@@ -188,20 +199,119 @@ router.get('/summary', requirePermission('dashboard', 'read'), asyncHandler(asyn
         SELECT COUNT(*)::int AS orders,
                COALESCE(SUM(total), 0)::float AS revenue
         FROM sales
-        WHERE created_at >= NOW() - INTERVAL '30 days'
+        WHERE organization_id = ${orgId} AND created_at >= NOW() - INTERVAL '30 days'
       `
     ]);
 
     const payload = {
-      daily,
-      categories,
+      dailyRevenue: daily,
+      categoryDistribution: categories,
       totals: totals[0] || { orders: 0, revenue: 0 }
     };
-    cache.set(cacheKey, payload, cacheConfig.ttl.short);
+
+    cache.set(cacheKey, payload, 600); // 10 min
     res.json({ success: true, data: payload });
   } catch (error) {
-    console.error('Error fetching summary:', error);
-    res.status(500).json({ success: false, error: 'Error al obtener resumen' });
+    console.error('Error fetching dashboard summary:', error);
+    res.status(500).json({ success: false, message: 'Error al obtener resumen de ventas' });
+  }
+}));
+
+// Obtener TODO el Overview consolidado para MainDashboard
+router.get('/overview', requirePermission('dashboard', 'read'), asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
+  const orgId = getEffectiveOrganizationId(req);
+  if (!orgId) {
+    res.status(400).json({ success: false, message: 'Organización no especificada' });
+    return;
+  }
+
+  const today = new Date();
+  const startOfDay = new Date(today.setHours(0, 0, 0, 0));
+  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  
+  try {
+    const cacheKey = `dashboard:overview:${orgId}`;
+    const cached = cache.get<any>(cacheKey);
+    if (cached) return res.json({ success: true, data: cached });
+
+    const [
+      totalCustomers,
+      activeProducts,
+      saleStats,
+      lowStockProducts,
+      recentSales
+    ] = await Promise.all([
+      // 1. Total de clientes
+      prisma.customer.count({ where: { organizationId: orgId } }),
+      
+      // 2. Productos activos
+      prisma.product.count({ where: { organizationId: orgId, isActive: true } }),
+      
+      // 3. Estadísticas de ventas (hoy vs mes)
+      prisma.$queryRaw<any[]>`
+        SELECT 
+          COALESCE(SUM(CASE WHEN created_at >= ${startOfDay} THEN total ELSE 0 END), 0)::float as "todaySales",
+          COUNT(CASE WHEN created_at >= ${startOfDay} THEN 1 END)::int as "todayOrders",
+          COALESCE(SUM(CASE WHEN created_at >= ${startOfMonth} THEN total ELSE 0 END), 0)::float as "monthSales"
+        FROM sales
+        WHERE organization_id = ${orgId}
+      `,
+      
+      // 4. Productos con bajo stock
+      prisma.product.findMany({
+        where: { 
+          organizationId: orgId,
+          isActive: true,
+          stockQuantity: { lte: prisma.product.fields.minStock } 
+        },
+        select: { name: true, stockQuantity: true, minStock: true },
+        orderBy: { stockQuantity: 'asc' },
+        take: 5
+      }),
+      
+      // 5. Ventas recientes
+      prisma.sale.findMany({
+        where: { organizationId: orgId },
+        take: 10,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          customer: {
+            select: { name: true }
+          }
+        }
+      })
+    ]);
+
+    const payload = {
+      totalCustomers,
+      activeProducts,
+      todaySales: saleStats[0]?.todaySales || 0,
+      todayOrders: saleStats[0]?.todayOrders || 0,
+      monthSales: saleStats[0]?.monthSales || 0,
+      lowStockProducts: lowStockProducts.map(p => ({
+        name: p.name,
+        stock: p.stockQuantity,
+        minStock: p.minStock
+      })),
+      webOrders: {
+        pending: 0, // Placeholder as status is not in DB yet
+        processing: 0,
+        shipped: 0,
+      },
+      recentSales: recentSales.map(s => ({
+        id: s.id,
+        customerName: s.customer?.name || 'Venta Mostrador',
+        total: s.total,
+        status: 'COMPLETED', // Placeholder as status is not in DB yet
+        date: s.createdAt
+      }))
+    };
+
+    cache.set(cacheKey, payload, 60);
+    res.json({ success: true, data: payload });
+  } catch (error) {
+    console.error('Error fetching dashboard overview:', error);
+    res.status(500).json({ success: false, message: 'Error al obtener resumen del dashboard' });
   }
 }));
 

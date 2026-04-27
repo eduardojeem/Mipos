@@ -3,6 +3,8 @@ import { prisma, supabase } from '../index';
 import { z } from 'zod';
 import { authenticateToken, requireAdmin } from '../middleware/auth';
 import { carouselService } from '../services/carouselService';
+import { apiRateLimit } from '../middleware/rate-limiter';
+import { validateDiscountMiddleware } from '../middleware/validateDiscount';
 
 const router = Router();
 
@@ -28,7 +30,14 @@ router.get('/', async (req, res) => {
     const start = (p - 1) * l;
     q = q.order('start_date', { ascending: true }).range(start, start + l - 1);
     const { data, count, error } = await q;
-    if (error) return res.status(500).json({ success: false, message: 'Error al consultar promociones', error: error.message });
+    if (error) {
+      console.error('Database error fetching promotions:', error);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Error al consultar promociones',
+        ...(process.env.NODE_ENV === 'development' && { debug: error.message })
+      });
+    }
     const base = (data || []).map((r: any) => ({
       id: r.id,
       name: r.name,
@@ -93,6 +102,18 @@ router.get('/offers-products', async (req, res) => {
   const orgId = String(req.get('x-organization-id') || '').trim();
   if (!orgId) return res.status(400).json({ success: false, message: 'Organization header missing' });
   if (!supabase) return res.status(503).json({ success: false, message: 'Supabase no está configurado' });
+  
+  // Validar que la organización existe y está activa
+  const { data: org, error: orgError } = await supabase
+    .from('organizations')
+    .select('id, is_active')
+    .eq('id', orgId)
+    .single();
+  
+  if (orgError || !org || !org.is_active) {
+    return res.status(404).json({ success: false, message: 'Organización no encontrada' });
+  }
+  
   res.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
   const nowIso = new Date().toISOString();
   const { limit = '24', offset = '0', category } = (req.query || {}) as any;
@@ -106,7 +127,14 @@ router.get('/offers-products', async (req, res) => {
     .eq('is_active', true)
     .lte('start_date', nowIso)
     .gte('end_date', nowIso);
-  if (promoErr) return res.status(500).json({ success: false, message: 'Error al consultar promociones', error: promoErr.message });
+  if (promoErr) {
+    console.error('Database error fetching active promotions:', promoErr);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Error al consultar promociones',
+      ...(process.env.NODE_ENV === 'development' && { debug: promoErr.message })
+    });
+  }
   const promoIds = (activePromos || []).map((p: any) => p.id);
   if (promoIds.length === 0) return res.json({ success: true, data: [], count: 0, pagination: { limit: l, offset: o, total: 0, pages: 0 } });
 
@@ -116,7 +144,14 @@ router.get('/offers-products', async (req, res) => {
     .select('promotion_id,product_id')
     .eq('organization_id', orgId)
     .in('promotion_id', promoIds);
-  if (linkErr) return res.status(500).json({ success: false, message: 'Error al consultar enlaces de promociones', error: linkErr.message });
+  if (linkErr) {
+    console.error('Database error fetching promotion links:', linkErr);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Error al consultar enlaces de promociones',
+      ...(process.env.NODE_ENV === 'development' && { debug: linkErr.message })
+    });
+  }
   const productIds = Array.from(new Set((links || []).map((l: any) => String(l.product_id))));
 
   // Productos con posible precio de oferta
@@ -126,7 +161,14 @@ router.get('/offers-products', async (req, res) => {
     .eq('organization_id', orgId)
     .in('id', productIds)
     .eq('is_active', true);
-  if (prodErr) return res.status(500).json({ success: false, message: 'Error al consultar productos', error: prodErr.message });
+  if (prodErr) {
+    console.error('Database error fetching products:', prodErr);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Error al consultar productos',
+      ...(process.env.NODE_ENV === 'development' && { debug: prodErr.message })
+    });
+  }
 
   // Obtener nombres de categorías
   const catIds = Array.from(new Set((products || []).map((p: any) => String(p.category_id || '')).filter(Boolean)));
@@ -237,22 +279,57 @@ const promotionSchema = z.object({
   description: z.string().optional(),
   discountType: z.enum(['PERCENTAGE', 'FIXED_AMOUNT']).optional(),
   type: z.enum(['PERCENTAGE', 'FIXED_AMOUNT']).optional(),
-  discountValue: z.number().positive().optional(),
-  value: z.number().positive().optional(),
+  discountValue: z.number().positive('El descuento debe ser positivo').optional(),
+  value: z.number().positive('El descuento debe ser positivo').optional(),
   stacking: z.boolean().optional(),
   minPurchaseAmount: z.number().nonnegative().optional(),
   maxDiscountAmount: z.number().nonnegative().optional(),
   isActive: z.boolean(),
-  startDate: z.string(),
-  endDate: z.string(),
+  startDate: z.string().refine(
+    (date) => {
+      const d = new Date(date);
+      return !isNaN(d.getTime());
+    },
+    { message: 'Fecha de inicio inválida' }
+  ),
+  endDate: z.string().refine(
+    (date) => {
+      const d = new Date(date);
+      return !isNaN(d.getTime());
+    },
+    { message: 'Fecha de fin inválida' }
+  ),
   applicableProductIds: z.array(z.string()).optional()
 }).refine((d) => {
   const sd = new Date(d.startDate).getTime();
   const ed = new Date(d.endDate).getTime();
   return !isNaN(sd) && !isNaN(ed) && ed > sd;
-}, { message: 'Rango de fechas inválido' });
+}, { message: 'La fecha de fin debe ser posterior a la fecha de inicio' })
+.refine((d) => {
+  const sd = new Date(d.startDate);
+  const ed = new Date(d.endDate);
+  const maxDuration = 365 * 24 * 60 * 60 * 1000; // 1 año
+  return (ed.getTime() - sd.getTime()) <= maxDuration;
+}, { message: 'El rango de fechas no puede exceder 1 año' })
+.refine((d) => {
+  const dtype = d.discountType ?? d.type;
+  const dval = d.discountValue ?? d.value;
+  if (dtype === 'PERCENTAGE' && dval) {
+    return dval <= 100;
+  }
+  return true;
+}, { message: 'El porcentaje de descuento no puede exceder 100%' })
+.refine((d) => {
+  const dtype = d.discountType ?? d.type;
+  const dval = d.discountValue ?? d.value;
+  const maxDiscount = d.maxDiscountAmount;
+  if (dtype === 'FIXED_AMOUNT' && maxDiscount && dval) {
+    return maxDiscount >= dval;
+  }
+  return true;
+}, { message: 'El descuento máximo debe ser mayor o igual al descuento base' });
 
-router.post('/', async (req, res) => {
+router.post('/', apiRateLimit, authenticateToken, requireAdmin, validateDiscountMiddleware, async (req, res) => {
   if (!supabase) return res.status(503).json({ success: false, message: 'Supabase no está configurado' });
   const orgId = String(req.get('x-organization-id') || '').trim();
   if (!orgId) return res.status(400).json({ success: false, message: 'Organization header missing' });
@@ -275,11 +352,43 @@ router.post('/', async (req, res) => {
     organization_id: orgId
   };
   const { data, error } = await supabase.from('promotions').insert([row]).select('*').single();
-  if (error) return res.status(500).json({ success: false, message: 'Error creando promoción', error: error.message });
+  if (error) {
+    console.error('Database error creating promotion:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Error creando promoción',
+      ...(process.env.NODE_ENV === 'development' && { debug: error.message })
+    });
+  }
   const r: any = data;
   const ids: string[] = Array.isArray(payload.applicableProductIds) ? payload.applicableProductIds : [];
   if (ids.length > 0) {
-    const links = ids.map((pid) => ({ promotion_id: r.id, product_id: pid, organization_id: orgId }));
+    // Validar que los productos existen, están activos y pertenecen a la organización
+    const { data: validProducts, error: validError } = await supabase
+      .from('products')
+      .select('id')
+      .eq('organization_id', orgId)
+      .eq('is_active', true)
+      .in('id', ids);
+    
+    if (validError) {
+      console.error('Error validating products:', validError);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Error validando productos',
+        ...(process.env.NODE_ENV === 'development' && { debug: validError.message })
+      });
+    }
+    
+    const validIds = (validProducts || []).map((p: any) => p.id);
+    if (validIds.length !== ids.length) {
+      return res.status(400).json({
+        success: false,
+        message: 'Algunos productos no están activos o no existen'
+      });
+    }
+    
+    const links = validIds.map((pid) => ({ promotion_id: r.id, product_id: pid, organization_id: orgId }));
     await supabase.from('promotions_products').insert(links);
   }
   let prodMap: Record<string, { name?: string; category?: string }> = {};
@@ -320,7 +429,7 @@ router.post('/', async (req, res) => {
   } });
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', apiRateLimit, authenticateToken, requireAdmin, validateDiscountMiddleware, async (req, res) => {
   if (!supabase) return res.status(503).json({ success: false, message: 'Supabase no está configurado' });
   const orgId = String(req.get('x-organization-id') || '').trim();
   if (!orgId) return res.status(400).json({ success: false, message: 'Organization header missing' });
@@ -331,7 +440,14 @@ router.put('/:id', async (req, res) => {
   }
   const payload = parsed.data as any;
   const { data: existing, error: e0 } = await supabase.from('promotions').select('*').eq('id', id).eq('organization_id', orgId).single();
-  if (e0 && (e0 as any).code !== 'PGRST116') return res.status(500).json({ success: false, message: 'Error consultando promoción', error: e0.message });
+  if (e0 && (e0 as any).code !== 'PGRST116') {
+    console.error('Database error fetching promotion:', e0);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Error consultando promoción',
+      ...(process.env.NODE_ENV === 'development' && { debug: e0.message })
+    });
+  }
   if (!existing) return res.status(404).json({ success: false, message: 'Promoción no encontrada' });
   const row = {
     name: payload.name,
@@ -345,13 +461,45 @@ router.put('/:id', async (req, res) => {
     end_date: new Date(payload.endDate).toISOString()
   };
   const { data, error } = await supabase.from('promotions').update(row).eq('id', id).eq('organization_id', orgId).select('*').single();
-  if (error) return res.status(500).json({ success: false, message: 'Error actualizando promoción', error: error.message });
+  if (error) {
+    console.error('Database error updating promotion:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Error actualizando promoción',
+      ...(process.env.NODE_ENV === 'development' && { debug: error.message })
+    });
+  }
   const r: any = data;
   const ids: string[] = Array.isArray(payload.applicableProductIds) ? payload.applicableProductIds : [];
   if (Array.isArray(payload.applicableProductIds)) {
     await supabase.from('promotions_products').delete().eq('promotion_id', id).eq('organization_id', orgId);
     if (ids.length > 0) {
-      const links = ids.map((pid) => ({ promotion_id: id, product_id: pid, organization_id: orgId }));
+      // Validar que los productos existen, están activos y pertenecen a la organización
+      const { data: validProducts, error: validError } = await supabase
+        .from('products')
+        .select('id')
+        .eq('organization_id', orgId)
+        .eq('is_active', true)
+        .in('id', ids);
+      
+      if (validError) {
+        console.error('Error validating products:', validError);
+        return res.status(500).json({ 
+          success: false, 
+          message: 'Error validando productos',
+          ...(process.env.NODE_ENV === 'development' && { debug: validError.message })
+        });
+      }
+      
+      const validIds = (validProducts || []).map((p: any) => p.id);
+      if (validIds.length !== ids.length) {
+        return res.status(400).json({
+          success: false,
+          message: 'Algunos productos no están activos o no existen'
+        });
+      }
+      
+      const links = validIds.map((pid) => ({ promotion_id: id, product_id: pid, organization_id: orgId }));
       await supabase.from('promotions_products').insert(links);
     }
   }
@@ -393,16 +541,30 @@ router.put('/:id', async (req, res) => {
   } });
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', apiRateLimit, authenticateToken, requireAdmin, async (req, res) => {
   if (!supabase) return res.status(503).json({ success: false, message: 'Supabase no está configurado' });
   const orgId = String(req.get('x-organization-id') || '').trim();
   if (!orgId) return res.status(400).json({ success: false, message: 'Organization header missing' });
   const id = String(req.params.id || '').trim();
   const { data: existing, error: e0 } = await supabase.from('promotions').select('id').eq('id', id).eq('organization_id', orgId).limit(1);
-  if (e0) return res.status(500).json({ success: false, message: 'Error consultando promoción', error: e0.message });
+  if (e0) {
+    console.error('Database error checking promotion:', e0);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Error consultando promoción',
+      ...(process.env.NODE_ENV === 'development' && { debug: e0.message })
+    });
+  }
   if ((existing || []).length === 0) return res.status(404).json({ success: false, message: 'Promoción no encontrada' });
   const { error } = await supabase.from('promotions').delete().eq('id', id).eq('organization_id', orgId);
-  if (error) return res.status(500).json({ success: false, message: 'Error eliminando promoción', error: error.message });
+  if (error) {
+    console.error('Database error deleting promotion:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Error eliminando promoción',
+      ...(process.env.NODE_ENV === 'development' && { debug: error.message })
+    });
+  }
   return res.json({ success: true, message: 'Promoción eliminada' });
 });
 
@@ -413,7 +575,14 @@ router.patch('/:id/status', async (req, res) => {
   const id = String(req.params.id || '').trim();
   const isActive = String((req.body || {}).isActive).toLowerCase() === 'true' || (req.body || {}).isActive === true;
   const { data, error } = await supabase.from('promotions').update({ is_active: isActive }).eq('id', id).eq('organization_id', orgId).select('id,is_active').single();
-  if (error) return res.status(500).json({ success: false, message: 'Error actualizando estado', error: error.message });
+  if (error) {
+    console.error('Database error updating promotion status:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Error actualizando estado',
+      ...(process.env.NODE_ENV === 'development' && { debug: error.message })
+    });
+  }
   if (!data) return res.status(404).json({ success: false, message: 'Promoción no encontrada' });
   return res.json({ success: true, data: { id: data.id, isActive: data.is_active } });
 });
@@ -433,7 +602,14 @@ router.patch('/:id/approval', async (req, res) => {
     approved_at: approved ? new Date().toISOString() : null
   };
   const { data, error } = await supabase.from('promotions').update(row).eq('id', id).eq('organization_id', orgId).select('id,approval_status,approval_comment,approved_by,approved_at').single();
-  if (error) return res.status(500).json({ success: false, message: 'Error actualizando aprobación', error: error.message });
+  if (error) {
+    console.error('Database error updating promotion approval:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Error actualizando aprobación',
+      ...(process.env.NODE_ENV === 'development' && { debug: error.message })
+    });
+  }
   if (!data) return res.status(404).json({ success: false, message: 'Promoción no encontrada' });
   return res.json({ success: true, data });
 });
@@ -890,10 +1066,7 @@ router.get('/:id/products', async (req, res) => {
     const promotionId = req.params.id;
     const orgId = String(req.get('x-organization-id') || '').trim();
     if (!orgId) return res.status(400).json({ success: false, message: 'Organization header missing' });
-    console.log('[DEBUG] GET /promotions/:id/products called with ID:', promotionId);
-
     if (!supabase) {
-      console.log('[DEBUG] Supabase not configured');
       return res.status(503).json({
         success: false,
         message: 'Supabase no está configurado',
@@ -901,21 +1074,18 @@ router.get('/:id/products', async (req, res) => {
     }
 
     // Obtener productos asociados
-    console.log('[DEBUG] Fetching promotion products for ID:', promotionId);
     const { data: links, error: linksError } = await supabase
       .from('promotions_products')
       .select('product_id')
       .eq('promotion_id', promotionId)
       .eq('organization_id', orgId);
 
-    console.log('[DEBUG] Links result:', { links: links?.length || 0, error: linksError?.message });
-
     if (linksError) {
       console.error('Error fetching promotion products:', linksError);
       return res.status(500).json({
         success: false,
         message: 'Error al obtener productos',
-        error: linksError.message,
+        ...(process.env.NODE_ENV === 'development' && { debug: linksError.message })
       });
     }
 
@@ -941,7 +1111,7 @@ router.get('/:id/products', async (req, res) => {
       return res.status(500).json({
         success: false,
         message: 'Error al obtener detalles de productos',
-        error: productsError.message,
+        ...(process.env.NODE_ENV === 'development' && { debug: productsError.message })
       });
     }
 
@@ -1015,13 +1185,7 @@ router.post('/:id/products', async (req, res) => {
     const orgId = String(req.get('x-organization-id') || '').trim();
     if (!orgId) return res.status(400).json({ success: false, message: 'Organization header missing' });
 
-    console.log('[DEBUG] POST /promotions/:id/products called');
-    console.log('[DEBUG] promotionId:', promotionId);
-    console.log('[DEBUG] productIds:', productIds);
-    console.log('[DEBUG] body:', req.body);
-
     if (!Array.isArray(productIds) || productIds.length === 0) {
-      console.log('[DEBUG] Invalid productIds array');
       return res.status(400).json({
         success: false,
         message: 'Se requiere un array de productIds',
@@ -1050,14 +1214,41 @@ router.post('/:id/products', async (req, res) => {
       });
     }
 
-    // Crear las asociaciones
-    // Validar que los productos pertenezcan a la misma organización
+    // Verificar productos ya asociados para evitar duplicados
+    const { data: existing } = await supabase
+      .from('promotions_products')
+      .select('product_id')
+      .eq('promotion_id', promotionId)
+      .eq('organization_id', orgId)
+      .in('product_id', productIds);
+
+    const existingIds = new Set((existing || []).map((e: any) => e.product_id));
+    const newIds = productIds.filter(id => !existingIds.has(id));
+
+    if (newIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Todos los productos ya están asociados a esta promoción'
+      });
+    }
+
+    // Validar que los productos pertenezcan a la misma organización y estén activos
     const { data: validProducts } = await supabase
       .from('products')
       .select('id')
       .eq('organization_id', orgId)
-      .in('id', productIds);
+      .eq('is_active', true)
+      .in('id', newIds);
+    
     const validIds = (validProducts || []).map((p: any) => p.id);
+    
+    if (validIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ninguno de los productos es válido o está activo'
+      });
+    }
+    
     const links = validIds.map(productId => ({
       promotion_id: promotionId,
       product_id: productId,
@@ -1073,13 +1264,15 @@ router.post('/:id/products', async (req, res) => {
       return res.status(500).json({
         success: false,
         message: 'Error al asociar productos',
-        error: insertError.message,
+        ...(process.env.NODE_ENV === 'development' && { debug: insertError.message })
       });
     }
 
     res.json({
       success: true,
-      message: `${productIds.length} producto(s) asociado(s) exitosamente`,
+      message: `${validIds.length} producto(s) asociado(s) exitosamente`,
+      associated: validIds.length,
+      skipped: productIds.length - validIds.length
     });
   } catch (error: any) {
     console.error('Error in POST /promotions/:id/products:', error);
@@ -1126,7 +1319,7 @@ router.delete('/:id/products', async (req, res) => {
       return res.status(500).json({
         success: false,
         message: 'Error al desasociar producto',
-        error: error.message,
+        ...(process.env.NODE_ENV === 'development' && { debug: error.message })
       });
     }
 
@@ -1153,7 +1346,7 @@ router.delete('/:id/products', async (req, res) => {
  * @body {string[]} ids - Array de IDs de promociones
  * @returns {object} - Objeto con conteos { [promotionId]: count }
  */
-router.post('/batch/product-counts', async (req, res) => {
+router.post('/batch/product-counts', apiRateLimit, async (req, res) => {
   try {
     const { ids } = req.body;
 
@@ -1191,7 +1384,7 @@ router.post('/batch/product-counts', async (req, res) => {
       return res.status(500).json({
         success: false,
         message: 'Error al obtener conteos de productos',
-        error: error.message,
+        ...(process.env.NODE_ENV === 'development' && { debug: error.message })
       });
     }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -35,7 +35,6 @@ interface CatalogFiltersProps {
     // Data
     categories: Category[];
     resultsCount: number;
-    totalProducts: number;
     maxPrice: number;
 
     // Advanced filters
@@ -65,7 +64,6 @@ export default function CatalogFilters({
     showOnlyOnSale,
     categories,
     resultsCount,
-    totalProducts,
     maxPrice,
     advancedFilters,
     searchQuery = '',
@@ -105,8 +103,8 @@ export default function CatalogFilters({
     return (
         <>
             {/* Barra de Herramientas Sticky - Estilo Offers */}
-            <div className="sticky top-16 z-30 -mx-4 px-3 sm:px-4 md:mx-0 mb-6">
-                <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border border-slate-200/80 dark:border-slate-800/80 rounded-xl sm:rounded-2xl shadow-lg p-3 sm:p-4 flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch sm:items-center justify-between">
+            <div className="sticky top-16 z-30 -mx-4 px-3 sm:px-4 md:mx-0 mb-8 transition-all duration-300">
+                <div className="bg-white/70 dark:bg-slate-900/40 backdrop-blur-2xl border border-slate-200/50 dark:border-white/5 rounded-2xl sm:rounded-3xl shadow-xl shadow-slate-200/20 dark:shadow-none p-3 sm:p-4 flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch sm:items-center justify-between">
 
                     {/* Campo de búsqueda - Full width en móviles */}
                     {onSearchChange && (
@@ -114,7 +112,7 @@ export default function CatalogFilters({
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
                             <Input
                                 placeholder="Buscar productos..."
-                                className="pl-10 pr-10 bg-transparent border-slate-200 dark:border-slate-700 focus-visible:ring-rose-500 text-sm sm:text-base"
+                                className="pl-10 pr-10 bg-slate-100/50 dark:bg-white/5 border-transparent focus-visible:ring-primary/30 text-sm sm:text-base h-11 rounded-xl transition-all"
                                 value={searchQuery}
                                 onChange={(e) => onSearchChange(e.target.value)}
                             />
@@ -135,8 +133,8 @@ export default function CatalogFilters({
                     <div className="flex gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0 no-scrollbar">
                         {/* Filtro de Stock */}
                         <Select value={showOnlyInStock ? 'in-stock' : 'all'} onValueChange={(v) => v === 'in-stock' ? onToggleInStock() : onToggleInStock()}>
-                            <SelectTrigger className="min-w-[120px] sm:w-[140px] border-slate-200 dark:border-slate-700 text-sm">
-                                <Package className="w-4 h-4 mr-2 text-muted-foreground" />
+                            <SelectTrigger className="min-w-[120px] sm:w-[140px] bg-slate-100/50 dark:bg-white/5 border-transparent h-11 rounded-xl transition-all text-sm">
+                                <Package className="w-4 h-4 mr-2 text-primary" />
                                 <SelectValue placeholder="Stock" />
                             </SelectTrigger>
                             <SelectContent>
@@ -156,8 +154,8 @@ export default function CatalogFilters({
                                 }
                             }}
                         >
-                            <SelectTrigger className="min-w-[140px] sm:w-[160px] border-slate-200 dark:border-slate-700 text-sm">
-                                <Filter className="w-4 h-4 mr-2 text-muted-foreground" />
+                            <SelectTrigger className="min-w-[140px] sm:w-[160px] bg-slate-100/50 dark:bg-white/5 border-transparent h-11 rounded-xl transition-all text-sm">
+                                <Filter className="w-4 h-4 mr-2 text-primary" />
                                 <SelectValue placeholder="Categoría" />
                             </SelectTrigger>
                             <SelectContent>
@@ -170,8 +168,8 @@ export default function CatalogFilters({
 
                         {/* Ordenar */}
                         <Select value={sortBy} onValueChange={(v) => onSortChange(v as SortMode)}>
-                            <SelectTrigger className="min-w-[140px] sm:w-[160px] border-slate-200 dark:border-slate-700 text-sm">
-                                <ArrowUpDown className="w-4 h-4 mr-2 text-muted-foreground" />
+                            <SelectTrigger className="min-w-[140px] sm:w-[160px] bg-slate-100/50 dark:bg-white/5 border-transparent h-11 rounded-xl transition-all text-sm">
+                                <ArrowUpDown className="w-4 h-4 mr-2 text-primary" />
                                 <SelectValue placeholder="Ordenar" />
                             </SelectTrigger>
                             <SelectContent>
@@ -187,10 +185,10 @@ export default function CatalogFilters({
             </div>
 
             {/* Sección de Resultados y Filtros Rápidos */}
-            <div className="flex items-center gap-2 mb-6">
-                <Sparkles className="w-5 h-5 text-rose-500" />
-                <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Explora el Catálogo</h2>
-                <Badge variant="outline" className="ml-2 bg-white/50 backdrop-blur-sm" aria-live="polite" role="status">
+            <div className="flex items-center gap-2 mb-8 scale-in-animation">
+                <Sparkles className="w-6 h-6 text-primary animate-glow-pulse" />
+                <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">Explora el Catálogo</h2>
+                <Badge variant="outline" className="ml-3 bg-primary/5 border-primary/20 text-primary font-bold px-3 py-1 rounded-full backdrop-blur-sm" aria-live="polite" role="status">
                     {resultsCount} {resultsCount === 1 ? 'producto' : 'productos'}
                 </Badge>
             </div>
@@ -211,9 +209,13 @@ export default function CatalogFilters({
                     size="sm"
                     variant={showOnlyInStock ? 'default' : 'outline'}
                     onClick={onToggleInStock}
-                    className="rounded-full gap-1.5"
+                    className={`rounded-full h-10 px-5 font-semibold transition-all duration-300 gap-2 ${
+                        showOnlyInStock 
+                          ? 'bg-primary text-white shadow-lg shadow-primary/25 border-0' 
+                          : 'bg-white dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300'
+                      }`}
                 >
-                    <Package className="w-3.5 h-3.5" />
+                    <Package className="w-4 h-4" />
                     En Stock
                 </Button>
 
@@ -259,19 +261,18 @@ export default function CatalogFilters({
                     </>
                 )}
 
-                {/* View Mode - Desktop */}
                 <div className="ml-auto hidden sm:flex items-center gap-2">
                     <Tabs value={viewMode} onValueChange={(v) => onViewModeChange(v as ViewMode)}>
-                        <TabsList className="h-9 bg-muted/50">
-                            <TabsTrigger value="grid" className="h-7 px-3 gap-1.5">
+                        <TabsList className="h-10 bg-slate-100/80 dark:bg-white/5 border-0 p-1 rounded-xl">
+                            <TabsTrigger value="grid" className="h-8 px-4 gap-2 rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-white/10 data-[state=active]:shadow-sm transition-all">
                                 <Grid3X3 className="w-4 h-4" />
                                 <span className="hidden md:inline">Grid</span>
                             </TabsTrigger>
-                            <TabsTrigger value="list" className="h-7 px-3 gap-1.5">
+                            <TabsTrigger value="list" className="h-8 px-4 gap-2 rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-white/10 data-[state=active]:shadow-sm transition-all">
                                 <List className="w-4 h-4" />
                                 <span className="hidden md:inline">Lista</span>
                             </TabsTrigger>
-                            <TabsTrigger value="compact" className="h-7 px-3 gap-1.5">
+                            <TabsTrigger value="compact" className="h-8 px-4 gap-2 rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-white/10 data-[state=active]:shadow-sm transition-all">
                                 <LayoutGrid className="w-4 h-4" />
                                 <span className="hidden md:inline">Compacto</span>
                             </TabsTrigger>

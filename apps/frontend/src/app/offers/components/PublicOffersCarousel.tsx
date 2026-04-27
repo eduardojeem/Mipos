@@ -1,119 +1,123 @@
 /**
- * PublicOffersCarousel Component
- * 
  * Displays featured offers from the admin-configured carousel
- * Public-facing component for /offers page
+ * and falls back to active promotions when the manual carousel is empty.
  */
 
-"use client";
+'use client';
 
-import { useEffect, useState, useRef } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
+import { useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   ChevronLeft,
   ChevronRight,
-  Flame,
   Clock,
+  Flame,
   ShoppingCart,
   Sparkles,
-} from "lucide-react";
-import Image from "next/image";
-import { motion, AnimatePresence } from "framer-motion";
-import { useCurrencyFormatter } from "@/contexts/BusinessConfigContext";
-import { useToast } from "@/components/ui/use-toast";
-import { useCatalogCart } from "@/hooks/useCatalogCart";
+} from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { useToast } from '@/components/ui/use-toast';
+import { useCatalogCart } from '@/hooks/useCatalogCart';
+import { useTenantPublicRouting } from '@/hooks/useTenantPublicRouting';
+import { useCurrencyFormatter } from '@/contexts/BusinessConfigContext';
+import type { OfferItem } from '../offers-types';
 
-interface CarouselPromotion {
-  id: string;
-  name: string;
-  description?: string;
-  discountType: string;
-  discountValue?: number;
-  startDate?: string;
-  endDate?: string;
-  isActive: boolean;
-}
+type CarouselCartProduct = Parameters<ReturnType<typeof useCatalogCart>['addToCart']>[0];
 
-interface CarouselProduct {
-  id: string;
-  name: string;
-  sku?: string;
-  brand?: string;
-  image?: string;
-  images?: { url: string }[];
-  stock_quantity?: number;
-  category_id?: string;
-}
-
-interface CarouselItem {
-  promotion: CarouselPromotion;
-  product: CarouselProduct;
-  basePrice: number;
-  offerPrice: number;
-  discountPercent: number;
-}
+type CarouselApiPayload = {
+  success: boolean;
+  data?: OfferItem[];
+};
 
 interface PublicOffersCarouselProps {
-  onAddToCart?: (product: CarouselProduct) => void;
-  onViewDetails?: (item: CarouselItem) => void;
+  initialItems?: OfferItem[];
+  onAddToCart?: (product: CarouselCartProduct) => void;
+  onViewDetails?: (item: OfferItem) => void;
+  showCart?: boolean;
+}
+
+function getTimeRemaining(endDate?: string) {
+  if (!endDate) return null;
+  const end = new Date(endDate);
+  const now = new Date();
+  const diff = end.getTime() - now.getTime();
+
+  if (diff <= 0) return 'Finalizada';
+
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  if (days > 0) return `${days} dias`;
+
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  return `${hours} horas`;
 }
 
 export default function PublicOffersCarousel({
+  initialItems = [],
   onAddToCart,
   onViewDetails,
+  showCart = true,
 }: PublicOffersCarouselProps) {
-  const [items, setItems] = useState<CarouselItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<OfferItem[]>(initialItems);
+  const [loading, setLoading] = useState(initialItems.length === 0);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
   const formatCurrency = useCurrencyFormatter();
   const { toast } = useToast();
   const { addToCart: addToCartHook } = useCatalogCart();
+  const { tenantApiPath } = useTenantPublicRouting();
   const autoPlayRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Fetch carousel data
   useEffect(() => {
     const fetchCarousel = async () => {
       try {
-        const response = await fetch("/api/promotions/carousel/public");
+        const response = await fetch(tenantApiPath('/api/promotions/carousel/public'), {
+          cache: 'no-store',
+        });
 
-        // Silently handle errors - no toast
         if (!response.ok) {
           console.warn('[PublicCarousel] API returned error:', response.status);
-          setItems([]);
-          setLoading(false);
+          if (initialItems.length === 0) {
+            setItems([]);
+          }
           return;
         }
 
-        const result = await response.json();
+        const result = (await response.json().catch(() => null)) as CarouselApiPayload | null;
+        const nextItems = Array.isArray(result?.data) ? result.data : null;
+        if (result?.success && nextItems) {
+          setItems(nextItems);
+          setCurrentIndex((previous) => {
+            if (nextItems.length === 0) return 0;
+            return Math.min(previous, nextItems.length - 1);
+          });
+          return;
+        }
 
-        if (result.success && result.data && Array.isArray(result.data)) {
-          setItems(result.data);
-        } else {
+        if (initialItems.length === 0) {
           setItems([]);
         }
       } catch (error) {
-        // Silently handle errors - just log
-        console.warn("[PublicCarousel] Error loading carousel:", error);
-        setItems([]);
+        console.warn('[PublicCarousel] Error loading carousel:', error);
+        if (initialItems.length === 0) {
+          setItems([]);
+        }
       } finally {
         setLoading(false);
       }
     };
 
-    fetchCarousel();
-  }, []); // Removed toast dependency
+    void fetchCarousel();
+  }, [initialItems, tenantApiPath]);
 
-  // Auto-play functionality
   useEffect(() => {
     if (!isAutoPlaying || items.length <= 1) return;
 
     autoPlayRef.current = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % items.length);
-    }, 4000); // Change every 4 seconds (mejorado de 5s)
+      setCurrentIndex((previous) => (previous + 1) % items.length);
+    }, 5000);
 
     return () => {
       if (autoPlayRef.current) {
@@ -124,12 +128,12 @@ export default function PublicOffersCarousel({
 
   const handlePrevious = () => {
     setIsAutoPlaying(false);
-    setCurrentIndex((prev) => (prev - 1 + items.length) % items.length);
+    setCurrentIndex((previous) => (previous - 1 + items.length) % items.length);
   };
 
   const handleNext = () => {
     setIsAutoPlaying(false);
-    setCurrentIndex((prev) => (prev + 1) % items.length);
+    setCurrentIndex((previous) => (previous + 1) % items.length);
   };
 
   const handleDotClick = (index: number) => {
@@ -137,79 +141,76 @@ export default function PublicOffersCarousel({
     setCurrentIndex(index);
   };
 
-  const handleAddToCart = (product: CarouselProduct) => {
-    const currentItem = items[currentIndex];
-    const rawBase = Number(currentItem.basePrice ?? NaN);
-    const rawOffer = Number(currentItem.offerPrice ?? NaN);
-    const base = Number.isFinite(rawBase) && rawBase > 0 ? rawBase : (Number.isFinite(rawOffer) && rawOffer > 0 ? rawOffer : 0);
-    const effectiveOffer = Number.isFinite(rawOffer) && rawOffer > 0 && rawOffer < base ? rawOffer : undefined;
-    const productForCart = {
-      id: String(product.id || ''),
-      name: String(product.name || 'Producto'),
-      image_url: product.images?.[0]?.url || product.image || '/api/placeholder/300/300',
-      stock_quantity: Number(product.stock_quantity ?? 999),
-      sale_price: base,
-      offer_price: effectiveOffer,
+  const handleAddToCart = (item: OfferItem) => {
+    const basePrice = Number.isFinite(item.basePrice) && item.basePrice > 0 ? item.basePrice : item.offerPrice;
+    const hasOfferPrice = Number.isFinite(item.offerPrice) && item.offerPrice > 0 && item.offerPrice < basePrice;
+
+    const productForCart: CarouselCartProduct = {
+      id: String(item.product.id || ''),
+      name: String(item.product.name || 'Producto'),
+      sku: String(item.product.sku || ''),
+      description: item.product.description || item.promotion.description,
+      cost_price: basePrice,
+      image_url: item.product.images?.[0]?.url || item.product.image || '/api/placeholder/300/300',
+      stock_quantity: Number(item.product.stock_quantity ?? 999),
+      min_stock: 0,
+      sale_price: basePrice,
+      offer_price: hasOfferPrice ? item.offerPrice : undefined,
+      category_id: String(item.product.category_id || ''),
       is_active: true,
-    } as any;
+      brand: item.product.brand,
+      images: item.product.images,
+      created_at: new Date(0).toISOString(),
+      updated_at: new Date(0).toISOString(),
+    };
+
     try {
-      if (onAddToCart) onAddToCart(productForCart);
-      else addToCartHook(productForCart, 1);
-    } catch (error) {
+      if (onAddToCart) {
+        onAddToCart(productForCart);
+      } else {
+        addToCartHook(productForCart, 1);
+      }
+    } catch {
       toast({ title: 'Error', description: 'No se pudo agregar al carrito', variant: 'destructive' });
     }
   };
 
-  const getTimeRemaining = (endDate?: string) => {
-    if (!endDate) return null;
-    const end = new Date(endDate);
-    const now = new Date();
-    const diff = end.getTime() - now.getTime();
-    if (diff <= 0) return "Finalizada";
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    if (days > 0) return `${days} días`;
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    return `${hours} horas`;
-  };
-
-  // Loading state
   if (loading) {
     return (
-      <section className="mb-12 animate-slide-up">
-        <div className="flex items-center gap-2 mb-6">
-          <Flame className="w-6 h-6 text-rose-500 animate-pulse" />
+      <section className="mb-12">
+        <div className="mb-6 flex items-center gap-2">
+          <Flame className="h-6 w-6 animate-pulse text-rose-500" />
           <h2 className="text-3xl font-bold text-slate-900 dark:text-white">
-            Ofertas Destacadas
+            Promociones activas
           </h2>
         </div>
         <Card className="overflow-hidden border-0 shadow-2xl">
           <CardContent className="p-0">
-            <div className="relative h-[400px] md:h-[500px] bg-gradient-to-r from-slate-100 via-slate-200 to-slate-100 dark:from-slate-800 dark:via-slate-700 dark:to-slate-800 animate-pulse" />
+            <div className="relative h-[400px] bg-gradient-to-r from-slate-100 via-slate-200 to-slate-100 dark:from-slate-800 dark:via-slate-700 dark:to-slate-800 animate-pulse md:h-[500px]" />
           </CardContent>
         </Card>
       </section>
     );
   }
 
-  // Empty state - show beautiful card instead of nothing
   if (items.length === 0) {
     return (
-      <section className="mb-12 animate-slide-up">
-        <div className="flex items-center gap-2 mb-6">
-          <Flame className="w-6 h-6 text-slate-400" />
+      <section className="mb-12">
+        <div className="mb-6 flex items-center gap-2">
+          <Flame className="h-6 w-6 text-slate-400" />
           <h2 className="text-3xl font-bold text-slate-900 dark:text-white">
-            Ofertas Destacadas
+            Promociones activas
           </h2>
         </div>
-        <Card className="overflow-hidden border-0 shadow-xl bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 dark:from-slate-800 dark:via-purple-900/20 dark:to-slate-800">
+        <Card className="overflow-hidden border border-dashed border-slate-300 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <CardContent className="p-12 text-center">
-            <div className="max-w-md mx-auto space-y-4">
-              <Sparkles className="w-16 h-16 mx-auto text-purple-400 opacity-50" />
+            <div className="mx-auto max-w-md space-y-4">
+              <Sparkles className="mx-auto h-14 w-14 text-slate-300 dark:text-slate-600" />
               <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
-                Próximamente 🎉
+                Sin promociones destacadas
               </h3>
               <p className="text-slate-600 dark:text-slate-400">
-                Estamos preparando ofertas increíbles para ti. ¡Vuelve pronto para descubrir descuentos exclusivos!
+                Cuando haya promociones activas configuradas, apareceran aqui con su mejor oferta visible.
               </p>
             </div>
           </CardContent>
@@ -222,20 +223,19 @@ export default function PublicOffersCarousel({
   const imageUrl =
     currentItem.product.images?.[0]?.url ||
     currentItem.product.image ||
-    "/api/placeholder/800/600";
+    '/api/placeholder/800/600';
 
   return (
     <section className="mb-12">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Flame className="w-6 h-6 text-rose-500" />
+          <Flame className="h-6 w-6 text-rose-500" />
           <h2 className="text-3xl font-bold text-slate-900 dark:text-white">
-            Ofertas Destacadas
+            Promociones activas
           </h2>
-          <Badge className="bg-rose-500 text-white border-none animate-pulse">
-            <Sparkles className="w-3 h-3 mr-1" />
-            Hot
+          <Badge className="border-none bg-rose-500 text-white">
+            <Sparkles className="mr-1 h-3 w-3" />
+            Destacadas
           </Badge>
         </div>
         <div className="text-sm text-slate-500 dark:text-slate-400">
@@ -243,23 +243,18 @@ export default function PublicOffersCarousel({
         </div>
       </div>
 
-      {/* Carousel */}
-      <Card className="overflow-hidden border-2 border-rose-200 dark:border-rose-800 shadow-2xl">
+      <Card className="overflow-hidden border border-rose-200 shadow-xl dark:border-rose-900/40">
         <CardContent className="p-0">
-          <div className="relative h-[400px] md:h-[500px]">
+          <div className="relative h-[420px] md:h-[520px]">
             <AnimatePresence mode="wait">
               <motion.div
-                key={currentIndex}
-                initial={{ opacity: 0, x: 100 }}
+                key={`${currentItem.product.id}-${currentItem.promotion.id}`}
+                initial={{ opacity: 0, x: 80 }}
                 animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -100 }}
-                transition={{
-                  duration: 0.3, // Reducido de 0.5s a 0.3s para transiciones más rápidas
-                  ease: "easeInOut" // Curva de animación suave
-                }}
+                exit={{ opacity: 0, x: -80 }}
+                transition={{ duration: 0.28, ease: 'easeInOut' }}
                 className="absolute inset-0"
               >
-                {/* Background Image */}
                 <div className="absolute inset-0">
                   <Image
                     src={imageUrl}
@@ -269,79 +264,78 @@ export default function PublicOffersCarousel({
                     sizes="100vw"
                     priority={currentIndex === 0}
                   />
-                  <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/50 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/65 to-slate-950/20" />
                 </div>
 
-                {/* Content */}
-                <div className="relative z-10 h-full flex items-center">
+                <div className="relative z-10 flex h-full items-center">
                   <div className="container mx-auto px-6 md:px-12">
                     <div className="max-w-2xl space-y-6">
-                      {/* Badges */}
                       <div className="flex flex-wrap gap-3">
-                        <Badge className="bg-rose-500 text-white border-none text-lg px-4 py-2">
-                          -{currentItem.discountPercent}% OFF
+                        <Badge className="border-none bg-rose-500 px-4 py-2 text-lg text-white">
+                          -{Math.round(currentItem.discountPercent)}% OFF
                         </Badge>
-                        {currentItem.promotion.endDate && (
+                        {currentItem.promotion.endDate ? (
                           <Badge
                             variant="secondary"
-                            className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm text-base px-4 py-2"
+                            className="bg-white/90 px-4 py-2 text-base text-slate-800 backdrop-blur-sm dark:bg-slate-900/90 dark:text-white"
                           >
-                            <Clock className="w-4 h-4 mr-2" />
+                            <Clock className="mr-2 h-4 w-4" />
                             {getTimeRemaining(currentItem.promotion.endDate)}
                           </Badge>
-                        )}
+                        ) : null}
                       </div>
 
-                      {/* Promotion Name */}
-                      <h3 className="text-2xl md:text-4xl font-black text-white drop-shadow-lg">
-                        {currentItem.promotion.name}
-                      </h3>
-
-                      {/* Product Name */}
-                      <p className="text-xl md:text-2xl text-white/90 font-semibold">
-                        {currentItem.product.name}
-                      </p>
-
-                      {/* Description */}
-                      {currentItem.promotion.description && (
-                        <p className="text-base md:text-lg text-white/80 line-clamp-2">
-                          {currentItem.promotion.description}
+                      <div className="space-y-3">
+                        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-white/70">
+                          {currentItem.promotion.name}
                         </p>
-                      )}
+                        <h3 className="text-3xl font-black text-white md:text-5xl">
+                          {currentItem.product.name}
+                        </h3>
+                        {currentItem.promotion.description ? (
+                          <p className="max-w-xl text-base text-white/80 md:text-lg">
+                            {currentItem.promotion.description}
+                          </p>
+                        ) : null}
+                      </div>
 
-                      {/* Pricing */}
-                      <div className="flex items-baseline gap-4">
-                        <span className="text-4xl md:text-5xl font-black text-white drop-shadow-lg">
+                      <div className="flex flex-wrap items-end gap-4">
+                        <span className="text-4xl font-black text-white md:text-6xl">
                           {formatCurrency(currentItem.offerPrice)}
                         </span>
-                        {currentItem.basePrice > currentItem.offerPrice && (
-                          <span className="text-xl md:text-2xl text-white/60 line-through">
-                            {formatCurrency(currentItem.basePrice)}
-                          </span>
-                        )}
+                        {currentItem.basePrice > currentItem.offerPrice ? (
+                          <div className="space-y-1 pb-1">
+                            <p className="text-lg text-white/60 line-through md:text-2xl">
+                              {formatCurrency(currentItem.basePrice)}
+                            </p>
+                            <p className="text-sm font-medium text-emerald-300">
+                              Ahorras {formatCurrency(currentItem.savings)}
+                            </p>
+                          </div>
+                        ) : null}
                       </div>
 
-                      {/* Actions */}
                       <div className="flex flex-wrap gap-4">
-                        <Button
-                          size="lg"
-                          className="bg-red-600 hover:bg-red-700 text-white font-bold px-8 py-6 text-lg rounded-xl shadow-lg transition-all duration-200 hover:shadow-lg hover:scale-105"
-                          onClick={() => handleAddToCart(currentItem.product)}
-                        >
-                          <ShoppingCart className="w-5 h-5 mr-2" />
-                          Agregar al Carrito
-                        </Button
-                        >
-                        {onViewDetails && (
+                        {showCart ? (
+                          <Button
+                            size="lg"
+                            className="rounded-xl bg-rose-600 px-8 py-6 text-lg font-bold text-white shadow-lg transition hover:scale-[1.02] hover:bg-rose-700"
+                            onClick={() => handleAddToCart(currentItem)}
+                          >
+                            <ShoppingCart className="mr-2 h-5 w-5" />
+                            Agregar al carrito
+                          </Button>
+                        ) : null}
+                        {onViewDetails ? (
                           <Button
                             size="lg"
                             variant="outline"
-                            className="border-white/50 text-white hover:bg-white/20 backdrop-blur-sm px-8 py-6 text-lg rounded-xl"
+                            className="rounded-xl border-white/50 bg-white/10 px-8 py-6 text-lg text-white backdrop-blur-sm hover:bg-white/20"
                             onClick={() => onViewDetails(currentItem)}
                           >
-                            Ver Detalles
+                            Ver detalle
                           </Button>
-                        )}
+                        ) : null}
                       </div>
                     </div>
                   </div>
@@ -349,46 +343,43 @@ export default function PublicOffersCarousel({
               </motion.div>
             </AnimatePresence>
 
-            {/* Navigation Arrows */}
-            {items.length > 1 && (
+            {items.length > 1 ? (
               <>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="absolute left-4 top-1/2 -translate-y-1/2 z-20 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white rounded-full h-12 w-12 transition-all duration-200 hover:scale-110"
+                  className="absolute left-4 top-1/2 z-20 h-12 w-12 -translate-y-1/2 rounded-full bg-white/20 text-white backdrop-blur-sm transition hover:scale-110 hover:bg-white/30"
                   onClick={handlePrevious}
                   aria-label="Anterior"
                 >
-                  <ChevronLeft className="w-6 h-6" />
+                  <ChevronLeft className="h-6 w-6" />
                 </Button>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="absolute right-4 top-1/2 -translate-y-1/2 z-20 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white rounded-full h-12 w-12 transition-all duration-200 hover:scale-110"
+                  className="absolute right-4 top-1/2 z-20 h-12 w-12 -translate-y-1/2 rounded-full bg-white/20 text-white backdrop-blur-sm transition hover:scale-110 hover:bg-white/30"
                   onClick={handleNext}
                   aria-label="Siguiente"
                 >
-                  <ChevronRight className="w-6 h-6" />
+                  <ChevronRight className="h-6 w-6" />
                 </Button>
               </>
-            )}
+            ) : null}
 
-            {/* Dots Indicator */}
-            {items.length > 1 && (
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex gap-2">
+            {items.length > 1 ? (
+              <div className="absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 gap-2">
                 {items.map((_, index) => (
                   <button
                     key={index}
                     onClick={() => handleDotClick(index)}
-                    className={`h-2 rounded-full transition-all duration-300 ease-in-out ${index === currentIndex
-                        ? "w-8 bg-white"
-                        : "w-2 bg-white/50 hover:bg-white/75"
-                      }`}
+                    className={`h-2 rounded-full transition-all duration-300 ${
+                      index === currentIndex ? 'w-8 bg-white' : 'w-2 bg-white/50 hover:bg-white/75'
+                    }`}
                     aria-label={`Ir a oferta ${index + 1}`}
                   />
                 ))}
               </div>
-            )}
+            ) : null}
           </div>
         </CardContent>
       </Card>

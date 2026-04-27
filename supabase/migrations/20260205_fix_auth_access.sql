@@ -8,11 +8,12 @@
 -- ============================================================================
 -- Esta función verifica si hay un usuario autenticado
 CREATE OR REPLACE FUNCTION public.current_user_id()
-RETURNS UUID AS $$
+RETURNS UUID
+AS $$
 BEGIN
     RETURN auth.uid();
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE SET search_path = '';
 
 -- 2. Recrear política de SELECT para organization_members (más permisiva)
 -- ============================================================================

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { SalesFilters } from '../components/SalesFilters';
@@ -6,6 +6,7 @@ import { Sale } from '../components/SalesDataTable';
 import { createLogger } from '@/lib/logger';
 import { formatStatus, formatPaymentMethod, formatSaleType } from '@/lib/sales-formatters';
 import { CACHE_CONFIG } from '@/config/sales.config';
+import api from '@/lib/api';
 
 interface SalesResponse {
   success: boolean;
@@ -24,196 +25,97 @@ interface UseSalesOptions {
   filters: SalesFilters;
   page: number;
   limit: number;
-  includeItems?: boolean;
 }
 
 const logger = createLogger('SalesHook');
 
-export function useSales({ filters, page, limit, includeItems = true }: UseSalesOptions) {
+export function useSales({ filters, page, limit }: UseSalesOptions) {
   const [isExporting, setIsExporting] = useState(false);
 
-  // Build query parameters
-  const buildQueryParams = useCallback(() => {
-    const params = new URLSearchParams();
+  const buildParams = useCallback(
+    (overrides: Record<string, any> = {}): Record<string, string> => {
+      const params: Record<string, string> = {
+        page: String(overrides.page ?? page),
+        limit: String(overrides.limit ?? limit),
+      };
 
-    // Pagination
-    params.set('page', String(page));
-    params.set('limit', String(limit));
+      if (filters.search) params.search = filters.search;
+      if (filters.dateFrom) params.date_from = format(filters.dateFrom, 'yyyy-MM-dd');
+      if (filters.dateTo) params.date_to = format(filters.dateTo, 'yyyy-MM-dd');
+      if (filters.customerId) params.customer_id = filters.customerId;
+      if (filters.paymentMethod) params.payment_method = filters.paymentMethod;
+      if (filters.status) params.status = filters.status;
+      if (filters.saleType) params.sale_type = filters.saleType;
+      if (filters.minAmount !== undefined) params.min_amount = String(filters.minAmount);
+      if (filters.maxAmount !== undefined) params.max_amount = String(filters.maxAmount);
+      if (filters.hasCoupon !== undefined) params.has_coupon = String(filters.hasCoupon);
 
-    // Include items
-    if (includeItems) {
-      params.set('include', 'items');
-    }
-
-    // Search (ID or customer)
-    if (filters.search) {
-      // Try to parse as sale ID first
-      const saleIdMatch = filters.search.match(/^#?(\d+)$/);
-      if (saleIdMatch) {
-        params.set('id', saleIdMatch[1]);
-      } else {
-        // Otherwise treat as customer search
-        params.set('customer_id', filters.search);
-      }
-    }
-
-    // Date filters
-    if (filters.dateFrom) {
-      params.set('date_from', filters.dateFrom.toISOString().split('T')[0]);
-    }
-    if (filters.dateTo) {
-      params.set('date_to', filters.dateTo.toISOString().split('T')[0]);
-    }
-
-    // Other filters
-    if (filters.customerId) {
-      params.set('customer_id', filters.customerId);
-    }
-    if (filters.paymentMethod) {
-      params.set('payment_method', filters.paymentMethod);
-    }
-    if (filters.status) {
-      params.set('status', filters.status);
-    }
-    if (filters.saleType) {
-      params.set('sale_type', filters.saleType);
-    }
-    if (filters.minAmount !== undefined) {
-      params.set('min_amount', String(filters.minAmount));
-    }
-    if (filters.maxAmount !== undefined) {
-      params.set('max_amount', String(filters.maxAmount));
-    }
-    if (filters.hasCoupon !== undefined) {
-      params.set('has_coupon', String(filters.hasCoupon));
-    }
-
-    return params.toString();
-  }, [filters, page, limit, includeItems]);
-
-  // Fetch sales data
-  const { data, isLoading, error, refetch } = useQuery<SalesResponse>({
-    queryKey: ['sales', 'all', buildQueryParams()],
-    queryFn: async () => {
-      const response = await fetch(`/api/sales?${buildQueryParams()}`);
-      if (!response.ok) {
-        throw new Error('Error al cargar las ventas');
-      }
-      return response.json();
+      return { ...params, ...overrides };
     },
-    staleTime: CACHE_CONFIG.LIST_STALE_TIME, // 30 segundos
+    [filters, page, limit],
+  );
+
+  const { data, isLoading, error, refetch } = useQuery<SalesResponse>({
+    queryKey: ['sales', 'all', buildParams()],
+    queryFn: async () => {
+      const response = await api.get<SalesResponse>('/sales', { params: buildParams() });
+      return response.data;
+    },
+    staleTime: CACHE_CONFIG.LIST_STALE_TIME,
     refetchOnWindowFocus: false,
   });
 
-  // Export function
-  const exportSales = useCallback(async (exportFormat: 'csv' | 'excel' = 'csv') => {
+  const exportSales = useCallback(async () => {
     setIsExporting(true);
     try {
-      // Build export params (same as query but with larger limit)
-      const exportParams = buildQueryParams();
-      const exportUrl = `/api/sales?${exportParams}&limit=1000`;
+      const response = await api.get<SalesResponse>('/sales', {
+        params: buildParams({ page: 1, limit: 1000 }),
+      });
+      const sales: Sale[] = response.data?.sales || response.data?.data || [];
 
-      const response = await fetch(exportUrl);
-      if (!response.ok) {
-        throw new Error('Error al exportar las ventas');
-      }
+      const headers = [
+        'ID Venta', 'Fecha', 'Cliente', 'Email Cliente', 'Teléfono',
+        'Total', 'Método de Pago', 'Estado', 'Tipo de Venta', 'Notas',
+      ];
+      const rows = sales.map((sale) => [
+        sale.id,
+        format(new Date(sale.created_at), 'yyyy-MM-dd HH:mm:ss'),
+        sale.customer?.name || 'Cliente no registrado',
+        sale.customer?.email || '',
+        sale.customer?.phone || '',
+        sale.total_amount.toFixed(2),
+        formatPaymentMethod(sale.payment_method),
+        formatStatus(sale.status),
+        formatSaleType(sale.sale_type),
+        sale.notes || '',
+      ]);
 
-      const data = await response.json();
-      const sales = data.sales || data.data || [];
+      const csvContent =
+        '\ufeff' +
+        [headers, ...rows]
+          .map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
+          .join('\n');
 
-      if (exportFormat === 'csv') {
-        // Convert to CSV
-        const headers = [
-          'ID Venta',
-          'Fecha',
-          'Cliente',
-          'Email Cliente',
-          'Teléfono Cliente',
-          'Total',
-          'Método de Pago',
-          'Estado',
-          'Tipo de Venta',
-          'Notas'
-        ];
-
-        const rows = sales.map((sale: Sale) => [
-          sale.id,
-          format(new Date(sale.created_at), 'yyyy-MM-dd HH:mm:ss'),
-          sale.customer?.name || 'Cliente no registrado',
-          sale.customer?.email || '',
-          sale.customer?.phone || '',
-          sale.total_amount.toFixed(2),
-          formatPaymentMethod(sale.payment_method),
-          formatStatus(sale.status),
-          formatSaleType(sale.sale_type),
-          sale.notes || ''
-        ]);
-
-        const csvContent = [
-          headers.join(','),
-          ...rows.map((row: (string | number)[]) => row.map((cell: any) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-        ].join('\n');
-
-        // Download CSV
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', `ventas_${format(new Date(), 'yyyy-MM-dd')}.csv`);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      } else {
-        // For Excel, we'll create a more structured format
-        // This is a simplified version - in a real app you might use a library like xlsx
-        const excelData = sales.map((sale: Sale) => ({
-          'ID Venta': sale.id,
-          'Fecha': format(new Date(sale.created_at), 'yyyy-MM-dd HH:mm:ss'),
-          'Cliente': sale.customer?.name || 'Cliente no registrado',
-          'Email': sale.customer?.email || '',
-          'Teléfono': sale.customer?.phone || '',
-          'Total': sale.total_amount,
-          'Método de Pago': formatPaymentMethod(sale.payment_method),
-          'Estado': formatStatus(sale.status),
-          'Tipo': formatSaleType(sale.sale_type),
-          'Notas': sale.notes || '',
-          'Cantidad de Productos': sale.items?.length || 0,
-          'Subtotal': (sale.total_amount - (sale.tax_amount || 0) + (sale.discount_amount || 0)),
-          'Descuento': sale.discount_amount || 0,
-          'Impuesto': sale.tax_amount || 0
-        }));
-
-        // Convert to CSV for now (Excel would require additional library)
-        const headers = Object.keys(excelData[0]);
-        const rows = excelData.map((row: any) => headers.map(header => row[header]));
-
-        const csvContent = [
-          headers.join(','),
-          ...rows.map((row: any[]) => row.map((cell: any) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-        ].join('\n');
-
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', `ventas_${format(new Date(), 'yyyy-MM-dd')}.csv`);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
-    } catch (error) {
-      logger.error('Error exporting sales:', error);
-      throw error;
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `ventas_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      logger.error('Error exporting sales:', err);
+      throw err;
     } finally {
       setIsExporting(false);
     }
-  }, [buildQueryParams]);
+  }, [buildParams]);
 
   return {
     sales: data?.sales || data?.data || [],
-    pagination: data?.pagination || { page: 1, limit: 20, total: 0, pages: 0 },
+    pagination: data?.pagination || { page: 1, limit, total: 0, pages: 0 },
     isLoading,
     isExporting,
     error,

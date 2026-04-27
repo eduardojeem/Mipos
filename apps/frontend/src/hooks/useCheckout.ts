@@ -46,17 +46,19 @@ export function useCheckout({ products, discount, discountType, paymentMethod, n
       const { couponCode, couponDiscountType } = useStore.getState();
 
       const saleData: any = {
-        customer_id: selectedCustomer?.id ?? null,
+        customerId: selectedCustomer?.id ?? null,
         items: cart.map(item => ({
-          product_id: item.product_id,
+          productId: item.product_id,
           quantity: item.quantity,
-          unit_price: item.price,
-          discount_amount: 0,
         })),
-        payment_method: paymentMethod,
-        discount_amount: totals.discountAmount,
-        discount_type: discountType,
-        tax_amount: totals.taxAmount,
+        paymentMethod: paymentMethod,
+        taxAmount: totals.taxAmount,
+        totalAmount: totals.total,
+        manualDiscount: totals.discountAmount > 0 ? {
+          type: discountType,
+          value: totals.discountAmount,
+          reason: 'Manual discount'
+        } : undefined,
         notes: couponCode ? `${notes || ''}`.trim() : notes,
       };
 

@@ -1,158 +1,149 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-admin'
-import { isMockAuthEnabled } from '@/lib/env'
-import { assertAdmin } from '@/app/api/_utils/auth'
+import { COMPANY_FEATURE_KEYS, COMPANY_PERMISSIONS, resolveCompanyAccess } from '@/app/api/_utils/company-authorization'
+import { buildUserResponse, deactivateMembershipRole, normalizeCompanyUserRole, normalizeCompanyUserStatus, syncMembershipRole } from '../_lib'
+
+type ActiveRoleRow = {
+  role?: { name?: string | null } | Array<{ name?: string | null }> | null
+}
+
+function isSuperAdminRole(rows: ActiveRoleRow[] | null | undefined) {
+  return (rows || []).some((row) => {
+    const role = Array.isArray(row.role) ? row.role[0] : row.role
+    return String(role?.name || '').toUpperCase() === 'SUPER_ADMIN'
+  })
+}
+
+function getRequestedOrganizationId(request: NextRequest, body?: Record<string, unknown>): string | undefined {
+  const headerOrgId = request.headers.get('x-organization-id')?.trim()
+  const queryOrgId = request.nextUrl.searchParams.get('organizationId')?.trim()
+  const bodyOrgId = typeof body?.organizationId === 'string' ? body.organizationId.trim() : ''
+  return headerOrgId || queryOrgId || bodyOrgId || undefined
+}
+
+async function resolveAccessForUserMutation(request: NextRequest, body?: Record<string, unknown>) {
+  return resolveCompanyAccess({
+    companyId: getRequestedOrganizationId(request, body),
+    permission: COMPANY_PERMISSIONS.MANAGE_USERS,
+    feature: COMPANY_FEATURE_KEYS.TEAM_MANAGEMENT,
+    allowedRoles: ['OWNER', 'ADMIN', 'SUPER_ADMIN'],
+  })
+}
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await assertAdmin(request)
-    if (!('ok' in auth) || auth.ok === false) {
-      return NextResponse.json(auth.body, { status: auth.status })
-    }
-    // Bypass in mock mode for stable Admin UI editing
-    if (isMockAuthEnabled()) {
-      const { id: userId } = await params;
-      const body = await request.json();
-      const { name, email, role, password } = body;
-
-      if (!name || !email || !role) {
-        return NextResponse.json({ error: 'Nombre, email y rol son requeridos' }, { status: 400 });
-      }
-
-      const now = new Date().toISOString();
-      const updatedUser = {
-        id: userId,
-        email,
-        name,
-        role,
-        status: 'active',
-        createdAt: now,
-        lastLogin: now
-      };
-
-      return NextResponse.json({ success: true, user: updatedUser });
+    const body = await request.json()
+    const access = await resolveAccessForUserMutation(request, body)
+    if (!access.ok) {
+      return NextResponse.json(access.body, { status: access.status })
     }
 
-    const supabase = await createClient();
-    const { id: userId } = await params;
-    
-    // Verificar autenticación
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    
-    if (sessionError || !session) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    const { id: userId } = await params
+    const companyId = access.context.isSuperAdmin
+      ? String(getRequestedOrganizationId(request, body) || access.context.companyId || '').trim()
+      : String(access.context.companyId || '')
+
+    if (!companyId) {
+      return NextResponse.json({ error: 'Organizacion no resuelta' }, { status: 400 })
     }
 
-    // Verificar que el usuario sea admin
-    const { data: profile } = await supabase
+    const name = String(body?.name || '').trim()
+    const email = String(body?.email || '').trim().toLowerCase()
+    const role = normalizeCompanyUserRole(body?.role as string)
+    const status = normalizeCompanyUserStatus(body?.status as string)
+    const password = typeof body?.password === 'string' ? body.password : ''
+
+    if (!name || !email) {
+      return NextResponse.json({ error: 'Nombre y email son requeridos' }, { status: 400 })
+    }
+
+    if (role === 'OWNER' && !access.context.isSuperAdmin) {
+      return NextResponse.json({ error: 'Solo super admin puede asignar rol OWNER desde esta interfaz' }, { status: 403 })
+    }
+
+    const admin = createAdminClient()
+    const { data: membership } = await admin
+      .from('organization_members')
+      .select('organization_id,user_id,is_owner,role_id')
+      .eq('organization_id', companyId)
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (!membership) {
+      return NextResponse.json({ error: 'Usuario no encontrado en la organizacion actual' }, { status: 404 })
+    }
+
+    const { data: activeSuperRole } = await admin
+      .from('user_roles')
+      .select('role:roles(name)')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+
+    const targetIsSuperAdmin = isSuperAdminRole(activeSuperRole as ActiveRoleRow[] | null | undefined)
+    if (targetIsSuperAdmin && !access.context.isSuperAdmin) {
+      return NextResponse.json({ error: 'No puedes modificar un super admin desde este panel' }, { status: 403 })
+    }
+
+    await admin
       .from('users')
-      .select('role')
-      .eq('id', session.user.id)
-      .single();
+      .upsert(
+        {
+          id: userId,
+          email,
+          full_name: name,
+          role,
+          organization_id: companyId,
+          status,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'id' }
+      )
 
-    const userRole = (profile as any)?.role;
-    if (!profile || (userRole !== 'ADMIN' && userRole !== 'SUPER_ADMIN')) {
-      return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
-    }
-
-    const body = await request.json();
-    const { name, email, role, password } = body;
-
-    if (!name || !email || !role) {
-      return NextResponse.json({ error: 'Nombre, email y rol son requeridos' }, { status: 400 });
-    }
-
-    // Validar tipos explícitamente
-    const fullName = String(name);
-    const newUserRole = String(role);
-
-    // Crear cliente admin (service role)
-    let admin: any
-    try {
-      admin = createAdminClient()
-    } catch (e) {
-      console.error('Supabase admin client not configured:', e)
-      return NextResponse.json({ error: 'Supabase admin client not configured' }, { status: 500 })
-    }
-
-    // Verificar que el usuario existe usando cliente admin para evitar RLS
-    const { data: existingUser } = await admin
-      .from('users')
-      .select('id')
-      .eq('id', userId)
-      .single();
-
-    if (!existingUser) {
-      return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 });
-    }
-
-    // Actualizar en la tabla users usando cliente admin
-    const { data: userData, error: userError } = await admin
-      .from('users')
-      .update({
-        full_name: fullName,
-        role: newUserRole,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', userId)
-      .select()
-      .single();
-
-    if (userError) {
-      console.error('Error updating user:', userError);
-      return NextResponse.json({ error: 'Error al actualizar usuario' }, { status: 500 });
-    }
-
-    // Si se proporciona una nueva contraseña, actualizarla en Supabase Auth usando admin
-    if (password) {
-      const { error: passwordError } = await admin.auth.admin.updateUserById(
-        userId,
-        { password }
-      );
-
-      if (passwordError) {
-        console.error('Error updating password:', passwordError);
-        // No fallar completamente si solo falla la actualización de contraseña
-      }
-    }
-
-    // Actualizar email en Supabase Auth si es diferente usando admin
-    const { error: emailError } = await admin.auth.admin.updateUserById(
+    await syncMembershipRole({
+      organizationId: companyId,
       userId,
-      { 
-        email,
-        user_metadata: { full_name: name }
-      }
-    );
+      roleName: role,
+      isOwner: role === 'OWNER',
+      activate: status === 'ACTIVE',
+    })
 
-    if (emailError) {
-      console.error('Error updating auth email:', emailError);
-      // No fallar completamente si solo falla la actualización del email en auth
+    if (password && password.length >= 8) {
+      await admin.auth.admin.updateUserById(userId, { password })
     }
 
-    // Transformar datos para respuesta
-    const updatedUser = {
-      id: userData.id,
-      email: userData.email,
-      name: userData.full_name,
-      role: userData.role,
-      status: 'active',
-      createdAt: userData.created_at,
-      lastLogin: userData.updated_at || userData.created_at
-    };
+    await admin.auth.admin.updateUserById(userId, {
+      email,
+      user_metadata: {
+        full_name: name,
+        role,
+        organization_id: companyId,
+      },
+    })
 
-    return NextResponse.json({ 
-      success: true,
-      user: updatedUser 
-    });
+    const { data: updatedMembership } = await admin
+      .from('organization_members')
+      .select(`
+        organization_id,
+        user_id,
+        role_id,
+        is_owner,
+        created_at,
+        updated_at,
+        user:users(id,email,full_name,phone,status,created_at,updated_at,last_login),
+        role:roles(name,display_name),
+        organization:organizations(id,name)
+      `)
+      .eq('organization_id', companyId)
+      .eq('user_id', userId)
+      .maybeSingle()
 
+    return NextResponse.json({ success: true, user: buildUserResponse(updatedMembership) })
   } catch (error) {
-    console.error('Error in update user API:', error);
-    return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 });
+    console.error('Error in update user API:', error)
+    return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
   }
 }
 
@@ -161,92 +152,50 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await assertAdmin(request)
-    if (!('ok' in auth) || auth.ok === false) {
-      return NextResponse.json(auth.body, { status: auth.status })
-    }
-    // Bypass in mock mode to simulate deletion
-    if (isMockAuthEnabled()) {
-      return NextResponse.json({ 
-        success: true,
-        message: 'Usuario eliminado exitosamente'
-      });
+    const access = await resolveAccessForUserMutation(request)
+    if (!access.ok) {
+      return NextResponse.json(access.body, { status: access.status })
     }
 
-    const supabase = await createClient();
-    const { id: userId } = await params;
-    
-    // Verificar autenticación
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-    
-    if (sessionError || !session) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    const { id: userId } = await params
+    const companyId = getRequestedOrganizationId(request) || access.context.companyId
+    if (!companyId) {
+      return NextResponse.json({ error: 'Organizacion no resuelta' }, { status: 400 })
     }
 
-    // Verificar que el usuario sea admin
-    const { data: profile } = await supabase
-      .from('users')
-      .select('role')
-      .eq('id', session.user.id)
-      .single();
-
-    const deleteUserRole = (profile as any)?.role;
-    if (!profile || (deleteUserRole !== 'ADMIN' && deleteUserRole !== 'SUPER_ADMIN')) {
-      return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
+    if (userId === access.context.userId) {
+      return NextResponse.json({ error: 'No puedes eliminar tu propia membresia desde esta pantalla' }, { status: 400 })
     }
 
-    // Crear cliente admin (service role)
-    let admin: any
-    try {
-      admin = createAdminClient()
-    } catch (e) {
-      console.error('Supabase admin client not configured:', e)
-      return NextResponse.json({ error: 'Supabase admin client not configured' }, { status: 500 })
+    const admin = createAdminClient()
+    const { data: activeSuperRole } = await admin
+      .from('user_roles')
+      .select('role:roles(name)')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+
+    const targetIsSuperAdmin = isSuperAdminRole(activeSuperRole as ActiveRoleRow[] | null | undefined)
+    if (targetIsSuperAdmin && !access.context.isSuperAdmin) {
+      return NextResponse.json({ error: 'No puedes eliminar un super admin desde este panel' }, { status: 403 })
     }
 
-    // Prevenir auto-eliminación
-    const { id: requestUserId } = await params;
-    if (requestUserId === session.user.id) {
-      return NextResponse.json({ error: 'No puedes eliminar tu propia cuenta' }, { status: 400 });
+    await deactivateMembershipRole({ organizationId: companyId, userId })
+
+    const { data: remainingMemberships } = await admin
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', userId)
+
+    if (!remainingMemberships || remainingMemberships.length === 0) {
+      await admin
+        .from('users')
+        .update({ status: 'INACTIVE', updated_at: new Date().toISOString() })
+        .eq('id', userId)
     }
 
-    // Verificar que el usuario existe usando cliente admin
-    const { data: existingUser } = await admin
-      .from('users')
-      .select('id')
-      .eq('id', userId)
-      .single();
-
-    if (!existingUser) {
-      return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 });
-    }
-
-    // Eliminar de la tabla users usando cliente admin
-    const { error: deleteError } = await admin
-      .from('users')
-      .delete()
-      .eq('id', userId);
-
-    if (deleteError) {
-      console.error('Error deleting user:', deleteError);
-      return NextResponse.json({ error: 'Error al eliminar usuario' }, { status: 500 });
-    }
-
-    // Eliminar de Supabase Auth usando admin
-    const { error: authDeleteError } = await admin.auth.admin.deleteUser(userId);
-
-    if (authDeleteError) {
-      console.error('Error deleting auth user:', authDeleteError);
-      // No fallar completamente si solo falla la eliminación en auth
-    }
-
-    return NextResponse.json({ 
-      success: true,
-      message: 'Usuario eliminado exitosamente' 
-    });
-
+    return NextResponse.json({ success: true, message: 'Usuario removido de la organizacion' })
   } catch (error) {
-    console.error('Error in delete user API:', error);
-    return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 });
+    console.error('Error in delete user API:', error)
+    return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
   }
 }

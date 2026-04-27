@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getValidatedOrganizationId } from '@/lib/organization';
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,21 +14,23 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Start date and end date are required' }, { status: 400 });
     }
 
-    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    const orgId = ((await getValidatedOrganizationId(request)) || '').trim();
     if (!orgId) {
       return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
     }
 
     const supabase = await createClient();
 
+    const deliveredStatuses = ['DELIVERED', 'delivered', 'COMPLETED', 'completed'];
+
     // Get sales (revenue) for the period
     let salesQuery = supabase
       .from('sales')
-      .select('id, total_amount, created_at, status')
+      .select('id, total, date, status, branch_id, pos_id')
       .eq('organization_id', orgId) // Filter by Organization
-      .gte('created_at', startDate)
-      .lte('created_at', endDate)
-      .eq('status', 'completed');
+      .gte('date', startDate)
+      .lte('date', endDate)
+      .in('status', deliveredStatuses);
 
     if (branchId) salesQuery = salesQuery.eq('branch_id', branchId);
     if (posId) salesQuery = salesQuery.eq('pos_id', posId);
@@ -37,19 +40,23 @@ export async function GET(request: NextRequest) {
     if (salesError) throw salesError;
 
     // Calculate total revenue
-    const totalRevenue = (salesData || []).reduce((sum: number, sale: any) => sum + (sale.total_amount || 0), 0);
+    const totalRevenue = (salesData || []).reduce((sum: number, sale: any) => sum + Number(sale.total || 0), 0);
 
-    // Get expenses for the period (if expenses table exists)
-    let expensesQuery = supabase
-      .from('expenses')
-      .select('amount, category, created_at')
-      .eq('organization_id', orgId) // Filter by Organization
-      .gte('created_at', startDate)
-      .lte('created_at', endDate);
-
-    if (branchId) expensesQuery = expensesQuery.eq('branch_id', branchId);
-
-    const { data: expensesData } = await expensesQuery; // Don't throw error if table doesn't exist
+    // Get expenses for the period (optional table)
+    let expensesData: any[] = [];
+    try {
+      let expensesQuery = (supabase as any)
+        .from('expenses')
+        .select('amount, category, created_at')
+        .eq('organization_id', orgId)
+        .gte('created_at', startDate)
+        .lte('created_at', endDate);
+      if (branchId) expensesQuery = expensesQuery.eq('branch_id', branchId);
+      const { data, error } = await expensesQuery;
+      if (!error) expensesData = data || [];
+    } catch {
+      expensesData = [];
+    }
 
     // Calculate total expenses
     const totalExpenses = (expensesData || []).reduce((sum: number, expense: any) => sum + (expense.amount || 0), 0);
@@ -63,9 +70,9 @@ export async function GET(request: NextRequest) {
 
     // Process sales by month
     (salesData || []).forEach((sale: any) => {
-      const month = new Date(sale.created_at).toISOString().slice(0, 7); // YYYY-MM format
+      const month = new Date(sale.date || sale.created_at).toISOString().slice(0, 7); // YYYY-MM format
       const existing = revenueByMonthMap.get(month) || { revenue: 0, expenses: 0 };
-      existing.revenue += sale.total_amount || 0;
+      existing.revenue += Number(sale.total || 0);
       revenueByMonthMap.set(month, existing);
     });
 
@@ -111,30 +118,33 @@ export async function GET(request: NextRequest) {
     // Previous period sales
     let prevSalesQuery = supabase
       .from('sales')
-      .select('total_amount')
+      .select('total, date, status')
       .eq('organization_id', orgId) // Filter by Organization
-      .gte('created_at', prevStart.toISOString().split('T')[0])
-      .lte('created_at', prevEnd.toISOString().split('T')[0])
-      .eq('status', 'completed');
+      .gte('date', prevStart.toISOString())
+      .lte('date', prevEnd.toISOString())
+      .in('status', deliveredStatuses);
 
     if (branchId) prevSalesQuery = prevSalesQuery.eq('branch_id', branchId);
     if (posId) prevSalesQuery = prevSalesQuery.eq('pos_id', posId);
 
     const { data: prevSalesData } = await prevSalesQuery;
 
-    // Previous period expenses
-    let prevExpensesQuery = supabase
-      .from('expenses')
-      .select('amount')
-      .eq('organization_id', orgId) // Filter by Organization
-      .gte('created_at', prevStart.toISOString().split('T')[0])
-      .lte('created_at', prevEnd.toISOString().split('T')[0]);
+    let prevExpensesData: any[] = [];
+    try {
+      let prevExpensesQuery = (supabase as any)
+        .from('expenses')
+        .select('amount')
+        .eq('organization_id', orgId)
+        .gte('created_at', prevStart.toISOString())
+        .lte('created_at', prevEnd.toISOString());
+      if (branchId) prevExpensesQuery = prevExpensesQuery.eq('branch_id', branchId);
+      const { data, error } = await prevExpensesQuery;
+      if (!error) prevExpensesData = data || [];
+    } catch {
+      prevExpensesData = [];
+    }
 
-    if (branchId) prevExpensesQuery = prevExpensesQuery.eq('branch_id', branchId);
-
-    const { data: prevExpensesData } = await prevExpensesQuery;
-
-    const prevRevenue = (prevSalesData || []).reduce((sum: number, sale: any) => sum + (sale.total_amount || 0), 0);
+    const prevRevenue = (prevSalesData || []).reduce((sum: number, sale: any) => sum + Number(sale.total || 0), 0);
     const prevExpenses = (prevExpensesData || []).reduce((sum: number, expense: any) => sum + (expense.amount || 0), 0);
     const prevProfit = prevRevenue - prevExpenses;
     const prevMargin = prevRevenue > 0 ? (prevProfit / prevRevenue) * 100 : 0;

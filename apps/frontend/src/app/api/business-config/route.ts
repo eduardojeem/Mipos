@@ -1,55 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { assertAdmin } from '@/app/api/_utils/auth'
-import { getUserOrganizationId } from '@/app/api/_utils/organization'
+import { createAdminClient } from '@/lib/supabase/server'
 import { validateBusinessConfig } from '@/app/api/admin/_utils/business-config-validation'
 import { logAudit } from '@/app/api/admin/_utils/audit'
 import type { BusinessConfig, BusinessConfigUpdate } from '@/types/business-config'
 import { defaultBusinessConfig } from '@/types/business-config'
 import { getCachedConfig, setCachedConfig } from './cache'
+import { requireCompanyAccess } from '@/app/api/_utils/company-authorization'
+import { COMPANY_FEATURE_KEYS, COMPANY_PERMISSIONS } from '@/lib/company-access'
 
-// ✅ Cache per organización (compartido entre rutas)
+async function requireBusinessConfigAccess(request: NextRequest) {
+  const { searchParams } = new URL(request.url)
+  const orgFilter = searchParams.get('organizationId') || searchParams.get('organization_id')
+
+  return requireCompanyAccess(request, {
+    companyId: orgFilter,
+    permission: COMPANY_PERMISSIONS.MANAGE_COMPANY,
+    feature: COMPANY_FEATURE_KEYS.ADMIN_PANEL,
+    allowedRoles: ['OWNER', 'ADMIN'],
+  })
+}
 
 export async function GET(request: NextRequest) {
   try {
-    // ✅ Authentication and authorization
-    const auth = await assertAdmin(request)
-    if (!auth.ok) {
-      return NextResponse.json(auth.body, { status: auth.status })
+    const access = await requireBusinessConfigAccess(request)
+    if (!access.ok) {
+      return NextResponse.json(access.body, { status: access.status })
     }
 
-    const userId = auth.userId as string
-    const userEmail = auth.email
-    const isSuperAdmin = auth.isSuperAdmin || false
-
-    // ✅ Get organization context
-    const { searchParams } = new URL(request.url)
-    const orgFilter = searchParams.get('organizationId') || searchParams.get('organization_id')
-    
-    let organizationId: string
-    if (isSuperAdmin && orgFilter) {
-      // Super admin can query any organization
-      organizationId = orgFilter
-    } else {
-      // Regular admin gets their own organization
-      const userOrgId = await getUserOrganizationId(userId)
-      if (!userOrgId) {
-        return NextResponse.json(
-          { error: 'Usuario no pertenece a ninguna organización' },
-          { status: 403 }
-        )
-      }
-      organizationId = userOrgId
+    const organizationId = access.context.companyId
+    if (!organizationId) {
+      return NextResponse.json({ error: 'Empresa no encontrada' }, { status: 403 })
     }
 
-    // Check cache first
     const cached = getCachedConfig(organizationId)
     if (cached) {
       return NextResponse.json({ success: true, config: cached })
     }
 
-    // ✅ Query with RLS-enabled client
-    const supabase = await createClient()
+    const supabase = await createAdminClient()
     const { data, error } = await supabase
       .from('settings')
       .select('value')
@@ -59,13 +47,9 @@ export async function GET(request: NextRequest) {
 
     if (error && error.code !== 'PGRST116') {
       console.error('Error fetching business config:', error)
-      return NextResponse.json(
-        { error: 'Error al obtener configuración' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'Error al obtener configuracion' }, { status: 500 })
     }
 
-    // Return default config if not found
     const config = data?.value || defaultBusinessConfig
     setCachedConfig(organizationId, config)
 
@@ -81,43 +65,46 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    // ✅ Authentication and authorization
-    const auth = await assertAdmin(request)
-    if (!auth.ok) {
-      return NextResponse.json(auth.body, { status: auth.status })
+    const access = await requireBusinessConfigAccess(request)
+    if (!access.ok) {
+      return NextResponse.json(access.body, { status: access.status })
     }
 
-    const userId = auth.userId as string
-    const userEmail = auth.email
-    const isSuperAdmin = auth.isSuperAdmin || false
-
-    // ✅ Get organization context
-    const { searchParams } = new URL(request.url)
-    const orgFilter = searchParams.get('organizationId') || searchParams.get('organization_id')
-    
-    let organizationId: string
-    if (isSuperAdmin && orgFilter) {
-      organizationId = orgFilter
-    } else {
-      const userOrgId = await getUserOrganizationId(userId)
-      if (!userOrgId) {
-        return NextResponse.json(
-          { error: 'Usuario no pertenece a ninguna organización' },
-          { status: 403 }
-        )
-      }
-      organizationId = userOrgId
+    const organizationId = access.context.companyId
+    if (!organizationId) {
+      return NextResponse.json({ error: 'Empresa no encontrada' }, { status: 403 })
     }
 
-    // Parse and validate request body
     const raw = await request.json()
-    const s = (v: any, d: string = '') => (typeof v === 'string' ? v : d)
+    const s = (v: any, d = '') => (typeof v === 'string' ? v : d)
     const n = (v: any, d: number) => {
       const num = Number(v)
       return Number.isFinite(num) ? num : d
     }
     const b = (v: any, d: boolean) => (typeof v === 'boolean' ? v : d)
     const arrStr = (v: any, d: string[]) => (Array.isArray(v) ? v.filter((x: any) => typeof x === 'string') : d)
+    const systemSettings: NonNullable<BusinessConfig['systemSettings']> = raw?.systemSettings ? {
+      autoBackup: b(raw?.systemSettings?.autoBackup, defaultBusinessConfig.systemSettings!.autoBackup),
+      backupFrequency: s(raw?.systemSettings?.backupFrequency, defaultBusinessConfig.systemSettings!.backupFrequency) as NonNullable<BusinessConfig['systemSettings']>['backupFrequency'],
+      maxUsers: n(raw?.systemSettings?.maxUsers, defaultBusinessConfig.systemSettings!.maxUsers),
+      sessionTimeout: n(raw?.systemSettings?.sessionTimeout, defaultBusinessConfig.systemSettings!.sessionTimeout),
+      enableLogging: b(raw?.systemSettings?.enableLogging, defaultBusinessConfig.systemSettings!.enableLogging),
+      logLevel: s(raw?.systemSettings?.logLevel, defaultBusinessConfig.systemSettings!.logLevel) as NonNullable<BusinessConfig['systemSettings']>['logLevel'],
+      security: {
+        requireStrongPasswords: b(raw?.systemSettings?.security?.requireStrongPasswords, defaultBusinessConfig.systemSettings!.security.requireStrongPasswords),
+        enableTwoFactor: b(raw?.systemSettings?.security?.enableTwoFactor, defaultBusinessConfig.systemSettings!.security.enableTwoFactor),
+        maxLoginAttempts: n(raw?.systemSettings?.security?.maxLoginAttempts, defaultBusinessConfig.systemSettings!.security.maxLoginAttempts),
+        lockoutDuration: n(raw?.systemSettings?.security?.lockoutDuration, defaultBusinessConfig.systemSettings!.security.lockoutDuration),
+      },
+      email: {
+        provider: 'smtp',
+        smtpHost: s(raw?.systemSettings?.email?.smtpHost, ''),
+        smtpPort: n(raw?.systemSettings?.email?.smtpPort, 587),
+        smtpUser: s(raw?.systemSettings?.email?.smtpUser, ''),
+        smtpPassword: s(raw?.systemSettings?.email?.smtpPassword),
+      },
+    } : (defaultBusinessConfig.systemSettings as NonNullable<BusinessConfig['systemSettings']>)
+
     const body: BusinessConfigUpdate = {
       businessName: s(raw?.businessName, defaultBusinessConfig.businessName),
       tagline: s(raw?.tagline, defaultBusinessConfig.tagline),
@@ -184,7 +171,9 @@ export async function PUT(request: NextRequest) {
         freeShippingThreshold: n(raw?.storeSettings?.freeShippingThreshold, defaultBusinessConfig.storeSettings.freeShippingThreshold),
         freeShippingEnabled: b(raw?.storeSettings?.freeShippingEnabled, !!defaultBusinessConfig.storeSettings.freeShippingEnabled),
         freeShippingMessage: s(raw?.storeSettings?.freeShippingMessage, defaultBusinessConfig.storeSettings.freeShippingMessage || ''),
-        freeShippingRegions: Array.isArray(raw?.storeSettings?.freeShippingRegions) ? raw.storeSettings.freeShippingRegions.map((r: any) => ({ id: s(r?.id), name: s(r?.name), threshold: n(r?.threshold, 0) })) : [],
+        freeShippingRegions: Array.isArray(raw?.storeSettings?.freeShippingRegions)
+          ? raw.storeSettings.freeShippingRegions.map((r: any) => ({ id: s(r?.id), name: s(r?.name), threshold: n(r?.threshold, 0) }))
+          : [],
         minimumOrderAmount: n(raw?.storeSettings?.minimumOrderAmount, defaultBusinessConfig.storeSettings.minimumOrderAmount || 0),
         acceptsCreditCards: b(raw?.storeSettings?.acceptsCreditCards, defaultBusinessConfig.storeSettings.acceptsCreditCards),
         acceptsDebitCards: b(raw?.storeSettings?.acceptsDebitCards, defaultBusinessConfig.storeSettings.acceptsDebitCards),
@@ -196,42 +185,65 @@ export async function PUT(request: NextRequest) {
         printReceipts: b(raw?.storeSettings?.printReceipts, !!defaultBusinessConfig.storeSettings.printReceipts),
         enableCashDrawer: b(raw?.storeSettings?.enableCashDrawer, !!defaultBusinessConfig.storeSettings.enableCashDrawer),
       },
-      systemSettings: raw?.systemSettings ? {
-        autoBackup: b(raw?.systemSettings?.autoBackup, defaultBusinessConfig.systemSettings!.autoBackup),
-        backupFrequency: s(raw?.systemSettings?.backupFrequency, defaultBusinessConfig.systemSettings!.backupFrequency),
-        maxUsers: n(raw?.systemSettings?.maxUsers, defaultBusinessConfig.systemSettings!.maxUsers),
-        sessionTimeout: n(raw?.systemSettings?.sessionTimeout, defaultBusinessConfig.systemSettings!.sessionTimeout),
-        enableLogging: b(raw?.systemSettings?.enableLogging, defaultBusinessConfig.systemSettings!.enableLogging),
-        logLevel: s(raw?.systemSettings?.logLevel, defaultBusinessConfig.systemSettings!.logLevel),
-        security: {
-          requireStrongPasswords: b(raw?.systemSettings?.security?.requireStrongPasswords, defaultBusinessConfig.systemSettings!.security.requireStrongPasswords),
-          enableTwoFactor: b(raw?.systemSettings?.security?.enableTwoFactor, defaultBusinessConfig.systemSettings!.security.enableTwoFactor),
-          maxLoginAttempts: n(raw?.systemSettings?.security?.maxLoginAttempts, defaultBusinessConfig.systemSettings!.security.maxLoginAttempts),
-          lockoutDuration: n(raw?.systemSettings?.security?.lockoutDuration, defaultBusinessConfig.systemSettings!.security.lockoutDuration),
-        },
-        email: {
-          provider: 'smtp',
-          smtpHost: s(raw?.systemSettings?.email?.smtpHost, ''),
-          smtpPort: n(raw?.systemSettings?.email?.smtpPort, 587),
-          smtpUser: s(raw?.systemSettings?.email?.smtpUser, ''),
-          smtpPassword: s(raw?.systemSettings?.email?.smtpPassword),
-        },
-      } : defaultBusinessConfig.systemSettings,
+      systemSettings,
       carousel: {
         enabled: b(raw?.carousel?.enabled, defaultBusinessConfig.carousel.enabled),
         transitionSeconds: Math.min(10, Math.max(3, n(raw?.carousel?.transitionSeconds, defaultBusinessConfig.carousel.transitionSeconds))),
-        ratio: (Number.isFinite(Number(raw?.carousel?.ratio)) && Number(raw?.carousel?.ratio) > 0) ? Number(raw?.carousel?.ratio) : defaultBusinessConfig.carousel.ratio,
+        ratio: (Number.isFinite(Number(raw?.carousel?.ratio)) && Number(raw?.carousel?.ratio) > 0)
+          ? Number(raw?.carousel?.ratio)
+          : defaultBusinessConfig.carousel.ratio,
         autoplay: b(raw?.carousel?.autoplay, !!defaultBusinessConfig.carousel.autoplay),
         transitionMs: Math.min(5000, Math.max(0, n(raw?.carousel?.transitionMs, defaultBusinessConfig.carousel.transitionMs || 800))),
-        images: Array.isArray(raw?.carousel?.images) ? raw.carousel.images.map((img: any) => ({ id: s(img?.id, ''), url: s(img?.url, ''), alt: s(img?.alt) })).filter((img: any) => !!img.url) : defaultBusinessConfig.carousel.images,
+        images: Array.isArray(raw?.carousel?.images)
+          ? raw.carousel.images.map((img: any) => ({ id: s(img?.id, ''), url: s(img?.url, ''), alt: s(img?.alt) })).filter((img: any) => !!img.url)
+          : defaultBusinessConfig.carousel.images,
       },
       homeOffersCarousel: raw?.homeOffersCarousel ? {
         enabled: b(raw?.homeOffersCarousel?.enabled, defaultBusinessConfig.homeOffersCarousel!.enabled),
         autoplay: b(raw?.homeOffersCarousel?.autoplay, defaultBusinessConfig.homeOffersCarousel!.autoplay),
         intervalSeconds: Math.min(10, Math.max(3, n(raw?.homeOffersCarousel?.intervalSeconds, defaultBusinessConfig.homeOffersCarousel!.intervalSeconds))),
         transitionMs: Math.min(5000, Math.max(0, n(raw?.homeOffersCarousel?.transitionMs, defaultBusinessConfig.homeOffersCarousel!.transitionMs))),
-        ratio: (Number.isFinite(Number(raw?.homeOffersCarousel?.ratio)) && Number(raw?.homeOffersCarousel?.ratio) > 0) ? Number(raw?.homeOffersCarousel?.ratio) : defaultBusinessConfig.homeOffersCarousel!.ratio,
+        ratio: (Number.isFinite(Number(raw?.homeOffersCarousel?.ratio)) && Number(raw?.homeOffersCarousel?.ratio) > 0)
+          ? Number(raw?.homeOffersCarousel?.ratio)
+          : defaultBusinessConfig.homeOffersCarousel!.ratio,
       } : defaultBusinessConfig.homeOffersCarousel,
+      publicSite: {
+        sections: {
+          showOffers: b(raw?.publicSite?.sections?.showOffers, defaultBusinessConfig.publicSite!.sections.showOffers),
+          showCatalog: b(raw?.publicSite?.sections?.showCatalog, defaultBusinessConfig.publicSite!.sections.showCatalog),
+          showCategories: b(raw?.publicSite?.sections?.showCategories, defaultBusinessConfig.publicSite!.sections.showCategories),
+          showFeaturedProducts: b(raw?.publicSite?.sections?.showFeaturedProducts, defaultBusinessConfig.publicSite!.sections.showFeaturedProducts),
+          showContactInfo: b(raw?.publicSite?.sections?.showContactInfo, defaultBusinessConfig.publicSite!.sections.showContactInfo),
+          showLocation: b(raw?.publicSite?.sections?.showLocation, defaultBusinessConfig.publicSite!.sections.showLocation),
+          showCart: b(raw?.publicSite?.sections?.showCart, defaultBusinessConfig.publicSite!.sections.showCart),
+          showOrderTracking: b(raw?.publicSite?.sections?.showOrderTracking, defaultBusinessConfig.publicSite!.sections.showOrderTracking),
+          showBusinessHours: b(raw?.publicSite?.sections?.showBusinessHours, defaultBusinessConfig.publicSite!.sections.showBusinessHours),
+          showSocialLinks: b(raw?.publicSite?.sections?.showSocialLinks, defaultBusinessConfig.publicSite!.sections.showSocialLinks),
+          showHeroStats: b(raw?.publicSite?.sections?.showHeroStats, defaultBusinessConfig.publicSite!.sections.showHeroStats),
+        },
+        content: {
+          announcementText: s(raw?.publicSite?.content?.announcementText),
+          heroBadge: s(raw?.publicSite?.content?.heroBadge, defaultBusinessConfig.publicSite!.content.heroBadge || ''),
+          heroSecondaryText: s(raw?.publicSite?.content?.heroSecondaryText, defaultBusinessConfig.publicSite!.content.heroSecondaryText || ''),
+          heroPrimaryCtaLabel: s(raw?.publicSite?.content?.heroPrimaryCtaLabel, defaultBusinessConfig.publicSite!.content.heroPrimaryCtaLabel || ''),
+          heroSecondaryCtaLabel: s(raw?.publicSite?.content?.heroSecondaryCtaLabel, defaultBusinessConfig.publicSite!.content.heroSecondaryCtaLabel || ''),
+          heroImageUrl: s(raw?.publicSite?.content?.heroImageUrl),
+          featuredCategoriesTitle: s(raw?.publicSite?.content?.featuredCategoriesTitle, defaultBusinessConfig.publicSite!.content.featuredCategoriesTitle || ''),
+          featuredCategoriesDescription: s(raw?.publicSite?.content?.featuredCategoriesDescription, defaultBusinessConfig.publicSite!.content.featuredCategoriesDescription || ''),
+          featuredProductsTitle: s(raw?.publicSite?.content?.featuredProductsTitle, defaultBusinessConfig.publicSite!.content.featuredProductsTitle || ''),
+          featuredProductsDescription: s(raw?.publicSite?.content?.featuredProductsDescription, defaultBusinessConfig.publicSite!.content.featuredProductsDescription || ''),
+          offersTitle: s(raw?.publicSite?.content?.offersTitle, defaultBusinessConfig.publicSite!.content.offersTitle || ''),
+          offersDescription: s(raw?.publicSite?.content?.offersDescription, defaultBusinessConfig.publicSite!.content.offersDescription || ''),
+          catalogTitle: s(raw?.publicSite?.content?.catalogTitle, defaultBusinessConfig.publicSite!.content.catalogTitle || ''),
+          catalogDescription: s(raw?.publicSite?.content?.catalogDescription, defaultBusinessConfig.publicSite!.content.catalogDescription || ''),
+          orderTrackingTitle: s(raw?.publicSite?.content?.orderTrackingTitle, defaultBusinessConfig.publicSite!.content.orderTrackingTitle || ''),
+          orderTrackingDescription: s(raw?.publicSite?.content?.orderTrackingDescription, defaultBusinessConfig.publicSite!.content.orderTrackingDescription || ''),
+          contactTitle: s(raw?.publicSite?.content?.contactTitle, defaultBusinessConfig.publicSite!.content.contactTitle || ''),
+          contactDescription: s(raw?.publicSite?.content?.contactDescription, defaultBusinessConfig.publicSite!.content.contactDescription || ''),
+          footerHeadline: s(raw?.publicSite?.content?.footerHeadline, defaultBusinessConfig.publicSite!.content.footerHeadline || ''),
+          supportMessage: s(raw?.publicSite?.content?.supportMessage, defaultBusinessConfig.publicSite!.content.supportMessage || ''),
+        },
+      },
       notifications: {
         emailNotifications: b(raw?.notifications?.emailNotifications, defaultBusinessConfig.notifications.emailNotifications),
         smsNotifications: b(raw?.notifications?.smsNotifications, defaultBusinessConfig.notifications.smsNotifications),
@@ -246,16 +258,13 @@ export async function PUT(request: NextRequest) {
       },
       updatedAt: s(raw?.updatedAt, new Date().toISOString()),
     }
-    const validation = validateBusinessConfig(body)
+
+    const validation = validateBusinessConfig(body as BusinessConfig)
     if (!validation.ok) {
-      return NextResponse.json(
-        { success: false, errors: validation.errors },
-        { status: 400 }
-      )
+      return NextResponse.json({ success: false, errors: validation.errors }, { status: 400 })
     }
 
-    // Get previous config for audit
-    const supabase = await createClient()
+    const supabase = await createAdminClient()
     const { data: prevData } = await supabase
       .from('settings')
       .select('value')
@@ -264,47 +273,68 @@ export async function PUT(request: NextRequest) {
       .single()
 
     const prevConfig: BusinessConfig | null = prevData?.value || null
+    const canUseCustomBranding =
+      access.context.isSuperAdmin || access.context.features.includes(COMPANY_FEATURE_KEYS.CUSTOM_BRANDING)
 
-    // ✅ Update with organization_id
+    if (!canUseCustomBranding) {
+      body.branding = prevConfig?.branding || defaultBusinessConfig.branding
+    }
+
     const { error } = await supabase
       .from('settings')
-      .upsert({
-        key: 'business_config',
-        value: body,
-        organization_id: organizationId,
-        updated_at: new Date().toISOString()
-      }, {
-        onConflict: 'organization_id,key'
-      })
+      .upsert(
+        {
+          key: 'business_config',
+          value: body,
+          organization_id: organizationId,
+          updated_at: new Date().toISOString(),
+        },
+        {
+          onConflict: 'organization_id,key',
+        }
+      )
 
     if (error) {
       console.error('Error updating business config:', error)
-      return NextResponse.json(
-        { error: 'Error al actualizar configuración' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'Error al actualizar configuracion' }, { status: 500 })
     }
 
-    // Update cache
-    setCachedConfig(organizationId, body)
+    const { data: persistedRow, error: persistedError } = await supabase
+      .from('settings')
+      .select('value,updated_at')
+      .eq('key', 'business_config')
+      .eq('organization_id', organizationId)
+      .single()
 
-    // Audit log
+    if (persistedError) {
+      console.error('Error verifying persisted business config:', persistedError)
+      return NextResponse.json({ error: 'La configuracion se guardo pero no se pudo verificar' }, { status: 500 })
+    }
+
+    const persistedConfig = (persistedRow?.value || body) as BusinessConfig
+    setCachedConfig(organizationId, persistedConfig)
+
     await logAudit(
       'business_config.update',
       {
         entityType: 'BUSINESS_CONFIG',
         entityId: organizationId,
         oldData: prevConfig,
-        newData: body
+        newData: persistedConfig,
       },
       {
-        id: userId,
-        email: userEmail || null,
-        role: isSuperAdmin ? 'SUPER_ADMIN' : 'ADMIN'
+        id: access.context.userId,
+        email: access.context.email,
+        role: access.context.role,
       }
     )
 
-    return NextResponse.json({ success: true, config: body })
+    return NextResponse.json({
+      success: true,
+      config: persistedConfig,
+      persisted: true,
+      updatedAt: persistedRow?.updated_at || new Date().toISOString(),
+    })
   } catch (error: any) {
     console.error('Error in PUT /api/business-config:', error)
     return NextResponse.json(

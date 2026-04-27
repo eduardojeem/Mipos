@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient, createClient } from '@/lib/supabase/server';
 
 interface UserProfileData {
   id: string;
@@ -14,81 +14,110 @@ interface UserProfileData {
   updated_at: string;
 }
 
+const ROLE_PRIORITY = ['SUPER_ADMIN', 'OWNER', 'ADMIN', 'MANAGER', 'CASHIER', 'EMPLOYEE', 'USER'] as const;
+
+function normalizeRoleName(role?: string | null): string {
+  const normalized = String(role || '').toUpperCase().trim();
+  if (!normalized) return 'USER';
+  if (normalized === 'SUPER_ADMIN') return 'SUPER_ADMIN';
+  if (normalized === 'OWNER') return 'OWNER';
+  if (normalized === 'ADMIN') return 'ADMIN';
+  if (normalized === 'MANAGER') return 'MANAGER';
+  if (normalized === 'CASHIER') return 'CASHIER';
+  if (normalized === 'EMPLOYEE') return 'EMPLOYEE';
+  return 'USER';
+}
+
+function pickHighestRole(...roles: Array<string | null | undefined>): string {
+  const normalizedRoles = roles.map(normalizeRoleName);
+  return ROLE_PRIORITY.find((role) => normalizedRoles.includes(role)) || 'USER';
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
-    
-    // Verificar autenticación
+    const admin = await createAdminClient();
+
     const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
+
     if (userError || !user) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
 
-    // Intentar obtener datos del usuario desde la tabla users
-    let userData: UserProfileData | null = null;
-    
-    try {
-      const { data: userRecord, error: userError2 } = await supabase
-        .from('users')
-        .select(`
-          id,
-          email,
-          full_name,
-          role,
-          created_at,
-          updated_at
-        `)
-        .eq('id', user.id)
-        .single();
+    const orgHeader = request.headers.get('x-organization-id')?.trim() || null;
+    const orgCookie = request.cookies.get('x-organization-id')?.value || null;
+    const preferredOrgId = orgHeader || orgCookie;
 
-      if (userRecord && !userError2) {
-        userData = {
-          id: (userRecord as any).id,
-          email: (userRecord as any).email,
-          name: (userRecord as any).full_name || (userRecord as any).email?.split('@')[0] || 'Usuario',
-          phone: user.user_metadata?.phone || (user as any).phone || '',
-          bio: user.user_metadata?.bio || '',
-          location: user.user_metadata?.location || '',
-          avatar_url: user.user_metadata?.avatar_url || '',
-          role: (userRecord as any).role || 'USER',
-          created_at: (userRecord as any).created_at,
-          updated_at: (userRecord as any).updated_at,
-        } as UserProfileData;
+    // Run ALL role-related queries in parallel instead of sequentially
+    const [userResult, rolesResult, memberResult] = await Promise.allSettled([
+      // 1. Users table profile
+      admin.from('users').select('id, email, full_name, role, created_at, updated_at').eq('id', user.id).single(),
+      // 2. RBAC roles
+      admin.from('user_roles').select('role:roles(name)').eq('user_id', user.id).eq('is_active', true),
+      // 3. Organization membership + role
+      preferredOrgId
+        ? admin.from('organization_members').select('role_id, is_owner').eq('organization_id', preferredOrgId).eq('user_id', user.id).maybeSingle()
+        : admin.from('organization_members').select('organization_id, role_id, is_owner').eq('user_id', user.id).order('is_owner', { ascending: false }).order('created_at', { ascending: true }).limit(1).maybeSingle(),
+    ]);
+
+    // Extract profile data
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const userRecord = userResult.status === 'fulfilled' ? (userResult.value as any)?.data : null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const userRoles = rolesResult.status === 'fulfilled' ? (rolesResult.value as any)?.data : [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const membership = memberResult.status === 'fulfilled' ? (memberResult.value as any)?.data : null;
+
+    // Collect all role candidates
+    const roleCandidates: Array<string | null | undefined> = [
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (user.user_metadata as any)?.role,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (user.app_metadata as any)?.role,
+      userRecord?.role,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ...(userRoles || []).map((row: any) => row?.role?.name).filter(Boolean),
+    ];
+
+    // If membership has a role_id, resolve it (single extra query only if needed)
+    if (membership?.role_id) {
+      const { data: roleRow } = await admin.from('roles').select('name').eq('id', membership.role_id).maybeSingle();
+      if (roleRow?.name) {
+        roleCandidates.push(roleRow.name as string);
       }
-    } catch (error) {
-      console.warn('Could not fetch user from users table, using auth data');
+    }
+    if (membership?.is_owner) {
+      roleCandidates.push('OWNER');
     }
 
-    // Fallback: usar datos de autenticación
-    if (!userData) {
-      userData = {
-        id: user.id,
-        email: user.email || '',
-        name: (user.user_metadata as any)?.name || (user.user_metadata as any)?.full_name || 'Usuario',
-        phone: (user.user_metadata as any)?.phone || (user as any).phone || '',
-        bio: (user.user_metadata as any)?.bio || '',
-        location: (user.user_metadata as any)?.location || '',
-        avatar_url: (user.user_metadata as any)?.avatar_url || '',
-        role: (user.user_metadata as any)?.role || (user.app_metadata as any)?.role || 'USER',
-        created_at: (user as any).created_at,
-        updated_at: (user as any).updated_at || (user as any).created_at
-      };
-    }
+    const resolvedRole = pickHighestRole(...roleCandidates);
 
-    return NextResponse.json({
-      success: true,
-      data: userData
-    });
+    // Build profile response
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const meta = (user.user_metadata || {}) as any;
+    const userData: UserProfileData = {
+      id: userRecord?.id || user.id,
+      email: userRecord?.email || user.email || '',
+      name: userRecord?.full_name || meta?.name || meta?.full_name || user.email?.split('@')[0] || 'Usuario',
+      phone: meta?.phone || '',
+      bio: meta?.bio || '',
+      location: meta?.location || '',
+      avatar_url: meta?.avatar_url || '',
+      role: resolvedRole,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      created_at: userRecord?.created_at || (user as any).created_at,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      updated_at: userRecord?.updated_at || (user as any).updated_at || (user as any).created_at,
+    };
+
+    return NextResponse.json({ success: true, data: userData });
 
   } catch (error) {
     console.error('Error fetching profile:', error);
-    return NextResponse.json({
-      success: false,
-      error: 'Error interno del servidor'
-    }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Error interno del servidor' }, { status: 500 });
   }
 }
+
 
 export async function PUT(request: NextRequest) {
   try {

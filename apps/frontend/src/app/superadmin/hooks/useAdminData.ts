@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-// import { createClient } from '@/lib/supabase/client'; // Removed unused import
+import { createClient } from '@/lib/supabase/client';
 import { ErrorState, classifyError } from '@/types/error-state';
 import { 
   loadAdminDataCache, 
@@ -22,8 +22,11 @@ export interface Organization {
   created_at: string;
   updated_at?: string;
   settings?: Record<string, unknown>;
+  subdomain?: string;
+  custom_domain?: string | null;
   organization_members?: { count: number }[];
   members?: { count: number }[];
+  member_count?: number;
 }
 
 export interface AdminStats {
@@ -140,7 +143,14 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
 
       const [statsRes, orgsRes] = await Promise.allSettled([
         fetch('/api/superadmin/stats', { headers: { 'Content-Type': 'application/json' }, cache: 'no-store', signal }),
-        fetch('/api/superadmin/organizations?pageSize=100', { headers: { 'Content-Type': 'application/json' }, cache: 'no-store', signal }),
+        (async () => {
+          const supabase = createClient();
+          const { data, error } = await supabase
+            .from('organizations')
+            .select('*')
+            .order('created_at', { ascending: false });
+          return { data, error };
+        })(),
       ]);
 
       const fetchDuration = Date.now() - fetchStartTime;
@@ -148,6 +158,11 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
 
       clearTimeout(timeoutId); // Limpiar el timeout inmediatamente después de las peticiones
       timeoutId = undefined;
+
+      if (signal.aborted) {
+        console.log('🛑 [useAdminData] Request aborted');
+        return;
+      }
 
       if (statsRes.status === 'fulfilled') {
         const r = statsRes.value;
@@ -158,7 +173,9 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
         } else {
           const errorText = await r.text();
           console.error('❌ [useAdminData] Stats error:', errorText);
-          statsError = classifyError(new Error(`Error ${r.status}: ${errorText}`), { url: '/api/superadmin/stats', method: 'GET' });
+          const err = new Error(`Error ${r.status}: ${errorText}`) as Error & { statusCode?: number };
+          err.statusCode = r.status;
+          statsError = classifyError(err, { url: '/api/superadmin/stats', method: 'GET' });
         }
       } else {
         console.error('❌ [useAdminData] Stats request failed:', statsRes.reason);
@@ -167,20 +184,15 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
 
       if (orgsRes.status === 'fulfilled') {
         const r = orgsRes.value;
-        console.log(`🏢 [useAdminData] Organizations response: ${r.status} ${r.statusText}`);
-        if (r.ok) {
-          const json = await r.json();
-          if (json.error) {
-            console.error('❌ [useAdminData] Organizations error in response:', json.error);
-            orgsError = classifyError(new Error(json.error), { url: '/api/superadmin/organizations', method: 'GET' });
-          } else {
-            orgsData = json.organizations || [];
-            console.log(`✅ [useAdminData] Organizations data received: ${orgsData?.length ?? 0} items`);
-          }
+        if (r.error) {
+          console.error('❌ [useAdminData] Organizations error:', r.error);
+          orgsError = classifyError(new Error(String(r.error.message || 'Organizations query failed')), {
+            url: '/api/superadmin/organizations',
+            method: 'GET',
+          });
         } else {
-          const errorText = await r.text();
-          console.error('❌ [useAdminData] Organizations error:', errorText);
-          orgsError = classifyError(new Error(`Error ${r.status}: ${errorText}`), { url: '/api/superadmin/organizations', method: 'GET' });
+          orgsData = (r.data as any) || [];
+          console.log(`✅ [useAdminData] Organizations data received: ${orgsData?.length ?? 0} items`);
         }
       } else {
         console.error('❌ [useAdminData] Organizations request failed:', orgsRes.reason);
@@ -194,10 +206,15 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
         setPartialFailures({ statsFailure: statsError, organizationsFailure: orgsError });
         
         // Use cached data if available
-        if (cachedData) {
+        const cacheToUse = cachedData || loadAdminDataCache();
+        if (cacheToUse) {
           console.log('💾 [useAdminData] Using cached data');
-          setOrganizations(cachedData.organizations);
-          setStats(cachedData.stats);
+          setOrganizations(cacheToUse.organizations);
+          setStats(cacheToUse.stats);
+          setCachedData({
+            ...cacheToUse,
+            isStale: true,
+          });
         }
         
         onErrorRef.current?.(statsError.message);

@@ -29,12 +29,13 @@ CREATE INDEX IF NOT EXISTS idx_subscription_plans_active ON subscription_plans(i
 
 -- Add trigger to update updated_at
 CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+AS $$
 BEGIN
   NEW.updated_at = NOW();
   RETURN NEW;
 END;
-$$ language 'plpgsql';
+$$ LANGUAGE plpgsql SET search_path = '';
 
 CREATE TRIGGER update_subscription_plans_updated_at
   BEFORE UPDATE ON subscription_plans

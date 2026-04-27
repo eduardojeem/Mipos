@@ -28,6 +28,19 @@ vi.mock('@/lib/pos/stock-config', () => ({
   },
 }));
 
+vi.mock('@/contexts/BusinessConfigContext', () => ({
+  useBusinessConfigData: () => ({
+    config: {
+      storeSettings: {
+        taxEnabled: true,
+        ivaRate: 0,
+        currency: 'USD',
+      },
+    },
+    organizationName: 'Test Org',
+  }),
+}));
+
 describe('useCart', () => {
   const mockProducts: Product[] = [
     {

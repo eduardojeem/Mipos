@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { User, Session, AuthChangeEvent } from '@supabase/supabase-js';
 import { toast } from '@/lib/toast';
@@ -23,8 +23,8 @@ interface AuthContextType {
   session: Session | null;
   userRoles: UserRole[];
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: any }>;
-  signUp: (email: string, password: string, userData?: any) => Promise<{ error: any }>;
+  signIn: (email: string, password: string) => Promise<{ error: unknown }>;
+  signUp: (email: string, password: string, userData?: Record<string, unknown>) => Promise<{ error: unknown }>;
   signOut: () => Promise<void>;
   hasRole: (roleName: string) => boolean;
   hasPermission: (permissionName: string) => boolean;
@@ -40,10 +40,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userRoles, setUserRoles] = useState<UserRole[]>([]);
   const [loading, setLoading] = useState(true);
   
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   // Cargar roles del usuario
-  const loadUserRoles = useCallback(async (userId: string) => {
+  const loadUserRoles = useCallback(async (_userId: string) => {
     try {
       // Use API route to bypass RLS issues on client side
       const response = await fetch('/api/auth/my-roles')
@@ -235,9 +235,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Función de registro
-  const signUp = async (email: string, password: string, userData?: any) => {
+  const signUp = async (email: string, password: string, userData?: Record<string, unknown>) => {
     try {
-      const { data, error } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {

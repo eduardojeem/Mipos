@@ -1,166 +1,179 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { logAudit } from '@/app/api/admin/_utils/audit';
+import { NextRequest, NextResponse } from 'next/server'
+import {
+  COMPANY_FEATURE_KEYS,
+  COMPANY_PERMISSIONS,
+  requireCompanyAccess,
+} from '@/app/api/_utils/company-authorization'
+import { createAdminClient } from '@/lib/supabase/server'
+import { logAudit } from '@/app/api/admin/_utils/audit'
+import {
+  buildSubscriptionResponse,
+  getPlanRecord,
+  syncOrganizationSubscriptionState,
+} from '@/app/api/subscription/_lib'
+
+type BranchPolicyResult = {
+  primaryBranchId: string | null
+  deactivatedBranchIds: string[]
+}
+
+async function enforceBranchLimitOnDowngrade(params: {
+  adminClient: Awaited<ReturnType<typeof createAdminClient>>
+  organizationId: string
+  allowedActiveBranches: number
+  preferredPrimaryBranchId?: string | null
+}): Promise<BranchPolicyResult> {
+  const { adminClient, organizationId, allowedActiveBranches, preferredPrimaryBranchId } = params
+
+  const { data, error } = await adminClient
+    .from('branches')
+    .select('id,is_active,created_at')
+    .eq('organization_id', organizationId)
+    .eq('is_active', true)
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  const active = (data || []) as Array<{ id: string; is_active: boolean; created_at: string | null }>
+  if (active.length <= allowedActiveBranches) {
+    return {
+      primaryBranchId: active[0]?.id ?? null,
+      deactivatedBranchIds: [],
+    }
+  }
+
+  const primaryFromRequest = preferredPrimaryBranchId
+    ? active.find((row) => row.id === preferredPrimaryBranchId)?.id ?? null
+    : null
+  const primaryBranchId = primaryFromRequest ?? active[0]?.id ?? null
+  const toDeactivate = active
+    .filter((row) => row.id !== primaryBranchId)
+    .slice(Math.max(0, allowedActiveBranches - 1))
+    .map((row) => row.id)
+    .filter(Boolean)
+  if (toDeactivate.length === 0) {
+    return { primaryBranchId, deactivatedBranchIds: [] }
+  }
+
+  const now = new Date().toISOString()
+  const { error: updateError } = await adminClient
+    .from('branches')
+    .update({ is_active: false, updated_at: now })
+    .in('id', toDeactivate)
+    .eq('organization_id', organizationId)
+
+  if (updateError) {
+    throw new Error(updateError.message)
+  }
+
+  return {
+    primaryBranchId,
+    deactivatedBranchIds: toDeactivate,
+  }
+}
 
 export async function POST(request: NextRequest) {
+  const body = await request.json().catch(() => ({}))
+  const requestedCompanyId = request.headers.get('x-organization-id') || body.organizationId || undefined
+  const access = await requireCompanyAccess(request, {
+    companyId: requestedCompanyId,
+    permission: COMPANY_PERMISSIONS.MANAGE_BILLING,
+    feature: COMPANY_FEATURE_KEYS.ADMIN_PANEL,
+    allowedRoles: ['OWNER', 'SUPER_ADMIN'],
+  })
+
+  if (!access.ok) {
+    return NextResponse.json(access.body, { status: access.status })
+  }
+
+  const { newPlanId, billingCycle: rawBillingCycle, primaryBranchId } = body
+  const billingCycle = rawBillingCycle === 'yearly' ? 'yearly' : 'monthly'
+
+  if (!newPlanId) {
+    return NextResponse.json({ error: 'Plan requerido' }, { status: 400 })
+  }
+
+  if (!access.context.companyId) {
+    return NextResponse.json({ error: 'No hay empresa seleccionada' }, { status: 400 })
+  }
+
   try {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const adminClient = await createAdminClient()
+    const { data: organization, error: organizationError } = await adminClient
+      .from('organizations')
+      .select('id,name,slug,subscription_plan,subscription_status,settings,created_at,updated_at')
+      .eq('id', access.context.companyId)
+      .single()
 
-    if (authError || !user) {
-      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    if (organizationError || !organization) {
+      return NextResponse.json({ error: 'Empresa no encontrada' }, { status: 404 })
     }
 
-    const body = await request.json();
-    const { newPlanId, billingCycle } = body;
-
-    if (!newPlanId || !billingCycle) {
-      return NextResponse.json(
-        { error: 'Plan y ciclo de facturación requeridos' },
-        { status: 400 }
-      );
+    const plan = await getPlanRecord(newPlanId)
+    if (!plan) {
+      return NextResponse.json({ error: 'Plan no encontrado' }, { status: 404 })
     }
 
-    // Obtener la organización del usuario
-    const { data: membership, error: membershipError } = await supabase
-      .from('organization_members')
-      .select(`
-        organization_id,
-        is_owner,
-        organization:organizations(
-          id,
-          name,
-          slug,
-          subscription_plan,
-          subscription_status
-        )
-      `)
-      .eq('user_id', user.id)
-      .single();
+    const normalizedTargetSlug = String(plan.slug || '').toLowerCase()
+    let branchPolicy: BranchPolicyResult | null = null
 
-    if (membershipError || !membership) {
-      return NextResponse.json(
-        { error: 'No estás asociado a ninguna organización' },
-        { status: 404 }
-      );
-    }
+    if (normalizedTargetSlug === 'free') {
+      branchPolicy = await enforceBranchLimitOnDowngrade({
+        adminClient,
+        organizationId: organization.id,
+        allowedActiveBranches: 1,
+        preferredPrimaryBranchId: typeof primaryBranchId === 'string' ? primaryBranchId : null,
+      })
 
-    // Verificar que el usuario es owner o admin
-    if (!membership.is_owner) {
-      // Verificar si es admin
-      const { data: userRoles } = await supabase
-        .from('user_roles')
-        .select('role:roles(name)')
-        .eq('user_id', user.id)
-        .eq('is_active', true);
-
-      const isAdmin = userRoles?.some((ur: any) => 
-        ur.role?.name === 'ADMIN' || ur.role?.name === 'SUPER_ADMIN'
-      );
-
-      if (!isAdmin) {
-        return NextResponse.json(
-          { error: 'Solo los administradores pueden cambiar el plan' },
-          { status: 403 }
-        );
+      if (branchPolicy.deactivatedBranchIds.length) {
+        logAudit('branches.deactivated_due_to_plan_limit', {
+          entityType: 'BRANCH',
+          entityId: organization.id,
+          organizationId: organization.id,
+          targetPlan: 'free',
+          primaryBranchId: branchPolicy.primaryBranchId,
+          deactivatedBranchIds: branchPolicy.deactivatedBranchIds,
+        })
       }
     }
 
-    const org = membership.organization as any;
+    const sync = await syncOrganizationSubscriptionState({
+      organization: organization as any,
+      plan,
+      billingCycle,
+    })
 
-    // Obtener el nuevo plan
-    const { data: newPlan, error: planError } = await supabase
-      .from('saas_plans')
-      .select('*')
-      .eq('id', newPlanId)
-      .single();
-
-    if (planError || !newPlan) {
-      return NextResponse.json(
-        { error: 'Plan no encontrado' },
-        { status: 404 }
-      );
-    }
-
-    // Actualizar la organización con el nuevo plan
-    const { error: updateError } = await supabase
-      .from('organizations')
-      .update({
-        subscription_plan: newPlan.slug.toUpperCase(),
-        subscription_status: 'ACTIVE',
-        settings: {
-          ...(org.settings || {}),
-          billingCycle,
-          lastPlanChange: new Date().toISOString(),
-        },
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', org.id);
-
-    if (updateError) {
-      console.error('Error updating organization:', updateError);
-      return NextResponse.json(
-        { error: 'Error al actualizar el plan' },
-        { status: 500 }
-      );
-    }
-
-    // Registrar auditoría
     logAudit('subscription.plan_changed', {
-      userId: user.id,
-      organizationId: org.id,
-      oldPlan: org.subscription_plan,
-      newPlan: newPlan.slug,
+      userId: access.context.userId,
+      organizationId: organization.id,
+      oldPlan: organization.subscription_plan,
+      newPlan: plan.slug,
       billingCycle,
-    });
+    })
 
-    // Calcular días hasta renovación
-    const createdDate = new Date(org.created_at || new Date());
-    const nextRenewal = new Date(createdDate);
-    nextRenewal.setMonth(nextRenewal.getMonth() + 1);
-    const daysUntilRenewal = Math.ceil((nextRenewal.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-
-    // Devolver la suscripción actualizada
-    const subscription = {
-      id: org.id,
-      organizationId: org.id,
-      plan: {
-        id: newPlan.id,
-        name: newPlan.name,
-        slug: newPlan.slug,
-        priceMonthly: newPlan.price_monthly || 0,
-        priceYearly: newPlan.price_yearly || 0,
-        features: newPlan.features || [],
-        limits: {
-          maxUsers: newPlan.max_users || 1,
-          maxProducts: newPlan.max_products || 20,
-          maxTransactionsPerMonth: newPlan.max_transactions_per_month || 50,
-          maxLocations: newPlan.max_locations || 1,
+    return NextResponse.json({
+      success: true,
+      subscription: buildSubscriptionResponse({
+        organization: {
+          ...(organization as any),
+          subscription_plan: plan.slug,
+          subscription_status: 'ACTIVE',
+          settings: sync.settings,
         },
-        description: newPlan.description,
-        currency: newPlan.currency || 'PYG',
-        trialDays: newPlan.trial_days || 0,
-      },
-      status: 'active',
-      billingCycle,
-      currentPeriodStart: org.created_at,
-      currentPeriodEnd: nextRenewal.toISOString(),
-      cancelAtPeriodEnd: false,
-      daysUntilRenewal,
-      createdAt: org.created_at,
-      isOrgAdmin: membership.is_owner || false,
-    };
-
-    return NextResponse.json({ 
-      success: true, 
-      subscription,
-      message: `Plan cambiado exitosamente a ${newPlan.name}` 
-    });
+        plan,
+        billingCycle,
+        currentPeriodStart: sync.currentPeriodStart,
+        currentPeriodEnd: sync.currentPeriodEnd,
+        isOrgAdmin: true,
+      }),
+      message: `Plan cambiado exitosamente a ${plan.name}`,
+      branchPolicy,
+    })
   } catch (error) {
-    console.error('Error changing plan:', error);
-    return NextResponse.json(
-      { error: 'Error interno del servidor' },
-      { status: 500 }
-    );
+    console.error('Error changing plan:', error)
+    const message = error instanceof Error ? error.message : 'Error interno del servidor'
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

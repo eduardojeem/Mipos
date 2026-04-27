@@ -61,6 +61,35 @@ export type PromotionsState = {
   setItems: (items: Promotion[]) => void
 }
 
+function extractPromotionRows(data: any): any[] {
+  return (
+    Array.isArray(data?.data) ? data.data :
+      (data?.success && Array.isArray(data?.data)) ? data.data :
+        Array.isArray(data?.items) ? data.items :
+          Array.isArray(data) ? data :
+            []
+  ) as any[]
+}
+
+function normalizePromotionRows(rows: any[]): Promotion[] {
+  return rows.map((r: any) => ({
+    id: r.id,
+    name: r.name,
+    description: r.description ?? '',
+    discountType: r.discountType ?? r.type,
+    discountValue: r.discountValue ?? r.value,
+    startDate: r.startDate ?? r.start_date,
+    endDate: r.endDate ?? r.end_date,
+    isActive: typeof r.isActive !== 'undefined' ? r.isActive : r.is_active,
+    minPurchaseAmount: r.minPurchaseAmount ?? r.minPurchase ?? 0,
+    maxDiscountAmount: r.maxDiscountAmount ?? r.maxDiscount ?? 0,
+    usageLimit: r.usageLimit ?? 0,
+    usageCount: r.usageCount ?? 0,
+    applicableProducts: Array.isArray(r.applicableProducts) ? r.applicableProducts : [] as any[],
+    createdAt: r.createdAt ?? new Date().toISOString()
+  })) as Promotion[]
+}
+
 export type CouponState = {
   couponCode: string | null
   couponDiscountType: 'PERCENTAGE' | 'FIXED_AMOUNT' | null
@@ -121,8 +150,8 @@ export type ProductEditingState = {
 }
 
 export type POSState = {
-  paymentMethod: 'CASH' | 'CARD' | 'TRANSFER' | 'OTHER'
-  setPaymentMethod: (m: 'CASH' | 'CARD' | 'TRANSFER' | 'OTHER') => void
+  paymentMethod: 'CASH' | 'CARD' | 'TRANSFER' | 'QR' | 'OTHER' | 'MIXED'
+  setPaymentMethod: (m: 'CASH' | 'CARD' | 'TRANSFER' | 'QR' | 'OTHER' | 'MIXED') => void
   discount: number
   setDiscount: (v: number) => void
   discountType: 'PERCENTAGE' | 'FIXED_AMOUNT'
@@ -216,22 +245,31 @@ export const useStore = create<RootState>()(
         set((s: RootState) => ({ ...s, loading: true, error: undefined }), false, 'promotions/fetch/start')
 
         const MAX_RETRIES = 2
-        const TIMEOUT_MS = 10000 // 10 segundos
+        const TIMEOUT_MS = 25000 // 25 segundos
+        const PAGE_SIZE = 100
 
         try {
           const apiMod = await import('@/lib/api')
           const api = (apiMod as any).default || (apiMod as any).api
 
-          // Crear una promesa con timeout
+          // Crear una promesa con timeout (con cleanup del timer)
+          let timeoutId: ReturnType<typeof setTimeout> | undefined
           const fetchWithTimeout = Promise.race([
-            api.get('/promotions', { params }),
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('Tiempo de espera agotado. El servidor tardó demasiado en responder.')), TIMEOUT_MS)
-            )
-          ])
+            api.get('/promotions', {
+              params: {
+                ...(params || {}),
+                page: 1,
+                limit: PAGE_SIZE,
+              },
+            }),
+            new Promise((_, reject) => {
+              timeoutId = setTimeout(() => reject(new Error('Tiempo de espera agotado. El servidor tardó demasiado en responder.')), TIMEOUT_MS)
+            })
+          ]).finally(() => { if (timeoutId) clearTimeout(timeoutId) })
 
           const response = await fetchWithTimeout as any
           const data = response?.data
+          const totalPages = Math.max(Number(data?.pages || 1), 1)
 
           // Validar que tengamos datos
           if (!data && retryCount < MAX_RETRIES) {
@@ -240,30 +278,26 @@ export const useStore = create<RootState>()(
             return get().fetchPromotions(params, retryCount + 1)
           }
 
-          const raw = (
-            Array.isArray(data?.data) ? data.data :
-              (data?.success && Array.isArray(data?.data)) ? data.data :
-                Array.isArray(data?.items) ? data.items :
-                  Array.isArray(data) ? data :
-                    []
-          ) as any[]
+          let raw = extractPromotionRows(data)
+          if (totalPages > 1) {
+            const additionalResponses = await Promise.all(
+              Array.from({ length: totalPages - 1 }, (_, index) =>
+                api.get('/promotions', {
+                  params: {
+                    ...(params || {}),
+                    page: index + 2,
+                    limit: PAGE_SIZE,
+                  },
+                })
+              )
+            )
 
-          const list = raw.map((r: any) => ({
-            id: r.id,
-            name: r.name,
-            description: r.description ?? '',
-            discountType: r.discountType ?? r.type,
-            discountValue: r.discountValue ?? r.value,
-            startDate: r.startDate ?? r.start_date,
-            endDate: r.endDate ?? r.end_date,
-            isActive: typeof r.isActive !== 'undefined' ? r.isActive : r.is_active,
-            minPurchaseAmount: r.minPurchaseAmount ?? r.minPurchase ?? 0,
-            maxDiscountAmount: r.maxDiscountAmount ?? r.maxDiscount ?? 0,
-            usageLimit: r.usageLimit ?? 0,
-            usageCount: r.usageCount ?? 0,
-            applicableProducts: Array.isArray(r.applicableProducts) ? r.applicableProducts : [] as any[],
-            createdAt: r.createdAt ?? new Date().toISOString()
-          })) as Promotion[]
+            raw = raw.concat(
+              additionalResponses.flatMap((pageResponse: any) => extractPromotionRows(pageResponse?.data))
+            )
+          }
+
+          const list = normalizePromotionRows(raw)
 
           const sourceHeader = String((response?.headers || {})['x-source'] || '')
           const origin = sourceHeader || (Array.isArray(data?.data) ? 'supabase' : (data?.success ? 'supabase' : 'memory'))
@@ -280,10 +314,11 @@ export const useStore = create<RootState>()(
             e?.message?.includes('fetch') ||
             e?.message?.includes('network') ||
             e?.message?.includes('Network') ||
+            e?.message?.includes('Tiempo de espera') ||
             e?.code === 'ECONNREFUSED'
           )) {
-            console.warn(`[fetchPromotions] Network error, retrying... (${retryCount + 1}/${MAX_RETRIES})`)
-            await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1))) // Espera exponencial
+            console.warn(`[fetchPromotions] Error, retrying... (${retryCount + 1}/${MAX_RETRIES})`)
+            await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)))
             return get().fetchPromotions(params, retryCount + 1)
           }
 

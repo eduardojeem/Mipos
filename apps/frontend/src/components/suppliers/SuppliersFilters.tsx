@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Search, List, Grid3X3, Loader2 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useDebounce } from '@/hooks/useDebounce';
 
 interface SuppliersFiltersProps {
@@ -12,6 +12,7 @@ interface SuppliersFiltersProps {
   onFilterStatusChange: (value: string) => void;
   filterCategory: string;
   onFilterCategoryChange: (value: string) => void;
+  categories?: string[];
   viewMode: 'list' | 'grid';
   onViewModeChange: (mode: 'list' | 'grid') => void;
   isSearching?: boolean;
@@ -24,6 +25,7 @@ export function SuppliersFilters({
   onFilterStatusChange,
   filterCategory,
   onFilterCategoryChange,
+  categories = [],
   viewMode,
   onViewModeChange,
   isSearching = false,
@@ -34,9 +36,9 @@ export function SuppliersFilters({
   const debouncedSearch = useDebounce(localSearch, 500);
 
   // Update parent when debounced value changes
-  useState(() => {
+  useEffect(() => {
     onSearchChange(debouncedSearch);
-  }, [debouncedSearch]);
+  }, [debouncedSearch, onSearchChange]);
 
   return (
     <div className="flex flex-col space-y-4 md:flex-row md:items-center md:space-y-0 md:space-x-4">
@@ -76,8 +78,13 @@ export function SuppliersFilters({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todas</SelectItem>
-            <SelectItem value="premium">Premium</SelectItem>
-            <SelectItem value="regular">Regular</SelectItem>
+            {categories
+              .filter((c) => c && c.trim().length > 0)
+              .map((c) => (
+                <SelectItem key={c} value={c}>
+                  {c}
+                </SelectItem>
+              ))}
           </SelectContent>
         </Select>
         <div className="flex items-center space-x-1">

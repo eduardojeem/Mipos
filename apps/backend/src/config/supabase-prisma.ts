@@ -35,13 +35,17 @@ export class SupabasePrismaAdapter {
       'taxId': 'tax_id',
       'totalPurchases': 'total_purchases',
       'lastPurchase': 'last_purchase',
+      'organizationId': 'organization_id',
       
       // Inventory fields
       'categoryId': 'category_id',
       'supplierId': 'supplier_id',
+      'productId': 'product_id',
       'productCode': 'product_code',
       'costPrice': 'cost_price',
       'salePrice': 'sale_price',
+      'ivaRate': 'iva_rate',
+      'ivaIncluded': 'iva_included',
       'minStock': 'min_stock',
       'maxStock': 'max_stock',
       'currentStock': 'current_stock',
@@ -66,12 +70,20 @@ export class SupabasePrismaAdapter {
       'saleDate': 'sale_date',
       'totalAmount': 'total_amount',
       'discountAmount': 'discount_amount',
+      'discountType': 'discount_type',
       'taxAmount': 'tax_amount',
       'paymentMethod': 'payment_method',
       'paymentStatus': 'payment_status',
+      'paymentDetails': 'payment_details',
+      'idempotencyKey': 'idempotency_key',
+      'saleType': 'sale_type',
+      'couponCode': 'coupon_code',
+      'branchId': 'branch_id',
+      'posId': 'pos_id',
+      'transferReference': 'transfer_reference',
       
       // Additional inventory aliases
-      'stockQuantity': 'current_stock',
+      'stockQuantity': 'stock_quantity',
       
       // Returns fields
       'originalSaleId': 'original_sale_id',
@@ -97,6 +109,30 @@ export class SupabasePrismaAdapter {
     };
     
     return fieldMapping[prismaField] || prismaField;
+  }
+
+  private normalizeProductRow(row: Record<string, any> | null) {
+    if (!row) return row;
+
+    const stockQuantity = row.stock_quantity ?? row.current_stock ?? row.stockQuantity ?? row.currentStock ?? 0;
+
+    return {
+      ...row,
+      categoryId: row.category_id ?? row.categoryId,
+      supplierId: row.supplier_id ?? row.supplierId,
+      costPrice: row.cost_price ?? row.costPrice,
+      salePrice: row.sale_price ?? row.salePrice,
+      stockQuantity,
+      currentStock: stockQuantity,
+      minStock: row.min_stock ?? row.minStock,
+      maxStock: row.max_stock ?? row.maxStock,
+      ivaRate: row.iva_rate ?? row.ivaRate,
+      ivaIncluded: row.iva_included ?? row.ivaIncluded,
+      organizationId: row.organization_id ?? row.organizationId,
+      isActive: row.is_active ?? row.isActive,
+      createdAt: row.created_at ?? row.createdAt,
+      updatedAt: row.updated_at ?? row.updatedAt,
+    };
   }
 
   // Helper to map an object with Prisma-style keys to DB column names
@@ -730,19 +766,20 @@ export class SupabasePrismaAdapter {
       
       if (options?.where) {
         Object.entries(options.where).forEach(([key, value]) => {
+          const dbKey = this.mapPrismaFieldToDbColumn(key);
           if (typeof value === 'object' && value !== null) {
             // Handle complex where conditions
             if ('contains' in value) {
-              query = query.ilike(key, `%${value.contains}%`);
+              query = query.ilike(dbKey, `%${value.contains}%`);
             } else if ('gte' in value) {
-              query = query.gte(key, value.gte);
+              query = query.gte(dbKey, value.gte);
             } else if ('lte' in value) {
-              query = query.lte(key, value.lte);
+              query = query.lte(dbKey, value.lte);
             } else if ('in' in value && Array.isArray(value.in)) {
-              query = query.in(key, value.in);
+              query = query.in(dbKey, value.in);
             }
           } else {
-            query = query.eq(key, value);
+            query = query.eq(dbKey, value);
           }
         });
       }
@@ -766,7 +803,7 @@ export class SupabasePrismaAdapter {
       if (error) {
         throw new Error(`Database query failed: ${error.message}`);
       }
-      let rows = (data || []) as any[];
+      let rows = ((data || []) as any[]).map((row) => this.normalizeProductRow(row));
 
       // Handle cross-field comparison: stockQuantity.lte = fields.minStock
       if (options?.where && typeof options.where.stockQuantity === 'object' && options.where.stockQuantity !== null) {
@@ -774,7 +811,7 @@ export class SupabasePrismaAdapter {
         const lteVal = cond.lte;
         if (typeof lteVal === 'string' && lteVal === 'min_stock') {
           rows = rows.filter((r: any) => {
-            const current = Number(r.current_stock ?? 0);
+            const current = Number(r.stockQuantity ?? r.stock_quantity ?? r.current_stock ?? 0);
             const min = Number(r.min_stock ?? 0);
             const gtOk = typeof cond.gt === 'number' ? current > cond.gt : true;
             return gtOk && current <= min;
@@ -811,7 +848,9 @@ export class SupabasePrismaAdapter {
       
       // Handle select option
       if (options.select) {
-        const selectedFields = Object.keys(options.select).filter(key => options.select[key] === true);
+        const selectedFields = Object.keys(options.select)
+          .filter(key => options.select[key] === true)
+          .map((key) => this.mapPrismaFieldToDbColumn(key));
         if (selectedFields.length > 0) {
           selectFields = selectedFields.join(', ');
         }
@@ -833,7 +872,7 @@ export class SupabasePrismaAdapter {
         throw new Error(`Database query failed: ${error.message}`);
       }
       
-      const row = data as Record<string, any> | null;
+      const row = this.normalizeProductRow(data as Record<string, any> | null);
       if (!row) return null;
 
       if (options?.include) {
@@ -893,7 +932,7 @@ export class SupabasePrismaAdapter {
         throw new Error(`Database insert failed: ${error.message}`);
       }
       
-      return data;
+      return this.normalizeProductRow(data as Record<string, any> | null);
     },
 
     update: async (options: { where: { id: string }; data: any; include?: any }) => {
@@ -907,15 +946,15 @@ export class SupabasePrismaAdapter {
         if (inc !== 0 || dec !== 0) {
           const { data: currentRow, error: fetchErr } = await this.supabase
             .from('products')
-            .select('current_stock')
+            .select('stock_quantity')
             .eq('id', options.where.id)
             .single();
           if (fetchErr) {
             throw new Error(`Database read failed: ${fetchErr.message}`);
           }
-          const current = (currentRow?.current_stock ?? 0) as number;
+          const current = (currentRow?.stock_quantity ?? 0) as number;
           const next = current + inc - dec;
-          mappedData['current_stock'] = next < 0 ? 0 : next;
+          mappedData['stock_quantity'] = next < 0 ? 0 : next;
         }
       }
 
@@ -940,7 +979,7 @@ export class SupabasePrismaAdapter {
         throw new Error(`Database update failed: ${error.message}`);
       }
       
-      return data;
+      return this.normalizeProductRow(data as Record<string, any> | null);
     },
 
     delete: async (options: { where: { id: string } }) => {
@@ -964,16 +1003,16 @@ export class SupabasePrismaAdapter {
         const cond = options.where.stockQuantity as any;
         const lteVal = cond.lte;
         if (typeof lteVal === 'string' && lteVal === 'min_stock') {
-          let query = this.supabase.from('products').select('current_stock, min_stock');
+          let query = this.supabase.from('products').select('stock_quantity, min_stock');
           if (typeof cond.gt === 'number') {
-            query = query.gt('current_stock', cond.gt);
+            query = query.gt('stock_quantity', cond.gt);
           }
           const { data, error } = await query;
           if (error) {
             throw new Error(`Database count failed: ${error.message}`);
           }
-          const rows = (data || []) as Array<{ current_stock?: number; min_stock?: number }>;
-          const filtered = rows.filter(r => (r.current_stock ?? 0) <= (r.min_stock ?? 0));
+          const rows = (data || []) as Array<{ stock_quantity?: number; min_stock?: number }>;
+          const filtered = rows.filter(r => (r.stock_quantity ?? 0) <= (r.min_stock ?? 0));
           return filtered.length;
         }
       }
@@ -1011,7 +1050,7 @@ export class SupabasePrismaAdapter {
     // Expose field mappings for cross-field comparisons in routes
     fields: {
       minStock: 'min_stock',
-      stockQuantity: 'current_stock'
+      stockQuantity: 'stock_quantity'
     },
 
     // Minimal findFirst implementation (supports simple OR by using first condition)
@@ -1056,7 +1095,7 @@ export class SupabasePrismaAdapter {
       if (error) {
         throw new Error(`Database query failed: ${error.message}`);
       }
-      const row = (data || [])[0] || null;
+      const row = this.normalizeProductRow((((data || [])[0] || null) as Record<string, any> | null));
       if (!row) return null;
 
       if (options?.include) {
@@ -1066,7 +1105,7 @@ export class SupabasePrismaAdapter {
           const { data: cat } = await this.supabase
             .from('categories')
             .select('id, name')
-            .eq('id', row.category_id)
+            .eq('id', (row as any).category_id ?? (row as any).categoryId)
             .single();
           enriched.category = cat || null;
         }
@@ -1077,7 +1116,7 @@ export class SupabasePrismaAdapter {
 
     // Minimal aggregate implementation for supported aggregations
     aggregate: async (options?: { where?: any; _sum?: any; _avg?: any; _count?: any }) => {
-      let query = this.supabase.from('products').select('current_stock, min_stock');
+      let query = this.supabase.from('products').select('stock_quantity, min_stock');
 
       if (options?.where) {
         Object.entries(options.where).forEach(([key, value]) => {
@@ -1111,15 +1150,15 @@ export class SupabasePrismaAdapter {
         throw new Error(`Database query failed: ${error.message}`);
       }
 
-      const rows = (data || []) as Array<{ current_stock?: number; min_stock?: number }>;
+      const rows = (data || []) as Array<{ stock_quantity?: number; min_stock?: number }>;
       const result: any = {};
 
       if (options?._sum) {
         result._sum = {};
         Object.keys(options._sum).forEach((field) => {
           const dbField = this.mapPrismaFieldToDbColumn(field);
-          if (dbField === 'current_stock') {
-            result._sum[field] = rows.reduce((acc, r) => acc + (r.current_stock || 0), 0);
+          if (dbField === 'stock_quantity') {
+            result._sum[field] = rows.reduce((acc, r) => acc + (r.stock_quantity || 0), 0);
           } else {
             result._sum[field] = 0;
           }
@@ -1137,8 +1176,8 @@ export class SupabasePrismaAdapter {
         result._avg = {};
         Object.keys(options._avg).forEach((field) => {
           const dbField = this.mapPrismaFieldToDbColumn(field);
-          if (dbField === 'current_stock') {
-            const total = rows.reduce((acc, r) => acc + (r.current_stock || 0), 0);
+          if (dbField === 'stock_quantity') {
+            const total = rows.reduce((acc, r) => acc + (r.stock_quantity || 0), 0);
             result._avg[field] = rows.length ? total / rows.length : 0;
           } else {
             result._avg[field] = 0;
@@ -1976,9 +2015,10 @@ export class SupabasePrismaAdapter {
     },
 
     create: async (options: { data: any; include?: any }) => {
+      const mappedData = this.mapDataToDb(options.data);
       const { data, error } = await this.supabase
         .from('sales')
-        .insert([options.data])
+        .insert([mappedData])
         .select()
         .single();
       
@@ -1990,9 +2030,10 @@ export class SupabasePrismaAdapter {
     },
 
     update: async (options: { where: { id: string }; data: any; include?: any }) => {
+      const mappedData = this.mapDataToDb(options.data);
       const { data, error } = await this.supabase
         .from('sales')
-        .update(options.data)
+        .update(mappedData)
         .eq('id', options.where.id)
         .select()
         .single();
@@ -3716,11 +3757,44 @@ export class SupabasePrismaAdapter {
     },
   };
 
-  $queryRaw = async (query: any) => {
+  $queryRaw = async (query: any, ...params: any[]) => {
+    const rawQuery = Array.isArray(query)
+      ? query.reduce((sql, chunk, index) => (
+          sql + String(chunk) + (index < params.length ? `$${index + 1}` : '')
+        ), '')
+      : String(query);
+
     // For simple queries like SELECT 1, just return a mock result
-    if (query.toString().includes('SELECT 1')) {
+    if (rawQuery.includes('SELECT 1')) {
       return [{ '?column?': 1 }];
     }
+
+    if (
+      rawQuery.includes('SELECT id, stock_quantity') &&
+      rawQuery.includes('FROM products') &&
+      rawQuery.includes('WHERE id IN')
+    ) {
+      const productIds = params
+        .flatMap((value) => Array.isArray(value) ? value : [value])
+        .map((value) => String(value ?? '').trim())
+        .filter(Boolean);
+
+      if (productIds.length === 0) {
+        return [];
+      }
+
+      const { data, error } = await this.supabase
+        .from('products')
+        .select('id, stock_quantity')
+        .in('id', productIds);
+
+      if (error) {
+        throw new Error(`Database query failed: ${error.message}`);
+      }
+
+      return data || [];
+    }
+
     throw new Error('Raw queries not supported in Supabase adapter');
   };
 
@@ -4083,6 +4157,53 @@ export class SupabasePrismaAdapter {
         .from('customer_preferences')
         .update(updateObj)
         .eq('customer_id', customer_id);
+      if (error) throw new Error(`Database update failed: ${error.message}`);
+      return data;
+    }
+
+    const genericUpdateMatch = q.match(
+      /UPDATE\s+(?:public\.)?("?[\w]+"?)\s+SET\s+([\s\S]+?)\s+WHERE\s+id\s*=\s*\$(\d+)/i,
+    );
+    if (genericUpdateMatch) {
+      const rawTable = genericUpdateMatch[1];
+      const setClause = genericUpdateMatch[2];
+      const idIdx = Number(genericUpdateMatch[3]);
+      const table = rawTable.replace(/"/g, '');
+      const idValue = params[idIdx - 1];
+      const updateObj: Record<string, any> = {};
+
+      for (const rawPair of setClause.split(',')) {
+        const pair = rawPair.trim();
+        if (!pair) continue;
+
+        if (/updated_at\s*=\s*NOW\(\)/i.test(pair)) {
+          updateObj.updated_at = new Date().toISOString();
+          continue;
+        }
+
+        const match = pair.match(/("?[\w]+"?)\s*=\s*\$(\d+)(::jsonb)?/i);
+        if (!match) continue;
+
+        const column = match[1].replace(/"/g, '');
+        const paramIdx = Number(match[2]);
+        const isJson = Boolean(match[3]);
+        let value = params[paramIdx - 1];
+
+        if (isJson && typeof value === 'string') {
+          try {
+            value = JSON.parse(value);
+          } catch {
+            // Keep original string when JSON parsing fails.
+          }
+        }
+
+        updateObj[column] = value;
+      }
+
+      const { data, error } = await this.supabase
+        .from(table)
+        .update(updateObj)
+        .eq('id', idValue);
       if (error) throw new Error(`Database update failed: ${error.message}`);
       return data;
     }

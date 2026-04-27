@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar as CalendarIcon, Filter, X } from 'lucide-react';
@@ -13,6 +14,7 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
+import { useCurrentOrganizationId } from '@/hooks/use-current-organization';
 
 export interface ReportFilterValues {
   startDate: Date;
@@ -24,6 +26,8 @@ export interface ReportFilterValues {
   branchId?: string;
   posId?: string;
   paymentMethod?: string;
+  inventoryOnlyLowStock?: boolean;
+  inventoryStockLimit?: number;
 }
 
 interface ReportFiltersProps {
@@ -33,6 +37,7 @@ interface ReportFiltersProps {
   onReset: () => void;
   loading?: boolean;
   showAdvanced?: boolean;
+  activeTab?: 'sales' | 'inventory' | 'customers' | 'financial';
 }
 
 const DATE_PRESETS = [
@@ -51,17 +56,25 @@ export function ReportFilters({
   onReset,
   loading = false,
   showAdvanced = false,
+  activeTab,
 }: ReportFiltersProps) {
   const [showCalendar, setShowCalendar] = useState<'start' | 'end' | null>(null);
   const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
   const [branches, setBranches] = useState<string[]>([]);
   const [posNodes, setPosNodes] = useState<string[]>([]);
   const supabase = createClient();
+  const orgId = useCurrentOrganizationId();
+
+  const inventoryStockLimit = Number.isFinite(filters.inventoryStockLimit)
+    ? Math.min(200, Math.max(1, Number(filters.inventoryStockLimit)))
+    : 50;
 
   useEffect(() => {
     let mounted = true;
     const loadCategories = async () => {
-      const { data } = await supabase.from('categories').select('id,name').order('name', { ascending: true });
+      let query = supabase.from('categories').select('id,name').order('name', { ascending: true });
+      if (orgId) query = query.eq('organization_id', orgId);
+      const { data } = await query;
       if (mounted) {
         setCategories([{ id: 'all', name: 'Todas' }, ...(data || [])]);
       }
@@ -69,7 +82,9 @@ export function ReportFilters({
     const loadBranchPos = async () => {
       try {
         // Intentar cargar branches reales primero
-        const { data: bData, error: bError } = await supabase.from('branches').select('id,name');
+        let branchesQuery = supabase.from('branches').select('id,name');
+        if (orgId) branchesQuery = branchesQuery.eq('organization_id', orgId);
+        const { data: bData, error: bError } = await branchesQuery;
         if (!bError && bData && bData.length > 0) {
           if (mounted) setBranches(['all', ...bData.map((b: any) => b.id)]);
         } else {
@@ -80,6 +95,7 @@ export function ReportFilters({
           .from('sync_events')
           .select('branch_id,pos_id')
           .not('branch_id', 'is', null)
+          .eq('organization_id', orgId || '')
           .limit(500);
         const branchesSet = new Set<string>();
         const posSet = new Set<string>();
@@ -98,7 +114,7 @@ export function ReportFilters({
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [orgId, supabase]);
 
   const handleDatePreset = (days: number) => {
     const end = new Date();
@@ -244,6 +260,43 @@ export function ReportFilters({
                   </SelectContent>
                 </Select>
               </div>
+
+              {activeTab === 'inventory' && (
+                <>
+                  <div className="space-y-2">
+                    <Label>Solo stock bajo</Label>
+                    <div className="flex items-center justify-between rounded-md border px-3 py-2 dark:bg-slate-900/50 dark:border-slate-800/50">
+                      <span className="text-sm text-muted-foreground">Bajo o sin stock</span>
+                      <Switch
+                        checked={!!filters.inventoryOnlyLowStock}
+                        onCheckedChange={(checked) =>
+                          onFiltersChange({ ...filters, inventoryOnlyLowStock: checked })
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Límite en lista</Label>
+                    <Select
+                      value={String(inventoryStockLimit)}
+                      onValueChange={(value) =>
+                        onFiltersChange({ ...filters, inventoryStockLimit: Number.parseInt(value, 10) })
+                      }
+                    >
+                      <SelectTrigger className="dark:bg-slate-900/50 dark:border-slate-800/50">
+                        <SelectValue placeholder="50" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="25">25</SelectItem>
+                        <SelectItem value="50">50</SelectItem>
+                        <SelectItem value="100">100</SelectItem>
+                        <SelectItem value="200">200</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
 
               <div className="space-y-2">
                 <Label>Estado</Label>

@@ -1,23 +1,29 @@
 import { useQuery } from '@tanstack/react-query'
-import { api } from '@/lib/api'
+import { createClient } from '@/lib/supabase'
 import type { Customer } from '@/types'
-
-const normalizeCustomersArray = (r: any): Customer[] => Array.isArray(r?.data?.data)
-  ? r.data.data
-  : (Array.isArray(r?.data?.customers)
-      ? r.data.customers
-      : (Array.isArray(r?.data)
-          ? r.data
-          : []))
+import { useCurrentOrganizationId } from '@/hooks/use-current-organization'
 
 export function useCustomers() {
+  const supabase = createClient()
+  const orgId = useCurrentOrganizationId()
+
   return useQuery<Customer[], any>({
-    queryKey: ['customers'],
+    queryKey: ['customers', orgId],
     queryFn: async () => {
-      const res = await api.get('/customers', { timeout: 10000 })
-      return normalizeCustomersArray(res)
+      let query = supabase
+        .from('customers')
+        .select('id, name, email, phone')
+        .order('name')
+      if (orgId) query = query.eq('organization_id', orgId)
+
+      const { data, error } = await query
+      if (!error && Array.isArray(data)) return data as Customer[]
+
+      // Fallback mínimo: devolver lista vacía si falla
+      return []
     },
-    staleTime: 5 * 60_000, // 5 minutos
+    staleTime: 5 * 60_000,
     gcTime: 10 * 60_000,
+    refetchOnWindowFocus: false
   })
 }

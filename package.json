@@ -7,9 +7,9 @@
   ],
   "scripts": {
     "build": "npm --prefix apps/frontend run build",
-    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
-    "dev:frontend": "cd apps/frontend && npm run dev",
-    "dev:backend": "cd apps/backend && npm run dev",
+    "dev": "concurrently -k --names frontend,backend --prefix-colors blue,green \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "dev:frontend": "npm --prefix apps/frontend run dev",
+    "dev:backend": "npm --prefix apps/backend run dev",
     "lint": "turbo lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "db:generate": "prisma generate",
@@ -60,7 +60,8 @@
     "test:e2e:debug": "playwright test --debug",
     "test:e2e:report": "playwright show-report",
     "test:e2e:headed": "playwright test --headed",
-    "test:all": "npm run test:unit && npm run test:property && npm run test:e2e"
+    "test:all": "npm run test:unit && npm run test:property && npm run test:e2e",
+    "seed:pyg": "tsx scripts/seed-electronics-pyg.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

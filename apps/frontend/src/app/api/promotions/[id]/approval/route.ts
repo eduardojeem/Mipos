@@ -18,10 +18,15 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
         .update({ approval_status: approvalStatus, approval_comment: comment })
         .eq('id', id)
       if (error) return NextResponse.json({ success: false, message: 'Error al actualizar aprobación' }, { status: 500 })
-      const uid = userData?.user?.id ? String(userData.user.id) : 'system'
       await (supabase as any)
         .from('audit_logs')
-        .insert({ user_id: uid, action: 'promotion_approval_updated', resource: 'promotion', details: { id, status: approvalStatus, comment } })
+        .insert({ 
+          user_id: userData?.user?.id || null, 
+          table_name: 'promotions',
+          record_id: id,
+          action: 'APPROVAL_UPDATED', 
+          changes: { status: approvalStatus, comment } 
+        }).catch(() => {})
       return NextResponse.json({ success: true })
     }
     return NextResponse.json({ success: false, message: 'Supabase no configurado' }, { status: 500 })

@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import api from '@/lib/api';
+import { getRequestOperationalContext } from '@/app/api/_utils/operational-context';
+import { getUserOrganizationId } from '@/app/api/_utils/organization';
+import {
+  buildSalePaymentDetails,
+  getSaleDisplayPaymentMethod,
+  type StoredSalePaymentDetails,
+} from '@/lib/sales-payment-details';
 
 // Backend URL resolution removed in favor of centralized api client
 // Helper: read backend base URL from env only (avoid self-calls)
@@ -12,9 +18,185 @@ function getBackendBaseURL(): string | null {
   return trimmed.replace(/\/+$/, '') + '/api';
 }
 
+function isMissingColumnError(error: any): boolean {
+  const message = String(error?.message || '').toLowerCase();
+  const details = String(error?.details || '').toLowerCase();
+  const code = String(error?.code || '').toUpperCase();
+  return (
+    code === 'PGRST204' ||
+    code === '42703' ||
+    message.includes('column') && message.includes('does not exist') ||
+    details.includes('column') && details.includes('does not exist')
+  );
+}
+
+function getBackendHeaders(
+  accessToken: string | undefined,
+  organizationId: string,
+  context: ReturnType<typeof getRequestOperationalContext>,
+): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+    'x-organization-id': organizationId,
+  };
+
+  if (accessToken) {
+    headers.Authorization = `Bearer ${accessToken}`;
+  }
+
+  if (context.branchId) {
+    headers['x-branch-id'] = context.branchId;
+  }
+
+  if (context.posId) {
+    headers['x-pos-id'] = context.posId;
+    headers['x-register-id'] = context.posId;
+  }
+
+  return headers;
+}
+
+async function persistSaleOperationalFields(
+  supabase: any,
+  organizationId: string,
+  saleId: string,
+  paymentDetails: StoredSalePaymentDetails,
+  context: ReturnType<typeof getRequestOperationalContext>,
+) {
+  const updates: Array<Record<string, unknown>> = [];
+
+  updates.push({ payment_details: paymentDetails });
+
+  if (context.branchId) {
+    updates.push({ branch_id: context.branchId });
+  }
+
+  if (context.posId) {
+    updates.push({ pos_id: context.posId });
+  }
+
+  if (paymentDetails.primaryMethod !== paymentDetails.legacyMethod) {
+    updates.push({ payment_method: paymentDetails.primaryMethod });
+  }
+
+  for (const update of updates) {
+    const { error } = await supabase
+      .from('sales')
+      .update(update)
+      .eq('id', saleId)
+      .eq('organization_id', organizationId);
+
+    if (error && !isMissingColumnError(error)) {
+      console.warn('[sales] Optional sales update failed:', error.message);
+    }
+  }
+}
+
+async function findOpenCashSession(
+  supabase: any,
+  organizationId: string,
+  context: ReturnType<typeof getRequestOperationalContext>,
+) {
+  let query = supabase
+    .from('cash_sessions')
+    .select('id, status')
+    .eq('organization_id', organizationId)
+    .or('status.eq.OPEN,status.eq.open')
+    .order('opened_at', { ascending: false })
+    .limit(1);
+
+  if (context.branchId) {
+    query = query.eq('branch_id', context.branchId);
+  }
+
+  if (context.posId) {
+    query = query.eq('pos_id', context.posId);
+  }
+
+  const result = await query.maybeSingle();
+  if (!result.error) {
+    return result.data ?? null;
+  }
+
+  if (!isMissingColumnError(result.error)) {
+    console.warn('[sales] Failed to fetch open session with operational context:', result.error.message);
+  }
+
+  const fallback = await supabase
+    .from('cash_sessions')
+    .select('id, status')
+    .eq('organization_id', organizationId)
+    .or('status.eq.OPEN,status.eq.open')
+    .order('opened_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return fallback.data ?? null;
+}
+
+async function insertCashMovementForSale(
+  supabase: any,
+  organizationId: string,
+  userId: string | null | undefined,
+  saleId: string,
+  cashAmount: number,
+  context: ReturnType<typeof getRequestOperationalContext>,
+) {
+  if (!(cashAmount > 0)) {
+    return;
+  }
+
+  const openSession = await findOpenCashSession(supabase, organizationId, context);
+  if (!openSession?.id) {
+    return;
+  }
+
+  const basePayload = {
+    session_id: openSession.id,
+    organization_id: organizationId,
+    type: 'SALE',
+    amount: cashAmount,
+    reason: `Venta #${saleId}`,
+    reference_type: 'SALE',
+    reference_id: String(saleId),
+    created_by: userId,
+  };
+
+  const { error } = await supabase
+    .from('cash_movements')
+    .insert({
+      ...basePayload,
+      branch_id: context.branchId,
+      pos_id: context.posId,
+    });
+
+  if (!error) {
+    return;
+  }
+
+  if (!isMissingColumnError(error)) {
+    console.warn('[sales] Cash sync with operational context failed:', error.message);
+  }
+
+  await supabase
+    .from('cash_movements')
+    .insert(basePayload);
+}
+
 // Normalize backend Prisma-style sale to frontend Supabase-style shape
 const normalizeSale = (sale: any) => {
   if (!sale || typeof sale !== 'object') return sale;
+  const paymentDetails = sale.payment_details ?? sale.paymentDetails ?? undefined;
+  const paymentMethod = getSaleDisplayPaymentMethod(paymentDetails, sale);
+  const normalizedPaymentDetails = paymentDetails
+    ? buildSalePaymentDetails({
+        paymentDetails,
+        paymentMethod,
+        totalAmount: sale.total ?? sale.total_amount,
+      })
+    : undefined;
+
   return {
     ...sale,
     // Core amounts
@@ -24,13 +206,20 @@ const normalizeSale = (sale: any) => {
     discount_type: sale.discount_type ?? sale.discountType ?? undefined,
     coupon_code: sale.coupon_code ?? sale.couponCode ?? undefined,
     // Payment fields
-    payment_method: sale.paymentMethod ?? sale.payment_method ?? 'CASH',
+    payment_method: paymentMethod,
+    payment_details: normalizedPaymentDetails ?? paymentDetails,
+    mixedPayments: normalizedPaymentDetails?.payments,
+    cashReceived: normalizedPaymentDetails?.cashReceived ?? sale.cashReceived ?? sale.cash_received,
+    change: normalizedPaymentDetails?.change ?? sale.change ?? sale.change_amount,
+    transferReference: normalizedPaymentDetails?.transferReference ?? sale.transferReference ?? sale.transfer_reference,
     // Timestamps
     created_at: sale.created_at ?? sale.date ?? sale.createdAt ?? undefined,
     updated_at: sale.updated_at ?? sale.updatedAt ?? undefined,
     // Relations
     customer_id: sale.customerId ?? sale.customer_id ?? sale.customer?.id ?? undefined,
     user_id: sale.userId ?? sale.user_id ?? sale.user?.id ?? undefined,
+    branch_id: sale.branch_id ?? sale.branchId ?? undefined,
+    pos_id: sale.pos_id ?? sale.posId ?? sale.register_id ?? sale.registerId ?? undefined,
     items: sale.items ?? sale.saleItems ?? [],
   };
 };
@@ -48,7 +237,11 @@ export async function GET(request: NextRequest) {
 
     // Parse query params
     const { searchParams } = new URL(request.url);
-    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    let orgId = (request.headers.get('x-organization-id') || '').trim();
+    if (!orgId && user?.id) {
+      const resolved = await getUserOrganizationId(user.id);
+      if (resolved) orgId = resolved;
+    }
     if (!orgId) {
       return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
     }
@@ -56,6 +249,7 @@ export async function GET(request: NextRequest) {
     const page = Number(searchParams.get('page') || 1);
     const limit = Number(searchParams.get('limit') || 50);
     const customerId = searchParams.get('customer_id') || undefined;
+    const sortParam = searchParams.get('sort') || '';
 
     // Normalización robusta de casing y mapeos
     const normalize = (v?: string | null) => (v ? v.trim().toUpperCase() : undefined);
@@ -76,6 +270,7 @@ export async function GET(request: NextRequest) {
       if (n === 'BANK_TRANSFER' || n === 'TRANSFERENCIA') return 'TRANSFER';
       if (n === 'TARJETA') return 'CARD';
       if (n === 'EFECTIVO') return 'CASH';
+      if (n === 'BILLETERA' || n === 'DIGITAL_WALLET') return 'QR';
       return n;
     };
   const normalizeSaleType = (v?: string | null) => {
@@ -92,6 +287,10 @@ export async function GET(request: NextRequest) {
     const dateTo = searchParams.get('date_to') || undefined;
     const saleType = normalizeSaleType(searchParams.get('sale_type'));
     const saleId = (searchParams.get('id') || searchParams.get('sale_id') || undefined) || undefined;
+    const [sortFieldRaw, sortDirectionRaw] = sortParam.split(':');
+    const allowedSortFields = new Set(['created_at', 'updated_at', 'total_amount']);
+    const sortField = allowedSortFields.has(sortFieldRaw) ? sortFieldRaw : 'created_at';
+    const sortAscending = String(sortDirectionRaw || 'desc').toLowerCase() === 'asc';
     const includeRaw = (searchParams.get('include') || '').toLowerCase();
     const includeItems = includeRaw.includes('items');
     const includeProduct = includeRaw.includes('product') || includeItems;
@@ -143,7 +342,7 @@ export async function GET(request: NextRequest) {
     : undefined;
 
     if (canQuery) {
-      const baseFields = 'id, customer_id, user_id, total_amount, tax_amount, discount_amount, payment_method, status, sale_type, notes, created_at, updated_at, customer:customers (id, name, email, phone)';
+      const baseFields = '*, customer:customers (id, name, email, phone)';
       const itemsFields = includeItems
         ? ', sale_items (id, sale_id, product_id, quantity, unit_price, total_price, discount_amount' + (includeProduct ? ', products (id, name, sku)' : '') + ')'
         : '';
@@ -153,7 +352,7 @@ export async function GET(request: NextRequest) {
         .from('sales')
         .select(selectFields, { count: 'exact' })
         .eq('organization_id', orgId)
-        .order('created_at', { ascending: false });
+        .order(sortField, { ascending: sortAscending });
 
       if (saleId) query = query.eq('id', saleId);
       if (customerId) query = query.eq('customer_id', customerId);
@@ -194,8 +393,8 @@ export async function GET(request: NextRequest) {
               }))
             : [];
           const { sale_items, ...rest } = s;
-          return { ...rest, items };
-        }) : sales;
+          return normalizeSale({ ...rest, items });
+        }) : (sales as any[]).map((sale) => normalizeSale(sale));
         const pagination = {
           page,
           limit,
@@ -232,6 +431,7 @@ export async function GET(request: NextRequest) {
         params.paymentMethod = normalizePaymentMethod(params.payment_method);
         delete params.payment_method;
       }
+      delete params.sort;
       if (params.status) {
         params.status = normalizeStatus(params.status);
       }
@@ -292,8 +492,9 @@ export async function GET(request: NextRequest) {
       // 10s timeout using AbortController
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
-      const headers: Record<string, string> = { 'Accept': 'application/json' };
-      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+      // Incluir cabeceras de organización y contexto operativo también en GET fallback
+      const operationalContext = getRequestOperationalContext(request, {} as any);
+      const headers = getBackendHeaders(accessToken, orgId, operationalContext);
 
       const res = await fetch(url, { signal: controller.signal, headers });
       clearTimeout(timeoutId);
@@ -335,6 +536,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    const operationalContext = getRequestOperationalContext(request, body);
 
     const orgId = (request.headers.get('x-organization-id') || '').trim();
     if (!orgId) {
@@ -355,6 +557,15 @@ export async function POST(request: NextRequest) {
     if (isDev && !canUseSupabase) {
       const now = new Date().toISOString();
       const mockSaleId = `mock-sale-${Date.now()}`;
+      const paymentDetails = buildSalePaymentDetails({
+        paymentMethod: body?.payment_method ?? 'CASH',
+        totalAmount: body?.total_amount ?? body?.total,
+        mixedPayments: body?.mixedPayments,
+        paymentDetails: body?.payment_details,
+        cashReceived: body?.cashReceived,
+        change: body?.change,
+        transferReference: body?.transfer_reference ?? body?.transferReference,
+      });
       const result = {
         success: true,
         message: 'Venta simulada (modo desarrollo, sin Supabase)',
@@ -362,6 +573,10 @@ export async function POST(request: NextRequest) {
           id: mockSaleId,
           created_at: now,
           status: 'COMPLETED',
+          payment_method: paymentDetails.primaryMethod,
+          payment_details: paymentDetails,
+          branch_id: operationalContext.branchId,
+          pos_id: operationalContext.posId,
           ...body,
         },
       };
@@ -377,8 +592,6 @@ export async function POST(request: NextRequest) {
         const url = `${backendBase.replace(/\/$/, '')}/sales`;
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
-        const headers: Record<string, string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
-        if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
         // Mapear al esquema esperado por el backend Prisma
         const backendPayload = {
           customerId: body?.customer_id ?? undefined,
@@ -388,12 +601,24 @@ export async function POST(request: NextRequest) {
             unitPrice: Number(it.unit_price),
           })) : [],
           paymentMethod: body?.payment_method ?? 'CASH',
+          mixedPayments: Array.isArray(body?.mixedPayments) ? body.mixedPayments : undefined,
+          paymentDetails: body?.payment_details,
           discount: Number(body?.discount_amount) || 0,
           discountType: (body?.discount_type === 'PERCENTAGE' || body?.discount_type === 'FIXED_AMOUNT') ? body.discount_type : 'FIXED_AMOUNT',
           tax: Number(body?.tax_amount) || 0,
           notes: body?.coupon_code ? `${body?.notes ?? ''}`.trim() : (body?.notes ?? ''),
+          cashReceived: typeof body?.cashReceived === 'number' ? Number(body.cashReceived) : undefined,
+          change: typeof body?.change === 'number' ? Number(body.change) : undefined,
+          transferReference: body?.transfer_reference ?? body?.transferReference,
+          branchId: operationalContext.branchId ?? undefined,
+          posId: operationalContext.posId ?? undefined,
         };
-        const res = await fetch(url, { method: 'POST', body: JSON.stringify(backendPayload), headers, signal: controller.signal });
+        const res = await fetch(url, {
+          method: 'POST',
+          body: JSON.stringify(backendPayload),
+          headers: getBackendHeaders(accessToken, orgId, operationalContext),
+          signal: controller.signal,
+        });
         clearTimeout(timeoutId);
         if (!res.ok) {
           const details = await res.text().catch(() => 'Unknown error');
@@ -422,6 +647,15 @@ export async function POST(request: NextRequest) {
       const taxAmount = Number(body.tax_amount ?? body.tax ?? 0);
       const discountAmount = Number(body.discount_amount ?? body.discount ?? 0);
       const totalAmount = Number(body.total_amount ?? body.total ?? (subtotal - discountAmount + taxAmount));
+      const paymentDetails = buildSalePaymentDetails({
+        paymentMethod: body.payment_method ?? 'CASH',
+        totalAmount,
+        mixedPayments: body.mixedPayments,
+        paymentDetails: body.payment_details,
+        cashReceived: body.cashReceived,
+        change: body.change,
+        transferReference: body.transfer_reference ?? body.transferReference,
+      });
 
       const rpcPayload = {
         p_customer_id: body.customer_id ?? null,
@@ -429,7 +663,7 @@ export async function POST(request: NextRequest) {
         p_total_amount: totalAmount,
         p_tax_amount: taxAmount,
         p_discount_amount: discountAmount,
-        p_payment_method: body.payment_method ?? 'CASH',
+        p_payment_method: paymentDetails.legacyMethod,
         p_status: body.status ?? 'COMPLETED',
         p_sale_type: body.sale_type ?? 'RETAIL',
         p_notes: body.notes ?? null,
@@ -442,38 +676,28 @@ export async function POST(request: NextRequest) {
       if (!rpcError && rpcResult) {
         // rpcResult is the full sale object (Option A)
         try {
-          const paymentMethod = String(rpcResult.payment_method || body.payment_method || 'CASH').toUpperCase();
-          const total = Number(rpcResult.total_amount || body.total_amount || 0);
-          const netCash = (typeof body.cashReceived === 'number' ? Number(body.cashReceived) : 0) - (typeof body.change === 'number' ? Number(body.change) : 0);
-          const mixedCash = Array.isArray(body.mixedPayments)
-            ? body.mixedPayments.filter((p: any) => String(p.type).toUpperCase() === 'CASH').reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0)
-            : 0;
-          const cashAmount = paymentMethod === 'CASH' ? (netCash > 0 ? netCash : total) : mixedCash;
-          if (cashAmount && cashAmount > 0) {
-            const { data: openSession } = await (supabase as any)
-              .from('cash_sessions')
-              .select('id, session_status')
-              .eq('session_status', 'open')
-              .order('opening_time', { ascending: false })
-              .limit(1)
-              .maybeSingle();
-            if (openSession?.id) {
-              await (supabase as any)
-                .from('cash_movements')
-                .insert({
-                  session_id: openSession.id,
-                  type: 'SALE',
-                  amount: cashAmount,
-                  reason: `Venta #${rpcResult.id}`,
-                  reference_type: 'SALE',
-                  reference_id: String(rpcResult.id),
-                });
-            }
-          }
+          await persistSaleOperationalFields(supabase as any, orgId, String(rpcResult.id), paymentDetails, operationalContext);
+          await insertCashMovementForSale(
+            supabase as any,
+            orgId,
+            userId,
+            String(rpcResult.id),
+            paymentDetails.cashAmount,
+            operationalContext,
+          );
         } catch (syncErr) {
           console.warn('[sales] Cash sync (RPC) error:', syncErr);
         }
-        return NextResponse.json({ success: true, sale: rpcResult }, { status: 200 });
+        return NextResponse.json({
+          success: true,
+          sale: normalizeSale({
+            ...rpcResult,
+            payment_method: paymentDetails.primaryMethod,
+            payment_details: paymentDetails,
+            branch_id: operationalContext.branchId,
+            pos_id: operationalContext.posId,
+          }),
+        }, { status: 200 });
       }
     } catch (rpcErr: any) {
       console.warn('[sales] RPC create_sale_with_items failed, falling back to direct inserts:', rpcErr?.message || rpcErr);
@@ -487,13 +711,22 @@ export async function POST(request: NextRequest) {
     const discountAmount = Number(discount_amount) || 0;
     const taxAmount = Number(tax_amount) || 0;
     const totalAmount = subtotal - discountAmount + taxAmount;
+    const paymentDetails = buildSalePaymentDetails({
+      paymentMethod: payment_method || 'CASH',
+      totalAmount,
+      mixedPayments: body.mixedPayments,
+      paymentDetails: body.payment_details,
+      cashReceived: body.cashReceived,
+      change: body.change,
+      transferReference: body.transfer_reference ?? body.transferReference,
+    });
 
     const salePayload: any = {
       customer_id: customer_id ?? null,
       total_amount: totalAmount,
       tax_amount: taxAmount || null,
       discount_amount: discountAmount || null,
-      payment_method: payment_method || 'CASH',
+      payment_method: paymentDetails.legacyMethod,
       status: 'COMPLETED',
       sale_type: sale_type || 'RETAIL',
       notes: notes || null,
@@ -530,8 +763,6 @@ export async function POST(request: NextRequest) {
         const url = `${backendBase.replace(/\/$/, '')}/sales`;
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
-        const headers: Record<string, string> = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
-        if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
         const backendPayload = {
           customerId: body?.customer_id ?? undefined,
           items: Array.isArray(body?.items) ? body.items.map((it: any) => ({
@@ -540,12 +771,24 @@ export async function POST(request: NextRequest) {
             unitPrice: Number(it.unit_price),
           })) : [],
           paymentMethod: body?.payment_method ?? 'CASH',
+          mixedPayments: Array.isArray(body?.mixedPayments) ? body.mixedPayments : undefined,
+          paymentDetails: body?.payment_details,
           discount: Number(body?.discount_amount) || 0,
           discountType: (body?.discount_type === 'PERCENTAGE' || body?.discount_type === 'FIXED_AMOUNT') ? body.discount_type : 'FIXED_AMOUNT',
           tax: Number(body?.tax_amount) || 0,
           notes: body?.coupon_code ? `${body?.notes ?? ''}`.trim() : (body?.notes ?? ''),
+          cashReceived: typeof body?.cashReceived === 'number' ? Number(body.cashReceived) : undefined,
+          change: typeof body?.change === 'number' ? Number(body.change) : undefined,
+          transferReference: body?.transfer_reference ?? body?.transferReference,
+          branchId: operationalContext.branchId ?? undefined,
+          posId: operationalContext.posId ?? undefined,
         };
-        const res = await fetch(url, { method: 'POST', body: JSON.stringify(backendPayload), headers, signal: controller.signal });
+        const res = await fetch(url, {
+          method: 'POST',
+          body: JSON.stringify(backendPayload),
+          headers: getBackendHeaders(accessToken, orgId, operationalContext),
+          signal: controller.signal,
+        });
         clearTimeout(timeoutId);
         if (!res.ok) {
           const details = await res.text().catch(() => 'Unknown error');
@@ -573,10 +816,12 @@ export async function POST(request: NextRequest) {
     }
 
     // fetch con relaciones para respuesta completa
+    await persistSaleOperationalFields(supabase as any, orgId, String(insertedSale.id), paymentDetails, operationalContext);
+
     const { data: saleFull, error: saleFullError } = await (supabase as any)
       .from('sales')
       .select(`
-        id, customer_id, user_id, total_amount, tax_amount, discount_amount, discount_type, coupon_code, payment_method, status, sale_type, notes, created_at, updated_at,
+        *,
         customer:customers(id, name, email, phone),
         items:sale_items(
           id, sale_id, product_id, quantity, unit_price, total_price, discount_amount, created_at, updated_at,
@@ -589,74 +834,53 @@ export async function POST(request: NextRequest) {
 
     if (!saleFullError && saleFull) {
       try {
-        const paymentMethod = String(saleFull.payment_method || body.payment_method || 'CASH').toUpperCase();
-        const total = Number(saleFull.total_amount || body.total_amount || 0);
-        const netCash = (typeof body.cashReceived === 'number' ? Number(body.cashReceived) : 0) - (typeof body.change === 'number' ? Number(body.change) : 0);
-        const mixedCash = Array.isArray(body.mixedPayments)
-          ? body.mixedPayments.filter((p: any) => String(p.type).toUpperCase() === 'CASH').reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0)
-          : 0;
-        const cashAmount = paymentMethod === 'CASH' ? (netCash > 0 ? netCash : total) : mixedCash;
-        if (cashAmount && cashAmount > 0) {
-          const { data: openSession } = await (supabase as any)
-            .from('cash_sessions')
-            .select('id, session_status')
-            .eq('session_status', 'open')
-            .order('opening_time', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          if (openSession?.id) {
-            await (supabase as any)
-              .from('cash_movements')
-              .insert({
-                session_id: openSession.id,
-                type: 'SALE',
-                amount: cashAmount,
-                reason: `Venta #${saleFull.id}`,
-                reference_type: 'SALE',
-                reference_id: String(saleFull.id),
-              });
-          }
-        }
+        await insertCashMovementForSale(
+          supabase as any,
+          orgId,
+          user?.id,
+          String(saleFull.id),
+          paymentDetails.cashAmount,
+          operationalContext,
+        );
       } catch (syncErr) {
         console.warn('[sales] Cash sync error:', syncErr);
       }
-      return NextResponse.json({ success: true, sale: saleFull }, { status: 200 });
+      return NextResponse.json({
+        success: true,
+        sale: normalizeSale({
+          ...saleFull,
+          payment_method: paymentDetails.primaryMethod,
+          payment_details: saleFull.payment_details ?? paymentDetails,
+          branch_id: saleFull.branch_id ?? operationalContext.branchId,
+          pos_id: saleFull.pos_id ?? operationalContext.posId,
+        }),
+      }, { status: 200 });
     }
 
     // Si el select con relaciones falla, devolver base
     try {
-      const paymentMethod = String(insertedSale.payment_method || body.payment_method || 'CASH').toUpperCase();
-      const total = Number(insertedSale.total_amount || body.total_amount || 0);
-      const netCash = (typeof body.cashReceived === 'number' ? Number(body.cashReceived) : 0) - (typeof body.change === 'number' ? Number(body.change) : 0);
-      const mixedCash = Array.isArray(body.mixedPayments)
-        ? body.mixedPayments.filter((p: any) => String(p.type).toUpperCase() === 'CASH').reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0)
-        : 0;
-      const cashAmount = paymentMethod === 'CASH' ? (netCash > 0 ? netCash : total) : mixedCash;
-      if (cashAmount && cashAmount > 0) {
-        const { data: openSession } = await (supabase as any)
-          .from('cash_sessions')
-          .select('id, session_status')
-          .eq('session_status', 'open')
-          .order('opening_time', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (openSession?.id) {
-          await (supabase as any)
-            .from('cash_movements')
-            .insert({
-              session_id: openSession.id,
-              type: 'SALE',
-              amount: cashAmount,
-              reason: `Venta #${insertedSale.id}`,
-              reference_type: 'SALE',
-              reference_id: String(insertedSale.id),
-            });
-        }
-      }
+      await insertCashMovementForSale(
+        supabase as any,
+        orgId,
+        user?.id,
+        String(insertedSale.id),
+        paymentDetails.cashAmount,
+        operationalContext,
+      );
     } catch (syncErr) {
       console.warn('[sales] Cash sync (base) error:', syncErr);
     }
-    return NextResponse.json({ success: true, sale: { ...insertedSale, items: insertedItems || [] } }, { status: 200 });
+    return NextResponse.json({
+      success: true,
+      sale: normalizeSale({
+        ...insertedSale,
+        payment_method: paymentDetails.primaryMethod,
+        payment_details: paymentDetails,
+        branch_id: operationalContext.branchId,
+        pos_id: operationalContext.posId,
+        items: insertedItems || [],
+      }),
+    }, { status: 200 });
 
   } catch (error) {
     console.error('Error in sales API route:', error);

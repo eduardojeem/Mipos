@@ -105,30 +105,19 @@ CREATE POLICY "SuperAdmin can manage email templates"
   ON public.email_templates
   FOR ALL
   TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.users
-      WHERE users.id = auth.uid()
-      AND users.role = 'SUPER_ADMIN'
-    )
-  )
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.users
-      WHERE users.id = auth.uid()
-      AND users.role = 'SUPER_ADMIN'
-    )
-  );
+  USING (is_super_admin())
+  WITH CHECK (is_super_admin());
 
 -- Create updated_at trigger
 CREATE OR REPLACE FUNCTION update_email_templates_updated_at()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+AS $$
 BEGIN
   NEW.updated_at = now();
   NEW.updated_by = auth.uid();
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SET search_path = '';
 
 CREATE TRIGGER trigger_update_email_templates_updated_at
   BEFORE UPDATE ON public.email_templates

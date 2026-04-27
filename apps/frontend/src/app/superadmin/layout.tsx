@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase-admin';
+import { createAdminClient } from '@/lib/supabase/server';
 import SuperAdminClientLayout from './SuperAdminClientLayout';
 
 export const metadata: Metadata = {
@@ -64,16 +64,23 @@ export default async function SuperAdminLayout({
   }
 
   // 2. Check DB via Admin Client (Most Robust)
-  const adminClient = await createAdminClient();
+  let adminClient: any = null;
+  try {
+    adminClient = await createAdminClient();
+  } catch {
+    adminClient = null;
+  }
   
   // Check user_roles table
-  const { data: userRoles } = await adminClient
-    .from('user_roles')
-    .select('role:roles(name)')
-    .eq('user_id', user.id)
-    .eq('is_active', true);
-    
-  const hasRole = userRoles?.some((ur: any) => ur.role?.name === 'SUPER_ADMIN');
+  let hasRole = false;
+  if (adminClient) {
+    const { data: userRoles } = await adminClient
+      .from('user_roles')
+      .select('role:roles(name)')
+      .eq('user_id', user.id)
+      .eq('is_active', true);
+    hasRole = userRoles?.some((ur: any) => ur.role?.name === 'SUPER_ADMIN') === true;
+  }
   
   if (hasRole) {
     return <SuperAdminClientLayout>{children}</SuperAdminClientLayout>;

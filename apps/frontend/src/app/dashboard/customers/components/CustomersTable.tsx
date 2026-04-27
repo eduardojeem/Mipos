@@ -1,14 +1,14 @@
 import { memo } from 'react';
 import { CustomersTableRow } from './CustomersTableRow';
 import { CustomersTableHeader } from './CustomersTableHeader';
-import type { UICustomer } from '@/types/customer-page';
+import type { CustomerSortField, UICustomer } from '@/types/customer-page';
 
 interface CustomersTableProps {
     customers: UICustomer[];
     selectedIds: string[];
-    sortBy: string;
+    sortBy: CustomerSortField;
     sortOrder: 'asc' | 'desc';
-    onSort: (field: any) => void;
+    onSort: (field: CustomerSortField) => void;
     onSelectCustomer: (id: string) => void;
     onSelectAll: (customers: UICustomer[]) => void;
     onEdit: (customer: UICustomer) => void;
@@ -33,7 +33,7 @@ export const CustomersTable = memo(function CustomersTable({
     onViewDetails
 }: CustomersTableProps) {
     return (
-        <div className="rounded-xl border shadow-lg overflow-hidden bg-card">
+        <div className="rounded-xl border border-border/60 overflow-hidden bg-card">
             <div className="overflow-x-auto">
                 <table className="w-full">
                     <CustomersTableHeader

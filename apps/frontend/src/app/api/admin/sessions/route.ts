@@ -1,39 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { assertAdmin } from '@/app/api/_utils/auth'
-import { createClient } from '@/lib/supabase/server'
+import { ADMIN_API_ACCESS, requireAdminApiAccess } from '@/app/api/admin/_utils/access'
+import { getAllowedUserIds } from '@/app/api/admin/_utils/orgCache'
 import { listSessions, SessionListFilters } from '@/app/api/admin/_services/sessions'
 
-// Migrado a servicio centralizado en _services/sessions.ts
-
 export async function GET(req: NextRequest) {
-  const auth = await assertAdmin(req)
-  if (!auth.ok) {
-    return NextResponse.json(auth.body, { status: auth.status })
+  const access = await requireAdminApiAccess(req, ADMIN_API_ACCESS.adminPanel)
+  if (!access.ok) {
+    return access.response
   }
 
-  const { organizationId, isSuperAdmin } = auth
+  const { companyId, isSuperAdmin } = access.context
+  let allowedUserIds: string[] | undefined
 
-  // ✅ CRÍTICO: Obtener usuarios de la organización para filtrar sesiones
-  let allowedUserIds: string[] | undefined = undefined
-  
-  if (!isSuperAdmin && organizationId) {
-    const supabase = await createClient()
-    const { data: members } = await supabase
-      .from('organization_members')
-      .select('user_id')
-      .eq('organization_id', organizationId)
-    
-    allowedUserIds = members?.map(m => m.user_id) || []
-    
-    // Si no hay usuarios en la org, retornar vacío
-    if (allowedUserIds.length === 0) {
-      return NextResponse.json({
-        items: [],
-        total: 0,
-        page: 1,
-        limit: 10,
-        pageCount: 0
-      })
+  if (companyId) {
+    allowedUserIds = await getAllowedUserIds(companyId)
+    if (!isSuperAdmin && allowedUserIds.length === 0) {
+      return NextResponse.json({ items: [], total: 0, page: 1, limit: 10, pageCount: 0 })
     }
   }
 
@@ -44,22 +26,41 @@ export async function GET(req: NextRequest) {
   const limit = Number.isNaN(limitRaw) ? 10 : Math.max(1, Math.min(100, limitRaw))
 
   const filters: SessionListFilters = {
-    search: (searchParams.get('search') || undefined),
-    status: (['active', 'expired', 'all'].includes(searchParams.get('status') ?? '') ? (searchParams.get('status') as any) : 'all'),
+    search: searchParams.get('search') || undefined,
+    status: ['active', 'expired', 'all'].includes(searchParams.get('status') ?? '')
+      ? (searchParams.get('status') as any)
+      : 'all',
     userRole: searchParams.get('userRole') || undefined,
-    deviceType: (['desktop', 'mobile', 'tablet', 'unknown', 'all'].includes(searchParams.get('deviceType') ?? '') ? (searchParams.get('deviceType') as any) : 'all'),
-    riskLevel: (['low', 'medium', 'high', 'all'].includes(searchParams.get('riskLevel') ?? '') ? (searchParams.get('riskLevel') as any) : 'all'),
-    loginMethod: (['email', 'google', 'github', 'sso', 'all'].includes(searchParams.get('loginMethod') ?? '') ? (searchParams.get('loginMethod') as any) : 'all'),
-    isActive: searchParams.get('isActive') === null ? undefined : searchParams.get('isActive') === 'true' ? true : searchParams.get('isActive') === 'false' ? false : undefined,
-    isCurrent: searchParams.get('isCurrent') === null ? undefined : searchParams.get('isCurrent') === 'true' ? true : searchParams.get('isCurrent') === 'false' ? false : undefined,
+    deviceType: ['desktop', 'mobile', 'tablet', 'unknown', 'all'].includes(searchParams.get('deviceType') ?? '')
+      ? (searchParams.get('deviceType') as any)
+      : 'all',
+    riskLevel: ['low', 'medium', 'high', 'all'].includes(searchParams.get('riskLevel') ?? '')
+      ? (searchParams.get('riskLevel') as any)
+      : 'all',
+    loginMethod: ['email', 'google', 'github', 'sso', 'all'].includes(searchParams.get('loginMethod') ?? '')
+      ? (searchParams.get('loginMethod') as any)
+      : 'all',
+    isActive: searchParams.get('isActive') === null
+      ? undefined
+      : searchParams.get('isActive') === 'true'
+        ? true
+        : searchParams.get('isActive') === 'false'
+          ? false
+          : undefined,
+    isCurrent: searchParams.get('isCurrent') === null
+      ? undefined
+      : searchParams.get('isCurrent') === 'true'
+        ? true
+        : searchParams.get('isCurrent') === 'false'
+          ? false
+          : undefined,
     dateFrom: searchParams.get('dateFrom') || undefined,
     dateTo: searchParams.get('dateTo') || undefined,
     sortBy: (searchParams.get('sortBy') as any) || undefined,
     sortDir: searchParams.get('sortDir') === 'asc' ? 'asc' : 'desc',
-    // ✅ NUEVO: Filtrar por usuarios de la organización
-    allowedUserIds
+    allowedUserIds,
   }
 
-  const res = await listSessions(filters, { page, limit })
-  return NextResponse.json(res)
+  const result = await listSessions(filters, { page, limit })
+  return NextResponse.json(result)
 }

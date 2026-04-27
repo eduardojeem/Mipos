@@ -1,45 +1,61 @@
-import React, { useState, useRef, useMemo, useEffect } from 'react';
-import QRCode from 'qrcode';
-import { motion, AnimatePresence } from 'framer-motion';
+'use client';
+
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
-  X,
-  Download,
-  Printer,
+  Check,
   CheckCircle,
-  Share2,
-  MessageCircle,
-  Mail,
   Copy,
-  Check
+  Download,
+  Mail,
+  MessageCircle,
+  Printer,
+  Share2,
+  X,
 } from 'lucide-react';
-import { SaleResponse } from '../../lib/api';
 import { useCurrencyFormatter } from '@/contexts/BusinessConfigContext';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from '@/components/ui/tooltip';
+import {
+  getPaymentMethodLabel,
+  INTERNAL_TICKET_LABEL,
+  type PosInternalTicket,
+} from '@/lib/pos/internal-ticket';
 
 interface ReceiptModalProps {
   isOpen: boolean;
   onClose: () => void;
-  saleData: SaleResponse | null;
+  saleData: PosInternalTicket | null;
   onPrint: () => void;
   onDownload: () => void;
   businessInfo?: {
     name: string;
-    address: string;
-    phone: string;
-    taxId: string;
+    address?: string;
+    phone?: string;
+    taxId?: string;
     logo?: string;
     email?: string;
     website?: string;
   };
   thermalPrinter?: boolean;
+  autoPrint?: boolean;
+  autoShare?: { whatsapp?: boolean; email?: boolean; recipientEmail?: string; recipientPhone?: string };
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
@@ -50,294 +66,429 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
   onDownload,
   businessInfo = {
     name: 'Mi Negocio',
-    address: 'Dirección del negocio',
-    phone: 'Teléfono: 000-000-000',
-    taxId: 'NIF: 00000000A',
-    email: 'contacto@minegocio.com',
-    website: 'www.minegocio.com'
+    address: '',
+    phone: '',
+    taxId: '',
+    email: '',
+    website: '',
   },
-  thermalPrinter = false
+  thermalPrinter = false,
+  autoPrint = false,
+  autoShare,
 }) => {
+  const fmtCurrency = useCurrencyFormatter();
   const [isPrinting, setIsPrinting] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
-  const fmtCurrency = useCurrencyFormatter();
-  const receiptRef = useRef<HTMLDivElement>(null);
-  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [csatScore, setCsatScore] = useState<number | null>(null);
   const [csatSubmitted, setCsatSubmitted] = useState(false);
+  const autoPrintHandledRef = useRef(false);
+  const autoShareHandledRef = useRef(false);
 
-  // Cálculos robustos memorizados
-  const { subtotal, tax, discount, total } = useMemo(() => {
-    if (!saleData) return { subtotal: 0, tax: 0, discount: 0, total: 0 };
+  // --- Memoized derived data ---
+  const business = useMemo(() => ({
+    name: businessInfo.name || 'Mi Negocio',
+    address: businessInfo.address || '',
+    phone: businessInfo.phone || '',
+    taxId: businessInfo.taxId || '',
+    email: businessInfo.email || '',
+    website: businessInfo.website || '',
+    logo: businessInfo.logo || '',
+  }), [businessInfo]);
 
-    // 1. Obtener valores finales de la BD (Fuente de la verdad)
-    const totalVal = Number(saleData.totalAmount || 0);
-    const taxVal = Number(saleData.taxAmount || 0);
-    const discountVal = Number(saleData.discountAmount || 0);
+  const items = useMemo(() => (Array.isArray(saleData?.items) ? saleData.items : []), [saleData]);
+  const subtotal = Number(saleData?.subtotal || 0);
+  const discount = Number(saleData?.discountAmount || 0);
+  const tax = Number(saleData?.taxAmount || 0);
+  const total = Number(saleData?.totalAmount || 0);
 
-    // 2. Calcular Subtotal hacia atrás para asegurar consistencia matemática visual
-    // Si Total = Subtotal - Descuento + Impuesto
-    // Entonces: Subtotal = Total + Descuento - Impuesto
-    const calculatedSubtotal = totalVal + discountVal - taxVal;
-
-    return {
-      subtotal: calculatedSubtotal,
-      tax: taxVal,
-      discount: discountVal,
-      total: totalVal
-    };
-  }, [saleData]);
-
-  if (!isOpen || !saleData) return null;
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString('es-ES', {
+  // --- Callbacks ---
+  const formatDate = useCallback((dateString: string) =>
+    new Date(dateString).toLocaleString('es-PY', {
       day: '2-digit',
       month: '2-digit',
       year: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
+      minute: '2-digit',
+    }), []);
 
-  useEffect(() => {
-    const buildQR = async () => {
-      if (!saleData) return;
-      const text = `Venta #${saleData.id} - ${fmtCurrency(total)}`;
-      try {
-        const url = await QRCode.toDataURL(text, { width: 128, margin: 0 });
-        setQrDataUrl(url);
-      } catch {}
-    };
-    buildQR();
-  }, [saleData, total]);
-
-  const getPaymentTypeLabel = (type: string) => {
-    switch (type) {
-      case 'CASH': return 'Efectivo';
-      case 'CARD': return 'Tarjeta';
-      case 'TRANSFER': return 'Transferencia';
-      case 'OTHER': return 'Otro';
-      default: return type;
+  const renderPaymentDetailsText = useCallback(() => {
+    if (!saleData) return '';
+    if (saleData.paymentMethod === 'MIXED' && Array.isArray(saleData.mixedPayments)) {
+      return saleData.mixedPayments
+        .map((part) => {
+          const reference = part.details?.reference ? ` · Ref ${part.details.reference}` : '';
+          return `${getPaymentMethodLabel(part.type)}: ${fmtCurrency(part.amount)}${reference}`;
+        })
+        .join('\n');
     }
-  };
 
-  // Generar texto plano del recibo para compartir
-  const generateReceiptText = () => {
-    const itemsList = saleData.items.map(item =>
-      `${item.quantity}x ${item.productName} (${fmtCurrency(item.unitPrice)}) = ${fmtCurrency(item.quantity * item.unitPrice)}`
-    ).join('\n');
+    const details: string[] = [`Método de pago: ${getPaymentMethodLabel(saleData.paymentMethod)}`];
 
-    return `
-*${businessInfo.name}*
-${businessInfo.address}
---------------------------------
-*RECIBO #${saleData.id.slice(-8).toUpperCase()}*
-Fecha: ${formatDate(saleData.createdAt)}
---------------------------------
-${itemsList}
---------------------------------
-Subtotal: ${fmtCurrency(subtotal)}
-${discount > 0 ? `Descuento: -${fmtCurrency(discount)}\n` : ''}IVA: ${fmtCurrency(tax)}
-*TOTAL: ${fmtCurrency(total)}*
---------------------------------
-Método de pago: ${saleData.paymentMethod === 'MIXED' ? 'Mixto' : getPaymentTypeLabel(saleData.paymentMethod)}
---------------------------------
-¡Gracias por su compra!
-    `.trim();
-  };
-
-  const handleWhatsAppShare = () => {
-    const text = generateReceiptText();
-    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank');
-  };
-
-  const handleEmailShare = () => {
-    const text = generateReceiptText();
-    const subject = `Recibo de compra - ${businessInfo.name}`;
-    const url = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;
-    window.open(url, '_blank');
-  };
-
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(generateReceiptText());
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error('Error al copiar:', err);
+    if (saleData.paymentMethod === 'CASH' && typeof saleData.cashReceived === 'number') {
+      details.push(`Entregado: ${fmtCurrency(saleData.cashReceived)}`);
+      details.push(`Vuelto: ${fmtCurrency(saleData.change || 0)}`);
     }
-  };
 
-  const handleNativeShare = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: `Recibo ${businessInfo.name}`,
-          text: generateReceiptText(),
-        });
-      } catch (err) {
-        console.error('Error al compartir:', err);
-      }
-    } else {
-      handleCopy();
+    if (saleData.transferReference) {
+      details.push(`Referencia: ${saleData.transferReference}`);
     }
-  };
 
-  const handleThermalPrint = async () => {
-    setIsPrinting(true);
-    try {
-      const thermalReceipt = createThermalReceipt();
-      const printWindow = window.open('', '_blank', 'width=300,height=600');
-      if (printWindow) {
-        printWindow.document.write(thermalReceipt);
-        printWindow.document.close();
-        setTimeout(() => {
-          printWindow.print();
-          printWindow.close();
-        }, 500);
-      }
-      onPrint();
-    } catch (error) {
-      console.error('Error printing:', error);
-    } finally {
-      setIsPrinting(false);
-    }
-  };
+    return details.join('\n');
+  }, [saleData, fmtCurrency]);
 
-  const createThermalReceipt = (): string => {
-    const fallbackQr = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(`Venta #${saleData.id} - ${fmtCurrency(total)}`)}`;
-    const qrUrl = qrDataUrl || fallbackQr;
+  const generateTicketText = useCallback(() => {
+    if (!saleData) return '';
+    const businessLines = [
+      business.name,
+      business.address,
+      business.phone,
+      business.email,
+      business.taxId ? `RUC/ID: ${business.taxId}` : '',
+    ].filter(Boolean);
+
+    const itemLines = items.map((item) => (
+      `${item.quantity}x ${item.productName} (${fmtCurrency(item.unitPrice)}) = ${fmtCurrency(item.totalPrice)}`
+    ));
+
+    return [
+      ...businessLines,
+      '--------------------------------',
+      `${INTERNAL_TICKET_LABEL.toUpperCase()} ${saleData.documentNumber}`,
+      saleData.documentDisclaimer,
+      saleData.documentDescription,
+      `Fecha: ${formatDate(saleData.createdAt)}`,
+      saleData.cashier ? `Cajero: ${saleData.cashier}` : '',
+      saleData.customer?.name ? `Cliente: ${saleData.customer.name}` : '',
+      '--------------------------------',
+      ...itemLines,
+      '--------------------------------',
+      `Subtotal: ${fmtCurrency(subtotal)}`,
+      discount > 0 ? `Descuento: -${fmtCurrency(discount)}` : '',
+      `IVA: ${fmtCurrency(tax)}`,
+      `TOTAL: ${fmtCurrency(total)}`,
+      '--------------------------------',
+      renderPaymentDetailsText(),
+      saleData.notes ? `Notas: ${saleData.notes}` : '',
+      '--------------------------------',
+      'Gracias por su compra.',
+    ].filter(Boolean).join('\n');
+  }, [saleData, business, items, subtotal, discount, tax, total, formatDate, renderPaymentDetailsText, fmtCurrency]);
+
+  const buildTicketHtml = useCallback(() => {
+    if (!saleData) return '';
+    const itemRows = items.map((item) => `
+      <div class="item">
+        <div class="item-name">${escapeHtml(item.productName)}</div>
+        <div class="item-meta">
+          <span>${item.quantity} x ${escapeHtml(fmtCurrency(item.unitPrice))}</span>
+          <span>${escapeHtml(fmtCurrency(item.totalPrice))}</span>
+        </div>
+      </div>
+    `).join('');
+
+    const paymentRows = saleData.paymentMethod === 'MIXED' && Array.isArray(saleData.mixedPayments)
+      ? saleData.mixedPayments.map((part) => `
+          <div class="row">
+            <span>${escapeHtml(getPaymentMethodLabel(part.type))}</span>
+            <span>${escapeHtml(fmtCurrency(part.amount))}</span>
+          </div>
+          ${part.details?.reference ? `<div class="meta">Ref: ${escapeHtml(part.details.reference)}</div>` : ''}
+        `).join('')
+      : `
+          <div class="row">
+            <span>Método de pago</span>
+            <span>${escapeHtml(getPaymentMethodLabel(saleData.paymentMethod))}</span>
+          </div>
+          ${saleData.paymentMethod === 'CASH' && typeof saleData.cashReceived === 'number' ? `
+            <div class="row">
+              <span>Entregado</span>
+              <span>${escapeHtml(fmtCurrency(saleData.cashReceived))}</span>
+            </div>
+            <div class="row">
+              <span>Vuelto</span>
+              <span>${escapeHtml(fmtCurrency(saleData.change || 0))}</span>
+            </div>
+          ` : ''}
+          ${saleData.transferReference ? `
+            <div class="meta">Referencia: ${escapeHtml(saleData.transferReference)}</div>
+          ` : ''}
+        `;
 
     return `
       <!DOCTYPE html>
-      <html>
+      <html lang="es">
       <head>
         <meta charset="utf-8">
-        <title>Recibo</title>
+        <title>${escapeHtml(INTERNAL_TICKET_LABEL)} ${escapeHtml(saleData.documentNumber)}</title>
         <style>
-          body { font-family: 'Courier New', monospace; font-size: 12px; margin: 0; padding: 5mm; width: 80mm; color: #000; }
-          .header { text-align: center; margin-bottom: 10px; }
-          .bold { font-weight: bold; }
-          .text-lg { font-size: 14px; }
-          .divider { border-top: 1px dashed #000; margin: 8px 0; }
-          .row { display: flex; justify-content: space-between; margin-bottom: 4px; }
-          .item-row { margin-bottom: 4px; }
-          .item-name { font-weight: bold; }
-          .item-details { display: flex; justify-content: space-between; padding-left: 10px; font-size: 11px; }
-          .total-section { margin-top: 10px; }
-          .footer { text-align: center; margin-top: 15px; font-size: 10px; }
-          .qr-container { text-align: center; margin-top: 10px; display: flex; justify-content: center; }
-          img { width: 120px; height: 120px; }
+          body {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            margin: 0;
+            padding: 5mm;
+            width: 80mm;
+            color: #111827;
+            background: #ffffff;
+          }
+          .header,
+          .footer {
+            text-align: center;
+          }
+          .business-name {
+            font-size: 15px;
+            font-weight: 700;
+            margin-bottom: 4px;
+          }
+          .business-meta {
+            font-size: 11px;
+            margin-bottom: 2px;
+          }
+          .notice {
+            margin: 12px 0;
+            padding: 8px;
+            border: 1px solid #dc2626;
+            background: #fef2f2;
+            text-align: center;
+          }
+          .notice strong {
+            display: block;
+            font-size: 12px;
+            margin-bottom: 4px;
+          }
+          .muted {
+            color: #4b5563;
+            font-size: 10px;
+          }
+          .divider {
+            border-top: 1px dashed #9ca3af;
+            margin: 10px 0;
+          }
+          .row {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 4px;
+          }
+          .meta {
+            margin-bottom: 4px;
+            color: #4b5563;
+            font-size: 10px;
+          }
+          .item {
+            margin-bottom: 8px;
+          }
+          .item-name {
+            font-weight: 700;
+          }
+          .item-meta {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            margin-top: 2px;
+            font-size: 11px;
+          }
+          .totals {
+            margin-top: 8px;
+          }
+          .totals .total {
+            font-size: 14px;
+            font-weight: 700;
+            padding-top: 4px;
+            border-top: 1px dashed #9ca3af;
+          }
+          .footer {
+            margin-top: 14px;
+            font-size: 10px;
+          }
         </style>
       </head>
       <body>
         <div class="header">
-          ${businessInfo.logo ? `<img src="${businessInfo.logo}" alt="${businessInfo.name}" style="max-height:50px;margin-bottom:6px;" />` : ''}
-          <div class="bold text-lg">${businessInfo.name}</div>
-          <div>${businessInfo.address}</div>
-          ${businessInfo.phone ? `<div>${businessInfo.phone}</div>` : ''}
-          ${businessInfo.taxId ? `<div>ID Fiscal: ${businessInfo.taxId}</div>` : ''}
+          ${business.logo ? `<img src="${escapeHtml(business.logo)}" alt="${escapeHtml(business.name)}" style="max-height:50px;margin-bottom:8px;" />` : ''}
+          <div class="business-name">${escapeHtml(business.name)}</div>
+          ${business.address ? `<div class="business-meta">${escapeHtml(business.address)}</div>` : ''}
+          ${business.phone ? `<div class="business-meta">${escapeHtml(business.phone)}</div>` : ''}
+          ${business.email ? `<div class="business-meta">${escapeHtml(business.email)}</div>` : ''}
+          ${business.taxId ? `<div class="business-meta">RUC/ID: ${escapeHtml(business.taxId)}</div>` : ''}
         </div>
-        
-        <div class="divider"></div>
-        
+
+        <div class="notice">
+          <strong>${escapeHtml(saleData.documentDisclaimer)}</strong>
+          <div class="muted">${escapeHtml(saleData.documentDescription)}</div>
+        </div>
+
         <div class="row">
-          <span>Recibo:</span>
-          <span>#${saleData.id.slice(-8).toUpperCase()}</span>
+          <span>${escapeHtml(INTERNAL_TICKET_LABEL)}</span>
+          <span>${escapeHtml(saleData.documentNumber)}</span>
         </div>
         <div class="row">
-          <span>Fecha:</span>
-          <span>${formatDate(saleData.createdAt)}</span>
+          <span>Fecha</span>
+          <span>${escapeHtml(formatDate(saleData.createdAt))}</span>
         </div>
-        
+        ${saleData.cashier ? `<div class="row"><span>Cajero</span><span>${escapeHtml(saleData.cashier)}</span></div>` : ''}
+        ${saleData.customer?.name ? `<div class="row"><span>Cliente</span><span>${escapeHtml(saleData.customer.name)}</span></div>` : ''}
+
         <div class="divider"></div>
-        
-        <div>
-          ${saleData.items.map((item) => `
-            <div class="item-row">
-              <div class="item-name">${item.productName}</div>
-              <div class="item-details">
-                <span>${item.quantity} x ${fmtCurrency(item.unitPrice)}</span>
-                <span>${fmtCurrency(item.quantity * item.unitPrice)}</span>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-        
+
+        ${itemRows}
+
         <div class="divider"></div>
-        
-        <div class="total-section">
+
+        <div class="totals">
           <div class="row">
-            <span>Subtotal:</span>
-            <span>${fmtCurrency(subtotal)}</span>
+            <span>Subtotal</span>
+            <span>${escapeHtml(fmtCurrency(subtotal))}</span>
           </div>
           ${discount > 0 ? `
-          <div class="row">
-            <span>Descuento:</span>
-            <span>-${fmtCurrency(discount)}</span>
-          </div>` : ''}
-          <div class="row">
-            <span>IVA:</span>
-            <span>${fmtCurrency(tax)}</span>
-          </div>
-          <div class="row bold text-lg" style="margin-top: 5px;">
-            <span>TOTAL:</span>
-            <span>${fmtCurrency(total)}</span>
-          </div>
-        </div>
-        
-        <div class="divider"></div>
-        
-        ${saleData.paymentMethod === 'MIXED' && Array.isArray(saleData.mixedPayments) ? `
-          ${saleData.mixedPayments.map((p) => `
-            <div class="row"><span>${getPaymentTypeLabel(p.type)}:</span><span>${fmtCurrency(p.amount)}</span></div>
-            ${p.details?.lastFourDigits ? `<div class="row"><span>Tarjeta:</span><span>**** ${p.details.lastFourDigits}${p.details.cardType ? ' ' + p.details.cardType : ''}</span></div>` : ''}
-            ${p.details?.authorizationCode ? `<div class="row"><span>Autorización:</span><span>${p.details.authorizationCode}</span></div>` : ''}
-            ${p.details?.reference ? `<div class="row"><span>Ref:</span><span>${p.details.reference}</span></div>` : ''}
-          `).join('')}
-        ` : `
-          <div class="row"><span>Pago:</span><span>${getPaymentTypeLabel(saleData.paymentMethod)}</span></div>
-          ${saleData.paymentMethod === 'CASH' && typeof saleData.cashReceived === 'number' ? `
-            <div class="row"><span>Entregado:</span><span>${fmtCurrency(saleData.cashReceived)}</span></div>
-            <div class="row"><span>Vuelto:</span><span>${fmtCurrency(saleData.change || 0)}</span></div>
+            <div class="row">
+              <span>Descuento</span>
+              <span>-${escapeHtml(fmtCurrency(discount))}</span>
+            </div>
           ` : ''}
-        `}
-        
-        <div class="qr-container">
-          <img src="${qrUrl}" alt="QR Code" />
+          <div class="row">
+            <span>IVA</span>
+            <span>${escapeHtml(fmtCurrency(tax))}</span>
+          </div>
+          <div class="row total">
+            <span>TOTAL</span>
+            <span>${escapeHtml(fmtCurrency(total))}</span>
+          </div>
         </div>
-        
+
+        <div class="divider"></div>
+
+        ${paymentRows}
+
+        ${saleData.notes ? `
+          <div class="divider"></div>
+          <div class="meta"><strong>Notas:</strong> ${escapeHtml(saleData.notes)}</div>
+        ` : ''}
+
         <div class="footer">
-          <p>¡Gracias por su compra!</p>
+          <div>Ticket interno emitido por el POS</div>
+          <div>${escapeHtml(saleData.documentDisclaimer)}</div>
+          ${business.website ? `<div>${escapeHtml(business.website)}</div>` : ''}
         </div>
       </body>
       </html>
     `;
-  };
+  }, [saleData, business, items, subtotal, discount, tax, total, formatDate, fmtCurrency]);
 
-  const handlePDFDownload = async () => {
+  const handleWhatsAppShare = useCallback(() => {
+    const text = generateTicketText();
+    const phone = autoShare?.recipientPhone?.replace(/[^0-9]/g, '') || '';
+    const base = phone ? `https://wa.me/${phone}` : 'https://wa.me/';
+    window.open(`${base}?text=${encodeURIComponent(text)}`, '_blank');
+  }, [autoShare?.recipientPhone, generateTicketText]);
+
+  const handleEmailShare = useCallback(() => {
+    if (!saleData) return;
+    const subject = `${INTERNAL_TICKET_LABEL} ${saleData.documentNumber} - ${business.name}`;
+    const body = generateTicketText();
+    const recipient = autoShare?.recipientEmail || '';
+    window.open(
+      `mailto:${encodeURIComponent(recipient)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,
+      '_blank',
+    );
+  }, [autoShare?.recipientEmail, business.name, saleData, generateTicketText]);
+
+  const handleCopy = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(generateTicketText());
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      console.error('Error al copiar ticket interno:', error);
+    }
+  }, [generateTicketText]);
+
+  const handleNativeShare = useCallback(async () => {
+    if (!saleData) return;
+    if (!navigator.share) {
+      await handleCopy();
+      return;
+    }
+
+    try {
+      await navigator.share({
+        title: `${INTERNAL_TICKET_LABEL} ${saleData.documentNumber}`,
+        text: generateTicketText(),
+      });
+    } catch (error) {
+      console.error('Error al compartir ticket interno:', error);
+    }
+  }, [saleData, generateTicketText, handleCopy]);
+
+  const handleTicketDownload = useCallback(async () => {
+    if (!saleData) return;
     setIsDownloading(true);
     try {
-      const receiptContent = createThermalReceipt();
-      const blob = new Blob([receiptContent], { type: 'text/html' });
+      const html = buildTicketHtml();
+      const blob = new Blob([html], { type: 'text/html' });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `ticket_${saleData.id.slice(-8)}.html`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `ticket-interno_${saleData.documentNumber}.html`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
       URL.revokeObjectURL(url);
       onDownload();
     } catch (error) {
-      console.error('Error downloading:', error);
+      console.error('Error al descargar ticket interno:', error);
     } finally {
       setIsDownloading(false);
     }
-  };
+  }, [saleData, buildTicketHtml, onDownload]);
+
+  const handleThermalPrint = useCallback(async () => {
+    setIsPrinting(true);
+    try {
+      const printWindow = window.open('', '_blank', 'width=320,height=700');
+      if (!printWindow) return;
+
+      printWindow.document.write(buildTicketHtml());
+      printWindow.document.close();
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+      }, 300);
+      onPrint();
+    } catch (error) {
+      console.error('Error al imprimir ticket interno:', error);
+    } finally {
+      setIsPrinting(false);
+    }
+  }, [buildTicketHtml, onPrint]);
+
+  // --- Effects ---
+  useEffect(() => {
+    autoPrintHandledRef.current = false;
+    autoShareHandledRef.current = false;
+  }, [saleData?.id, isOpen]);
+
+  useEffect(() => {
+    if (!saleData || !isOpen || !autoPrint || !thermalPrinter || autoPrintHandledRef.current) return;
+    autoPrintHandledRef.current = true;
+    void handleThermalPrint();
+  }, [autoPrint, isOpen, saleData, thermalPrinter, handleThermalPrint]);
+
+  useEffect(() => {
+    if (!saleData || !isOpen || autoShareHandledRef.current || !autoShare) return;
+
+    const shouldShareWhatsApp = Boolean(autoShare.whatsapp);
+    const shouldShareEmail = Boolean(autoShare.email);
+    if (!shouldShareWhatsApp && !shouldShareEmail) return;
+
+    autoShareHandledRef.current = true;
+
+    if (shouldShareWhatsApp) handleWhatsAppShare();
+    if (shouldShareEmail) handleEmailShare();
+  }, [autoShare, isOpen, saleData, handleWhatsAppShare, handleEmailShare]);
+
+  // --- Render ---
+  if (!isOpen || !saleData) return null;
 
   return (
     <AnimatePresence>
@@ -351,248 +502,291 @@ Método de pago: ${saleData.paymentMethod === 'MIXED' ? 'Mixto' : getPaymentType
         />
 
         <motion.div
-          initial={{ scale: 0.95, opacity: 0, y: 20 }}
+          initial={{ scale: 0.96, opacity: 0, y: 16 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.95, opacity: 0, y: 20 }}
-          className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden relative z-10 flex flex-col max-h-[90vh]"
+          exit={{ scale: 0.96, opacity: 0, y: 16 }}
+          className="relative z-10 flex max-h-[90vh] w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl"
           role="dialog"
           aria-modal="true"
-          aria-labelledby="receipt-modal-title"
+          aria-labelledby="internal-ticket-title"
         >
-          {/* Header con gradiente */}
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-700 dark:to-indigo-700 p-6 text-white text-center relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-full bg-white/10 dark:bg-white/5 transform -skew-y-6 origin-top-left scale-150"></div>
+          <div className="relative overflow-hidden bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-400 px-6 py-8 text-white">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.2),transparent_40%)]" />
+            <div className="absolute -bottom-12 -left-12 h-40 w-40 rounded-full bg-white/10 blur-3xl" />
+            
+            <div className="relative z-10 flex items-start justify-between gap-4">
+              <div className="flex items-center gap-5">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/20 shadow-xl backdrop-blur-md">
+                  <CheckCircle className="h-10 w-10 text-white" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm">
+                      ¡Venta Exitosa!
+                    </span>
+                  </div>
+                  <h2 id="internal-ticket-title" className="mt-1 text-2xl font-black tracking-tight">
+                    {INTERNAL_TICKET_LABEL} {saleData.documentNumber}
+                  </h2>
+                  <p className="mt-1 text-sm text-emerald-50 opacity-90">
+                    Transacción completada y registrada correctamente.
+                  </p>
+                </div>
+              </div>
 
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ type: "spring", stiffness: 200, damping: 15 }}
-              className="w-16 h-16 bg-white dark:bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-600 dark:text-blue-700 shadow-lg relative z-10"
-            >
-              <CheckCircle size={32} strokeWidth={3} />
-            </motion.div>
-
-            <h2 id="receipt-modal-title" className="text-2xl font-bold relative z-10 text-white dark:text-white">¡Venta Exitosa!</h2>
-            <p className="text-blue-100 dark:text-blue-200 relative z-10">Recibo #{saleData.id.slice(-8).toUpperCase()}</p>
-
-            <button
-              onClick={onClose}
-              className="absolute top-4 right-4 text-white/80 hover:text-white hover:bg-white/20 dark:hover:bg-white/10 p-2 rounded-full transition-colors z-20"
-            >
-              <X size={20} />
-            </button>
+              <button
+                onClick={onClose}
+                className="rounded-full p-2 text-white/80 transition hover:bg-white/20 hover:text-white active:scale-90"
+                aria-label="Cerrar ticket"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
           </div>
 
-          {/* Cuerpo del Recibo (Scrollable) */}
-          <ScrollArea className="flex-1 bg-gray-50/50 dark:bg-gray-800/50">
-            <div className="p-6">
-              {/* Tarjeta de Recibo Visual */}
-              <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm p-6 relative overflow-hidden">
-                {/* Decoración de borde dentado (simulado) */}
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 dark:from-blue-600 dark:via-purple-600 dark:to-pink-600"></div>
-
-                <div className="text-center mb-6">
-                  {businessInfo.logo && (
+          <ScrollArea className="flex-1 bg-slate-50">
+            <div className="p-5 sm:p-6">
+              <div className="rounded-3xl border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-100 px-6 py-6 text-center">
+                  {business.logo && (
                     <img
-                      src={businessInfo.logo}
-                      alt={businessInfo.name}
-                      className="mx-auto mb-2 h-12 w-auto object-contain"
+                      src={business.logo}
+                      alt={business.name}
+                      className="mx-auto mb-4 h-14 w-auto object-contain"
                     />
                   )}
-                  <h3 className="font-bold text-gray-900 dark:text-gray-100 text-lg">{businessInfo.name}</h3>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">{businessInfo.address}</p>
-                  {businessInfo.phone && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400">{businessInfo.phone}</p>
-                  )}
-                  {businessInfo.taxId && (
-                    <p className="text-xs text-gray-600 dark:text-gray-400">ID Fiscal: {businessInfo.taxId}</p>
-                  )}
-                  {businessInfo.email && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400">{businessInfo.email}</p>
-                  )}
-                  {businessInfo.website && (
-                    <p className="text-xs text-gray-500 dark:text-gray-400">{businessInfo.website}</p>
-                  )}
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{formatDate(saleData.createdAt)}</p>
+                  <h3 className="text-xl font-bold text-slate-900">{business.name}</h3>
+                  {business.address && <p className="mt-1 text-sm text-slate-500">{business.address}</p>}
+                  <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                    {business.phone && <span>{business.phone}</span>}
+                    {business.email && <span>{business.email}</span>}
+                    {business.taxId && <span>RUC/ID: {business.taxId}</span>}
+                  </div>
+
+                  <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-4 text-red-800">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.3em]">{saleData.documentSubtitle}</p>
+                    <p className="mt-2 text-base font-bold">{saleData.documentDisclaimer}</p>
+                    <p className="mt-2 text-xs leading-5 text-red-700/90">{saleData.documentDescription}</p>
+                  </div>
                 </div>
 
-                <Separator className="my-4" />
+                <div className="grid gap-3 border-b border-slate-100 px-6 py-5 sm:grid-cols-2">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Ticket</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">{saleData.documentNumber}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Fecha</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">{formatDate(saleData.createdAt)}</p>
+                  </div>
+                  {saleData.cashier && (
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Cajero</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">{saleData.cashier}</p>
+                    </div>
+                  )}
+                  {saleData.customer?.name && (
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Cliente</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">{saleData.customer.name}</p>
+                    </div>
+                  )}
+                </div>
 
-                {/* Lista de Productos */}
-                <div className="space-y-3 mb-6">
-                  {saleData.items.map((item, idx) => (
-                    <div key={idx} className="flex justify-between text-sm group">
-                      <div className="flex-1 pr-4">
-                        <div className="font-medium text-gray-800 dark:text-gray-200">{item.productName}</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">
-                          {item.quantity} x {fmtCurrency(item.unitPrice)}
+                <div className="px-6 py-5">
+                  <div className="mb-4 flex items-center justify-between">
+                    <h4 className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-500">Detalle de venta</h4>
+                    <span className="text-xs font-medium text-slate-400">{items.length} producto{items.length !== 1 ? 's' : ''}</span>
+                  </div>
+
+                  <div className="space-y-3">
+                    {items.map((item) => (
+                      <div key={item.id} className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-slate-900">{item.productName}</p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {item.quantity} x {fmtCurrency(item.unitPrice)}
+                            </p>
+                          </div>
+                          <div className="text-right text-sm font-semibold text-slate-900">
+                            {fmtCurrency(item.totalPrice)}
+                          </div>
                         </div>
                       </div>
-                      <div className="font-semibold text-gray-700 dark:text-gray-300">
-                        {fmtCurrency(item.quantity * item.unitPrice)}
-                      </div>
+                    ))}
+                  </div>
+
+                  <Separator className="my-5" />
+
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between text-slate-600">
+                      <span>Subtotal</span>
+                      <span>{fmtCurrency(subtotal)}</span>
                     </div>
-                  ))}
-                </div>
-
-                <Separator className="my-4" />
-
-                {/* Totales */}
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                    <span>Subtotal</span>
-                    <span>{fmtCurrency(subtotal)}</span>
-                  </div>
-                  {discount > 0 && (
-                    <div className="flex justify-between text-green-600 dark:text-green-400">
-                      <span>Descuento</span>
-                      <span>-{fmtCurrency(discount)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between text-gray-600 dark:text-gray-400">
-                    <span>IVA</span>
-                    <span>{fmtCurrency(tax)}</span>
-                  </div>
-                  <div className="flex justify-between text-lg font-bold text-gray-900 dark:text-gray-100 mt-2 pt-2 border-t border-gray-100 dark:border-gray-700">
-                    <span>Total</span>
-                    <span>{fmtCurrency(total)}</span>
-                  </div>
-                </div>
-
-                <div className="mt-4 pt-4 border-t border-dashed border-gray-200 dark:border-gray-700">
-                  {saleData.paymentMethod === 'MIXED' && Array.isArray(saleData.mixedPayments) ? (
-                    <div className="space-y-2">
-                      <div className="text-center">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-950/30 text-blue-800 dark:text-blue-400">Pago Mixto</span>
+                    {discount > 0 && (
+                      <div className="flex justify-between text-emerald-700">
+                        <span>Descuento</span>
+                        <span>-{fmtCurrency(discount)}</span>
                       </div>
-                      <div className="mt-2 space-y-2 text-sm">
-                        {saleData.mixedPayments.map((p, i) => (
-                          <div key={i} className="space-y-1">
-                            <div className="flex justify-between">
-                              <span className="text-gray-700">{getPaymentTypeLabel(p.type)}</span>
-                              <span className="font-medium">{fmtCurrency(p.amount)}</span>
+                    )}
+                    <div className="flex justify-between text-slate-600">
+                      <span>IVA</span>
+                      <span>{fmtCurrency(tax)}</span>
+                    </div>
+                    <div className="mt-3 flex justify-between rounded-2xl bg-slate-900 px-4 py-3 text-base font-bold text-white">
+                      <span>Total</span>
+                      <span>{fmtCurrency(total)}</span>
+                    </div>
+                  </div>
+
+                  <Separator className="my-5" />
+
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-500">Pago</h4>
+
+                    {saleData.paymentMethod === 'MIXED' && Array.isArray(saleData.mixedPayments) ? (
+                      <div className="space-y-2">
+                        {saleData.mixedPayments.map((part, index) => (
+                          <div key={`${part.type}-${index}`} className="rounded-2xl border border-slate-100 px-4 py-3">
+                            <div className="flex justify-between text-sm font-medium text-slate-900">
+                              <span>{getPaymentMethodLabel(part.type)}</span>
+                              <span>{fmtCurrency(part.amount)}</span>
                             </div>
-                            {(p.details?.lastFourDigits || p.details?.authorizationCode || p.details?.reference || p.details?.cardType) && (
-                              <div className="flex justify-between text-[11px] text-gray-500">
-                                <span>
-                                  {p.details?.cardType ? `Tarjeta ${p.details.cardType}` : (p.details?.reference ? 'Referencia' : (p.details?.authorizationCode ? 'Autorización' : ''))}
-                                </span>
-                                <span>
-                                  {p.details?.lastFourDigits ? `**** ${p.details.lastFourDigits}` : (p.details?.reference || p.details?.authorizationCode || '')}
-                                </span>
-                              </div>
+                            {part.details?.reference && (
+                              <p className="mt-1 text-xs text-slate-500">Referencia: {part.details.reference}</p>
                             )}
                           </div>
                         ))}
                       </div>
-                    </div>
-                  ) : (
-                    <div className="text-center space-y-1">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                        {getPaymentTypeLabel(saleData.paymentMethod)}
-                      </span>
-                      {saleData.paymentMethod === 'CASH' && (typeof saleData.cashReceived === 'number') && (
-                        <div className="text-xs text-gray-600">
-                          Entregado {fmtCurrency(saleData.cashReceived)} · Vuelto {fmtCurrency(saleData.change || 0)}
+                    ) : (
+                      <div className="rounded-2xl border border-slate-100 px-4 py-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                            {getPaymentMethodLabel(saleData.paymentMethod)}
+                          </span>
+                          {saleData.paymentMethod === 'CASH' && typeof saleData.cashReceived === 'number' && (
+                            <span className="text-xs text-slate-500">
+                              Entregado {fmtCurrency(saleData.cashReceived)} · Vuelto {fmtCurrency(saleData.change || 0)}
+                            </span>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                        {saleData.transferReference && (
+                          <p className="mt-2 text-xs text-slate-500">Referencia: {saleData.transferReference}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
-                <div className="mt-6 flex flex-col items-center justify-center">
-                  <img
-                    src={qrDataUrl || `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(`Venta #${saleData.id} - ${fmtCurrency(total)}`)}`}
-                    alt="Código QR de verificación"
-                    className="w-32 h-32 border p-2 rounded-lg"
-                  />
-                  <p className="text-[10px] text-gray-400 mt-2">Escanear para verificar</p>
+                  {saleData.notes && (
+                    <>
+                      <Separator className="my-5" />
+                      <div>
+                        <h4 className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-500">Notas</h4>
+                        <p className="mt-2 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                          {saleData.notes}
+                        </p>
+                      </div>
+                    </>
+                  )}
+
+                  <Separator className="my-5" />
+
+                  <div className="rounded-2xl bg-slate-100 px-4 py-4 text-center">
+                    <p className="text-sm font-semibold text-slate-900">Conserve este ticket como referencia interna de la compra.</p>
+                    <p className="mt-1 text-xs text-slate-500">{saleData.documentDisclaimer}</p>
+                    {business.website && <p className="mt-2 text-xs text-slate-500">{business.website}</p>}
+                  </div>
                 </div>
               </div>
             </div>
           </ScrollArea>
 
-          {/* Footer con Acciones */}
-          <div className="p-4 bg-white dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 space-y-3">
-            {/* Acciones Rápidas (Iconos) */}
+          <div className="space-y-4 border-t border-slate-200 bg-white px-5 py-4 sm:px-6">
             <div className="grid grid-cols-4 gap-2">
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant="outline" className="flex flex-col h-auto py-2 gap-1 hover:bg-green-50 hover:text-green-600 hover:border-green-200" onClick={handleWhatsAppShare}>
-                      <MessageCircle size={20} />
+                    <Button variant="outline" className="flex h-auto flex-col gap-1 py-2" onClick={handleWhatsAppShare}>
+                      <MessageCircle className="h-5 w-5" />
                       <span className="text-[10px]">WhatsApp</span>
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Enviar por WhatsApp</TooltipContent>
+                  <TooltipContent>Enviar ticket interno por WhatsApp</TooltipContent>
                 </Tooltip>
 
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant="outline" className="flex flex-col h-auto py-2 gap-1 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200" onClick={handleEmailShare}>
-                      <Mail size={20} />
+                    <Button variant="outline" className="flex h-auto flex-col gap-1 py-2" onClick={handleEmailShare}>
+                      <Mail className="h-5 w-5" />
                       <span className="text-[10px]">Email</span>
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Enviar por Correo</TooltipContent>
+                  <TooltipContent>Enviar ticket interno por email</TooltipContent>
                 </Tooltip>
 
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant="outline" className="flex flex-col h-auto py-2 gap-1 hover:bg-gray-50" onClick={handleCopy}>
-                      {copied ? <Check size={20} className="text-green-500" /> : <Copy size={20} />}
+                    <Button variant="outline" className="flex h-auto flex-col gap-1 py-2" onClick={handleCopy}>
+                      {copied ? <Check className="h-5 w-5 text-emerald-600" /> : <Copy className="h-5 w-5" />}
                       <span className="text-[10px]">{copied ? 'Copiado' : 'Copiar'}</span>
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Copiar texto del recibo</TooltipContent>
+                  <TooltipContent>Copiar texto del ticket interno</TooltipContent>
                 </Tooltip>
 
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant="outline" className="flex flex-col h-auto py-2 gap-1 hover:bg-purple-50 hover:text-purple-600 hover:border-purple-200" onClick={handleNativeShare}>
-                      <Share2 size={20} />
+                    <Button variant="outline" className="flex h-auto flex-col gap-1 py-2" onClick={handleNativeShare}>
+                      <Share2 className="h-5 w-5" />
                       <span className="text-[10px]">Compartir</span>
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Compartir en otras apps</TooltipContent>
+                  <TooltipContent>Compartir ticket interno</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             </div>
 
-            {/* Acciones Principales */}
             <div className="flex gap-3">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={handlePDFDownload}
-                disabled={isDownloading}
-              >
-                <Download className="w-4 h-4 mr-2" />
-                {isDownloading ? '...' : 'PDF'}
+              <Button variant="outline" className="flex-1" onClick={handleTicketDownload} disabled={isDownloading}>
+                <Download className="mr-2 h-4 w-4" />
+                {isDownloading ? 'Descargando...' : 'Descargar ticket'}
               </Button>
-              <Button
-                className="flex-1 bg-blue-600 hover:bg-blue-700"
-                onClick={thermalPrinter ? handleThermalPrint : onPrint}
-                disabled={isPrinting}
-              >
-                <Printer className="w-4 h-4 mr-2" />
-                {isPrinting ? 'Imprimiendo...' : 'Imprimir Ticket'}
+              <Button className="flex-1" onClick={thermalPrinter ? handleThermalPrint : onPrint} disabled={isPrinting}>
+                <Printer className="mr-2 h-4 w-4" />
+                {isPrinting ? 'Imprimiendo...' : 'Imprimir ticket'}
               </Button>
             </div>
 
-            <div className="mt-4 p-3 border border-border dark:border-border rounded-lg bg-gray-50 dark:bg-gray-800">
-              <div className="text-sm font-medium mb-2 text-foreground dark:text-foreground">¿Cómo fue su experiencia en caja?</div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="text-sm font-medium text-slate-900">Evaluación de caja</div>
               {!csatSubmitted ? (
-                <div className="flex items-center gap-2">
-                  {[1,2,3,4,5].map((n) => (
-                    <Button key={n} variant={csatScore === n ? 'default' : 'outline'} size="sm" onClick={() => setCsatScore(n)}>
-                      {n}
+                <div className="mt-3 flex items-center gap-2">
+                  {[1, 2, 3, 4, 5].map((score) => (
+                    <Button
+                      key={score}
+                      variant={csatScore === score ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setCsatScore(score)}
+                    >
+                      {score}
                     </Button>
                   ))}
-                  <Button size="sm" onClick={() => { if (saleData) { try { const key = `csat:${saleData.id}`; localStorage.setItem(key, String(csatScore ?? '')); } catch {} } setCsatSubmitted(true); }}>Enviar</Button>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      if (!saleData) return;
+                      try {
+                        localStorage.setItem(`csat:${saleData.id}`, String(csatScore ?? ''));
+                      } catch {}
+                      setCsatSubmitted(true);
+                    }}
+                  >
+                    Enviar
+                  </Button>
                 </div>
               ) : (
-                <div className="text-sm text-green-600 dark:text-green-400">Gracias por su respuesta</div>
+                <div className="mt-2 text-sm text-emerald-600">Gracias por su respuesta</div>
               )}
             </div>
           </div>

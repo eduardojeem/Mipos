@@ -1,5 +1,6 @@
- import axios, { AxiosError, AxiosResponse } from 'axios';
- import { createClient } from './supabase/client';
+import axios, { AxiosError, AxiosResponse } from 'axios';
+import { createClient } from './supabase/client';
+import { getOperationalContextHeaders } from './operational-context';
 // NOTE: Do not import the UI store at module scope. It is client-only and
 // importing it on the server can crash SSR/API routes due to localStorage usage.
 
@@ -115,6 +116,7 @@ api.interceptors.request.use(
     } catch (error: unknown) {
       console.error('Error getting session:', error);
     }
+    // No mock headers: autenticación real vía Supabase sesión
     // Inject tenant header from selected organization (client-side)
     try {
       if (typeof window !== 'undefined') {
@@ -132,6 +134,18 @@ api.interceptors.request.use(
             (safeConfig.headers as any)['x-organization-id'] = String(orgId).trim();
           }
         }
+        if (!(safeConfig.headers as any)['x-organization-id']) {
+          const cookieMatch = document.cookie.match(/(?:^|; )x-organization-id=([^;]*)/);
+          const cookieOrg = cookieMatch ? decodeURIComponent(cookieMatch[1]) : '';
+          if (cookieOrg && cookieOrg.trim()) {
+            (safeConfig.headers as any)['x-organization-id'] = cookieOrg.trim();
+          }
+        }
+
+        const operationalHeaders = getOperationalContextHeaders();
+        Object.entries(operationalHeaders).forEach(([key, value]) => {
+          (safeConfig.headers as any)[key] = value;
+        });
       }
     } catch {}
     try {
@@ -139,7 +153,7 @@ api.interceptors.request.use(
       const isMutable = method !== 'GET';
       if (typeof window !== 'undefined' && isMutable) {
         const getCookie = (name: string) => {
-          const m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[.$?*|{}()\[\]\\\/\+^]/g, '\\$&') + '=([^;]*)'));
+          const m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
           return m ? decodeURIComponent(m[1]) : '';
         };
         let csrf = getCookie('csrf-token');
@@ -435,7 +449,7 @@ export interface CreateSaleItemData {
 export interface CreateSaleData {
   customerId?: string;
   items: CreateSaleItemData[];
-  paymentMethod: 'CASH' | 'CARD' | 'TRANSFER' | 'OTHER' | 'MIXED';
+  paymentMethod: 'CASH' | 'CARD' | 'TRANSFER' | 'QR' | 'OTHER' | 'MIXED';
   discount?: number;
   discountType?: 'PERCENTAGE' | 'FIXED_AMOUNT';
   tax?: number;
@@ -448,7 +462,7 @@ export interface CreateSaleData {
     authorizationCode?: string;
   };
   mixedPayments?: Array<{
-    type: 'CASH' | 'CARD' | 'TRANSFER' | 'OTHER';
+    type: 'CASH' | 'CARD' | 'TRANSFER' | 'QR' | 'OTHER';
     amount: number;
     details?: {
       lastFourDigits?: string;
@@ -475,7 +489,7 @@ export interface SaleResponse {
   cashReceived?: number;
   change?: number;
   mixedPayments?: Array<{
-    type: 'CASH' | 'CARD' | 'TRANSFER' | 'OTHER';
+    type: 'CASH' | 'CARD' | 'TRANSFER' | 'QR' | 'OTHER';
     amount: number;
     details?: {
       lastFourDigits?: string;

@@ -1,400 +1,313 @@
-'use client'
+'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
-import { ExternalLink, Eye, Smartphone, Tablet, Monitor, AlertCircle, Package, Star, Plus } from 'lucide-react'
-import { Card, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Checkbox } from '@/components/ui/checkbox'
-import api from '@/lib/api'
-import { createLogger } from '@/lib/logger'
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { ExternalLink, Eye, Smartphone, Tablet, Monitor, AlertCircle, Package } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import api, { getErrorMessage } from '@/lib/api';
+import { createLogger } from '@/lib/logger';
+import { getSelectedOrganizationId } from '@/lib/organization-context';
 
-// Constants for configuration
-const INITIAL_DISPLAY_COUNT = 4
-const PRODUCTS_PER_LOAD = 4
-const MAX_DISPLAY_COUNT = 12
+const INITIAL_DISPLAY_COUNT = 4;
 
 interface Promotion {
-  id: string
-  name: string
-  description: string
-  discountType: 'PERCENTAGE' | 'FIXED_AMOUNT'
-  discountValue: number
-  startDate: string
-  endDate: string
-  isActive: boolean
-}
-
-interface OfferPreviewProps {
-  promotion: Promotion
+  id: string;
+  name: string;
+  description: string;
+  discountType: 'PERCENTAGE' | 'FIXED_AMOUNT';
+  discountValue: number;
+  startDate: string;
+  endDate: string;
+  isActive: boolean;
 }
 
 interface OfferProduct {
-  id: string
-  name: string
-  price: number
-  stock: number
-  brand?: string
-  imageUrl?: string
-  category?: string
-  discountedPrice: number
-  savings: number
-  isAvailable: boolean
-  rating?: number
-  reviewCount?: number
+  id: string;
+  name: string;
+  price: number;
+  stock?: number;
+  brand?: string;
+  imageUrl?: string;
+  category?: string;
+  discountedPrice: number;
+  savings: number;
 }
 
 const logger = createLogger('OfferPreview');
 
-export function OfferPreview({ promotion }: OfferPreviewProps) {
-  const [products, setProducts] = useState<OfferProduct[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [viewMode, setViewMode] = useState<'desktop' | 'tablet' | 'mobile'>('desktop')
-  const [displayCount, setDisplayCount] = useState(INITIAL_DISPLAY_COUNT)
-  const [sortBy, setSortBy] = useState<'savings' | 'price' | 'name' | 'stock'>('savings')
-  const [categoryFilter, setCategoryFilter] = useState<string>('all')
-  const [showOutOfStock, setShowOutOfStock] = useState(true)
+const VIEW_MODES = {
+  desktop: { width: '100%', icon: Monitor, label: 'Desktop', description: 'Vista de escritorio' },
+  tablet: { width: '768px', icon: Tablet, label: 'Tablet', description: 'Vista tablet (768px)' },
+  mobile: { width: '375px', icon: Smartphone, label: 'Movil', description: 'Vista movil (375px)' },
+} as const;
 
-  // Memoized calculation function for performance
-  const calculateDiscountedPrice = useCallback((price: number) => {
-    if (promotion.discountType === 'PERCENTAGE') {
-      return price * (1 - promotion.discountValue / 100)
-    }
-    return Math.max(0, price - promotion.discountValue)
-  }, [promotion.discountType, promotion.discountValue])
-
-  // Memoized status calculation
-  const status = useMemo(() => {
-    const now = new Date()
-    const start = new Date(promotion.startDate)
-    const end = new Date(promotion.endDate)
-
-    if (!promotion.isActive) return 'inactive'
-    if (now < start) return 'scheduled'
-    if (now > end) return 'expired'
-    return 'active'
-  }, [promotion.isActive, promotion.startDate, promotion.endDate])
-
-  useEffect(() => {
-    fetchOfferProducts()
-  }, [promotion.id])
-
-  const fetchOfferProducts = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-
-    try {
-      logger.log('Fetching products for promotion:', promotion.id);
-
-      // Simulate API delay for realistic UX
-      await new Promise(resolve => setTimeout(resolve, 300))
-
-      const response = await api.get(`/promotions/${promotion.id}/products`)
-
-      if (response.data?.success) {
-        const productsData = response.data.data || []
-        const productsWithDiscount = productsData.map((p: any) => ({
-          ...p,
-          stock: p.stock || Math.floor(Math.random() * 50) + 1, // Mock stock if not provided
-          brand: p.brand || 'Marca Genérica',
-          isAvailable: (p.stock || Math.floor(Math.random() * 50) + 1) > 0,
-          rating: p.rating || (Math.random() * 2 + 3), // 3-5 stars
-          reviewCount: p.reviewCount || Math.floor(Math.random() * 100) + 5,
-          discountedPrice: calculateDiscountedPrice(p.price),
-          savings: p.price - calculateDiscountedPrice(p.price)
-        }))
-        setProducts(productsWithDiscount)
-      } else {
-        logger.log('API returned unsuccessful response')
-        setProducts([])
-      }
-    } catch (error) {
-      logger.error('Error fetching products:', error);
-      setError('Error al cargar productos desde Supabase.')
-      // No usar datos de ejemplo; reflejar estado real sin productos
-      setProducts([])
-    } finally {
-      setLoading(false)
-    }
-  }, [promotion.id, calculateDiscountedPrice])
-
-  // Memoized filtered and sorted products
-  const filteredAndSortedProducts = useMemo(() => {
-    let filtered = products
-
-    // Filter by category
-    if (categoryFilter !== 'all') {
-      filtered = filtered.filter(p => p.category === categoryFilter)
-    }
-
-    // Filter out of stock products if needed
-    if (!showOutOfStock) {
-      filtered = filtered.filter(p => p.stock > 0)
-    }
-
-    // Sort products
-    filtered.sort((a, b) => {
-      switch (sortBy) {
-        case 'savings':
-          return b.savings - a.savings
-        case 'price':
-          return a.discountedPrice - b.discountedPrice
-        case 'name':
-          return a.name.localeCompare(b.name)
-        case 'stock':
-          return b.stock - a.stock
-        default:
-          return 0
-      }
-    })
-
-    return filtered
-  }, [products, categoryFilter, showOutOfStock, sortBy])
-
-  // Memoized displayed products with pagination
-  const displayedProducts = useMemo(() => {
-    return filteredAndSortedProducts.slice(0, displayCount)
-  }, [filteredAndSortedProducts, displayCount])
-
-  // Extract categories for filter
-  const categories = useMemo(() => {
-    const uniqueCategories = Array.from(new Set(products.map(p => p.category).filter(Boolean) as string[]))
-    return uniqueCategories.sort()
-  }, [products])
-
-  // Pagination functions
-  const showMoreProducts = useCallback(() => {
-    setDisplayCount(prev => Math.min(prev + PRODUCTS_PER_LOAD, filteredAndSortedProducts.length, MAX_DISPLAY_COUNT))
-  }, [filteredAndSortedProducts.length])
-
-  const showLessProducts = useCallback(() => {
-    setDisplayCount(INITIAL_DISPLAY_COUNT)
-  }, [])
-
-  const viewModeConfig = {
-    desktop: { width: '100%', icon: Monitor, label: 'Desktop', description: 'Vista completa de escritorio' },
-    tablet: { width: '768px', icon: Tablet, label: 'Tablet', description: 'Vista de tablet (768px)' },
-    mobile: { width: '375px', icon: Smartphone, label: 'Móvil', description: 'Vista móvil (375px)' }
-  }
-
-  const handleOpenInPublicSite = useCallback(() => {
-    window.open(`/offers?promotion=${promotion.id}`, '_blank')
-  }, [promotion.id])
-
-  // Enhanced ProductCard component
-  const ProductCard = useMemo(() => {
-    return ({ product }: { product: OfferProduct }) => (
-      <Card className="overflow-hidden hover:shadow-lg transition-all duration-200">
-        <CardContent className="p-0">
-          {/* Product Image with overlays */}
-          <div className="relative aspect-square bg-slate-100 dark:bg-slate-800">
-            {product.imageUrl ? (
-              <img
-                src={product.imageUrl}
-                alt={product.name}
-                className="w-full h-full object-cover"
-                loading="lazy"
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <Package className="h-12 w-12 text-slate-400" />
-              </div>
-            )}
-
-            {/* Badges overlay */}
-            <div className="absolute top-2 right-2 flex flex-col gap-1">
-              <Badge className="bg-red-600 text-white text-xs">
-                -{promotion.discountType === 'PERCENTAGE'
-                  ? `${promotion.discountValue}%`
-                  : `$${promotion.discountValue}`
-                }
-              </Badge>
-              {product.stock <= 5 && product.stock > 0 && (
-                <Badge variant="destructive" className="text-xs">
-                  Solo {product.stock}
-                </Badge>
-              )}
-              {product.stock === 0 && (
-                <Badge variant="secondary" className="text-xs">
-                  Agotado
-                </Badge>
-              )}
-            </div>
-
-            {/* Rating overlay */}
-            {product.rating && (
-              <div className="absolute bottom-2 left-2 bg-black/70 text-white px-2 py-1 rounded text-xs flex items-center gap-1">
-                <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                {product.rating.toFixed(1)} ({product.reviewCount || 0})
-              </div>
-            )}
-          </div>
-
-          {/* Enhanced Product Info */}
-          <div className="p-4 space-y-2">
-            <div className="flex items-start justify-between gap-2">
-              <h3 className="font-semibold text-sm line-clamp-2 flex-1">
-                {product.name}
-              </h3>
-              {product.brand && (
-                <Badge variant="outline" className="text-xs shrink-0">
-                  {product.brand}
-                </Badge>
-              )}
-            </div>
-
-            {product.category && (
-              <Badge variant="secondary" className="text-xs">
-                {product.category}
-              </Badge>
-            )}
-
-            <div className="flex items-baseline gap-2">
-              <span className="text-xl font-bold text-green-600">
-                ${product.discountedPrice.toFixed(2)}
-              </span>
-              <span className="text-sm text-slate-500 line-through">
-                ${product.price.toFixed(2)}
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-green-600 font-medium">
-                Ahorra ${product.savings.toFixed(2)}
-              </p>
-              <p className="text-xs text-slate-500">
-                {product.isAvailable ? 'Disponible' : 'No disponible'}
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    )
-  }, [promotion.discountType, promotion.discountValue])
-
-  // Enhanced ProductSkeleton component
-  const ProductSkeleton = useMemo(() => {
-    return () => (
-      <Card className="overflow-hidden">
-        <div className="aspect-square bg-slate-200 dark:bg-slate-700 animate-pulse relative">
-          {/* Skeleton badges */}
-          <div className="absolute top-2 right-2 space-y-1">
-            <div className="w-12 h-5 bg-slate-300 dark:bg-slate-600 rounded animate-pulse" />
-            <div className="w-16 h-4 bg-slate-300 dark:bg-slate-600 rounded animate-pulse" />
-          </div>
-          {/* Skeleton rating */}
-          <div className="absolute bottom-2 left-2 w-20 h-6 bg-slate-300 dark:bg-slate-600 rounded animate-pulse" />
-        </div>
-        <div className="p-4 space-y-2">
-          <div className="flex justify-between items-start gap-2">
-            <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded animate-pulse flex-1" />
-            <div className="w-12 h-4 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
-          </div>
-          <div className="w-20 h-3 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
-          <div className="flex gap-2 items-baseline">
-            <div className="w-16 h-6 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
-            <div className="w-12 h-4 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
-          </div>
-          <div className="flex justify-between">
-            <div className="w-20 h-3 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
-            <div className="w-16 h-3 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
-          </div>
-        </div>
-      </Card>
-    )
-  }, [])
+function OfferProductCard({
+  product,
+  discountType,
+  discountValue,
+}: {
+  product: OfferProduct;
+  discountType: Promotion['discountType'];
+  discountValue: number;
+}) {
+  const isOutOfStock = product.stock === 0;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-        <div className="space-y-1">
-          <h3 className="text-lg font-semibold flex items-center gap-2">
-            <Eye className="h-5 w-5 text-violet-600" />
+    <Card className={`overflow-hidden hover:shadow-lg transition-shadow ${isOutOfStock ? 'opacity-60' : ''}`}>
+      <CardContent className="p-0">
+        <div className="relative aspect-square bg-slate-100 dark:bg-slate-800">
+          {product.imageUrl ? (
+            <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" loading="lazy" />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <Package className="h-10 w-10 text-slate-400" />
+            </div>
+          )}
+          <div className="absolute top-2 right-2 flex flex-col gap-1">
+            <Badge className="bg-red-600 text-white text-xs">
+              -{discountType === 'PERCENTAGE' ? `${discountValue}%` : `$${discountValue}`}
+            </Badge>
+            {product.stock != null && product.stock <= 5 && product.stock > 0 && (
+              <Badge variant="destructive" className="text-xs">Solo {product.stock}</Badge>
+            )}
+            {isOutOfStock && (
+              <Badge variant="secondary" className="text-xs">Agotado</Badge>
+            )}
+          </div>
+        </div>
+        <div className="p-3 space-y-1.5">
+          <p className="font-semibold text-sm line-clamp-2">{product.name}</p>
+          {product.brand && (
+            <Badge variant="outline" className="text-xs">{product.brand}</Badge>
+          )}
+          {product.category && (
+            <Badge variant="secondary" className="text-xs">{product.category}</Badge>
+          )}
+          <div className="flex items-baseline gap-2">
+            <span className="text-lg font-bold text-green-600">${product.discountedPrice.toFixed(2)}</span>
+            <span className="text-sm text-slate-400 line-through">${product.price.toFixed(2)}</span>
+          </div>
+          <p className="text-xs text-green-600 font-medium">Ahorra ${product.savings.toFixed(2)}</p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function OfferProductSkeleton() {
+  return (
+    <Card className="overflow-hidden">
+      <div className="aspect-square bg-slate-200 dark:bg-slate-700 animate-pulse" />
+      <div className="p-3 space-y-2">
+        <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded animate-pulse w-3/4" />
+        <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded animate-pulse w-1/2" />
+        <div className="h-5 bg-slate-200 dark:bg-slate-700 rounded animate-pulse w-1/3" />
+      </div>
+    </Card>
+  );
+}
+
+export function OfferPreview({ promotion }: { promotion: Promotion }) {
+  const [products, setProducts] = useState<OfferProduct[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<keyof typeof VIEW_MODES>('desktop');
+  const [sortBy, setSortBy] = useState<'savings' | 'price' | 'name'>('savings');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [showOutOfStock, setShowOutOfStock] = useState(true);
+
+  const calculateDiscountedPrice = useCallback(
+    (price: number) =>
+      promotion.discountType === 'PERCENTAGE'
+        ? price * (1 - promotion.discountValue / 100)
+        : Math.max(0, price - promotion.discountValue),
+    [promotion.discountType, promotion.discountValue],
+  );
+
+  const status = useMemo(() => {
+    const now = new Date();
+    const start = new Date(promotion.startDate);
+    const end = new Date(promotion.endDate);
+    if (!promotion.isActive) return 'inactive';
+    if (now < start) return 'scheduled';
+    if (now > end) return 'expired';
+    return 'active';
+  }, [promotion.isActive, promotion.startDate, promotion.endDate]);
+
+  const fetchProducts = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const orgId = getSelectedOrganizationId();
+      const response = await api.get(`/promotions/${promotion.id}/products`, {
+        headers: orgId ? { 'x-organization-id': orgId } : {},
+      });
+
+      if (!response.data?.success) {
+        setProducts([]);
+        return;
+      }
+
+      const raw: Array<Record<string, unknown>> = response.data.data || [];
+      setProducts(
+        raw.map((product) => {
+          const basePrice = Number(product.price ?? product.salePrice ?? 0);
+          const discountedPrice = calculateDiscountedPrice(basePrice);
+
+          return {
+            id: String(product.id || ''),
+            name: String(product.name || ''),
+            price: basePrice,
+            stock: product.stock != null ? Number(product.stock) : undefined,
+            brand: typeof product.brand === 'string' ? product.brand : undefined,
+            imageUrl: typeof product.imageUrl === 'string'
+              ? product.imageUrl
+              : typeof product.image === 'string'
+                ? product.image
+                : undefined,
+            category: typeof product.category === 'string' ? product.category : undefined,
+            discountedPrice,
+            savings: basePrice - discountedPrice,
+          };
+        }),
+      );
+    } catch (err) {
+      const apiError = err as {
+        response?: { status?: number; data?: unknown };
+        code?: string;
+      };
+      const message = getErrorMessage(err);
+
+      logger.error('Error fetching products:', {
+        message,
+        code: apiError.code,
+        status: apiError.response?.status,
+        details: apiError.response?.data,
+      });
+
+      setError(message || 'No se pudieron cargar los productos de esta promocion.');
+      setProducts([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [promotion.id, calculateDiscountedPrice]);
+
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
+
+  const categories = useMemo(
+    () => Array.from(new Set(products.map((product) => product.category).filter(Boolean) as string[])).sort(),
+    [products],
+  );
+
+  const displayedProducts = useMemo(() => {
+    let list = [...products];
+    if (categoryFilter !== 'all') list = list.filter((product) => product.category === categoryFilter);
+    if (!showOutOfStock) list = list.filter((product) => product.stock == null || product.stock > 0);
+
+    list.sort((a, b) => {
+      if (sortBy === 'savings') return b.savings - a.savings;
+      if (sortBy === 'price') return a.discountedPrice - b.discountedPrice;
+      return a.name.localeCompare(b.name);
+    });
+
+    return list.slice(0, INITIAL_DISPLAY_COUNT);
+  }, [products, categoryFilter, showOutOfStock, sortBy]);
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+        <div>
+          <h3 className="text-base font-semibold flex items-center gap-2">
+            <Eye className="h-4 w-4 text-violet-600" />
             Vista Previa de Oferta
           </h3>
-          <p className="text-sm text-slate-600 dark:text-slate-400">
-            Así se verá esta promoción en el sitio público
-          </p>
+          <p className="text-sm text-slate-500 mt-0.5">Asi se vera en el sitio publico</p>
         </div>
-
         <Button
-          onClick={handleOpenInPublicSite}
           variant="outline"
+          size="sm"
+          onClick={() => window.open(`/offers?promotion=${promotion.id}`, '_blank')}
           className="gap-2"
         >
           <ExternalLink className="h-4 w-4" />
-          Abrir en sitio público
+          Abrir en sitio
         </Button>
       </div>
 
-      {/* Error Display */}
-      {error && (
+      {status !== 'active' && (
         <Card className="border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-950/20">
-          <CardContent className="p-4 flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+          <CardContent className="p-3 flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="font-semibold text-yellow-900 dark:text-yellow-200 text-sm">
-                {error}
+              <p className="text-sm font-medium text-yellow-900 dark:text-yellow-200">
+                {status === 'scheduled' && 'Esta promocion aun no ha comenzado'}
+                {status === 'expired' && 'Esta promocion ha expirado'}
+                {status === 'inactive' && 'Esta promocion esta inactiva'}
+              </p>
+              <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-0.5">
+                Los clientes no veran esta oferta hasta que este activa.
               </p>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* View Mode Selector */}
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center justify-center gap-2">
-          {Object.entries(viewModeConfig).map(([mode, config]) => {
-            const Icon = config.icon
-            return (
-              <Button
-                key={mode}
-                variant={viewMode === mode ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setViewMode(mode as any)}
-                className="gap-2"
-                title={config.description}
-              >
-                <Icon className="h-4 w-4" />
-                {config.label}
-              </Button>
-            )
-          })}
-        </div>
+      {error && (
+        <Card className="border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20">
+          <CardContent className="p-3 flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+          </CardContent>
+        </Card>
+      )}
 
-        {/* Viewport Info */}
-        <div className="text-center text-sm text-slate-500">
-          Vista: {viewModeConfig[viewMode].description}
-        </div>
+      <div className="flex items-center justify-center gap-2">
+        {(Object.entries(VIEW_MODES) as [keyof typeof VIEW_MODES, typeof VIEW_MODES[keyof typeof VIEW_MODES]][]).map(([mode, config]) => {
+          const Icon = config.icon;
+          return (
+            <Button
+              key={mode}
+              variant={viewMode === mode ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setViewMode(mode)}
+              className="gap-2"
+              title={config.description}
+            >
+              <Icon className="h-4 w-4" />
+              <span className="hidden sm:inline">{config.label}</span>
+            </Button>
+          );
+        })}
       </div>
 
-      {/* Filter Controls */}
-      {!loading && filteredAndSortedProducts.length > 0 && (
+      {!loading && products.length > 0 && (
         <div className="flex flex-wrap gap-3 items-center justify-center">
           <Select value={sortBy} onValueChange={(value) => setSortBy(value as typeof sortBy)}>
-            <SelectTrigger className="w-40">
+            <SelectTrigger className="w-40 h-9">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="savings">Mayor ahorro</SelectItem>
               <SelectItem value="price">Menor precio</SelectItem>
               <SelectItem value="name">Nombre A-Z</SelectItem>
-              <SelectItem value="stock">Mayor stock</SelectItem>
             </SelectContent>
           </Select>
 
           {categories.length > 1 && (
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="w-40">
+              <SelectTrigger className="w-44 h-9">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todas las categorías</SelectItem>
-                {categories.filter(cat => cat && cat.trim()).map(cat => (
-                  <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                <SelectItem value="all">Todas las categorias</SelectItem>
+                {categories.map((category) => (
+                  <SelectItem key={category} value={category}>{category}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -402,162 +315,81 @@ export function OfferPreview({ promotion }: OfferPreviewProps) {
 
           <div className="flex items-center gap-2">
             <Checkbox
-              id="show-out-of-stock"
+              id="show-oos"
               checked={showOutOfStock}
-              onCheckedChange={(checked) => setShowOutOfStock(checked === true)}
+              onCheckedChange={(value) => setShowOutOfStock(value === true)}
             />
-            <label htmlFor="show-out-of-stock" className="text-sm">
+            <label htmlFor="show-oos" className="text-sm cursor-pointer select-none">
               Mostrar sin stock
             </label>
           </div>
         </div>
       )}
 
-      {/* Status Warning */}
-      {status !== 'active' && (
-        <Card className="border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-950/20">
-          <CardContent className="p-4 flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="font-semibold text-yellow-900 dark:text-yellow-200 text-sm">
-                {status === 'scheduled' && 'Esta promoción aún no ha comenzado'}
-                {status === 'expired' && 'Esta promoción ha expirado'}
-                {status === 'inactive' && 'Esta promoción está inactiva'}
-              </p>
-              <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
-                Los clientes no podrán ver esta oferta en el sitio público hasta que esté activa.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Preview Container */}
-      <div className="bg-slate-100 dark:bg-slate-900 rounded-lg p-6 flex justify-center">
+      <div className="bg-slate-100 dark:bg-slate-900 rounded-lg p-4 flex justify-center">
         <div
-          style={{
-            width: viewModeConfig[viewMode].width,
-            maxWidth: '100%',
-            transition: 'width 0.3s ease'
-          }}
+          style={{ width: VIEW_MODES[viewMode].width, maxWidth: '100%', transition: 'width 0.3s ease' }}
           className="bg-white dark:bg-slate-950 rounded-lg shadow-xl overflow-hidden"
         >
-          {/* Offer Card Preview */}
-          <div className="p-6 space-y-4">
-            {/* Promotion Header */}
-            <div className="space-y-2">
-              <div className="flex items-start justify-between gap-4">
-                <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
-                  {promotion.name}
-                </h2>
-                <Badge className="bg-gradient-to-r from-violet-600 to-indigo-600 text-white">
-                  {promotion.discountType === 'PERCENTAGE'
-                    ? `-${promotion.discountValue}%`
-                    : `-$${promotion.discountValue}`
-                  }
-                </Badge>
+          <div className="p-5 space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900 dark:text-white">{promotion.name}</h2>
+                <p className="text-sm text-slate-500 mt-1">{promotion.description}</p>
               </div>
-              <p className="text-slate-600 dark:text-slate-400">
-                {promotion.description}
-              </p>
+              <Badge className="bg-gradient-to-r from-violet-600 to-indigo-600 text-white shrink-0">
+                {promotion.discountType === 'PERCENTAGE'
+                  ? `-${promotion.discountValue}%`
+                  : `-$${promotion.discountValue}`}
+              </Badge>
             </div>
 
-            {/* Products Grid */}
             {loading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {[...Array(4)].map((_, i) => (
-                  <div key={i} className="animate-pulse">
-                    <div className="h-48 bg-slate-200 dark:bg-slate-800 rounded-lg mb-3" />
-                    <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-3/4 mb-2" />
-                    <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded w-1/2" />
-                  </div>
-                ))}
+              <div className="grid grid-cols-2 gap-3">
+                {Array.from({ length: 4 }).map((_, index) => <OfferProductSkeleton key={index} />)}
               </div>
-            ) : products.length === 0 ? (
+            ) : displayedProducts.length === 0 ? (
               <Card className="border-dashed">
-                <CardContent className="flex flex-col items-center justify-center p-12 text-center">
-                  <AlertCircle className="h-12 w-12 text-slate-300 dark:text-slate-700 mb-3" />
-                  <p className="text-sm text-slate-600 dark:text-slate-400">
-                    No hay productos asociados a esta promoción
+                <CardContent className="flex flex-col items-center justify-center p-10 text-center">
+                  <Package className="h-10 w-10 text-slate-300 mb-3" />
+                  <p className="text-sm text-slate-500">
+                    {products.length === 0
+                      ? 'No hay productos asociados a esta promocion'
+                      : 'Ningun producto coincide con los filtros aplicados'}
                   </p>
-                  <p className="text-xs text-slate-500 dark:text-slate-500 mt-2">
-                    Agrega productos en la pestaña "Productos" para verlos aquí
-                  </p>
+                  {products.length === 0 && (
+                    <p className="text-xs text-slate-400 mt-1">
+                      Agrega productos en la pestana "Productos"
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {products.slice(0, 4).map((product) => (
-                  <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-shadow">
-                    <CardContent className="p-0">
-                      {/* Product Image */}
-                      <div className="relative aspect-square bg-slate-100 dark:bg-slate-800">
-                        {product.imageUrl ? (
-                          <img
-                            src={product.imageUrl}
-                            alt={product.name}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <span className="text-slate-400 text-sm">Sin imagen</span>
-                          </div>
-                        )}
-                        <div className="absolute top-2 right-2">
-                          <Badge className="bg-red-600 text-white">
-                            -{promotion.discountType === 'PERCENTAGE'
-                              ? `${promotion.discountValue}%`
-                              : `$${promotion.discountValue}`
-                            }
-                          </Badge>
-                        </div>
-                      </div>
-
-                      {/* Product Info */}
-                      <div className="p-4 space-y-2">
-                        <h3 className="font-semibold text-sm line-clamp-2">
-                          {product.name}
-                        </h3>
-                        {product.category && (
-                          <Badge variant="secondary" className="text-xs">
-                            {product.category}
-                          </Badge>
-                        )}
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-xl font-bold text-green-600">
-                            ${product.discountedPrice.toFixed(2)}
-                          </span>
-                          <span className="text-sm text-slate-500 line-through">
-                            ${product.price.toFixed(2)}
-                          </span>
-                        </div>
-                        <p className="text-xs text-green-600">
-                          Ahorra ${product.savings.toFixed(2)}
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-
-            {products.length > 4 && (
-              <p className="text-center text-sm text-slate-500 dark:text-slate-500 pt-4">
-                Y {products.length - 4} producto{products.length - 4 !== 1 ? 's' : ''} más...
-              </p>
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  {displayedProducts.map((product) => (
+                    <OfferProductCard
+                      key={product.id}
+                      product={product}
+                      discountType={promotion.discountType}
+                      discountValue={promotion.discountValue}
+                    />
+                  ))}
+                </div>
+                {products.length > INITIAL_DISPLAY_COUNT && (
+                  <p className="text-center text-sm text-slate-400 pt-2">
+                    Y {products.length - INITIAL_DISPLAY_COUNT} producto{products.length - INITIAL_DISPLAY_COUNT !== 1 ? 's' : ''} mas...
+                  </p>
+                )}
+              </>
             )}
           </div>
         </div>
       </div>
 
-      {/* Info Footer */}
-      <Card className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/20">
-        <CardContent className="p-4">
-          <p className="text-sm text-blue-900 dark:text-blue-200">
-            <strong>Nota:</strong> Esta es una vista previa aproximada. El diseño final puede variar ligeramente según el dispositivo y navegador del cliente.
-          </p>
-        </CardContent>
-      </Card>
+      <p className="text-xs text-slate-400 text-center">
+        Vista previa aproximada. El diseno final puede variar segun el dispositivo del cliente.
+      </p>
     </div>
-  )
+  );
 }

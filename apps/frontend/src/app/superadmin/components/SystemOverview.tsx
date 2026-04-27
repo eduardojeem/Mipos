@@ -15,13 +15,14 @@ import {
   Activity,
 } from 'lucide-react';
 import { useAdminData } from '../hooks/useAdminData';
+import { getCanonicalPlanDisplayName, normalizePlanSlug } from '@/lib/plan-catalog';
 
 export const SystemOverview = memo(function SystemOverview() {
   const { stats, organizations, loading, error } = useAdminData();
   const [, setPlanSummary] = useState<{ totalAuthUsers: number; plans: { name: string; organizations: number; users: number }[]; organizationsWithoutSubscription?: string[] } | null>(null);
   const [assignOpen, setAssignOpen] = useState(false);
   const [assignOrg] = useState<string | null>(null);
-  const [assignPlan, setAssignPlan] = useState<string>('pro');
+  const [assignPlan, setAssignPlan] = useState<string>('starter');
   const [assignCycle, setAssignCycle] = useState<string>('monthly');
 
   const formatCurrency = (amount: number) => {
@@ -33,7 +34,7 @@ export const SystemOverview = memo(function SystemOverview() {
   };
 
   const getPlanCount = (plan: string) => {
-    return organizations.filter(org => org.subscription_plan === plan).length;
+    return organizations.filter(org => normalizePlanSlug(org.subscription_plan) === normalizePlanSlug(plan)).length;
   };
 
   useEffect(() => {
@@ -215,7 +216,7 @@ export const SystemOverview = memo(function SystemOverview() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {['FREE', 'PRO'].map((plan) => {
+              {['FREE', 'STARTER', 'PROFESSIONAL'].map((plan) => {
                 const count = getPlanCount(plan);
                 const percentage = stats.totalOrganizations > 0 ? (count / stats.totalOrganizations) * 100 : 0;
                 
@@ -229,7 +230,7 @@ export const SystemOverview = memo(function SystemOverview() {
                           ${plan === 'PRO' ? 'bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-950/30 dark:text-emerald-300' : ''}
                         `}
                       >
-                        {plan}
+                        {getCanonicalPlanDisplayName(plan)}
                       </Badge>
                       <span className="text-sm text-slate-600 dark:text-slate-400">{count} organizaciones</span>
                     </div>
@@ -287,7 +288,8 @@ export const SystemOverview = memo(function SystemOverview() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="free">Free</SelectItem>
-                  <SelectItem value="pro">Pro</SelectItem>
+                  <SelectItem value="starter">Starter</SelectItem>
+                  <SelectItem value="professional">Professional</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -1,12 +1,13 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react';
 import { BusinessConfig, BusinessConfigUpdate, defaultBusinessConfig } from '@/types/business-config';
 import { supabaseRealtimeService } from '@/lib/supabase-realtime'
 import { isSupabaseActive } from '@/lib/env'
 import { syncLogger } from '@/lib/sync/sync-logging'
 import { useAuth } from '@/hooks/use-auth'
 import { useUserOrganizations } from '@/hooks/use-user-organizations'
+import { formatCurrency } from '@/lib/utils'
 
 // Normaliza el esquema de BusinessConfig para compatibilidad del carrusel
 function normalizeBusinessConfig(input: BusinessConfig): BusinessConfig {
@@ -25,16 +26,16 @@ function normalizeBusinessConfig(input: BusinessConfig): BusinessConfig {
       .filter((img: any) => img.url);
     cfg.carousel = { ...(cfg.carousel || { enabled: true, transitionSeconds: 5, images: [] }), images: mapped };
   }
-  // Espejar imágenes en items para clientes legacy (no se usa en UI actual)
+  // Espejar imÃ¡genes en items para clientes legacy (no se usa en UI actual)
   if (cfg.carousel && Array.isArray(cfg.carousel.images)) {
     (cfg as any).carousel.items = cfg.carousel.images.map((img) => ({ id: img.id, url: img.url, alt: img.alt }));
   }
-  // Clampear transición a rango permitido 3-10
+  // Clampear transiciÃ³n a rango permitido 3-10
   const t = cfg.carousel?.transitionSeconds;
   if (typeof t !== 'number' || t < 3 || t > 10) {
     cfg.carousel = { ...(cfg.carousel || {}), transitionSeconds: Math.min(10, Math.max(3, Number(t) || 5)), enabled: cfg.carousel?.enabled ?? true, images: cfg.carousel?.images ?? [] };
   }
-  // Defaults y validación leve para nuevos campos de carrusel
+  // Defaults y validaciÃ³n leve para nuevos campos de carrusel
   const r = cfg.carousel?.ratio;
   if (r !== undefined && (!isFinite(Number(r)) || Number(r) <= 0)) {
     cfg.carousel = { ...(cfg.carousel || {}), ratio: defaultBusinessConfig.carousel.ratio };
@@ -58,6 +59,16 @@ function normalizeBusinessConfig(input: BusinessConfig): BusinessConfig {
   };
   cfg.homeOffersCarousel = fixedHoc;
   cfg.storeSettings = { ...(defaultBusinessConfig.storeSettings), ...(cfg.storeSettings || {}) };
+  cfg.publicSite = {
+    sections: {
+      ...defaultBusinessConfig.publicSite!.sections,
+      ...(cfg.publicSite?.sections || {}),
+    },
+    content: {
+      ...defaultBusinessConfig.publicSite!.content,
+      ...(cfg.publicSite?.content || {}),
+    },
+  };
   return cfg;
 }
 
@@ -78,6 +89,13 @@ interface BusinessConfigProviderProps {
   children: ReactNode;
 }
 
+interface StaticBusinessConfigProviderProps {
+  children: ReactNode;
+  config: BusinessConfig;
+  organizationId?: string | null;
+  organizationName?: string | null;
+}
+
 export function BusinessConfigProvider({ children }: BusinessConfigProviderProps) {
   const { user } = useAuth();
   const { selectedOrganization } = useUserOrganizations(user?.id);
@@ -86,8 +104,8 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [persisted, setPersisted] = useState<boolean>(false);
-  // BroadcastChannel para sincronización entre pestañas/ventanas
-  const [bc, setBc] = useState<BroadcastChannel | null>(null)
+  // BroadcastChannel para sincronizaciÃ³n entre pestaÃ±as/ventanas
+  const bcRef = useRef<BroadcastChannel | null>(null)
   
   // Organization context
   const organizationId = selectedOrganization?.id || null;
@@ -124,7 +142,7 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
     return `${hh} ${ss}% ${ll}%`;
   }, [hexToRgb]);
 
-  // Cola offline mínima para operaciones pendientes de persistencia
+  // Cola offline mÃ­nima para operaciones pendientes de persistencia
   type PendingUpdate = { config: BusinessConfig; queuedAt: number }
   const QUEUE_KEY = 'businessConfigQueue'
   
@@ -177,7 +195,7 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
         return { ok: true, status: 'success' }
       } else {
         const data = await response.json().catch(() => null)
-        const msg = data?.error || 'Error al guardar la configuración'
+        const msg = data?.error || 'Error al guardar la configuraciÃ³n'
         syncLogger.warn('Fallo al persistir BusinessConfig en API', { 
           organizationId,
           message: msg 
@@ -231,7 +249,7 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
       setLoading(true);
       setError(null);
 
-      // Cargar desde localStorage primero (scoped por organización)
+      // Cargar desde localStorage primero (scoped por organizaciÃ³n)
       try {
         const savedConfig = localStorage.getItem(getStorageKey('businessConfig'));
         const savedPersistedFlag = localStorage.getItem(getStorageKey('businessConfigPersisted'));
@@ -246,7 +264,7 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
         console.warn('Error loading from localStorage:', localErr);
       }
 
-      // Intentar cargar desde API si Supabase está activo
+      // Intentar cargar desde API si Supabase estÃ¡ activo
       try {
         if (isSupabaseActive()) {
           const url = `/api/business-config?organizationId=${organizationId}`;
@@ -263,7 +281,7 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
               const normalized = normalizeBusinessConfig({ ...defaultBusinessConfig, ...apiConfig });
               setConfig(normalized);
               
-              // Guardar en localStorage (scoped por organización)
+              // Guardar en localStorage (scoped por organizaciÃ³n)
               localStorage.setItem(getStorageKey('businessConfig'), JSON.stringify(normalized));
               localStorage.setItem(getStorageKey('businessConfigPersisted'), 'true');
               setPersisted(true);
@@ -276,15 +294,15 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
           }
         }
       } catch (apiErr) {
-        // Silenciar errores de red o API - usar configuración local
+        // Silenciar errores de red o API - usar configuraciÃ³n local
         console.warn('API config load failed, using local config:', apiErr);
       }
 
     } catch (err) {
       console.error('Error loading business config:', err);
-      setError('Error al cargar la configuración del negocio');
+      setError('Error al cargar la configuraciÃ³n del negocio');
       
-      // Fallback a configuración por defecto
+      // Fallback a configuraciÃ³n por defecto
       setConfig(defaultBusinessConfig);
       setPersisted(false);
     } finally {
@@ -292,29 +310,28 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
     }
   }, [organizationId, organizationName, getStorageKey]); // Dependencias actualizadas
 
-  // Cargar configuración desde localStorage o API - cuando cambia la organización
+  // Cargar configuraciÃ³n desde localStorage o API - cuando cambia la organizaciÃ³n
   useEffect(() => {
     loadConfig();
   }, [loadConfig]); // Recargar cuando cambia organizationId
 
   // Configurar suscripciones y listeners - separado del loadConfig
   useEffect(() => {
-    if (!organizationId) return; // No suscribirse sin organización
-    if (!isSupabaseActive()) return; // Evitar suscripciones cuando Supabase está inactivo
+    if (!organizationId) return; // No suscribirse sin organizaciÃ³n
+    if (!isSupabaseActive()) return; // Evitar suscripciones cuando Supabase estÃ¡ inactivo
     
-    // Suscribirse a cambios de business_config en tiempo real (si Supabase está activo)
+    // Suscribirse a cambios de business_config en tiempo real (si Supabase estÃ¡ activo)
     let unsubscribe: (() => Promise<void>) | null = null
     let storageListener: ((e: StorageEvent) => void) | null = null
     let bcListener: ((ev: MessageEvent) => void) | null = null
-    let onlineListener: (() => void) | null = null
-    
+
     try {
       supabaseRealtimeService.subscribeToBusinessConfig(async (payload) => {
         if (payload?.config && typeof payload.config === 'object') {
           try {
             const remote = normalizeBusinessConfig({ ...defaultBusinessConfig, ...payload.config });
             
-            // Aplicar configuración remota directamente para evitar conflictos
+            // Aplicar configuraciÃ³n remota directamente para evitar conflictos
             setConfig(remote);
             localStorage.setItem(getStorageKey('businessConfig'), JSON.stringify(remote));
             localStorage.setItem(getStorageKey('businessConfigPersisted'), 'true');
@@ -333,7 +350,7 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
       }).catch(() => {});
     } catch {}
 
-    // Sincronización entre pestañas simplificada (scoped por organización)
+    // SincronizaciÃ³n entre pestaÃ±as simplificada (scoped por organizaciÃ³n)
     try {
       const storageKey = getStorageKey('businessConfig');
       storageListener = (e: StorageEvent) => {
@@ -346,7 +363,7 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
             const flag = localStorage.getItem(getStorageKey('businessConfigPersisted')) === 'true';
             setPersisted(flag);
             
-            syncLogger.info('BusinessConfig sincronizado vía storage event', {
+            syncLogger.info('BusinessConfig sincronizado vÃ­a storage event', {
               organizationId
             });
           } catch (err) {
@@ -357,11 +374,11 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
       window.addEventListener('storage', storageListener);
     } catch {}
 
-    // BroadcastChannel scoped por organización
+    // BroadcastChannel scoped por organizaciÃ³n
     try {
       const channelName = `business-config-${organizationId}`;
       const channel = new BroadcastChannel(channelName);
-      setBc(channel);
+      bcRef.current = channel;
       
       bcListener = (ev: MessageEvent) => {
         const data = ev?.data;
@@ -374,7 +391,7 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
             const flag = localStorage.getItem(getStorageKey('businessConfigPersisted')) === 'true';
             setPersisted(flag);
             
-            syncLogger.info('BusinessConfig sincronizado vía BroadcastChannel', {
+            syncLogger.info('BusinessConfig sincronizado vÃ­a BroadcastChannel', {
               organizationId
             });
           } catch (err) {
@@ -393,30 +410,38 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
         window.removeEventListener('storage', storageListener)
       }
       try {
-        if (bc && bcListener) {
-          (bc as any).removeEventListener?.('message', bcListener)
-          bc.close()
+        const activeChannel = bcRef.current
+        if (activeChannel && bcListener) {
+          (activeChannel as any).removeEventListener?.('message', bcListener)
+          activeChannel.close()
         }
+        bcRef.current = null
       } catch {}
-      if (onlineListener) {
-        window.removeEventListener('online', onlineListener)
-      }
     }
-  }, [organizationId, organizationName, getStorageKey]); // Recrear cuando cambia la organización
+  }, [organizationId, organizationName, getStorageKey]); // Recrear cuando cambia la organizaciÃ³n
 
   // Propagar colores de marca a variables CSS globales para toda la web
   useEffect(() => {
     try {
       const b = config?.branding || defaultBusinessConfig.branding;
       const root = document.documentElement;
-      // Tokens globales usados por Tailwind/Shadcn: hsl(var(--token))
-      root.style.setProperty('--primary', hexToHslTriple(b.primaryColor || defaultBusinessConfig.branding.primaryColor));
-      root.style.setProperty('--ring', hexToHslTriple((b.secondaryColor || defaultBusinessConfig.branding.secondaryColor)!));
-      root.style.setProperty('--background', hexToHslTriple((b.backgroundColor || defaultBusinessConfig.branding.backgroundColor)!));
-      root.style.setProperty('--foreground', hexToHslTriple((b.textColor || defaultBusinessConfig.branding.textColor)!));
-      // Tokens auxiliares de marca (custom)
-      root.style.setProperty('--accent', hexToHslTriple(b.accentColor || defaultBusinessConfig.branding.accentColor));
-      // —— Accesibilidad: elegir color de texto con mayor contraste (WCAG AA) para foregrounds
+      const primaryHex = b.primaryColor || defaultBusinessConfig.branding.primaryColor;
+      const secondaryHex = (b.secondaryColor || defaultBusinessConfig.branding.secondaryColor)!;
+      const accentHex = (b.accentColor || defaultBusinessConfig.branding.accentColor)!;
+      const backgroundHex = (b.backgroundColor || defaultBusinessConfig.branding.backgroundColor)!;
+      const textHex = (b.textColor || defaultBusinessConfig.branding.textColor)!;
+
+      // Tokens semánticos del sistema: solo conservar acentos seguros.
+      root.style.setProperty('--primary', hexToHslTriple(primaryHex));
+      root.style.setProperty('--ring', hexToHslTriple(secondaryHex));
+
+      // Tokens dedicados de marca para previews y páginas públicas.
+      root.style.setProperty('--brand-primary', hexToHslTriple(primaryHex));
+      root.style.setProperty('--brand-secondary', hexToHslTriple(secondaryHex));
+      root.style.setProperty('--brand-accent', hexToHslTriple(accentHex));
+      root.style.setProperty('--brand-background', hexToHslTriple(backgroundHex));
+      root.style.setProperty('--brand-foreground', hexToHslTriple(textHex));
+      // â€”â€” Accesibilidad: elegir color de texto con mayor contraste (WCAG AA) para foregrounds
       const hexToRgbLocal = (hex: string): [number, number, number] => {
         const h = (hex || '').replace('#', '');
         const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
@@ -450,14 +475,11 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
         const contrastLight = contrastRatio(bgHex, lightText);
         return contrastLight >= contrastDark ? lightText : darkText;
       };
-      const primaryHex = b.primaryColor || defaultBusinessConfig.branding.primaryColor;
-      const secondaryHex = (b.secondaryColor || defaultBusinessConfig.branding.secondaryColor)!;
-      const accentHex = (b.accentColor || defaultBusinessConfig.branding.accentColor)!;
       root.style.setProperty('--primary-foreground', hexToHslTriple(pickAccessibleText(primaryHex)));
-      root.style.setProperty('--secondary-foreground', hexToHslTriple(pickAccessibleText(secondaryHex)));
-      root.style.setProperty('--accent-foreground', hexToHslTriple(pickAccessibleText(accentHex)));
-      // Paleta de texto dedicada (jerarquía visual)
-      const textHex = (b.textColor || defaultBusinessConfig.branding.textColor)!;
+      root.style.setProperty('--brand-primary-foreground', hexToHslTriple(pickAccessibleText(primaryHex)));
+      root.style.setProperty('--brand-secondary-foreground', hexToHslTriple(pickAccessibleText(secondaryHex)));
+      root.style.setProperty('--brand-accent-foreground', hexToHslTriple(pickAccessibleText(accentHex)));
+      // Paleta de texto dedicada (jerarquÃ­a visual)
       root.style.setProperty('--text-primary', hexToHslTriple(textHex));
       root.style.setProperty('--text-accent', hexToHslTriple(accentHex));
       // Gradientes conservan HEX para uso en linear-gradient()
@@ -473,7 +495,7 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
 
   const updateConfig = async (updates: BusinessConfigUpdate) => {
     if (!organizationId) {
-      setError('No hay organización seleccionada');
+      setError('No hay organizaciÃ³n seleccionada');
       return { persisted: false, status: 'error', message: 'No organization selected' }
     }
     
@@ -491,14 +513,14 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
       // Actualizar estado local
       setConfig(normalizedUpdated);
 
-      // Guardar en localStorage (scoped por organización)
+      // Guardar en localStorage (scoped por organizaciÃ³n)
       localStorage.setItem(getStorageKey('businessConfig'), JSON.stringify(normalizedUpdated));
       // Por defecto marcamos como no persistido hasta confirmar
       localStorage.setItem(getStorageKey('businessConfigPersisted'), 'false');
       setPersisted(false)
       
-      // Difundir actualización inmediata
-      try { bc?.postMessage({ type: 'business-config:update', payload: normalizedUpdated }) } catch {}
+      // Difundir actualizaciÃ³n inmediata
+      try { bcRef.current?.postMessage({ type: 'business-config:update', payload: normalizedUpdated }) } catch {}
       try { window.dispatchEvent(new CustomEvent('business-config:updated', { detail: { config: normalizedUpdated } })) } catch {}
 
       // Guardar en API (requiere rol admin)
@@ -509,21 +531,25 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
         localStorage.setItem(getStorageKey('businessConfigPersisted'), 'true')
         setPersisted(true)
       } else {
-        // Encolar para persistencia cuando vuelva conexión / permisos
+        // Encolar para persistencia cuando vuelva conexiÃ³n / permisos
         enqueueUpdate(normalizedUpdated)
       }
 
-      syncLogger.info('Configuración de negocio actualizada localmente', { 
+      syncLogger.info('ConfiguraciÃ³n de negocio actualizada localmente', { 
         organizationId,
         organizationName,
         persisted 
       })
+      if (!apiRes.ok) {
+        setError(apiRes.message || 'No se pudo guardar en Supabase. El cambio quedo en cola local.')
+      }
+
       return { persisted, status: apiRes.ok ? 'success' : 'queued', message: apiRes.message }
 
     } catch (err) {
       console.error('Error updating business config:', err);
       syncLogger.error('Error al actualizar BusinessConfig', undefined, err)
-      setError('Error al actualizar la configuración del negocio');
+      setError('Error al actualizar la configuraciÃ³n del negocio');
       return { persisted: false, status: 'error', message: (err as any)?.message }
     } finally {
       setLoading(false);
@@ -532,7 +558,7 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
 
   const resetConfig = async () => {
     if (!organizationId) {
-      setError('No hay organización seleccionada');
+      setError('No hay organizaciÃ³n seleccionada');
       throw new Error('No organization selected');
     }
     
@@ -566,7 +592,7 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
           localStorage.setItem(getStorageKey('businessConfig'), JSON.stringify(apiConfig))
           localStorage.setItem(getStorageKey('businessConfigPersisted'), 'true')
           setPersisted(true)
-          try { bc?.postMessage({ type: 'business-config:update', payload: apiConfig }) } catch {}
+          try { bcRef.current?.postMessage({ type: 'business-config:update', payload: apiConfig }) } catch {}
           try { window.dispatchEvent(new CustomEvent('business-config:updated', { detail: { config: apiConfig } })) } catch {}
           syncLogger.info('BusinessConfig reseteado y persistido en API', {
             organizationId,
@@ -580,14 +606,14 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
 
     } catch (err) {
       console.error('Error resetting business config:', err);
-      setError('Error al resetear la configuración del negocio');
+      setError('Error al resetear la configuraciÃ³n del negocio');
       throw err;
     } finally {
       setLoading(false);
     }
   };
 
-  const value: BusinessConfigContextType = {
+  const value = useMemo<BusinessConfigContextType>(() => ({
     config,
     updateConfig,
     loading,
@@ -596,7 +622,7 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
     persisted,
     organizationId,
     organizationName
-  };
+  }), [config, updateConfig, loading, error, resetConfig, persisted, organizationId, organizationName]);
 
   return (
     <BusinessConfigContext.Provider value={value}>
@@ -613,20 +639,44 @@ export function useBusinessConfig() {
   return context;
 }
 
-// Hook personalizado para obtener solo la configuración (sin funciones de actualización)
+export function StaticBusinessConfigProvider({
+  children,
+  config,
+  organizationId = null,
+  organizationName = null,
+}: StaticBusinessConfigProviderProps) {
+  const normalizedConfig = useMemo(() => normalizeBusinessConfig(config), [config]);
+  const value = useMemo<BusinessConfigContextType>(() => ({
+    config: normalizedConfig,
+    updateConfig: async () => ({ persisted: true }),
+    loading: false,
+    error: null,
+    resetConfig: async () => {},
+    persisted: true,
+    organizationId,
+    organizationName,
+  }), [normalizedConfig, organizationId, organizationName]);
+
+  return (
+    <BusinessConfigContext.Provider value={value}>
+      {children}
+    </BusinessConfigContext.Provider>
+  );
+}
+
+// Hook personalizado para obtener solo la configuraciÃ³n (sin funciones de actualizaciÃ³n)
 export function useBusinessConfigData() {
   const { config, loading, error } = useBusinessConfig();
   return { config, loading, error };
 }
 
-// Formateador de moneda basado en configuración del negocio
+// Formateador de moneda basado en configuraciÃ³n del negocio
 export function useCurrencyFormatter() {
   const { config } = useBusinessConfig();
   const currencyCode = config?.storeSettings?.currency || 'PYG';
   const currencyLocale = config?.regional?.locale || 'es-PY';
   const currencyDecimals = currencyCode === 'PYG' ? 0 : 2;
   return (value: number) => {
-    const { formatCurrency } = require('@/lib/utils');
     return formatCurrency(value, currencyCode, currencyLocale, currencyDecimals);
   };
 }

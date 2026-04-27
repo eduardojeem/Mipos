@@ -96,6 +96,9 @@ export interface BusinessConfig {
     enableBarcodeScanner?: boolean;
     printReceipts?: boolean;
     enableCashDrawer?: boolean;
+    // POS Auto Actions
+    autoPrintOnSale?: boolean;
+    autoShareReceipt?: { whatsapp?: boolean; email?: boolean };
   };
 
   // Configuración del Sistema (Admin)
@@ -147,6 +150,45 @@ export interface BusinessConfig {
     intervalSeconds: number; // 3-10
     transitionMs: number; // 0-5000
     ratio?: number; // ancho/alto > 0
+  };
+
+  // Configuracion especifica del sitio publico del tenant
+  publicSite?: {
+    sections: {
+      showOffers: boolean;
+      showCatalog: boolean;
+      showCategories: boolean;
+      showFeaturedProducts: boolean;
+      showContactInfo: boolean;
+      showLocation: boolean;
+      showCart: boolean;
+      showOrderTracking: boolean;
+      showBusinessHours: boolean;
+      showSocialLinks: boolean;
+      showHeroStats: boolean;
+    };
+    content: {
+      announcementText?: string;
+      heroBadge?: string;
+      heroSecondaryText?: string;
+      heroPrimaryCtaLabel?: string;
+      heroSecondaryCtaLabel?: string;
+      heroImageUrl?: string;
+      featuredCategoriesTitle?: string;
+      featuredCategoriesDescription?: string;
+      featuredProductsTitle?: string;
+      featuredProductsDescription?: string;
+      offersTitle?: string;
+      offersDescription?: string;
+      catalogTitle?: string;
+      catalogDescription?: string;
+      orderTrackingTitle?: string;
+      orderTrackingDescription?: string;
+      contactTitle?: string;
+      contactDescription?: string;
+      footerHeadline?: string;
+      supportMessage?: string;
+    };
   };
 
   // Configuración de notificaciones
@@ -246,7 +288,7 @@ export const defaultBusinessConfig: BusinessConfig = {
     currencySymbol: "₲",
     taxRate: 0.10, // IVA 10% en Paraguay
     taxEnabled: true, // IVA habilitado por defecto
-    taxIncludedInPrices: false, // Precios sin IVA incluido por defecto
+    taxIncludedInPrices: true,
     freeShippingThreshold: 150000, // 150,000 guaraníes
     freeShippingEnabled: true,
     freeShippingMessage: "Envío gratis a partir de {amount}",
@@ -260,7 +302,9 @@ export const defaultBusinessConfig: BusinessConfig = {
     lowStockThreshold: 10,
     enableBarcodeScanner: true,
     printReceipts: true,
-    enableCashDrawer: true
+    enableCashDrawer: true,
+    autoPrintOnSale: true,
+    autoShareReceipt: { whatsapp: false, email: false }
   },
 
   systemSettings: {
@@ -315,6 +359,44 @@ export const defaultBusinessConfig: BusinessConfig = {
     intervalSeconds: 5,
     transitionMs: 700,
     ratio: 16 / 9,
+  },
+
+  publicSite: {
+    sections: {
+      showOffers: true,
+      showCatalog: true,
+      showCategories: true,
+      showFeaturedProducts: true,
+      showContactInfo: true,
+      showLocation: true,
+      showCart: true,
+      showOrderTracking: true,
+      showBusinessHours: true,
+      showSocialLinks: true,
+      showHeroStats: true,
+    },
+    content: {
+      announcementText: "",
+      heroBadge: "Tienda oficial",
+      heroSecondaryText: "Compra online, revisa promociones y sigue tus pedidos desde una experiencia publica unificada.",
+      heroPrimaryCtaLabel: "Ver catalogo",
+      heroSecondaryCtaLabel: "Ver ofertas",
+      heroImageUrl: "",
+      featuredCategoriesTitle: "Categorias destacadas",
+      featuredCategoriesDescription: "Explora las familias con mayor rotacion dentro del catalogo publico.",
+      featuredProductsTitle: "Productos destacados",
+      featuredProductsDescription: "Seleccion de productos activos con mejor traccion comercial.",
+      offersTitle: "Ofertas activas",
+      offersDescription: "Promociones visibles para clientes finales, con precios actualizados y ahorro claro.",
+      catalogTitle: "Catalogo completo",
+      catalogDescription: "Busca por categoria, filtra por disponibilidad y descubre productos del tenant actual.",
+      orderTrackingTitle: "Sigue tu pedido",
+      orderTrackingDescription: "Consulta el estado de tu compra con una vista clara y actualizada.",
+      contactTitle: "Contacto y soporte",
+      contactDescription: "Canales visibles para consultas, ubicacion y horarios del negocio.",
+      footerHeadline: "Compra con informacion clara, branding consistente y secciones publicas controladas desde el panel.",
+      supportMessage: "Si necesitas ayuda con tu pedido o una compra especifica, escribenos por nuestros canales oficiales.",
+    },
   },
 
   notifications: {

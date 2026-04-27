@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase';
+import { createAdminClient } from '@/lib/supabase/server';
+import { resolveTenantContextFromHeaders } from '@/lib/domain/request-tenant';
+import {
+  fetchOrderProductsForOrganization,
+  getEffectiveOrderProductPrice,
+  isSchemaMissingError,
+} from '@/lib/public-site/order-products';
 
 interface CartItemToValidate {
   id: string;
@@ -28,39 +34,52 @@ const MAX_TOTAL_ITEMS = 50;
 
 export async function POST(request: NextRequest) {
   try {
+    const tenantContext = await resolveTenantContextFromHeaders(request.headers);
+
+    if (tenantContext.kind !== 'tenant') {
+      return NextResponse.json(
+        { error: 'Tenant publico no resuelto para esta request.' },
+        { status: 400 }
+      );
+    }
+
     const body = await request.json();
     const { items } = body as { items: CartItemToValidate[] };
 
     if (!Array.isArray(items) || items.length === 0) {
       return NextResponse.json(
-        { error: 'Items inválidos' },
+        { error: 'Items invalidos' },
         { status: 400 }
       );
     }
 
-    // Validar cantidad total de items
-    const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
+    const totalItems = items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
     if (totalItems > MAX_TOTAL_ITEMS) {
       return NextResponse.json(
-        { 
-          error: `Cantidad máxima de items excedida. Máximo ${MAX_TOTAL_ITEMS} items por pedido.`,
-          maxTotalItems: MAX_TOTAL_ITEMS
+        {
+          error: `Cantidad maxima de items excedida. Maximo ${MAX_TOTAL_ITEMS} items por pedido.`,
+          maxTotalItems: MAX_TOTAL_ITEMS,
         },
         { status: 400 }
       );
     }
 
-    const supabase = createClient();
-    const productIds = items.map(item => item.id);
+    const supabase = await createAdminClient();
+    const productIds = items.map((item) => item.id);
+    const organizationId = tenantContext.organization.id;
 
-    // Obtener productos de la base de datos
-    const { data: products, error } = await supabase
-      .from('products')
-      .select('id, name, sale_price, offer_price, stock_quantity, is_active')
-      .in('id', productIds);
+    let products;
+    try {
+      products = await fetchOrderProductsForOrganization(supabase, organizationId, productIds);
+    } catch (error) {
+      if (isSchemaMissingError(error)) {
+        return NextResponse.json(
+          { error: 'La configuracion del catalogo publico todavia no esta lista.' },
+          { status: 503 }
+        );
+      }
 
-    if (error) {
-      console.error('Error fetching products:', error);
+      console.error('Error fetching products for cart validation:', error);
       return NextResponse.json(
         { error: 'Error al validar productos' },
         { status: 500 }
@@ -69,7 +88,7 @@ export async function POST(request: NextRequest) {
 
     if (!products || products.length === 0) {
       return NextResponse.json(
-        { error: 'No se encontraron productos' },
+        { error: 'No se encontraron productos publicados para este tenant' },
         { status: 404 }
       );
     }
@@ -78,12 +97,11 @@ export async function POST(request: NextRequest) {
       valid: true,
       items: [],
       total: 0,
-      errors: []
+      errors: [],
     };
 
-    // Validar cada item
     for (const item of items) {
-      const product = products.find((p: any) => p.id === item.id);
+      const product = products.find((current) => current.id === item.id);
 
       if (!product) {
         validationResults.valid = false;
@@ -92,86 +110,76 @@ export async function POST(request: NextRequest) {
           id: item.id,
           name: 'Producto no encontrado',
           validatedPrice: 0,
-          requestedPrice: item.price,
-          quantity: item.quantity,
+          requestedPrice: Number(item.price || 0),
+          quantity: Number(item.quantity || 0),
           maxQuantity: 0,
           isValid: false,
-          error: 'Producto no encontrado'
+          error: 'Producto no encontrado',
         });
         continue;
       }
 
-      // Validar que el producto esté activo
       if (!product.is_active) {
         validationResults.valid = false;
-        validationResults.errors.push(`${product.name} no está disponible`);
+        validationResults.errors.push(`${product.name} no esta disponible`);
         validationResults.items.push({
           id: product.id,
           name: product.name,
           validatedPrice: 0,
-          requestedPrice: item.price,
-          quantity: item.quantity,
+          requestedPrice: Number(item.price || 0),
+          quantity: Number(item.quantity || 0),
           maxQuantity: 0,
           isValid: false,
-          error: 'Producto no disponible'
+          error: 'Producto no disponible',
         });
         continue;
       }
 
-      // Obtener precio correcto (offer_price o sale_price)
-      const validatedPrice = product.offer_price || product.sale_price;
-      const stockQuantity = product.stock_quantity || 0;
-
-      // Validar precio
-      const priceDifference = Math.abs(validatedPrice - item.price);
-      const priceValid = priceDifference < 0.01; // Tolerancia de 1 centavo
-
-      // Validar stock
-      const stockValid = item.quantity <= stockQuantity;
-
-      // Validar cantidad máxima por producto
-      const quantityValid = item.quantity <= MAX_QTY_PER_PRODUCT;
-
-      const itemValid = priceValid && stockValid && quantityValid;
+      const validatedPrice = getEffectiveOrderProductPrice(product);
+      const stockQuantity = Number(product.stock_quantity || 0);
+      const requestedPrice = Number(item.price || 0);
+      const requestedQuantity = Number(item.quantity || 0);
+      const priceValid = Math.abs(validatedPrice - requestedPrice) < 0.01;
+      const stockValid = requestedQuantity <= stockQuantity;
+      const quantityValid = requestedQuantity <= MAX_QTY_PER_PRODUCT;
+      const itemValid = stockValid && quantityValid;
 
       if (!itemValid) {
         validationResults.valid = false;
       }
 
-      const errors: string[] = [];
+      const itemErrors: string[] = [];
       if (!priceValid) {
-        errors.push(`Precio incorrecto. Precio actual: ${validatedPrice}`);
+        itemErrors.push(`Precio actualizado. Precio actual: ${validatedPrice}`);
       }
       if (!stockValid) {
-        errors.push(`Stock insuficiente. Disponible: ${stockQuantity}`);
+        itemErrors.push(`Stock insuficiente. Disponible: ${stockQuantity}`);
       }
       if (!quantityValid) {
-        errors.push(`Cantidad máxima por producto: ${MAX_QTY_PER_PRODUCT}`);
+        itemErrors.push(`Cantidad maxima por producto: ${MAX_QTY_PER_PRODUCT}`);
       }
 
       validationResults.items.push({
         id: product.id,
         name: product.name,
         validatedPrice,
-        requestedPrice: item.price,
-        quantity: Math.min(item.quantity, stockQuantity, MAX_QTY_PER_PRODUCT),
+        requestedPrice,
+        quantity: Math.min(requestedQuantity, stockQuantity, MAX_QTY_PER_PRODUCT),
         maxQuantity: Math.min(stockQuantity, MAX_QTY_PER_PRODUCT),
         isValid: itemValid,
-        error: errors.length > 0 ? errors.join('. ') : undefined
+        error: itemErrors.length > 0 ? itemErrors.join('. ') : undefined,
       });
 
       if (itemValid) {
-        validationResults.total += validatedPrice * item.quantity;
+        validationResults.total += validatedPrice * requestedQuantity;
       }
     }
 
-    // Redondear total a 2 decimales
     validationResults.total = Math.round(validationResults.total * 100) / 100;
 
-    return NextResponse.json(validationResults, { 
-      status: validationResults.valid ? 200 : 400 
+    return NextResponse.json(validationResults, {
+      status: validationResults.valid ? 200 : 400,
     });
-
   } catch (error) {
     console.error('Error in cart validation:', error);
     return NextResponse.json(

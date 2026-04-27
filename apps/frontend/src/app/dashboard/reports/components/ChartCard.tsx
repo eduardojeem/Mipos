@@ -192,10 +192,15 @@ export function ChartCard({
 
 // Funciones auxiliares para generar paths SVG
 function generateLinePath(data: ChartDataPoint[], maxValue: number, height: string): string {
-  const heightNum = parseInt(height);
+  if (data.length === 0) return '';
+  if (data.length === 1) {
+    const y = 100 - (data[0].value / Math.max(1, maxValue)) * 100;
+    return `M 0,${y} L 100,${y}`;
+  }
+
   const points = data.map((item, index) => {
     const x = (index / (data.length - 1)) * 100;
-    const y = 100 - (item.value / maxValue) * 100;
+    const y = 100 - (item.value / Math.max(1, maxValue)) * 100;
     return `${x},${y}`;
   });
   return `M ${points.join(' L ')}`;

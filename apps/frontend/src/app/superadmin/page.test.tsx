@@ -55,6 +55,10 @@ vi.mock('@/app/superadmin/components/PartialFailureWarning', () => ({
   ),
 }));
 
+vi.mock('@/app/superadmin/components/SuperAdminGuard', () => ({
+  SuperAdminGuard: ({ children }: any) => <div>{children}</div>,
+}));
+
 vi.mock('@/components/auth/UnifiedPermissionGuard', () => ({
   UnifiedPermissionGuard: ({ children }: any) => <div>{children}</div>,
 }));

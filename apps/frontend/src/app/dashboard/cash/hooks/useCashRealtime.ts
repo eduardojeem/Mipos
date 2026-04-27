@@ -19,9 +19,10 @@ export function useCashRealtime(options: UseCashRealtimeOptions = {}) {
     const handleRealtimeUpdate = useCallback(() => {
         // Invalidate queries to trigger refetch
         queryClient.invalidateQueries({ queryKey: ['cashSession'] });
-        queryClient.invalidateQueries({ queryKey: ['cashMovements', sessionId] });
+        queryClient.invalidateQueries({ queryKey: ['cashMovements'] });
+        queryClient.invalidateQueries({ queryKey: ['cashSessions'] });
         onUpdate?.();
-    }, [queryClient, sessionId, onUpdate]);
+    }, [queryClient, onUpdate]);
 
     useEffect(() => {
         if (!sessionId || !enabled) return;
@@ -31,14 +32,14 @@ export function useCashRealtime(options: UseCashRealtimeOptions = {}) {
             clearTimeout(debounceTimer);
             debounceTimer = setTimeout(() => {
                 handleRealtimeUpdate();
-            }, 300);
+            }, 2000);
         };
 
         // Subscribe to movements
-        const subMov = realtimeService.subscribeToCashMovementsBySession(sessionId, scheduleRefetch);
+        realtimeService.subscribeToCashMovementsBySession(sessionId, scheduleRefetch);
 
         // Subscribe to session
-        const subSes = realtimeService.subscribeToCashSession(sessionId, scheduleRefetch);
+        realtimeService.subscribeToCashSession(sessionId, scheduleRefetch);
 
         return () => {
             try {

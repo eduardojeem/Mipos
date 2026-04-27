@@ -146,8 +146,9 @@ export function UnifiedPermissionGuard({
     }
   }, [redirectToSignin, redirectToDashboard, router]);
 
-  // Avoid rendering children while permissions are loading to prevent churn
-  if (loading) {
+  // Keep mounted content during background permission refreshes to avoid
+  // remounting dialogs and losing local UI state in dashboard screens.
+  if (loading && !user) {
     return <>{loadingComponent ?? null}</>;
   }
 

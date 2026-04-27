@@ -1,54 +1,37 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
-import { Search, Package, Check, Loader2, FilterX, AlertTriangle, Star, TrendingUp, DollarSign, Zap, Filter, SortAsc, SortDesc, Grid, List, Bookmark, BookmarkCheck } from 'lucide-react'
+import { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  Search, Package, Check, Loader2, FilterX, AlertTriangle,
+  TrendingUp, DollarSign, Grid, List, ChevronLeft, ChevronRight,
+} from 'lucide-react'
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter,
+  DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { Slider } from '@/components/ui/slider'
-import { Separator } from '@/components/ui/separator'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useToast } from '@/components/ui/use-toast'
 import { useDebounce } from '@/hooks/useDebounce'
 import { createLogger } from '@/lib/logger'
+import api from '@/lib/api'
+import { getSelectedOrganizationId } from '@/lib/organization-context'
 
-// Business Rules Constants
-const MAX_PRODUCTS_PER_PROMOTION = 50
-const MIN_PRODUCTS_FOR_PROMOTION = 1
-const PRODUCTS_PER_PAGE = 18 // Increased from 12 to 18 for better visibility
+const MAX_PRODUCTS = 50
+const PAGE_SIZE = 18
 
 interface Product {
   id: string
   name: string
-  price?: number // Made optional to handle API variations
+  price: number
   imageUrl?: string
   category?: string
-  categoryName?: string // Backend might return category object or name
-  stock?: number // Made optional to handle API variations
-  salePrice?: number // Backend might use salePrice
+  stock?: number
   brand?: string
-  rating?: number
-  reviewCount?: number
-  isPopular?: boolean
-  isFeatured?: boolean
-  tags?: string[]
 }
 
 interface ProductSelectionDialogProps {
@@ -58,10 +41,112 @@ interface ProductSelectionDialogProps {
   excludeProductIds?: string[]
   discountType: 'PERCENTAGE' | 'FIXED_AMOUNT'
   discountValue: number
-  maxProducts?: number // Allow customization of max products
+  maxProducts?: number
 }
 
-const logger = createLogger('ProductSelectionDialog');
+const logger = createLogger('ProductSelectionDialog')
+
+// ── ProductCard as a proper top-level component ──────────────────────────────
+
+interface ProductCardProps {
+  product: Product
+  isSelected: boolean
+  isDisabled: boolean
+  discountType: 'PERCENTAGE' | 'FIXED_AMOUNT'
+  discountValue: number
+  viewMode: 'grid' | 'list'
+  onToggle: (id: string) => void
+}
+
+const ProductCard = memo(function ProductCard({
+  product, isSelected, isDisabled, discountType, discountValue, viewMode, onToggle,
+}: ProductCardProps) {
+  const discountedPrice = discountType === 'PERCENTAGE'
+    ? product.price * (1 - discountValue / 100)
+    : Math.max(0, product.price - discountValue)
+  const savings = product.price - discountedPrice
+  const savingsPct = product.price > 0 ? (savings / product.price) * 100 : 0
+
+  return (
+    <div
+      role="button"
+      tabIndex={isDisabled && !isSelected ? -1 : 0}
+      aria-pressed={isSelected}
+      onClick={() => !isDisabled && onToggle(product.id)}
+      onKeyDown={(e) => e.key === 'Enter' && !isDisabled && onToggle(product.id)}
+      className={[
+        'relative flex rounded-lg border transition-all duration-150 cursor-pointer select-none',
+        viewMode === 'grid' ? 'flex-col p-3 min-h-[180px]' : 'flex-row items-center p-3 gap-3',
+        isSelected
+          ? 'border-violet-600 bg-violet-50/60 dark:bg-violet-900/15 ring-1 ring-violet-600'
+          : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-violet-300 hover:shadow-sm',
+        isDisabled && !isSelected ? 'opacity-40 cursor-not-allowed' : '',
+      ].join(' ')}
+    >
+      {/* Checkbox */}
+      <div className="absolute top-2 right-2 z-10">
+        <Checkbox
+          checked={isSelected}
+          disabled={isDisabled && !isSelected}
+          onCheckedChange={() => onToggle(product.id)}
+          onClick={(e) => e.stopPropagation()}
+          className="h-4 w-4 data-[state=checked]:bg-violet-600 data-[state=checked]:border-violet-600"
+        />
+      </div>
+
+      {/* Image */}
+      <div className={`flex-shrink-0 rounded-md overflow-hidden bg-slate-100 dark:bg-slate-800 flex items-center justify-center ${viewMode === 'grid' ? 'w-full h-24 mb-2' : 'w-12 h-12'}`}>
+        {product.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" loading="lazy" />
+        ) : (
+          <Package className="h-6 w-6 text-slate-400" />
+        )}
+      </div>
+
+      {/* Info */}
+      <div className="flex-1 min-w-0 pr-6">
+        <p className="font-medium text-sm text-slate-900 dark:text-white line-clamp-2 leading-tight">
+          {product.name}
+        </p>
+        <div className="flex flex-wrap gap-1 mt-1">
+          {product.category && (
+            <span className="text-xs text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+              {product.category}
+            </span>
+          )}
+          {product.brand && (
+            <span className="text-xs text-blue-600 bg-blue-50 dark:bg-blue-900/30 px-1.5 py-0.5 rounded">
+              {product.brand}
+            </span>
+          )}
+        </div>
+        {product.stock != null && product.stock <= 5 && product.stock > 0 && (
+          <p className="text-xs text-orange-600 mt-1 flex items-center gap-1">
+            <AlertTriangle className="h-3 w-3" />
+            Stock bajo: {product.stock}
+          </p>
+        )}
+      </div>
+
+      {/* Pricing */}
+      {product.price > 0 ? (
+        <div className={`${viewMode === 'grid' ? 'mt-auto pt-2 border-t border-dashed border-slate-200 dark:border-slate-700' : 'flex-shrink-0 text-right'}`}>
+          <p className="text-xs text-slate-400 line-through">${product.price.toFixed(2)}</p>
+          <p className="text-base font-bold text-green-600">${discountedPrice.toFixed(2)}</p>
+          <p className="text-xs text-green-600/80 flex items-center gap-0.5">
+            <TrendingUp className="h-3 w-3" />
+            -{savingsPct.toFixed(0)}%
+          </p>
+        </div>
+      ) : (
+        <p className="text-xs text-slate-400 italic">Sin precio</p>
+      )}
+    </div>
+  )
+})
+
+// ── Main component ────────────────────────────────────────────────────────────
 
 export function ProductSelectionDialog({
   open,
@@ -70,966 +155,395 @@ export function ProductSelectionDialog({
   excludeProductIds = [],
   discountType,
   discountValue,
-  maxProducts = MAX_PRODUCTS_PER_PROMOTION,
+  maxProducts = MAX_PRODUCTS,
 }: ProductSelectionDialogProps) {
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [categoryFilter, setCategoryFilter] = useState<string>('all')
-  const [categories, setCategories] = useState<string[]>([])
+  const [categoryFilter, setCategoryFilter] = useState('all')
+  const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([])
   const [currentPage, setCurrentPage] = useState(1)
-  const [totalProducts, setTotalProducts] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
-
-  // Advanced filtering and sorting
-  const [sortBy, setSortBy] = useState<'name' | 'price' | 'rating' | 'popularity' | 'savings'>('savings')
+  const [totalItems, setTotalItems] = useState(0)
+  const [sortBy, setSortBy] = useState<'name' | 'price' | 'savings'>('savings')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
-  const [priceRange, setPriceRange] = useState<[number, number]>([0, 1600])
-  const [showOnlyInStock, setShowOnlyInStock] = useState(false)
-  const [showOnlyFeatured, setShowOnlyFeatured] = useState(false)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
-
-  // Quick filters
-  const [quickFilter, setQuickFilter] = useState<'all' | 'popular' | 'featured' | 'high-rated' | 'best-savings'>('all')
-
-  // Favorites/bookmarks
-  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set())
+  const [showOnlyInStock, setShowOnlyInStock] = useState(false)
 
   const { toast } = useToast()
-  const debouncedSearch = useDebounce(searchTerm, 500)
+  const debouncedSearch = useDebounce(searchTerm, 400)
 
-  // Calculate discounted price helper
-  const calculateDiscountedPrice = useCallback((price: number) => {
-    if (discountType === 'PERCENTAGE') {
-      return price * (1 - discountValue / 100)
-    } else {
-      return Math.max(0, price - discountValue)
-    }
-  }, [discountType, discountValue])
+  // Stable refs to avoid stale closures without adding to useCallback deps
+  const excludeIdsRef = useRef(excludeProductIds)
+  excludeIdsRef.current = excludeProductIds
 
-  // Server-side filtering and pagination - products come pre-filtered from API
-  const filteredProducts = products
-  const paginatedProducts = products // Products are already paginated from server
-
-  // Reset pagination when filters change
-  useEffect(() => {
-    setCurrentPage(1)
-  }, [debouncedSearch, categoryFilter])
-
-  // Validation helpers
-  const isSelectionValid = selectedIds.size >= MIN_PRODUCTS_FOR_PROMOTION && selectedIds.size <= maxProducts
   const isAtMaxLimit = selectedIds.size >= maxProducts
-  const selectionError = useMemo(() => {
-    if (selectedIds.size === 0) return null
-    if (selectedIds.size > maxProducts) return `Máximo ${maxProducts} productos permitidos`
-    return null
-  }, [selectedIds.size, maxProducts])
 
-  // Fetch products from Supabase API with advanced filtering and pagination
-  const fetchProducts = useCallback(async (pageNum: number = 1) => {
+  // ── Data fetching ──────────────────────────────────────────────────────────
+
+  const fetchProducts = useCallback(async (page: number) => {
     setLoading(true)
     setError(null)
-
     try {
-      logger.log('Loading products from API...', {
-        page: pageNum,
-        search: debouncedSearch,
-        category: categoryFilter,
-        priceRange,
-        sortBy,
-        sortOrder
-      })
-
-      // Build API parameters
-      const params = new URLSearchParams({
-        page: pageNum.toString(),
-        limit: PRODUCTS_PER_PAGE.toString(),
-        sortBy,
+      const sortColumnMap: Record<string, string> = {
+        savings: 'sale_price', price: 'sale_price', name: 'name',
+      }
+      const params: Record<string, string | number> = {
+        page,
+        limit: PAGE_SIZE,
+        sortBy: sortColumnMap[sortBy] ?? 'updated_at',
         sortOrder,
-        minPrice: priceRange[0].toString(),
-        maxPrice: priceRange[1].toString(),
-        showOnlyInStock: showOnlyInStock.toString(),
-        showOnlyFeatured: showOnlyFeatured.toString()
+      }
+      if (debouncedSearch.trim()) params.search = debouncedSearch.trim()
+      if (categoryFilter !== 'all') params.categoryId = categoryFilter
+
+      const orgId = getSelectedOrganizationId()
+      const { data } = await api.get('/products', {
+        params,
+        headers: orgId ? { 'x-organization-id': orgId } : {},
       })
 
-      if (debouncedSearch && debouncedSearch.trim()) {
-        params.append('q', debouncedSearch.trim())
-      }
+      const normalized: Product[] = (data.products || []).map((p: Record<string, unknown>) => ({
+        id: String(p.id || ''),
+        name: String(p.name || ''),
+        price: Number(p.sale_price ?? p.price ?? 0),
+        imageUrl: (p.image_url || p.imageUrl) as string | undefined,
+        stock: p.stock_quantity != null ? Number(p.stock_quantity) : undefined,
+        brand: (p.brand as string) || undefined,
+        category: p.category && typeof p.category === 'object'
+          ? ((p.category as Record<string, unknown>).name as string)
+          : (p.categoryName as string) || undefined,
+      }))
 
-      if (categoryFilter !== 'all') {
-        params.append('categoryId', categoryFilter)
-      }
+      const excluded = excludeIdsRef.current
+      const available = normalized.filter((p) => !excluded.includes(p.id))
 
-      const response = await fetch(`/api/products/public?${params}`)
-      const data = await response.json()
+      // Client-side in-stock filter (not worth a server round-trip)
+      const filtered = showOnlyInStock ? available.filter((p) => (p.stock ?? 1) > 0) : available
 
-      if (!response.ok) {
-        throw new Error(data.message || 'Error loading products')
-      }
-
-      if (!data.success) {
-        throw new Error(data.message || 'API returned error')
-      }
-
-      // Filter out already associated products
-      const availableProducts = (data.products || []).filter(
-        (p: Product) => !excludeProductIds.includes(String(p.id))
+      setProducts(filtered)
+      setTotalItems(Number(data.total ?? 0))
+      setTotalPages(Number(data.totalPages ?? Math.ceil((data.total ?? 0) / PAGE_SIZE)))
+    } catch (err: unknown) {
+      const e = err as { response?: { status?: number; data?: { error?: string } }; message?: string }
+      const status = e?.response?.status
+      const msg = e?.response?.data?.error || e?.message || ''
+      logger.error('Error fetching products:', { status, msg })
+      setError(
+        status === 401 ? 'Sesión no válida. Inicia sesión nuevamente.' :
+        status === 403 ? 'Sin permiso para listar productos.' :
+        'No se pudieron cargar los productos.'
       )
-
-      setProducts(availableProducts)
-
-      // Update pagination info from server
-      if (data.pagination) {
-        setTotalProducts(data.pagination.total)
-        setTotalPages(data.pagination.pages)
-      }
-
-      logger.log('Products loaded successfully', {
-        count: availableProducts.length,
-        total: data.pagination?.total || 0,
-        page: pageNum
-      })
-
-    } catch (error) {
-      logger.error('Error fetching productos desde API:', error)
-      setError('Error al cargar productos desde Supabase. Por favor, intenta nuevamente.')
-      // No usar datos de respaldo mock; reflejar estado real sin productos
       setProducts([])
-      setCategories([])
     } finally {
       setLoading(false)
     }
-  }, [excludeProductIds, debouncedSearch, categoryFilter, priceRange, sortBy, sortOrder, showOnlyInStock, showOnlyFeatured])
+  }, [debouncedSearch, categoryFilter, sortBy, sortOrder, showOnlyInStock])
 
   const fetchCategories = useCallback(async () => {
     try {
-      logger.log('Loading categories from API...')
-
-      const response = await fetch('/api/products/categories')
-      const data = await response.json()
-
-      if (response.ok && data.success) {
-        const categoryNames = (data.categories || []).map((cat: any) => cat.name)
-        setCategories(categoryNames.sort())
-        logger.log('Categories loaded:', categoryNames.length)
-      } else {
-        logger.warn('Failed to load categories; no mock categories will be used')
-        setCategories([])
+      const orgId = getSelectedOrganizationId()
+      const { data } = await api.get('/products/categories', {
+        headers: orgId ? { 'x-organization-id': orgId } : {},
+      })
+      if (Array.isArray(data.categories)) {
+        setCategories(data.categories.map((c: { id: string; name: string }) => ({ id: c.id, name: c.name })))
       }
-    } catch (error) {
-      logger.error('Error fetching categories:', error)
+    } catch {
       setCategories([])
     }
   }, [])
 
-  // Initial fetch for categories and default products
+  // Reset on open
+  const prevOpenRef = useRef(false)
   useEffect(() => {
-    if (open) {
+    if (open && !prevOpenRef.current) {
       setSelectedIds(new Set())
       setSearchTerm('')
       setCategoryFilter('all')
       setCurrentPage(1)
       setError(null)
       fetchCategories()
-      fetchProducts(1)
     }
-  }, [open, fetchCategories, fetchProducts])
+    prevOpenRef.current = open
+  }, [open, fetchCategories])
 
-  // Fetch products when filters change
+  // Fetch products when dialog is open and filters change
   useEffect(() => {
-    if (open) {
-      fetchProducts(currentPage)
-    }
-  }, [open, currentPage, debouncedSearch, categoryFilter, priceRange, sortBy, sortOrder, showOnlyInStock, showOnlyFeatured, fetchProducts])
+    if (!open) return
+    fetchProducts(currentPage)
+  }, [open, currentPage, fetchProducts])
 
+  // Reset to page 1 when filters change (not page itself)
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [debouncedSearch, categoryFilter, sortBy, sortOrder, showOnlyInStock])
 
-  const toggleProduct = useCallback((productId: string) => {
-    setSelectedIds(prev => {
-      const newSelected = new Set(prev)
-      if (newSelected.has(productId)) {
-        newSelected.delete(productId)
+  // ── Handlers ───────────────────────────────────────────────────────────────
+
+  const toggleProduct = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
       } else {
-        // Check if adding this product would exceed the limit
-        if (newSelected.size >= maxProducts) {
-          toast({
-            title: "Límite alcanzado",
-            description: `Máximo ${maxProducts} productos por promoción`,
-            variant: "destructive"
-          })
+        if (next.size >= maxProducts) {
+          toast({ description: `Máximo ${maxProducts} productos por promoción`, variant: 'destructive' })
           return prev
         }
-        newSelected.add(productId)
+        next.add(id)
       }
-      return newSelected
+      return next
     })
   }, [maxProducts, toast])
 
-  const toggleFavorite = useCallback((productId: string) => {
-    setFavoriteIds(prev => {
-      const newFavorites = new Set(prev)
-      if (newFavorites.has(productId)) {
-        newFavorites.delete(productId)
-      } else {
-        newFavorites.add(productId)
-      }
-      return newFavorites
-    })
-  }, [])
-
   const toggleAll = useCallback(() => {
-    if (selectedIds.size === paginatedProducts.length) {
-      setSelectedIds(new Set())
-    } else {
-      const newSelection = new Set(selectedIds)
-      paginatedProducts.forEach(p => {
-        if (newSelection.size < maxProducts) {
-          newSelection.add(p.id)
-        }
-      })
-
-      if (newSelection.size >= maxProducts && paginatedProducts.length > maxProducts - selectedIds.size) {
-        toast({
-          title: "Límite alcanzado",
-          description: `Solo se pueden seleccionar ${maxProducts} productos máximo`,
-          variant: "destructive"
-        })
+    setSelectedIds((prev) => {
+      if (products.every((p) => prev.has(p.id))) {
+        // deselect all on current page
+        const next = new Set(prev)
+        products.forEach((p) => next.delete(p.id))
+        return next
       }
-
-      setSelectedIds(newSelection)
-    }
-  }, [selectedIds, paginatedProducts, maxProducts, toast])
+      const next = new Set(prev)
+      for (const p of products) {
+        if (next.size >= maxProducts) break
+        next.add(p.id)
+      }
+      return next
+    })
+  }, [products, maxProducts])
 
   const handleConfirm = useCallback(() => {
-    // Validation
     if (selectedIds.size === 0) {
-      toast({
-        title: "Selección requerida",
-        description: "Selecciona al menos un producto para continuar",
-        variant: "destructive"
-      })
+      toast({ description: 'Selecciona al menos un producto', variant: 'destructive' })
       return
     }
-
-    if (selectedIds.size < MIN_PRODUCTS_FOR_PROMOTION) {
-      toast({
-        title: "Selección insuficiente",
-        description: `Selecciona al menos ${MIN_PRODUCTS_FOR_PROMOTION} producto(s)`,
-        variant: "destructive"
-      })
-      return
-    }
-
-    if (selectedIds.size > maxProducts) {
-      toast({
-        title: "Demasiados productos",
-        description: `Máximo ${maxProducts} productos permitidos`,
-        variant: "destructive"
-      })
-      return
-    }
-
-    // Success feedback
-    toast({
-      title: "Productos seleccionados",
-      description: `${selectedIds.size} producto(s) serán asociados a la promoción`,
-    })
-
     onConfirm(Array.from(selectedIds))
-  }, [selectedIds, maxProducts, toast, onConfirm])
+  }, [selectedIds, onConfirm, toast])
 
-  // Memoized ProductCard component for performance
-  const ProductCard = useMemo(() => {
-    return ({ product, isSelected, onToggle }: {
-      product: Product;
-      isSelected: boolean;
-      onToggle: (id: string) => void
-    }) => {
-      // Ensure price is a valid number - handle multiple price field names
-      const productPrice = Number(product.salePrice || product.price || 0)
-      const discountedPrice = productPrice > 0 ? calculateDiscountedPrice(productPrice) : 0
-      const savings = productPrice > 0 ? productPrice - discountedPrice : 0
-      const isFavorite = favoriteIds.has(product.id)
+  // ── Derived state ──────────────────────────────────────────────────────────
 
-      return (
-        <div
-          className={`
-            group relative flex p-3 rounded-lg border transition-all duration-200 cursor-pointer
-            ${isSelected
-              ? 'border-violet-600 bg-violet-50/50 dark:bg-violet-900/10 shadow-[0_0_0_1px_rgba(124,58,237,1)]'
-              : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-violet-300 dark:hover:border-violet-700 hover:shadow-md'
-            }
-            ${isAtMaxLimit && !isSelected ? 'opacity-50 cursor-not-allowed' : ''}
-            ${viewMode === 'list' ? 'flex-row items-center min-h-[80px]' : 'flex-col min-h-[200px]'}
-          `}
-        >
-          {/* Top Row: Selection Checkbox and Favorite */}
-          <div className="absolute top-3 right-3 z-10 flex gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation()
-                toggleFavorite(product.id)
-              }}
-              className="h-6 w-6 p-0 hover:bg-slate-100 dark:hover:bg-slate-800"
-            >
-              {isFavorite ? (
-                <BookmarkCheck className="h-4 w-4 text-yellow-500" />
-              ) : (
-                <Bookmark className="h-4 w-4 text-slate-400" />
-              )}
-            </Button>
-            <Checkbox
-              checked={isSelected}
-              onCheckedChange={() => onToggle(product.id)}
-              onClick={(e) => e.stopPropagation()}
-              disabled={isAtMaxLimit && !isSelected}
-              className={`
-                h-5 w-5 border-2 
-                ${isSelected
-                  ? 'data-[state=checked]:bg-violet-600 data-[state=checked]:border-violet-600'
-                  : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900'
-                }
-              `}
-            />
-          </div>
-
-          <div
-            onClick={() => onToggle(product.id)}
-            className={`flex gap-3 mb-3 ${viewMode === 'list' ? 'flex-1' : ''}`}
-          >
-            {/* Product Image */}
-            <div className="flex-shrink-0">
-              {product.imageUrl ? (
-                <img
-                  src={product.imageUrl}
-                  alt={product.name}
-                  className={`object-cover rounded-lg border border-slate-100 dark:border-slate-800 ${viewMode === 'list' ? 'w-10 h-10' : 'w-12 h-12'
-                    }`}
-                  loading="lazy"
-                />
-              ) : (
-                <div className={`bg-slate-100 dark:bg-slate-800 rounded-lg flex items-center justify-center text-slate-300 ${viewMode === 'list' ? 'w-10 h-10' : 'w-12 h-12'
-                  }`}>
-                  <Package className={viewMode === 'list' ? 'h-5 w-5' : 'h-6 w-6'} />
-                </div>
-              )}
-            </div>
-
-            <div className="flex-1 pr-8">
-              {/* Product Name and Badges */}
-              <div className="flex items-start justify-between mb-2">
-                <h4 className="font-semibold text-sm leading-tight text-slate-900 dark:text-slate-100 line-clamp-2">
-                  {product.name}
-                </h4>
-                <div className="flex gap-1 ml-2">
-                  {product.isPopular && (
-                    <div title="Popular">
-                      <TrendingUp className="h-3 w-3 text-orange-500" />
-                    </div>
-                  )}
-                  {product.isFeatured && (
-                    <div title="Destacado">
-                      <Star className="h-3 w-3 text-yellow-500" />
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Rating and Reviews */}
-              {product.rating && (
-                <div className="flex items-center gap-1 mb-2">
-                  <div className="flex items-center">
-                    <Star className="h-3 w-3 text-yellow-400 fill-current" />
-                    <span className="text-xs text-slate-600 dark:text-slate-400 ml-1">
-                      {product.rating.toFixed(1)}
-                    </span>
-                  </div>
-                  {product.reviewCount && (
-                    <span className="text-xs text-slate-500">
-                      ({product.reviewCount} reviews)
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {/* Tags and Category */}
-              <div className="flex gap-1 flex-wrap mb-2">
-                {product.category && (
-                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
-                    {product.category}
-                  </span>
-                )}
-                {product.brand && (
-                  <span className="text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded-full">
-                    {product.brand}
-                  </span>
-                )}
-                {product.tags?.slice(0, 2).map(tag => (
-                  <span key={tag} className="text-xs text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/30 px-1.5 py-0.5 rounded">
-                    #{tag}
-                  </span>
-                ))}
-              </div>
-
-              {/* Stock Warning */}
-              {(product.stock || 0) <= 5 && (product.stock || 0) > 0 && (
-                <div className="flex items-center gap-1 text-xs text-orange-600 dark:text-orange-400 mb-2">
-                  <AlertTriangle className="h-3 w-3" />
-                  Stock bajo: {product.stock || 0} unidades
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Pricing Section */}
-          <div className={`mt-auto pt-3 border-t border-dashed border-slate-200 dark:border-slate-800 ${viewMode === 'list' ? 'min-w-[200px] flex-shrink-0' : ''
-            }`}>
-            {productPrice > 0 ? (
-              <>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs text-slate-500">Precio Regular</span>
-                  <span className="text-xs text-slate-500 line-through">${productPrice.toFixed(2)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-col">
-                    <span className="text-xs font-semibold text-green-600 flex items-center gap-1">
-                      <DollarSign className="h-3 w-3" />
-                      Precio Promo
-                    </span>
-                    <span className="text-[10px] text-green-600/80">
-                      Ahorras ${savings.toFixed(2)} ({((savings / productPrice) * 100).toFixed(0)}%)
-                    </span>
-                  </div>
-                  <span className="text-lg font-bold text-green-600">${discountedPrice.toFixed(2)}</span>
-                </div>
-              </>
-            ) : (
-              <div className="flex items-center justify-center py-2">
-                <div className="text-center">
-                  <span className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-900/30 px-2 py-1 rounded-full">
-                    Precio no disponible
-                  </span>
-                  <p className="text-[10px] text-slate-500 mt-1">Contactar para cotización</p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Active Indication Border */}
-          {isSelected && (
-            <div className="absolute inset-0 border-2 border-violet-600 rounded-xl pointer-events-none" />
-          )}
-        </div>
-      )
-    }
-  }, [calculateDiscountedPrice, isAtMaxLimit, favoriteIds, viewMode, toggleFavorite])
+  const allPageSelected = products.length > 0 && products.every((p) => selectedIds.has(p.id))
+  const somePageSelected = products.some((p) => selectedIds.has(p.id))
+  const startItem = (currentPage - 1) * PAGE_SIZE + 1
+  const endItem = Math.min(currentPage * PAGE_SIZE, totalItems)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-6xl max-h-[90vh] flex flex-col p-0 gap-0 bg-slate-50 dark:bg-slate-950 overflow-hidden">
-        <DialogHeader className="p-4 pb-3 border-b bg-white dark:bg-slate-900 z-10 flex-shrink-0">
-          <DialogTitle className="text-xl font-bold bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">
-            Seleccionar Productos
-          </DialogTitle>
-          <DialogDescription className="text-slate-500">
-            Selecciona los productos que deseas asociar a esta promoción
+      <DialogContent className="max-w-5xl h-[90vh] flex flex-col p-0 gap-0 overflow-hidden [&>button]:z-50">
+
+        {/* Header */}
+        <DialogHeader className="px-5 py-4 border-b flex-shrink-0">
+          <DialogTitle className="text-lg font-semibold">Seleccionar Productos</DialogTitle>
+          <DialogDescription className="text-sm text-muted-foreground">
+            Elige los productos que aplicarán el descuento de esta promoción
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-          {/* Fixed Controls Section */}
-          <div className="p-4 pb-3 space-y-3 flex-shrink-0 bg-slate-50 dark:bg-slate-950">
-            {/* Error Display */}
-            {error && (
-              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
-                  <p className="text-yellow-800 dark:text-yellow-200 text-sm">{error}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Search and Basic Filters */}
-            <div className="flex flex-col sm:flex-row gap-3">
-              <div className="flex-1 relative group">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-violet-500 transition-colors" />
-                <Input
-                  placeholder="Buscar por nombre, marca, categoría o tags..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 h-11 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:border-violet-500 focus:ring-violet-500/20 transition-all"
-                />
-              </div>
-
-              {categories.length > 0 && (
-                <Select
-                  value={categoryFilter}
-                  onValueChange={setCategoryFilter}
-                >
-                  <SelectTrigger className="w-full sm:w-[200px] h-11 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-                    <SelectValue placeholder="Categoría" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas las categorías</SelectItem>
-                    {categories.map(cat => (
-                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
-                className="h-11 px-3"
-              >
-                {viewMode === 'grid' ? <List className="h-4 w-4" /> : <Grid className="h-4 w-4" />}
-              </Button>
+        {/* Filters bar */}
+        <div className="px-5 py-3 border-b flex-shrink-0 space-y-3 bg-muted/30">
+          {/* Row 1: search + category + view toggle */}
+          <div className="flex flex-wrap gap-2">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar productos..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9 h-9"
+              />
             </div>
 
-            {/* Advanced Filters Panel */}
-            <Tabs defaultValue="filters" className="w-full">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="filters" className="flex items-center gap-2">
-                  <Filter className="h-4 w-4" />
-                  Filtros
-                </TabsTrigger>
-                <TabsTrigger value="sorting" className="flex items-center gap-2">
-                  {sortOrder === 'asc' ? <SortAsc className="h-4 w-4" /> : <SortDesc className="h-4 w-4" />}
-                  Ordenar
-                </TabsTrigger>
-                <TabsTrigger value="quick" className="flex items-center gap-2">
-                  <Zap className="h-4 w-4" />
-                  Rápido
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="filters" className="space-y-2 mt-2">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 p-3 bg-slate-50 dark:bg-slate-900/50 rounded-lg">
-                  {/* Price Range */}
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                      Rango de Precio: ${priceRange[0]} - ${priceRange[1]}
-                    </label>
-                    <Slider
-                      value={priceRange}
-                      onValueChange={(value) => setPriceRange(value as [number, number])}
-                      max={1600}
-                      min={0}
-                      step={25}
-                      className="w-full"
-                    />
-                  </div>
-
-                  {/* Stock Filter */}
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="in-stock"
-                      checked={showOnlyInStock}
-                      onCheckedChange={(checked) => setShowOnlyInStock(checked === true)}
-                    />
-                    <label htmlFor="in-stock" className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                      Solo en stock
-                    </label>
-                  </div>
-
-                  {/* Featured Filter */}
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="featured"
-                      checked={showOnlyFeatured}
-                      onCheckedChange={(checked) => setShowOnlyFeatured(checked === true)}
-                    />
-                    <label htmlFor="featured" className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                      Solo destacados
-                    </label>
-                  </div>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="sorting" className="space-y-2 mt-2">
-                <div className="flex flex-wrap gap-3 p-3 bg-slate-50 dark:bg-slate-900/50 rounded-lg">
-                  <Select value={sortBy} onValueChange={(value) => setSortBy(value as typeof sortBy)}>
-                    <SelectTrigger className="w-[180px]">
-                      <SelectValue placeholder="Ordenar por" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="savings">💰 Mayor ahorro</SelectItem>
-                      <SelectItem value="name">📝 Nombre</SelectItem>
-                      <SelectItem value="price">💵 Precio</SelectItem>
-                      <SelectItem value="rating">⭐ Calificación</SelectItem>
-                      <SelectItem value="popularity">🔥 Popularidad</SelectItem>
-                    </SelectContent>
-                  </Select>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                    className="flex items-center gap-2"
-                  >
-                    {sortOrder === 'asc' ? <SortAsc className="h-4 w-4" /> : <SortDesc className="h-4 w-4" />}
-                    {sortOrder === 'asc' ? 'Ascendente' : 'Descendente'}
-                  </Button>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="quick" className="space-y-2 mt-2">
-                <div className="flex flex-wrap gap-2 p-3 bg-slate-50 dark:bg-slate-900/50 rounded-lg">
-                  {[
-                    { value: 'all', label: 'Todos', icon: '📦' },
-                    { value: 'popular', label: 'Populares', icon: '🔥' },
-                    { value: 'featured', label: 'Destacados', icon: '⭐' },
-                    { value: 'high-rated', label: 'Mejor valorados', icon: '👍' },
-                    { value: 'best-savings', label: 'Mayor ahorro', icon: '💰' }
-                  ].map(filter => (
-                    <Button
-                      key={filter.value}
-                      variant={quickFilter === filter.value ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setQuickFilter(filter.value as any)}
-                      className="flex items-center gap-1"
-                    >
-                      <span>{filter.icon}</span>
-                      {filter.label}
-                    </Button>
+            {categories.length > 0 && (
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger className="w-[180px] h-9">
+                  <SelectValue placeholder="Categoría" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas las categorías</SelectItem>
+                  {categories.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                   ))}
-                </div>
-              </TabsContent>
-            </Tabs>
-
-            {/* Selection Status and Controls */}
-            {filteredProducts.length > 0 && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between px-1 py-2">
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      checked={selectedIds.size === paginatedProducts.length && paginatedProducts.length > 0}
-                      onCheckedChange={toggleAll}
-                      id="select-all"
-                      disabled={isAtMaxLimit && selectedIds.size === 0}
-                      className="data-[state=checked]:bg-violet-600 data-[state=checked]:border-violet-600"
-                    />
-                    <label htmlFor="select-all" className="text-sm font-medium cursor-pointer select-none text-slate-700 dark:text-slate-300">
-                      Seleccionar página ({selectedIds.size} de {filteredProducts.length})
-                    </label>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {selectedIds.size > 0 && (
-                      <Badge
-                        variant="secondary"
-                        className={`${selectionError
-                            ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
-                            : 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300'
-                          }`}
-                      >
-                        {selectedIds.size} seleccionados
-                      </Badge>
-                    )}
-                    <span className="text-xs text-slate-500">
-                      Máx: {maxProducts}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Bulk Actions */}
-                {selectedIds.size > 0 && (
-                  <div className="flex flex-wrap gap-2 p-3 bg-violet-50 dark:bg-violet-900/20 rounded-lg border border-violet-200 dark:border-violet-800">
-                    <div className="flex items-center gap-2 text-sm text-violet-700 dark:text-violet-300">
-                      <Check className="h-4 w-4" />
-                      <span className="font-medium">{selectedIds.size} productos seleccionados</span>
-                    </div>
-                    <Separator orientation="vertical" className="h-4" />
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setSelectedIds(new Set())}
-                        className="h-7 text-xs"
-                      >
-                        Limpiar todo
-                      </Button>
-                      {favoriteIds.size > 0 && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            const newSelection = new Set(selectedIds)
-                            Array.from(favoriteIds).forEach(id => {
-                              if (newSelection.size < maxProducts && filteredProducts.some(p => p.id === id)) {
-                                newSelection.add(id)
-                              }
-                            })
-                            setSelectedIds(newSelection)
-                          }}
-                          className="h-7 text-xs flex items-center gap-1"
-                        >
-                          <BookmarkCheck className="h-3 w-3" />
-                          Agregar favoritos
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Selection Error/Warning */}
-                {selectionError && (
-                  <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-2">
-                    <p className="text-red-800 dark:text-red-200 text-sm flex items-center gap-2">
-                      <AlertTriangle className="h-4 w-4" />
-                      {selectionError}
-                    </p>
-                  </div>
-                )}
-
-                {/* Pagination Info */}
-                {totalPages > 1 && (
-                  <div className="flex items-center justify-between text-sm text-slate-500">
-                    <span>
-                      Mostrando {((currentPage - 1) * PRODUCTS_PER_PAGE) + 1}-{Math.min(currentPage * PRODUCTS_PER_PAGE, filteredProducts.length)} de {filteredProducts.length}
-                    </span>
-                    <span>
-                      Página {currentPage} de {totalPages}
-                    </span>
-                  </div>
-                )}
-              </div>
+                </SelectContent>
+              </Select>
             )}
 
+            <Select value={`${sortBy}:${sortOrder}`} onValueChange={(v) => {
+              const [s, o] = v.split(':')
+              setSortBy(s as typeof sortBy)
+              setSortOrder(o as typeof sortOrder)
+            }}>
+              <SelectTrigger className="w-[160px] h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="savings:desc">Mayor ahorro</SelectItem>
+                <SelectItem value="price:asc">Menor precio</SelectItem>
+                <SelectItem value="price:desc">Mayor precio</SelectItem>
+                <SelectItem value="name:asc">Nombre A-Z</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <div className="flex items-center gap-1.5">
+              <Checkbox
+                id="in-stock"
+                checked={showOnlyInStock}
+                onCheckedChange={(v) => setShowOnlyInStock(v === true)}
+              />
+              <label htmlFor="in-stock" className="text-sm cursor-pointer select-none">Solo en stock</label>
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 w-9 p-0"
+              onClick={() => setViewMode((v) => v === 'grid' ? 'list' : 'grid')}
+              title={viewMode === 'grid' ? 'Vista lista' : 'Vista cuadrícula'}
+            >
+              {viewMode === 'grid' ? <List className="h-4 w-4" /> : <Grid className="h-4 w-4" />}
+            </Button>
           </div>
 
-          {/* Scrollable Products Section */}
-          <div className="flex-1 min-h-0 px-4 overflow-hidden">
-            <ScrollArea className="h-full w-full">
-              <div className="pb-4 pr-2">
-                {loading ? (
-                  <div className="flex flex-col items-center justify-center py-20 gap-3">
-                    <Loader2 className="h-10 w-10 animate-spin text-violet-600" />
-                    <p className="text-sm text-slate-500 animate-pulse">Cargando productos...</p>
-                  </div>
-                ) : filteredProducts.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-center">
-                    <div className="w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-4">
-                      <FilterX className="h-10 w-10 text-slate-300 dark:text-slate-600" />
-                    </div>
-                    <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-1">
-                      No se encontraron productos
-                    </h3>
-                    <p className="text-sm text-slate-500 max-w-xs mx-auto">
-                      {searchTerm
-                        ? `No hay resultados para "${searchTerm}"`
-                        : 'No hay productos disponibles para asociar'}
-                    </p>
-                    {searchTerm && (
-                      <Button
-                        variant="link"
-                        onClick={() => setSearchTerm('')}
-                        className="mt-2 text-violet-600 decoration-violet-600/30"
-                      >
-                        Borrar búsqueda
-                      </Button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className={
-                      viewMode === 'grid'
-                        ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 auto-rows-fr"
-                        : "flex flex-col gap-3"
-                    }>
-                      {paginatedProducts.map((product) => (
-                        <ProductCard
-                          key={product.id}
-                          product={product}
-                          isSelected={selectedIds.has(product.id)}
-                          onToggle={toggleProduct}
-                        />
-                      ))}
-                    </div>
+          {/* Row 2: select-all + selection count */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                checked={allPageSelected}
+                ref={(el) => { if (el) (el as HTMLButtonElement).dataset.indeterminate = String(somePageSelected && !allPageSelected) }}
+                onCheckedChange={toggleAll}
+                disabled={products.length === 0}
+                className="data-[state=checked]:bg-violet-600 data-[state=checked]:border-violet-600"
+              />
+              <span className="text-sm text-muted-foreground">
+                Seleccionar página
+              </span>
+            </div>
 
-                    {/* Enhanced Pagination Controls */}
-                    {totalPages > 1 && (
-                      <div className="space-y-3 pt-4 border-t border-slate-200 dark:border-slate-800">
-                        {/* Pagination Info */}
-                        <div className="flex items-center justify-between text-sm text-slate-500">
-                          <span>
-                            Mostrando {((currentPage - 1) * PRODUCTS_PER_PAGE) + 1}-{Math.min(currentPage * PRODUCTS_PER_PAGE, filteredProducts.length)} de {filteredProducts.length}
-                          </span>
-                          <div className="flex items-center gap-2">
-                            <span>Productos por página:</span>
-                            <Select
-                              value={PRODUCTS_PER_PAGE.toString()}
-                              onValueChange={(value) => {
-                                // This would require updating the constant, for now just show the option
-                                console.log('Products per page changed to:', value)
-                              }}
-                            >
-                              <SelectTrigger className="w-16 h-7">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="12">12</SelectItem>
-                                <SelectItem value="18">18</SelectItem>
-                                <SelectItem value="24">24</SelectItem>
-                                <SelectItem value="36">36</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-
-                        {/* Pagination Navigation */}
-                        <div className="flex items-center justify-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setCurrentPage(1)}
-                            disabled={currentPage === 1}
-                            className="h-8 px-3"
-                          >
-                            Primera
-                          </Button>
-
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                            disabled={currentPage === 1}
-                            className="h-8 px-3"
-                          >
-                            Anterior
-                          </Button>
-
-                          <div className="flex items-center gap-1">
-                            {Array.from({ length: Math.min(7, totalPages) }, (_, i) => {
-                              let pageNum
-                              if (totalPages <= 7) {
-                                pageNum = i + 1
-                              } else if (currentPage <= 4) {
-                                pageNum = i + 1
-                              } else if (currentPage >= totalPages - 3) {
-                                pageNum = totalPages - 6 + i
-                              } else {
-                                pageNum = currentPage - 3 + i
-                              }
-
-                              return (
-                                <Button
-                                  key={pageNum}
-                                  variant={currentPage === pageNum ? "default" : "outline"}
-                                  size="sm"
-                                  onClick={() => setCurrentPage(pageNum)}
-                                  className="h-8 w-8 p-0"
-                                >
-                                  {pageNum}
-                                </Button>
-                              )
-                            })}
-                          </div>
-
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                            disabled={currentPage === totalPages}
-                            className="h-8 px-3"
-                          >
-                            Siguiente
-                          </Button>
-
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setCurrentPage(totalPages)}
-                            disabled={currentPage === totalPages}
-                            className="h-8 px-3"
-                          >
-                            Última
-                          </Button>
-                        </div>
-
-                        {/* Quick Jump */}
-                        <div className="flex items-center justify-center gap-2 text-sm">
-                          <span className="text-slate-500">Ir a página:</span>
-                          <Input
-                            type="number"
-                            min={1}
-                            max={totalPages}
-                            value={currentPage}
-                            onChange={(e) => {
-                              const page = parseInt(e.target.value)
-                              if (page >= 1 && page <= totalPages) {
-                                setCurrentPage(page)
-                              }
-                            }}
-                            className="w-16 h-7 text-center"
-                          />
-                          <span className="text-slate-500">de {totalPages}</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </ScrollArea>
-          </div>
-        </div>
-
-        <DialogFooter className="p-4 pt-3 border-t bg-white dark:bg-slate-900 flex-shrink-0">
-          <div className="flex flex-col sm:flex-row gap-3 w-full">
-            {/* Selection Summary */}
-            <div className="flex-1 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+            <div className="flex items-center gap-2">
               {selectedIds.size > 0 && (
                 <>
-                  <Check className="h-4 w-4 text-green-600" />
-                  <span>
-                    {selectedIds.size} de {maxProducts} productos seleccionados
-                  </span>
-                  {selectedIds.size > 0 && (
-                    <span className="text-green-600 font-medium">
-                      (${Array.from(selectedIds).reduce((total, id) => {
-                        const product = products.find(p => p.id === id)
-                        const productPrice = Number(product?.salePrice || product?.price || 0)
-                        return total + (productPrice > 0 ? calculateDiscountedPrice(productPrice) : 0)
-                      }, 0).toFixed(2)} total con descuento)
-                    </span>
-                  )}
+                  <Badge variant="secondary" className="bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300">
+                    {selectedIds.size} / {maxProducts} seleccionados
+                  </Badge>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSelectedIds(new Set())}>
+                    Limpiar
+                  </Button>
                 </>
               )}
             </div>
+          </div>
+        </div>
 
-            {/* Action Buttons */}
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-                className="h-11 px-6"
-              >
+        {/* Error */}
+        {error && (
+          <div className="mx-5 mt-3 flex-shrink-0 flex items-center gap-2 rounded-md border border-yellow-200 bg-yellow-50 dark:bg-yellow-950/20 px-3 py-2 text-sm text-yellow-800 dark:text-yellow-200">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+            {error}
+          </div>
+        )}
+
+        {/* Products grid */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <ScrollArea className="h-full w-full">
+            <div className="p-5">
+              {loading ? (
+                <div className="flex flex-col items-center justify-center py-20 gap-3 text-muted-foreground">
+                  <Loader2 className="h-8 w-8 animate-spin text-violet-600" />
+                  <p className="text-sm">Cargando productos...</p>
+                </div>
+              ) : products.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
+                  <FilterX className="h-10 w-10 mb-3 opacity-40" />
+                  <p className="font-medium">No se encontraron productos</p>
+                  <p className="text-sm mt-1">
+                    {searchTerm ? `Sin resultados para "${searchTerm}"` : 'No hay productos disponibles'}
+                  </p>
+                  {(searchTerm || categoryFilter !== 'all') && (
+                    <Button variant="link" size="sm" className="mt-2 text-violet-600" onClick={() => {
+                      setSearchTerm('')
+                      setCategoryFilter('all')
+                    }}>
+                      Limpiar filtros
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className={
+                  viewMode === 'grid'
+                    ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3'
+                    : 'flex flex-col gap-2'
+                }>
+                  {products.map((product) => (
+                    <ProductCard
+                      key={product.id}
+                      product={product}
+                      isSelected={selectedIds.has(product.id)}
+                      isDisabled={isAtMaxLimit}
+                      discountType={discountType}
+                      discountValue={discountValue}
+                      viewMode={viewMode}
+                      onToggle={toggleProduct}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+        </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="px-5 py-2 border-t flex-shrink-0 flex items-center justify-between text-sm text-muted-foreground">
+            <span>{startItem}–{endItem} de {totalItems}</span>
+            <div className="flex items-center gap-1">
+              <Button variant="outline" size="sm" className="h-7 w-7 p-0"
+                disabled={currentPage <= 1} onClick={() => setCurrentPage((p) => p - 1)}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="px-2">{currentPage} / {totalPages}</span>
+              <Button variant="outline" size="sm" className="h-7 w-7 p-0"
+                disabled={currentPage >= totalPages} onClick={() => setCurrentPage((p) => p + 1)}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Footer */}
+        <DialogFooter className="px-5 py-3 border-t flex-shrink-0 bg-muted/20">
+          <div className="flex items-center justify-between w-full gap-3">
+            <div className="text-sm text-muted-foreground">
+              {selectedIds.size > 0 && (
+                <span className="flex items-center gap-1.5">
+                  <DollarSign className="h-4 w-4 text-green-600" />
+                  Total con descuento:{' '}
+                  <strong className="text-green-600">
+                    ${Array.from(selectedIds).reduce((sum, id) => {
+                      const p = products.find((x) => x.id === id)
+                      if (!p || p.price <= 0) return sum
+                      const dp = discountType === 'PERCENTAGE'
+                        ? p.price * (1 - discountValue / 100)
+                        : Math.max(0, p.price - discountValue)
+                      return sum + dp
+                    }, 0).toFixed(2)}
+                  </strong>
+                </span>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => onOpenChange(false)}>
                 Cancelar
               </Button>
               <Button
                 onClick={handleConfirm}
-                disabled={!isSelectionValid || !!selectionError}
-                className={`
-                  h-11 px-8 gap-2 transition-all duration-300
-                  ${isSelectionValid && !selectionError
-                    ? 'bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 shadow-lg shadow-violet-500/25'
-                    : 'bg-slate-200 text-slate-400 cursor-not-allowed dark:bg-slate-800'
-                  }
-                `}
+                disabled={selectedIds.size === 0}
+                className="bg-violet-600 hover:bg-violet-700 text-white gap-2"
               >
                 <Check className="h-4 w-4" />
-                <span>
-                  {selectedIds.size === 0
-                    ? 'Seleccionar productos'
-                    : selectionError
-                      ? 'Corregir selección'
-                      : `Asociar ${selectedIds.size} producto${selectedIds.size !== 1 ? 's' : ''}`}
-                </span>
+                Asociar {selectedIds.size > 0 ? `${selectedIds.size} producto${selectedIds.size !== 1 ? 's' : ''}` : ''}
               </Button>
             </div>
           </div>

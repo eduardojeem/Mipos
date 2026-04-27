@@ -1,43 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { assertAdmin } from '@/app/api/_utils/auth'
-import { getUserOrganizationId } from '@/app/api/_utils/organization'
+import { createAdminClient } from '@/lib/supabase/server'
 import { defaultBusinessConfig } from '@/types/business-config'
 import { invalidateCachedConfig } from '../cache'
 import { logAudit } from '../../admin/_utils/audit'
+import { requireCompanyAccess } from '@/app/api/_utils/company-authorization'
+import { COMPANY_FEATURE_KEYS, COMPANY_PERMISSIONS } from '@/lib/company-access'
 
 export async function POST(request: NextRequest) {
   try {
-    // ✅ Authentication and authorization
-    const auth = await assertAdmin(request)
-    if (!auth.ok) {
-      return NextResponse.json(auth.body, { status: auth.status })
-    }
-
-    const userId = auth.userId as string
-    const userEmail = auth.email
-    const isSuperAdmin = auth.isSuperAdmin || false
-
-    // ✅ Get organization context
     const { searchParams } = new URL(request.url)
     const orgFilter = searchParams.get('organizationId') || searchParams.get('organization_id')
-    
-    let organizationId: string
-    if (isSuperAdmin && orgFilter) {
-      organizationId = orgFilter
-    } else {
-      const userOrgId = await getUserOrganizationId(userId)
-      if (!userOrgId) {
-        return NextResponse.json(
-          { error: 'Usuario no pertenece a ninguna organización' },
-          { status: 403 }
-        )
-      }
-      organizationId = userOrgId
+    const access = await requireCompanyAccess(request, {
+      companyId: orgFilter,
+      permission: COMPANY_PERMISSIONS.MANAGE_COMPANY,
+      feature: COMPANY_FEATURE_KEYS.ADMIN_PANEL,
+      allowedRoles: ['OWNER', 'ADMIN'],
+    })
+
+    if (!access.ok) {
+      return NextResponse.json(access.body, { status: access.status })
     }
 
-    // Get current config for audit
-    const supabase = await createClient()
+    const organizationId = access.context.companyId
+    if (!organizationId) {
+      return NextResponse.json({ error: 'Empresa no encontrada' }, { status: 403 })
+    }
+
+    const supabase = await createAdminClient()
     const { data: prevData } = await supabase
       .from('settings')
       .select('value')
@@ -47,49 +36,63 @@ export async function POST(request: NextRequest) {
 
     const prevConfig = prevData?.value || null
 
-    // ✅ Reset to defaults with organization_id
     const { error } = await supabase
       .from('settings')
-      .upsert({
-        key: 'business_config',
-        value: defaultBusinessConfig,
-        organization_id: organizationId,
-        updated_at: new Date().toISOString()
-      }, {
-        onConflict: 'organization_id,key'
-      })
+      .upsert(
+        {
+          key: 'business_config',
+          value: defaultBusinessConfig,
+          organization_id: organizationId,
+          updated_at: new Date().toISOString(),
+        },
+        {
+          onConflict: 'organization_id,key',
+        }
+      )
 
     if (error) {
       console.error('Error resetting business config:', error)
-      return NextResponse.json(
-        { error: 'Error al restablecer configuración' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'Error al restablecer configuracion' }, { status: 500 })
     }
 
-    // Invalidate cache para garantizar GET fresco
-    try { invalidateCachedConfig(organizationId) } catch {}
+    const { data: persistedRow, error: persistedError } = await supabase
+      .from('settings')
+      .select('value,updated_at')
+      .eq('key', 'business_config')
+      .eq('organization_id', organizationId)
+      .single()
 
-    // Audit log
+    if (persistedError) {
+      console.error('Error verifying reset business config:', persistedError)
+      return NextResponse.json({ error: 'La configuracion se restablecio pero no se pudo verificar' }, { status: 500 })
+    }
+
+    const persistedConfig = persistedRow?.value || defaultBusinessConfig
+    try {
+      invalidateCachedConfig(organizationId)
+    } catch {}
+
     await logAudit(
       'business_config.reset',
       {
         entityType: 'BUSINESS_CONFIG',
         entityId: organizationId,
         oldData: prevConfig,
-        newData: defaultBusinessConfig
+        newData: persistedConfig,
       },
       {
-        id: userId,
-        email: userEmail || null,
-        role: isSuperAdmin ? 'SUPER_ADMIN' : 'ADMIN'
+        id: access.context.userId,
+        email: access.context.email,
+        role: access.context.role,
       }
     )
 
     return NextResponse.json({
       success: true,
-      config: defaultBusinessConfig,
-      message: 'Configuración restablecida a valores predeterminados'
+      config: persistedConfig,
+      persisted: true,
+      updatedAt: persistedRow?.updated_at || new Date().toISOString(),
+      message: 'Configuracion restablecida a valores predeterminados',
     })
   } catch (error: any) {
     console.error('Error in POST /api/business-config/reset:', error)

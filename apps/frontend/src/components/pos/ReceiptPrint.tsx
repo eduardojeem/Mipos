@@ -2,55 +2,14 @@
 
 import React, { forwardRef } from 'react';
 import { useCurrencyFormatter } from '@/contexts/BusinessConfigContext';
-import type { Customer } from '@/types';
-
-interface POSItem {
-  product_id: string;
-  product_name: string;
-  price: number;
-  quantity: number;
-}
-
-interface ReceiptData {
-  id: string;
-  items: POSItem[];
-  customer?: Customer | null;
-  subtotal: number;
-  tax: number;
-  discount: number;
-  discountType: 'PERCENTAGE' | 'FIXED_AMOUNT';
-  notes?: string;
-  total: number;
-  paymentMethod: string;
-  date: Date;
-  cashier?: string;
-}
+import {
+  getPaymentMethodLabel,
+  INTERNAL_TICKET_LABEL,
+  type PosInternalTicket,
+} from '@/lib/pos/internal-ticket';
 
 interface ReceiptPrintProps {
-  receiptData: {
-    id: string;
-    items: Array<{
-      product_name: string;
-      quantity: number;
-      price: number;
-      total: number;
-    }>;
-    customer?: {
-      name: string;
-      phone?: string;
-      email?: string;
-    } | null;
-    subtotal: number;
-    tax: number;
-    discount: number;
-    discountType?: 'PERCENTAGE' | 'FIXED_AMOUNT';
-    notes?: string;
-    total: number;
-    paymentMethod: 'CASH' | 'CARD' | 'TRANSFER' | 'OTHER';
-    date: string;
-    cashier?: string;
-    couponCode?: string;
-  };
+  ticketData: PosInternalTicket;
   companyInfo: {
     name: string;
     address?: string;
@@ -63,147 +22,133 @@ interface ReceiptPrintProps {
 }
 
 const ReceiptPrint = forwardRef<HTMLDivElement, ReceiptPrintProps>(
-  ({ receiptData, companyInfo }, ref) => {
+  ({ ticketData, companyInfo }, ref) => {
     const fmtCurrency = useCurrencyFormatter();
-    const defaultCompanyInfo = {
-      name: 'Mi Empresa POS',
-      address: 'Calle Principal #123, Ciudad',
-      phone: '+52 (555) 123-4567',
-      email: 'contacto@miempresa.com',
-      taxId: 'RFC123456789',
-      website: 'www.miempresa.com'
+
+    const company = {
+      name: companyInfo.name || 'Mi Negocio',
+      address: companyInfo.address || '',
+      phone: companyInfo.phone || '',
+      email: companyInfo.email || '',
+      taxId: companyInfo.taxId || companyInfo.ruc || '',
+      website: companyInfo.website || '',
     };
 
-    const company = companyInfo || defaultCompanyInfo;
-    const companyTaxId = company.taxId || company.ruc;
-    const idLabel = companyTaxId ? 'ID Fiscal' : null;
-    const companyWebsite = company.website || defaultCompanyInfo.website;
-
-    const saleDate = typeof receiptData.date === 'string' 
-      ? new Date(receiptData.date) 
-      : (receiptData.date as unknown as Date);
+    const saleDate = new Date(ticketData.createdAt);
 
     return (
-      <div 
+      <div
         ref={ref}
-        className="receipt-print bg-white p-4 max-w-sm mx-auto font-mono text-sm"
+        className="receipt-print mx-auto max-w-sm bg-white p-4 font-mono text-sm"
         style={{
           width: '80mm',
           fontSize: '12px',
-          lineHeight: '1.2',
-          color: '#000'
+          lineHeight: '1.25',
+          color: '#000',
         }}
       >
-        {/* Header */}
-        <div className="text-center border-b border-dashed border-gray-400 pb-2 mb-2">
-          <h1 className="font-bold text-lg mb-1">{company.name}</h1>
+        <div className="mb-3 border-b border-dashed border-gray-400 pb-3 text-center">
+          <h1 className="mb-1 text-lg font-bold">{company.name}</h1>
           {company.address && <p className="text-xs">{company.address}</p>}
           {company.phone && <p className="text-xs">Tel: {company.phone}</p>}
           {company.email && <p className="text-xs">{company.email}</p>}
-          {idLabel && companyTaxId && (
-            <p className="text-xs">{idLabel}: {companyTaxId}</p>
-          )}
+          {company.taxId && <p className="text-xs">RUC/ID: {company.taxId}</p>}
         </div>
 
-        {/* Sale Info */}
-        <div className="mb-2 text-xs">
-          <div className="flex justify-between">
-            <span>Recibo:</span>
-            <span>#{receiptData.id.slice(-8).toUpperCase()}</span>
+        <div className="mb-3 rounded border border-red-300 bg-red-50 px-3 py-2 text-center">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-red-700">
+            {ticketData.documentSubtitle}
+          </p>
+          <p className="mt-1 text-xs font-bold text-red-800">{ticketData.documentDisclaimer}</p>
+        </div>
+
+        <div className="mb-3 space-y-1 text-xs">
+          <div className="flex justify-between gap-3">
+            <span>{INTERNAL_TICKET_LABEL}:</span>
+            <span>{ticketData.documentNumber}</span>
           </div>
-          <div className="flex justify-between">
+          <div className="flex justify-between gap-3">
             <span>Fecha:</span>
-            <span>{saleDate.toLocaleDateString('es-MX')} {saleDate.toLocaleTimeString('es-MX')}</span>
+            <span>
+              {saleDate.toLocaleDateString('es-PY')} {saleDate.toLocaleTimeString('es-PY')}
+            </span>
           </div>
-          {receiptData.cashier && (
-            <div className="flex justify-between">
+          {ticketData.cashier && (
+            <div className="flex justify-between gap-3">
               <span>Cajero:</span>
-              <span>{receiptData.cashier}</span>
+              <span>{ticketData.cashier}</span>
             </div>
           )}
-          {receiptData.customer && (
-            <div className="flex justify-between">
+          {ticketData.customer?.name && (
+            <div className="flex justify-between gap-3">
               <span>Cliente:</span>
-              <span>{receiptData.customer.name}</span>
+              <span>{ticketData.customer.name}</span>
             </div>
           )}
         </div>
 
-        {/* Items */}
-        <div className="border-b border-dashed border-gray-400 pb-2 mb-2">
-          <div className="text-xs font-bold mb-1">PRODUCTOS</div>
-          {(Array.isArray(receiptData.items) ? receiptData.items : []).map((item, index) => (
-            <div key={index} className="mb-1">
-              <div className="flex justify-between">
-                <span className="flex-1 truncate pr-2">{item.product_name}</span>
+        <div className="mb-3 border-b border-dashed border-gray-400 pb-3">
+          <div className="mb-2 text-xs font-bold">PRODUCTOS</div>
+          {ticketData.items.map((item) => (
+            <div key={item.id} className="mb-2">
+              <div className="flex justify-between gap-3">
+                <span className="flex-1 truncate pr-2">{item.productName}</span>
               </div>
               <div className="flex justify-between text-xs">
-                <span>{item.quantity} x {fmtCurrency(item.price)}</span>
-                <span>{fmtCurrency(item.quantity * item.price)}</span>
+                <span>{item.quantity} x {fmtCurrency(item.unitPrice)}</span>
+                <span>{fmtCurrency(item.totalPrice)}</span>
               </div>
             </div>
           ))}
         </div>
 
-        {/* Totals */}
-        <div className="text-xs space-y-1">
+        <div className="space-y-1 text-xs">
           <div className="flex justify-between">
             <span>Subtotal:</span>
-            <span>{fmtCurrency(receiptData.subtotal)}</span>
+            <span>{fmtCurrency(ticketData.subtotal)}</span>
           </div>
-          <div className="flex justify-between">
-            <span>IVA (16%):</span>
-            <span>{fmtCurrency(receiptData.tax)}</span>
-          </div>
-          {receiptData.discount > 0 && (
+          {ticketData.discountAmount > 0 && (
             <div className="flex justify-between">
-              <span>Descuento ({receiptData.discountType === 'PERCENTAGE' ? '%' : 'Monto'}):</span>
-              <span>-{fmtCurrency(receiptData.discount)}</span>
+              <span>Descuento:</span>
+              <span>-{fmtCurrency(ticketData.discountAmount)}</span>
             </div>
           )}
-          {receiptData.couponCode && (
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>Cupón aplicado:</span>
-              <span>{receiptData.couponCode}</span>
-            </div>
-          )}
-          <div className="flex justify-between font-bold text-base border-t border-dashed border-gray-400 pt-1">
+          <div className="flex justify-between">
+            <span>IVA:</span>
+            <span>{fmtCurrency(ticketData.taxAmount)}</span>
+          </div>
+          <div className="flex justify-between border-t border-dashed border-gray-400 pt-1 text-base font-bold">
             <span>TOTAL:</span>
-            <span>{fmtCurrency(receiptData.total)}</span>
+            <span>{fmtCurrency(ticketData.totalAmount)}</span>
           </div>
         </div>
 
-        {/* Notes */}
-        {receiptData.notes && (
-          <div className="mt-2 text-xs">
-            <div className="border-t border-dashed border-gray-400 pt-1">
-              <span className="font-semibold">Notas:</span>
-              <p className="mt-1">{receiptData.notes}</p>
+        <div className="mt-3 text-xs">
+          <div className="flex justify-between">
+            <span>Método de pago:</span>
+            <span>{getPaymentMethodLabel(ticketData.paymentMethod)}</span>
+          </div>
+          {ticketData.transferReference && (
+            <div className="mt-1 flex justify-between gap-3">
+              <span>Referencia:</span>
+              <span>{ticketData.transferReference}</span>
             </div>
+          )}
+        </div>
+
+        {ticketData.notes && (
+          <div className="mt-3 border-t border-dashed border-gray-400 pt-2 text-xs">
+            <span className="font-semibold">Notas:</span>
+            <p className="mt-1">{ticketData.notes}</p>
           </div>
         )}
 
-        {/* Payment Method */}
-        <div className="mt-2 text-xs">
-          <div className="flex justify-between">
-            <span>Método de pago:</span>
-            <span>
-              {receiptData.paymentMethod === 'CASH' && 'Efectivo'}
-              {receiptData.paymentMethod === 'CARD' && 'Tarjeta'}
-              {receiptData.paymentMethod === 'TRANSFER' && 'Transferencia'}
-              {receiptData.paymentMethod === 'OTHER' && 'Otro'}
-            </span>
-          </div>
+        <div className="mt-4 border-t border-dashed border-gray-400 pt-3 text-center text-xs">
+          <p>{ticketData.documentDescription}</p>
+          <p className="mt-1 font-semibold">{ticketData.documentDisclaimer}</p>
+          {company.website && <p className="mt-2">{company.website}</p>}
         </div>
 
-        {/* Footer */}
-        <div className="text-center mt-4 pt-2 border-t border-dashed border-gray-400 text-xs">
-          <p>¡Gracias por su compra!</p>
-          <p>Conserve este ticket</p>
-          {companyWebsite && <p className="mt-2">{companyWebsite}</p>}
-        </div>
-
-        {/* Print Styles */}
         <style jsx>{`
           @media print {
             .receipt-print {
@@ -212,12 +157,12 @@ const ReceiptPrint = forwardRef<HTMLDivElement, ReceiptPrintProps>(
               padding: 5mm !important;
               font-size: 10px !important;
             }
-            
+
             body {
               margin: 0;
               padding: 0;
             }
-            
+
             * {
               -webkit-print-color-adjust: exact !important;
               color-adjust: exact !important;
@@ -226,7 +171,7 @@ const ReceiptPrint = forwardRef<HTMLDivElement, ReceiptPrintProps>(
         `}</style>
       </div>
     );
-  }
+  },
 );
 
 ReceiptPrint.displayName = 'ReceiptPrint';

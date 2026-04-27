@@ -1,9 +1,13 @@
 import type { Customer } from '@/types';
 import type { CustomerStats, CustomerFilters } from '@/lib/customer-service';
 
+export type CustomerSegment = 'new' | 'regular' | 'frequent' | 'vip' | 'at_risk' | 'dormant';
+export type CustomerSortField = 'name' | 'created_at' | 'total_purchases' | 'total_orders';
+
 export interface UICustomer extends Customer {
   customerCode?: string;
   customerType: 'regular' | 'vip' | 'wholesale';
+  ruc?: string;
   totalSpent: number;
   totalOrders: number;
   lastPurchase?: string;
@@ -11,6 +15,9 @@ export interface UICustomer extends Customer {
   notes?: string;
   created_at: string;
   updated_at: string;
+  segment?: CustomerSegment;
+  riskScore?: number;
+  lifetimeValue?: number;
   purchaseHistory?: Array<{
     orderNumber: string;
     date: string;

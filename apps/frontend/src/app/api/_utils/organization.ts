@@ -14,7 +14,9 @@ export async function getUserOrganizationId(
     .from('organization_members')
     .select('organization_id')
     .eq('user_id', userId)
-    .single()
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
   
   if (error || !data) return null
   return data.organization_id
@@ -37,7 +39,7 @@ export async function validateOrganizationAccess(
     .select('id')
     .eq('user_id', userId)
     .eq('organization_id', organizationId)
-    .single()
+    .maybeSingle()
   
   return !error && !!data
 }
@@ -66,7 +68,9 @@ export async function getUserOrganization(userId: string) {
       )
     `)
     .eq('user_id', userId)
-    .single()
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle()
   
   if (error || !data) return null
   return data

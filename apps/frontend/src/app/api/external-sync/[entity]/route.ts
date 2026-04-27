@@ -16,14 +16,15 @@ function buildAuthHeaders() {
   return headers
 }
 
-export async function POST(request: NextRequest, { params }: { params: { entity: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ entity: string }> }) {
   try {
     const base = process.env.EXTERNAL_SAAS_BASE_URL?.replace(/\/$/, '')
     if (!base) {
       return NextResponse.json({ error: 'EXTERNAL_SAAS_BASE_URL no configurado' }, { status: 500 })
     }
 
-    const entity = String(params.entity || '').replace(/^\//, '')
+    const { entity: rawEntity } = await params
+    const entity = String(rawEntity || '').replace(/^\//, '')
     const url = `${base}/${entity}`
     const body = await request.json()
 
@@ -41,8 +42,9 @@ export async function POST(request: NextRequest, { params }: { params: { entity:
       status: res.status,
       headers: { 'Content-Type': res.headers.get('content-type') || 'application/json' },
     })
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Proxy error' }, { status: 500 })
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Proxy error';
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
 

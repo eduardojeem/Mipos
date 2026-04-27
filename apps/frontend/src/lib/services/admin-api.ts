@@ -1,12 +1,16 @@
 import { api } from '@/lib/api';
+import { getEnvMode, isMockAuthEnabled } from '@/lib/env';
 
 // Types for API responses
 export interface User {
   id: string;
   email: string;
   name: string;
-  role: 'ADMIN' | 'CASHIER' | 'SUPER_ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'VIEWER' | 'INACTIVE';
-  status: 'active' | 'inactive';
+  role: 'OWNER' | 'ADMIN' | 'SELLER' | 'WAREHOUSE' | 'SUPER_ADMIN' | 'CASHIER' | 'MANAGER' | 'EMPLOYEE' | 'VIEWER' | 'INACTIVE';
+  status: 'active' | 'inactive' | 'suspended';
+  organizationId?: string;  // NUEVO: Multi-tenant support
+  organizationName?: string;
+  isOwner?: boolean;
   createdAt: string;
   lastLogin?: string;
   phone?: string;
@@ -19,7 +23,7 @@ export interface AuditLog {
   action: 'CREATE' | 'UPDATE' | 'DELETE';
   userId: string;
   userName?: string;
-  changes?: Record<string, any>;
+  changes?: Record<string, unknown>;
   timestamp: string;
   ipAddress?: string;
 }
@@ -78,6 +82,15 @@ export interface ActiveSession {
   location?: string;
 }
 
+type ApiErrorLike = {
+  code?: string;
+  message?: string;
+  response?: {
+    status?: number;
+    data?: unknown;
+  };
+};
+
 // API Service Class
 export class AdminApiService {
   private static cache = new Map<string, { ts: number; value: { users: User[]; total: number } }>();
@@ -88,24 +101,31 @@ export class AdminApiService {
     limit?: number;
     search?: string;
     role?: string;
+    status?: string;
+    organizationId?: string;  // NUEVO: Multi-tenant support
     source?: 'auth' | 'auto';
   }): Promise<{ users: User[]; total: number }> {
     try {
-      const key = JSON.stringify({ ...(params || {}), source: (params?.source ?? 'auth') });
+      const key = JSON.stringify(params || {});
       const now = Date.now();
       const cached = this.cache.get(key);
       if (cached && now - cached.ts < this.cacheTTL) {
         return cached.value;
       }
-      const response = await api.get('/users', { params: { ...(params || {}), source: (params?.source ?? 'auth') } });
+      const useMock = isMockAuthEnabled() || getEnvMode() === 'mock';
+      const response = await api.get('/users', { 
+        params,
+        headers: useMock ? { 'x-env-mode': 'mock', 'x-user-role': 'super_admin' } : undefined
+      });
       const users: User[] = (response?.data?.data || response?.data?.users || []) as User[];
       const total: number = response?.data?.total ?? (Array.isArray(users) ? users.length : 0);
       const value = { users, total };
       this.cache.set(key, { ts: now, value });
       return value;
-    } catch (error: any) {
-      const status = error?.response?.status;
-      const details = error?.response?.data;
+    } catch (error: unknown) {
+      const apiError = (error && typeof error === 'object' ? error : {}) as ApiErrorLike
+      const status = apiError.response?.status;
+      const details = apiError.response?.data;
 
       // Graceful fallback to keep UI stable
       if (status === 401 || status === 403) {
@@ -116,7 +136,7 @@ export class AdminApiService {
         console.warn('AdminApiService.getUsers not found (404); returning empty list.');
         return { users: [], total: 0 };
       }
-      if (!error?.response || error?.code === 'NETWORK_ERROR' || (typeof error?.message === 'string' && error.message.includes('fetch'))) {
+      if (!apiError.response || apiError.code === 'NETWORK_ERROR' || (typeof apiError.message === 'string' && apiError.message.includes('fetch'))) {
         console.warn('AdminApiService.getUsers network/backend error; returning empty list.');
         return { users: [], total: 0 };
       }
@@ -135,9 +155,12 @@ export class AdminApiService {
     password: string;
     name: string;
     role: string;
+    status?: string;
+    organizationId?: string;
   }): Promise<User> {
     try {
       const response = await api.post('/users', userData);
+      this.invalidateUsersCache();
       return response.data.user;
     } catch (error) {
       console.error('Error creating user:', error);
@@ -150,9 +173,12 @@ export class AdminApiService {
     email?: string;
     role?: string;
     password?: string;
+    status?: string;
+    organizationId?: string;
   }): Promise<User> {
     try {
       const response = await api.put(`/users/${userId}`, userData);
+      this.invalidateUsersCache();
       return response.data.user;
     } catch (error) {
       console.error('Error updating user:', error);
@@ -163,9 +189,14 @@ export class AdminApiService {
   static async deleteUser(userId: string): Promise<void> {
     try {
       await api.delete(`/users/${userId}`);
+      this.invalidateUsersCache();
     } catch (error) {
       console.error('Error deleting user:', error);
       throw error;
     }
+  }
+
+  static invalidateUsersCache() {
+    this.cache.clear();
   }
 }

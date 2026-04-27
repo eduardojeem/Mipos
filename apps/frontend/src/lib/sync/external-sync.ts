@@ -5,12 +5,12 @@
 
 import { EventEmitter } from 'events';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
 // Types and Interfaces
 export type SyncDirection = 'inbound' | 'outbound' | 'bidirectional';
 export type SyncStatus = 'idle' | 'syncing' | 'error' | 'success' | 'paused';
-export type EntityType = 'products' | 'customers' | 'sales' | 'categories' | 'inventory_movements';
+export type EntityType = 'products' | 'customers' | 'sales' | 'categories' | 'inventory_movements' | 'returns' | 'loyalty_points' | 'loyalty_redemptions';
 export type SyncTrigger = 'manual' | 'scheduled' | 'realtime' | 'webhook';
 
 export interface ExternalSystemConfig {
@@ -22,7 +22,7 @@ export interface ExternalSystemConfig {
     baseUrl: string;
     authentication: {
       type: 'api_key' | 'oauth2' | 'basic' | 'bearer' | 'custom';
-      credentials: Record<string, any>;
+      credentials: Record<string, string | number | boolean>;
     };
     timeout: number;
     retryAttempts: number;
@@ -59,8 +59,8 @@ export interface EntityMapping {
   enabled: boolean;
   fieldMappings: FieldMapping[];
   filters?: {
-    local?: Record<string, any>;
-    remote?: Record<string, any>;
+    local?: Record<string, string | number | boolean>;
+    remote?: Record<string, string | number | boolean>;
   };
   transformations?: {
     inbound?: string; // JavaScript code for transformation
@@ -74,12 +74,12 @@ export interface FieldMapping {
   direction: SyncDirection;
   required: boolean;
   dataType: 'string' | 'number' | 'boolean' | 'date' | 'object' | 'array';
-  defaultValue?: any;
+  defaultValue?: string | number | boolean | null;
   validation?: {
     pattern?: string;
     min?: number;
     max?: number;
-    enum?: any[];
+    enum?: Array<string | number | boolean>;
   };
 }
 
@@ -118,8 +118,8 @@ export interface SyncResult {
 
 export interface ConflictRecord {
   id: string;
-  localRecord: any;
-  remoteRecord: any;
+  localRecord: Record<string, unknown>;
+  remoteRecord: Record<string, unknown>;
   conflictType: 'field_mismatch' | 'timestamp_conflict' | 'deletion_conflict' | 'validation_error';
   conflictFields: string[];
   resolution?: 'local' | 'remote' | 'merged' | 'manual';
@@ -131,7 +131,7 @@ export interface SyncLogEntry {
   timestamp: Date;
   level: 'info' | 'warn' | 'error' | 'debug';
   message: string;
-  data?: any;
+  data?: Record<string, unknown>;
 }
 
 export interface SyncStats {
@@ -156,8 +156,8 @@ export class ExternalSyncService extends EventEmitter {
   private nextRunTimes: Map<string, Date> = new Map();
   private scheduledEntityJobs: Map<string, NodeJS.Timeout> = new Map();
   private nextEntityRunTimes: Map<string, Date> = new Map();
-  private webhookHandlers: Map<string, (data: any) => Promise<void>> = new Map();
-  private outboundQueues: Map<string, any[]> = new Map();
+  private webhookHandlers: Map<string, (data: Record<string, unknown>) => Promise<void>> = new Map();
+  private outboundQueues: Map<string, Record<string, unknown>[]> = new Map();
 
   constructor() {
     super();
@@ -299,13 +299,13 @@ export class ExternalSyncService extends EventEmitter {
     return jobId;
   }
 
-  enqueueOutboundRecords(systemId: string, entityType: EntityType, records: any[]): void {
+  enqueueOutboundRecords(systemId: string, entityType: EntityType, records: Record<string, unknown>[]): void {
     const key = `${systemId}:${entityType}`;
     const queue = this.outboundQueues.get(key) || [];
     this.outboundQueues.set(key, queue.concat(records));
   }
 
-  private getAndFlushOutboundRecords(systemId: string, entityType: EntityType): any[] {
+  private getAndFlushOutboundRecords(systemId: string, entityType: EntityType): Record<string, unknown>[] {
     const key = `${systemId}:${entityType}`;
     const queue = this.outboundQueues.get(key) || [];
     this.outboundQueues.delete(key);
@@ -399,7 +399,7 @@ export class ExternalSyncService extends EventEmitter {
   }
 
   // Webhook Handling
-  async handleWebhook(systemId: string, data: any): Promise<void> {
+  async handleWebhook(systemId: string, data: Record<string, unknown>): Promise<void> {
     const handler = this.webhookHandlers.get(systemId);
     if (handler) {
       await handler(data);
@@ -412,7 +412,7 @@ export class ExternalSyncService extends EventEmitter {
     }
   }
 
-  registerWebhookHandler(systemId: string, handler: (data: any) => Promise<void>): void {
+  registerWebhookHandler(systemId: string, handler: (data: Record<string, unknown>) => Promise<void>): void {
     this.webhookHandlers.set(systemId, handler);
   }
 
@@ -421,7 +421,7 @@ export class ExternalSyncService extends EventEmitter {
     jobId: string, 
     conflictId: string, 
     resolution: 'local' | 'remote' | 'merged',
-    mergedData?: any
+    mergedData?: Record<string, unknown>
   ): Promise<void> {
     const job = this.jobs.get(jobId);
     if (!job || !job.result) {
@@ -437,7 +437,7 @@ export class ExternalSyncService extends EventEmitter {
     conflict.resolvedAt = new Date();
 
     // Apply resolution
-    let resolvedRecord: any;
+    let resolvedRecord: Record<string, unknown>;
     switch (resolution) {
       case 'local':
         resolvedRecord = conflict.localRecord;
@@ -551,13 +551,13 @@ export class ExternalSyncService extends EventEmitter {
     this.addSystemLog(system.id, 'info', 'Connection test passed');
   }
 
-  private async getLocalData(entityType: EntityType, filters?: Record<string, any>): Promise<any[]> {
+  private async getLocalData(_entityType: EntityType, _filters?: Record<string, string | number | boolean>): Promise<Record<string, unknown>[]> {
     // Placeholder: in ausencia de payload encolado, retornar lote vacío
     // Podrías integrar con Supabase/Prisma para obtener registros recientes
     return [];
   }
 
-  private async getRemoteData(system: ExternalSystemConfig, entity: string, filters?: Record<string, any>): Promise<any[]> {
+  private async getRemoteData(system: ExternalSystemConfig, entity: string, filters?: Record<string, string | number | boolean>): Promise<Record<string, unknown>[]> {
     const url = this.composeUrl(system.connection.baseUrl, entity);
     const headers = this.composeAuthHeaders(system);
     const params = filters ? `?${new URLSearchParams(this.normalizeFilters(filters)).toString()}` : '';
@@ -566,10 +566,9 @@ export class ExternalSyncService extends EventEmitter {
     return await res.json();
   }
 
-  private async transformData(data: any[], mapping: EntityMapping, direction: 'inbound' | 'outbound'): Promise<any[]> {
-    // Apply field mappings and transformations
+  private async transformData(data: Record<string, unknown>[], mapping: EntityMapping, direction: 'inbound' | 'outbound'): Promise<Record<string, unknown>[]> {
     return data.map(record => {
-      const transformed: any = {};
+      const transformed: Record<string, unknown> = {};
       
       for (const fieldMapping of mapping.fieldMappings) {
         if (fieldMapping.direction === direction || fieldMapping.direction === 'bidirectional') {
@@ -604,7 +603,7 @@ export class ExternalSyncService extends EventEmitter {
     });
   }
 
-  private async sendToExternalSystem(system: ExternalSystemConfig, entity: string, data: any[]): Promise<void> {
+  private async sendToExternalSystem(system: ExternalSystemConfig, entity: string, data: Record<string, unknown>[]): Promise<void> {
     if (!data || data.length === 0) return;
     const url = this.composeUrl(system.connection.baseUrl, entity);
     const headers = {
@@ -619,11 +618,11 @@ export class ExternalSyncService extends EventEmitter {
     if (!res.ok) throw new Error(`External POST failed: ${res.status}`);
   }
 
-  private async saveToLocalSystem(entityType: EntityType, data: any[]): Promise<void> {
+  private async saveToLocalSystem(_entityType: EntityType, _data: Record<string, unknown>[]): Promise<void> {
     // Placeholder inbound: no-op; integrar con Supabase según tablas locales
   }
 
-  private async applyResolvedRecord(systemId: string, entityType: EntityType, record: any): Promise<void> {
+  private async applyResolvedRecord(_systemId: string, _entityType: EntityType, _record: Record<string, unknown>): Promise<void> {
     // Implementation to apply resolved conflict record
   }
 
@@ -740,7 +739,7 @@ export class ExternalSyncService extends EventEmitter {
    * - Weekly at 00:00 on day D: "0 0 * * D" (D=0-6, 0=Sunday)
    * Fallback: 15 minutes.
    */
-  private computeNextRun(cron: string, from: Date, timezone?: string): Date {
+  private computeNextRun(cron: string, from: Date, _timezone?: string): Date {
     // Note: timezone is currently not applied; placeholder for future support
     const mEvery = /^\*\/(\d+) \* \* \* \*$/;
     const hEvery = /^0 \*\/(\d+) \* \* \*$/;
@@ -784,12 +783,12 @@ export class ExternalSyncService extends EventEmitter {
     return next;
   }
 
-  private calculateUptime(systemId: string): number {
+  private calculateUptime(_systemId: string): number {
     // Implementation to calculate system uptime percentage
     return 100;
   }
 
-  private addJobLog(job: SyncJob, level: SyncLogEntry['level'], message: string, data?: any): void {
+  private addJobLog(job: SyncJob, level: SyncLogEntry['level'], message: string, data?: Record<string, unknown>): void {
     job.logs.push({
       timestamp: new Date(),
       level,
@@ -798,7 +797,7 @@ export class ExternalSyncService extends EventEmitter {
     });
   }
 
-  private addSystemLog(systemId: string, level: SyncLogEntry['level'], message: string, data?: any): void {
+  private addSystemLog(_systemId: string, _level: SyncLogEntry['level'], _message: string, _data?: Record<string, unknown>): void {
     // Implementation to add system-level logs
   }
 
@@ -818,7 +817,7 @@ export class ExternalSyncService extends EventEmitter {
     } catch {}
   }
 
-  private async saveSystem(system: ExternalSystemConfig): Promise<void> {
+  private async saveSystem(_system: ExternalSystemConfig): Promise<void> {
     try {
       const arr = Array.from(this.systems.values());
       if (typeof window !== 'undefined') {
@@ -1011,7 +1010,7 @@ export class ExternalSyncService extends EventEmitter {
     return headers;
   }
 
-  private normalizeFilters(filters: Record<string, any>): Record<string, string> {
+  private normalizeFilters(filters: Record<string, string | number | boolean | null | undefined>): Record<string, string> {
     const out: Record<string, string> = {};
     Object.entries(filters).forEach(([k, v]) => {
       if (v == null) return;
@@ -1071,7 +1070,7 @@ export function useExternalSync() {
       service.cancelEntitySchedule(systemId, entityType),
     getNextEntityScheduledSync: (systemId: string, entityType: EntityType) =>
       service.getNextEntityScheduledSync(systemId, entityType),
-    resolveConflict: (jobId: string, conflictId: string, resolution: 'local' | 'remote' | 'merged', mergedData?: any) =>
+    resolveConflict: (jobId: string, conflictId: string, resolution: 'local' | 'remote' | 'merged', mergedData?: Record<string, unknown>) =>
       service.resolveConflict(jobId, conflictId, resolution, mergedData)
   };
 }
@@ -1090,10 +1089,10 @@ export interface ScheduledSyncJob {
 
 class ScheduledExternalSync {
   private jobs = new Map<string, ScheduledSyncJob>();
-  private logger: any; // Sistema de logging configurado
+  private logger: { info: (m: string) => void; warn: (m: string) => void; error: (m: string, ...args: unknown[]) => void };
   private maxRetries = 3; // Máximo de reintentos por trabajo
 
-  constructor(logger?: any) {
+  constructor(logger?: { info: (m: string) => void; warn: (m: string) => void; error: (m: string, ...args: unknown[]) => void }) {
     this.logger = logger || console;
   }
 
@@ -1185,7 +1184,7 @@ import { syncLogger } from './sync-logging';
 const logger = {
   info: (message: string) => syncLogger.info(message),
   warn: (message: string) => syncLogger.warn(message),
-  error: (message: string, error?: any) => syncLogger.error(message, undefined, error)
+  error: (message: string, error?: unknown) => syncLogger.error(message, undefined, error as Error | undefined)
 };
 
 // Configurar el logger en la instancia

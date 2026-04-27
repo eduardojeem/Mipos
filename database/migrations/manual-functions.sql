@@ -3,7 +3,8 @@
 
 -- 1. Función para obtener estadísticas de roles
 CREATE OR REPLACE FUNCTION get_role_statistics()
-RETURNS JSON AS $$
+RETURNS JSON
+AS $$
 DECLARE
     result JSON;
 BEGIN
@@ -27,11 +28,12 @@ BEGIN
     
     RETURN result;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = '';
 
 -- 2. Función para validar jerarquía circular
 CREATE OR REPLACE FUNCTION check_circular_hierarchy(role_id UUID, parent_id UUID)
-RETURNS BOOLEAN AS $$
+RETURNS BOOLEAN
+AS $$
 DECLARE
     current_parent UUID;
     visited UUID[];
@@ -79,11 +81,12 @@ BEGIN
     
     RETURN FALSE;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = '';
 
 -- 3. Función para auditoría automática (OPCIONAL - solo si quieres triggers automáticos)
 CREATE OR REPLACE FUNCTION audit_role_changes()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+AS $$
 BEGIN
     -- Para INSERT
     IF TG_OP = 'INSERT' THEN
@@ -167,7 +170,7 @@ BEGIN
     
     RETURN NULL;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = '';
 
 -- 4. Crear el trigger (OPCIONAL)
 DROP TRIGGER IF EXISTS role_audit_trigger ON roles;

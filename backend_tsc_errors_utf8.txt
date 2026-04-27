@@ -1,0 +1,55 @@
+apps/backend/src/__tests__/auth.test.ts(54,23): error TS2339: Property 'status' does not exist on type 'TestAgent<Test>'.
+apps/backend/src/__tests__/auth.test.ts(55,23): error TS2339: Property 'body' does not exist on type 'TestAgent<Test>'.
+apps/backend/src/__tests__/users-multi-tenant.test.ts(2,10): error TS2614: Module '"../index"' has no exported member 'app'. Did you mean to use 'import app from "../index"' instead?
+apps/backend/src/__tests__/users-multi-tenant.test.ts(3,10): error TS2305: Module '"../config/database"' has no exported member 'prisma'.
+apps/backend/src/config/cache-usage-examples.ts(140,9): error TS2322: Type '{ userId: any; customerId: any; subtotal: any; discount: any; tax: any; total: any; paymentMethod: any; }' is not assignable to type '(Without<SaleCreateInput, SaleUncheckedCreateInput> & SaleUncheckedCreateInput) | (Without<...> & SaleCreateInput)'.
+  Type '{ userId: any; customerId: any; subtotal: any; discount: any; tax: any; total: any; paymentMethod: any; }' is not assignable to type 'Without<SaleUncheckedCreateInput, SaleCreateInput> & SaleCreateInput'.
+    Type '{ userId: any; customerId: any; subtotal: any; discount: any; tax: any; total: any; paymentMethod: any; }' is not assignable to type 'Without<SaleUncheckedCreateInput, SaleCreateInput>'.
+      Types of property 'userId' are incompatible.
+        Type 'any' is not assignable to type 'never'.
+apps/backend/src/index.ts(2,26): error TS2307: Cannot find module 'cookie-parser' or its corresponding type declarations.
+apps/backend/src/lib/auth/role-manager.ts(10,25): error TS2307: Cannot find module 'next/headers' or its corresponding type declarations.
+apps/backend/src/routes/inventory.ts(198,11): error TS2322: Type 'string' is not assignable to type 'number | FieldRef<"Product", "Int">'.
+apps/backend/src/routes/inventory.ts(241,9): error TS2322: Type 'string' is not assignable to type 'number | FieldRef<"Product", "Int">'.
+apps/backend/src/routes/invoices.ts(153,27): error TS2339: Property 'length' does not exist on type 'unknown'.
+apps/backend/src/routes/organizations.ts(136,5): error TS2322: Type '{ status?: "ACTIVE" | "INACTIVE" | "SUSPENDED"; name?: string; slug?: string; }' is not assignable to type '(Without<OrganizationCreateInput, OrganizationUncheckedCreateInput> & OrganizationUncheckedCreateInput) | (Without<...> & OrganizationCreateInput)'.
+  Type '{ status?: "ACTIVE" | "INACTIVE" | "SUSPENDED"; name?: string; slug?: string; }' is not assignable to type 'Without<OrganizationUncheckedCreateInput, OrganizationCreateInput> & OrganizationCreateInput'.
+    Type '{ status?: "ACTIVE" | "INACTIVE" | "SUSPENDED"; name?: string; slug?: string; }' is not assignable to type 'OrganizationCreateInput'.
+      Property 'name' is optional in type '{ status?: "ACTIVE" | "INACTIVE" | "SUSPENDED"; name?: string; slug?: string; }' but required in type 'OrganizationCreateInput'.
+apps/backend/src/routes/payments.ts(167,27): error TS2339: Property 'length' does not exist on type 'unknown'.
+apps/backend/src/routes/plans.ts(82,21): error TS2339: Property 'length' does not exist on type 'unknown'.
+apps/backend/src/routes/public-orders.ts(90,13): error TS2353: Object literal may only specify known properties, and 'totalSpent' does not exist in type '(Without<CustomerCreateInput, CustomerUncheckedCreateInput> & CustomerUncheckedCreateInput) | (Without<...> & CustomerCreateInput)'.
+apps/backend/src/routes/public-orders.ts(98,9): error TS2322: Type '{ customerId: string; total: number; paymentMethod: "CASH" | "CARD" | "TRANSFER"; notes: string; date: Date; }' is not assignable to type '(Without<SaleCreateInput, SaleUncheckedCreateInput> & SaleUncheckedCreateInput) | (Without<...> & SaleCreateInput)'.
+  Type '{ customerId: string; total: number; paymentMethod: "CASH" | "CARD" | "TRANSFER"; notes: string; date: Date; }' is not assignable to type 'Without<SaleUncheckedCreateInput, SaleCreateInput> & SaleCreateInput'.
+    Type '{ customerId: string; total: number; paymentMethod: "CASH" | "CARD" | "TRANSFER"; notes: string; date: Date; }' is not assignable to type 'Without<SaleUncheckedCreateInput, SaleCreateInput>'.
+      Types of property 'customerId' are incompatible.
+        Type 'string' is not assignable to type 'never'.
+apps/backend/src/routes/public-orders.ts(133,11): error TS2353: Object literal may only specify known properties, and 'totalSpent' does not exist in type '(Without<CustomerUpdateInput, CustomerUncheckedUpdateInput> & CustomerUncheckedUpdateInput) | (Without<...> & CustomerUpdateInput)'.
+apps/backend/src/routes/returns.ts(221,13): error TS2353: Object literal may only specify known properties, and 'returnNumber' does not exist in type 'ReturnSelect<DefaultArgs>'.
+apps/backend/src/routes/returns.ts(270,27): error TS2551: Property 'customer' does not exist on type '{ id: string; status: string; organizationId: string; createdAt: Date; updatedAt: Date; userId: string; customerId: string; totalAmount: number; originalSaleId: string; refundMethod: string; reason: string; }'. Did you mean 'customerId'?
+apps/backend/src/routes/returns.ts(271,20): error TS2339: Property 'returnItems' does not exist on type '{ id: string; status: string; organizationId: string; createdAt: Date; updatedAt: Date; userId: string; customerId: string; totalAmount: number; originalSaleId: string; refundMethod: string; reason: string; }'.
+apps/backend/src/routes/returns.ts(716,9): error TS2322: Type '{ action: string; entityType: string; entityId: string; userId: string; metadata: string; }' is not assignable to type '(Without<AuditLogCreateInput, AuditLogUncheckedCreateInput> & AuditLogUncheckedCreateInput) | (Without<...> & AuditLogCreateInput)'.
+  Type '{ action: string; entityType: string; entityId: string; userId: string; metadata: string; }' is not assignable to type 'Without<AuditLogUncheckedCreateInput, AuditLogCreateInput> & AuditLogCreateInput'.
+    Type '{ action: string; entityType: string; entityId: string; userId: string; metadata: string; }' is not assignable to type 'Without<AuditLogUncheckedCreateInput, AuditLogCreateInput>'.
+      Types of property 'userId' are incompatible.
+        Type 'string' is not assignable to type 'never'.
+apps/backend/src/routes/returns.ts(993,9): error TS2322: Type '{ action: string; entityType: string; entityId: string; userId: string; metadata: string; }' is not assignable to type '(Without<AuditLogCreateInput, AuditLogUncheckedCreateInput> & AuditLogUncheckedCreateInput) | (Without<...> & AuditLogCreateInput)'.
+  Type '{ action: string; entityType: string; entityId: string; userId: string; metadata: string; }' is not assignable to type 'Without<AuditLogUncheckedCreateInput, AuditLogCreateInput> & AuditLogCreateInput'.
+    Type '{ action: string; entityType: string; entityId: string; userId: string; metadata: string; }' is not assignable to type 'Without<AuditLogUncheckedCreateInput, AuditLogCreateInput>'.
+      Types of property 'userId' are incompatible.
+        Type 'string' is not assignable to type 'never'.
+apps/backend/src/routes/sales.ts(261,7): error TS2367: This comparison appears to be unintentional because the types '"NEAREST"' and '"UP"' have no overlap.
+apps/backend/src/routes/sales.ts(263,14): error TS2367: This comparison appears to be unintentional because the types '"NEAREST"' and '"DOWN"' have no overlap.
+apps/backend/src/routes/sales.ts(344,30): error TS2339: Property 'taxRate' does not exist on type '{ id: string; organizationId: string; createdAt: Date; updatedAt: Date; name: string; isActive: boolean; description: string; categoryId: string; costPrice: number; salePrice: number; ... 20 more ...; expirationDate: Date; }'.
+apps/backend/src/routes/sales.ts(344,49): error TS2339: Property 'taxRate' does not exist on type '{ id: string; organizationId: string; createdAt: Date; updatedAt: Date; name: string; isActive: boolean; description: string; categoryId: string; costPrice: number; salePrice: number; ... 20 more ...; expirationDate: Date; }'.
+apps/backend/src/routes/sales.ts(345,28): error TS2339: Property 'taxRate' does not exist on type '{ id: string; organizationId: string; createdAt: Date; updatedAt: Date; name: string; isActive: boolean; description: string; categoryId: string; costPrice: number; salePrice: number; ... 20 more ...; expirationDate: Date; }'.
+apps/backend/src/routes/sales.ts(398,35): error TS2448: Block-scoped variable 'hasPermission' used before its declaration.
+apps/backend/src/routes/sales.ts(426,28): error TS2339: Property 'taxRate' does not exist on type '{ id: string; organizationId: string; createdAt: Date; updatedAt: Date; name: string; isActive: boolean; description: string; categoryId: string; costPrice: number; salePrice: number; ... 20 more ...; expirationDate: Date; }'.
+apps/backend/src/routes/sales.ts(426,47): error TS2339: Property 'taxRate' does not exist on type '{ id: string; organizationId: string; createdAt: Date; updatedAt: Date; name: string; isActive: boolean; description: string; categoryId: string; costPrice: number; salePrice: number; ... 20 more ...; expirationDate: Date; }'.
+apps/backend/src/routes/sales.ts(443,32): error TS2339: Property 'taxRate' does not exist on type '{ id: string; organizationId: string; createdAt: Date; updatedAt: Date; name: string; isActive: boolean; description: string; categoryId: string; costPrice: number; salePrice: number; ... 20 more ...; expirationDate: Date; }'.
+apps/backend/src/routes/sales.ts(443,51): error TS2339: Property 'taxRate' does not exist on type '{ id: string; organizationId: string; createdAt: Date; updatedAt: Date; name: string; isActive: boolean; description: string; categoryId: string; costPrice: number; salePrice: number; ... 20 more ...; expirationDate: Date; }'.
+apps/backend/src/routes/sales.ts(444,30): error TS2339: Property 'taxRate' does not exist on type '{ id: string; organizationId: string; createdAt: Date; updatedAt: Date; name: string; isActive: boolean; description: string; categoryId: string; costPrice: number; salePrice: number; ... 20 more ...; expirationDate: Date; }'.
+apps/backend/src/routes/subscriptions.ts(112,37): error TS2339: Property 'length' does not exist on type 'unknown'.
+apps/backend/src/routes/subscriptions.ts(131,28): error TS2339: Property 'length' does not exist on type 'unknown'.
+apps/backend/src/routes/subscriptions.ts(140,21): error TS2339: Property 'length' does not exist on type 'unknown'.
+apps/backend/src/routes/subscriptions.ts(280,37): error TS2339: Property 'length' does not exist on type 'unknown'.

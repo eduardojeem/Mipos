@@ -1,22 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { createClient } from '@/lib/supabase';
 import { CACHE_CONFIG } from '@/config/sales.config';
-
-// Helper to get current organization ID
-const getOrganizationId = (): string | null => {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = window.localStorage.getItem('selected_organization');
-    if (!raw) return null;
-    if (raw.startsWith('{')) {
-      const parsed = JSON.parse(raw);
-      return parsed?.id || parsed?.organization_id || null;
-    }
-    return raw;
-  } catch {
-    return null;
-  }
-};
+import { useCurrentOrganizationId } from '@/hooks/use-current-organization';
 
 export interface SalesSummary {
   todaySales: number;
@@ -41,11 +26,11 @@ export interface RecentSale {
 
 export function useSalesSummary() {
   const supabase = createClient();
+  const orgId = useCurrentOrganizationId();
 
   return useQuery({
-    queryKey: ['sales-summary-optimized'],
+    queryKey: ['sales-summary-optimized', orgId],
     queryFn: async (): Promise<SalesSummary> => {
-      const orgId = getOrganizationId();
       if (!orgId) return { todaySales: 0, todayCount: 0, weekSales: 0, weekCount: 0, monthSales: 0, monthCount: 0, avgTicket: 0, topPaymentMethod: 'N/A', growthPercentage: 0 };
 
       const today = new Date();
@@ -103,7 +88,7 @@ export function useSalesSummary() {
         growthPercentage: 0 // Requires historical comparison, skipping for speed
       };
     },
-    enabled: !!getOrganizationId(),
+    enabled: !!orgId,
     staleTime: CACHE_CONFIG.SUMMARY_STALE_TIME,
     refetchInterval: CACHE_CONFIG.REFETCH_INTERVAL
   });
@@ -111,11 +96,11 @@ export function useSalesSummary() {
 
 export function useRecentSales(limit = 10) {
   const supabase = createClient();
+  const orgId = useCurrentOrganizationId();
 
   return useQuery({
-    queryKey: ['recent-sales-optimized', limit],
+    queryKey: ['recent-sales-optimized', orgId, limit],
     queryFn: async (): Promise<{ sales: RecentSale[]; total: number }> => {
-      const orgId = getOrganizationId();
       if (!orgId) return { sales: [], total: 0 };
 
       const { data, count, error } = await supabase
@@ -148,7 +133,7 @@ export function useRecentSales(limit = 10) {
         total: count || 0
       };
     },
-    enabled: !!getOrganizationId(),
+    enabled: !!orgId,
     staleTime: CACHE_CONFIG.RECENT_STALE_TIME,
     refetchInterval: CACHE_CONFIG.RECENT_REFETCH_INTERVAL
   });

@@ -1,8 +1,9 @@
-import { useCallback, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useToast } from '@/components/ui/use-toast';
+import { createClient } from '@/lib/supabase/client';
 import { Organization } from './useAdminData';
 import { OrganizationFilters } from './useAdminFilters';
-import { useToast } from '@/components/ui/use-toast';
 
 interface UseOrganizationsOptions {
     filters?: Partial<OrganizationFilters>;
@@ -11,6 +12,11 @@ interface UseOrganizationsOptions {
     pageSize?: number;
     page?: number;
 }
+
+type QuerySnapshot = {
+    organizations: Organization[];
+    total: number;
+};
 
 export function useOrganizations(options: UseOrganizationsOptions = {}) {
     const {
@@ -23,17 +29,24 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
 
     const queryClient = useQueryClient();
     const { toast } = useToast();
+    const supabase = useMemo(() => createClient(), []);
+    const invalidateTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const [updatingTarget, setUpdatingTarget] = useState<string | 'bulk' | null>(null);
+    const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
+    const searchFilter = filters?.search ?? '';
+    const statusFilter = filters?.status?.[0] ?? '';
+    const planFilter = filters?.plan?.[0] ?? '';
 
-    // Query key for caching
-    const queryKey = useMemo(() => 
-        ['admin', 'organizations', { filters, sortBy, sortOrder, pageSize, page }], 
-        [filters, sortBy, sortOrder, pageSize, page]
+    const queryKey = useMemo(
+        () => ['admin', 'organizations', searchFilter, statusFilter, planFilter, sortBy, sortOrder, pageSize, page],
+        [searchFilter, statusFilter, planFilter, sortBy, sortOrder, pageSize, page]
     );
 
-    // Fetch organizations using React Query
     const {
         data,
         isLoading: loading,
+        isFetching,
+        dataUpdatedAt,
         error: queryError,
         refetch,
     } = useQuery({
@@ -46,13 +59,9 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
                 sortOrder,
             });
 
-            if (filters?.search) params.append('search', filters.search);
-            if (filters?.status && filters.status.length > 0) {
-                params.append('status', filters.status[0]);
-            }
-            if (filters?.plan && filters.plan.length > 0) {
-                params.append('plan', filters.plan[0]);
-            }
+            if (searchFilter) params.append('search', searchFilter);
+            if (statusFilter) params.append('status', statusFilter);
+            if (planFilter) params.append('plan', planFilter);
 
             const response = await fetch(`/api/superadmin/organizations?${params.toString()}`);
             if (!response.ok) {
@@ -62,17 +71,60 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
 
             return await response.json();
         },
-        staleTime: 10 * 60 * 1000, // 10 minutes - datos que no cambian frecuentemente
-        gcTime: 15 * 60 * 1000, // 15 minutes (antes cacheTime)
-        refetchOnWindowFocus: false, // No refetch al cambiar de tab
-        refetchOnMount: false, // No refetch si hay cache válido
+        staleTime: 60 * 1000,
+        gcTime: 15 * 60 * 1000,
+        refetchOnWindowFocus: false,
+        refetchOnMount: true,
+        refetchInterval: isRealtimeConnected ? false : 60 * 1000,
+        refetchIntervalInBackground: true,
     });
 
     const organizations = data?.organizations || [];
     const totalCount = data?.total || 0;
+    const metrics = data?.metrics || {
+        total: totalCount,
+        active: 0,
+        trial: 0,
+        suspended: 0,
+    };
     const error = queryError instanceof Error ? queryError.message : null;
 
-    // Mutation for updating an organization
+    useEffect(() => {
+        const scheduleInvalidation = () => {
+            if (invalidateTimerRef.current) {
+                clearTimeout(invalidateTimerRef.current);
+            }
+
+            invalidateTimerRef.current = setTimeout(() => {
+                queryClient.invalidateQueries({ queryKey: ['admin', 'organizations'] });
+            }, 250);
+        };
+
+        const channel = supabase
+            .channel('superadmin-organizations')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'organizations' },
+                scheduleInvalidation
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'organization_members' },
+                scheduleInvalidation
+            )
+            .subscribe((status) => {
+                setIsRealtimeConnected(status === 'SUBSCRIBED');
+            });
+
+        return () => {
+            setIsRealtimeConnected(false);
+            if (invalidateTimerRef.current) {
+                clearTimeout(invalidateTimerRef.current);
+            }
+            void supabase.removeChannel(channel);
+        };
+    }, [queryClient, supabase]);
+
     const updateMutation = useMutation({
         mutationFn: async ({ id, updates }: { id: string; updates: Partial<Organization> }) => {
             const response = await fetch('/api/superadmin/organizations', {
@@ -83,22 +135,20 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
 
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.error || 'Error al actualizar organización');
+                throw new Error(errorData.error || 'Error al actualizar organizacion');
             }
 
             return await response.json();
         },
         onMutate: async ({ id, updates }) => {
-            // Cancel any outgoing refetches (so they don't overwrite our optimistic update)
+            setUpdatingTarget(id);
             await queryClient.cancelQueries({ queryKey: ['admin', 'organizations'] });
 
-            // Snapshot the previous value
             const previousData = queryClient.getQueryData(queryKey);
 
-            // Optimistically update to the new value
-            queryClient.setQueryData(queryKey, (old: { organizations: Organization[]; total: number } | undefined) => ({
+            queryClient.setQueryData(queryKey, (old: QuerySnapshot | undefined) => ({
                 ...old,
-                organizations: old?.organizations?.map((org: Organization) => 
+                organizations: old?.organizations?.map((org) =>
                     org.id === id ? { ...org, ...updates } : org
                 ) || [],
                 total: old?.total || 0,
@@ -106,8 +156,7 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
 
             return { previousData };
         },
-        onError: (err, variables, context) => {
-            // If the mutation fails, use the context returned from onMutate to roll back
+        onError: (err, _variables, context) => {
             queryClient.setQueryData(queryKey, context?.previousData);
             toast({
                 title: 'Error al actualizar',
@@ -117,17 +166,16 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
         },
         onSuccess: () => {
             toast({
-                title: 'Actualización exitosa',
-                description: 'La organización se actualizó correctamente.',
+                title: 'Actualizacion exitosa',
+                description: 'La organizacion se actualizo correctamente.',
             });
         },
         onSettled: () => {
-            // Always refetch after error or success to ensure we have the correct data
+            setUpdatingTarget(null);
             queryClient.invalidateQueries({ queryKey: ['admin', 'organizations'] });
         },
     });
 
-    // Mutation for deleting an organization
     const deleteMutation = useMutation({
         mutationFn: async (id: string) => {
             const response = await fetch(`/api/superadmin/organizations?id=${id}`, {
@@ -136,43 +184,47 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
 
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.error || 'Error al eliminar organización');
+                throw new Error(errorData.error || 'Error al archivar organizacion');
             }
 
             return await response.json();
         },
         onMutate: async (id) => {
+            setUpdatingTarget(id);
             await queryClient.cancelQueries({ queryKey: ['admin', 'organizations'] });
+
             const previousData = queryClient.getQueryData(queryKey);
 
-            queryClient.setQueryData(queryKey, (old: { organizations: Organization[]; total: number } | undefined) => ({
+            queryClient.setQueryData(queryKey, (old: QuerySnapshot | undefined) => ({
                 ...old,
-                organizations: old?.organizations?.filter((org: Organization) => org.id !== id) || [],
-                total: (old?.total || 0) - 1,
+                organizations: old?.organizations?.map((org) =>
+                    org.id === id ? { ...org, subscription_status: 'SUSPENDED' } : org
+                ) || [],
+                total: old?.total || 0,
             }));
 
             return { previousData };
         },
-        onError: (err, id, context) => {
+        onError: (err, _id, context) => {
             queryClient.setQueryData(queryKey, context?.previousData);
             toast({
-                title: 'Error al eliminar',
+                title: 'Error al archivar',
                 description: err instanceof Error ? err.message : 'Error desconocido',
                 variant: 'destructive',
             });
         },
         onSuccess: () => {
             toast({
-                title: 'Eliminación exitosa',
-                description: 'La organización se eliminó correctamente.',
+                title: 'Organizacion archivada',
+                description: 'La organizacion fue suspendida correctamente.',
             });
         },
         onSettled: () => {
+            setUpdatingTarget(null);
             queryClient.invalidateQueries({ queryKey: ['admin', 'organizations'] });
         },
     });
 
-    // Mutation for bulk updating organizations
     const bulkUpdateMutation = useMutation({
         mutationFn: async ({ ids, updates }: { ids: string[]; updates: Partial<Organization> }) => {
             const response = await fetch('/api/superadmin/organizations', {
@@ -183,17 +235,20 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
 
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.error || 'Error en actualización masiva');
+                throw new Error(errorData.error || 'Error en actualizacion masiva');
             }
 
             return await response.json();
         },
+        onMutate: async () => {
+            setUpdatingTarget('bulk');
+            await queryClient.cancelQueries({ queryKey: ['admin', 'organizations'] });
+        },
         onSuccess: (_, { ids }) => {
             toast({
                 title: 'Organizaciones actualizadas',
-                description: `${ids.length} organizaciones han sido actualizadas.`,
+                description: `${ids.length} organizaciones fueron actualizadas.`,
             });
-            queryClient.invalidateQueries({ queryKey: ['admin', 'organizations'] });
         },
         onError: (err) => {
             toast({
@@ -201,10 +256,13 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
                 description: err instanceof Error ? err.message : 'Error desconocido',
                 variant: 'destructive',
             });
-        }
+        },
+        onSettled: () => {
+            setUpdatingTarget(null);
+            queryClient.invalidateQueries({ queryKey: ['admin', 'organizations'] });
+        },
     });
 
-    // Mutation for bulk deleting organizations
     const bulkDeleteMutation = useMutation({
         mutationFn: async (ids: string[]) => {
             const response = await fetch(`/api/superadmin/organizations?ids=${ids.join(',')}`, {
@@ -213,17 +271,20 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
 
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.error || 'Error en eliminación masiva');
+                throw new Error(errorData.error || 'Error en archivado masivo');
             }
 
             return await response.json();
         },
+        onMutate: async () => {
+            setUpdatingTarget('bulk');
+            await queryClient.cancelQueries({ queryKey: ['admin', 'organizations'] });
+        },
         onSuccess: (_, ids) => {
             toast({
-                title: 'Organizaciones eliminadas',
-                description: `${ids.length} organizaciones han sido eliminadas.`,
+                title: 'Organizaciones archivadas',
+                description: `${ids.length} organizaciones fueron suspendidas correctamente.`,
             });
-            queryClient.invalidateQueries({ queryKey: ['admin', 'organizations'] });
         },
         onError: (err) => {
             toast({
@@ -231,7 +292,11 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
                 description: err instanceof Error ? err.message : 'Error desconocido',
                 variant: 'destructive',
             });
-        }
+        },
+        onSettled: () => {
+            setUpdatingTarget(null);
+            queryClient.invalidateQueries({ queryKey: ['admin', 'organizations'] });
+        },
     });
 
     const updateOrganization = useCallback(async (id: string, updates: Partial<Organization>) => {
@@ -250,7 +315,6 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
         return bulkDeleteMutation.mutateAsync(ids);
     }, [bulkDeleteMutation]);
 
-
     const suspendOrganization = useCallback(async (id: string) => {
         return updateOrganization(id, { subscription_status: 'SUSPENDED' });
     }, [updateOrganization]);
@@ -268,8 +332,13 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
         loading,
         error,
         totalCount,
+        metrics,
         refresh: refetch,
-        updating: updateMutation.isPending || deleteMutation.isPending || bulkUpdateMutation.isPending || bulkDeleteMutation.isPending ? 'loading' : null,
+        isFetching,
+        isRealtimeConnected,
+        lastUpdatedAt: dataUpdatedAt ? new Date(dataUpdatedAt) : null,
+        updating: updatingTarget,
+        isUpdating: updateMutation.isPending || deleteMutation.isPending || bulkUpdateMutation.isPending || bulkDeleteMutation.isPending,
         updateOrganization,
         deleteOrganization,
         bulkUpdateOrganizations,

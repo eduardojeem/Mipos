@@ -1,18 +1,17 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Slider } from '@/components/ui/slider';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import type { BusinessConfig } from '@/types/business-config';
 import { 
   SlidersHorizontal, 
-  X, 
   RotateCcw,
   Star,
   Tag,
@@ -38,7 +37,7 @@ interface FilterDrawerProps {
   onFiltersChange: (filters: AdvancedFilters) => void;
   onClearFilters: () => void;
   maxPrice: number;
-  config: any;
+  config: BusinessConfig;
   activeFiltersCount: number;
 }
 
@@ -53,6 +52,10 @@ export default function FilterDrawer({
 }: FilterDrawerProps) {
   const [open, setOpen] = useState(false);
   const [localFilters, setLocalFilters] = useState<AdvancedFilters>(filters);
+
+  useEffect(() => {
+    setLocalFilters(filters);
+  }, [filters]);
 
   const handleFilterChange = useCallback(<K extends keyof AdvancedFilters>(
     key: K,

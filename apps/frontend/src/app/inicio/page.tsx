@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import './landing.css';
 import {
     LandingHeader,
@@ -22,21 +22,76 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { usePlans } from '@/hooks/use-plans';
+import type { Plan } from '@/hooks/use-subscription';
 
 export default function InicioPage() {
-    const [selectedPlan, _setSelectedPlan] = useState<{
-        id: string;
-        name: string;
-        slug: string;
-        priceMonthly: number;
-        priceYearly: number;
-    } | null>(null);
+    const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
+    const searchParams = useSearchParams();
+    const { plans } = usePlans();
+
+    const defaultPlan = useMemo(() => {
+        const freePlan = plans.find((plan) => plan.priceMonthly === 0);
+        if (freePlan) {
+            return freePlan;
+        }
+
+        return [...plans].sort((a, b) => a.priceMonthly - b.priceMonthly)[0] || null;
+    }, [plans]);
+    const maxTrialDays = useMemo(
+        () => plans.reduce((max, plan) => Math.max(max, plan.trialDays || 0), 0),
+        [plans]
+    );
+
+    useEffect(() => {
+        if (!plans.length) {
+            return;
+        }
+
+        const requestedSlug = searchParams.get('plan');
+        const shouldOpenRegistration = Boolean(requestedSlug) || window.location.hash === '#registro';
+
+        if (!shouldOpenRegistration) {
+            return;
+        }
+
+        const matchedPlan = requestedSlug
+            ? plans.find((plan) => plan.slug === requestedSlug) || null
+            : null;
+
+        setSelectedPlan(matchedPlan || defaultPlan);
+    }, [defaultPlan, plans, searchParams]);
+
+    useEffect(() => {
+        if (!selectedPlan || window.location.hash !== '#registro') {
+            return;
+        }
+
+        const timeout = window.setTimeout(() => {
+            document.getElementById('registro')?.scrollIntoView({ behavior: 'smooth' });
+        }, 50);
+
+        return () => window.clearTimeout(timeout);
+    }, [selectedPlan]);
 
     
 
     const handleRegistrationSuccess = () => {
-        // Redirigir a la página de onboarding
-        window.location.href = '/onboarding';
+        window.location.href = '/dashboard/settings?tab=system';
+    };
+
+    const openRegistration = () => {
+        if (!defaultPlan) {
+            return;
+        }
+
+        setSelectedPlan(defaultPlan);
+        window.history.replaceState(null, '', `/inicio?plan=${encodeURIComponent(defaultPlan.slug)}#registro`);
+
+        window.setTimeout(() => {
+            document.getElementById('registro')?.scrollIntoView({ behavior: 'smooth' });
+        }, 50);
     };
 
     return (
@@ -106,8 +161,8 @@ export default function InicioPage() {
                                 },
                                 {
                                     icon: CheckCircle,
-                                    title: 'Soporte 24/7',
-                                    description: 'Estamos aquí cuando nos necesites, siempre',
+                                    title: 'Soporte dedicado',
+                                    description: 'Acompanamiento y ayuda segun el plan y los canales habilitados',
                                     color: 'text-cyan-400'
                                 }
                             ].map((benefit, idx) => (
@@ -209,7 +264,7 @@ export default function InicioPage() {
                                 </h2>
                                 <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
                                     Desde pequeños emprendimientos hasta grandes empresas. 
-                                    Sin permanencia, cancela cuando quieras.
+                                    Revisa las condiciones y beneficios del plan que mejor se adapte a tu operacion.
                                 </p>
 
                                 <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -222,19 +277,17 @@ export default function InicioPage() {
                                     <Button
                                         variant="outline"
                                         className="border-white/10 hover:bg-white/5 text-foreground px-8 py-6 text-base rounded-xl"
-                                        onClick={() => {
-                                            const registroSection = document.getElementById('registro');
-                                            if (registroSection) {
-                                                registroSection.scrollIntoView({ behavior: 'smooth' });
-                                            }
-                                        }}
+                                        onClick={openRegistration}
+                                        disabled={!defaultPlan}
                                     >
                                         Comenzar Gratis
                                     </Button>
                                 </div>
 
                                 <p className="text-sm text-muted-foreground mt-6">
-                                    ✓ 14 días de prueba gratis • ✓ Sin tarjeta de crédito • ✓ Cancela cuando quieras
+                                    {maxTrialDays > 0
+                                        ? `Hasta ${maxTrialDays} dias de prueba disponibles segun el plan activo.`
+                                        : 'Planes disponibles con activacion simple y condiciones segun disponibilidad.'}
                                 </p>
                             </div>
                         </div>

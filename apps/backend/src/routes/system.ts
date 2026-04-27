@@ -1,8 +1,5 @@
 import { Router } from 'express';
-import { z } from 'zod';
-import fs from 'fs/promises';
-import path from 'path';
-import { asyncHandler, createError } from '../middleware/errorHandler';
+import { asyncHandler } from '../middleware/errorHandler';
 import { enhancedAuthMiddleware } from '../middleware/enhanced-auth';
 import { getDatabaseHealth } from '../config/database-health';
 import { getSupabaseClient, isSupabaseConfigured } from '../config/supabase';
@@ -10,110 +7,18 @@ import { createClient } from '@supabase/supabase-js';
 
 const router = Router();
 
-// File storage helpers
-function getSettingsFilePath() {
-  // Store JSON under src/data so it is easy to locate in dev
-  return path.join(__dirname, '../data/system-settings.json');
-}
-
-async function readSettingsFile(): Promise<Record<string, any>> {
-  const file = getSettingsFilePath();
-  try {
-    const content = await fs.readFile(file, 'utf8');
-    return JSON.parse(content);
-  } catch (err: any) {
-    // If file doesn't exist, return defaults
-    if (err && (err.code === 'ENOENT' || err.code === 'ERR_MODULE_NOT_FOUND')) {
-      return getDefaultSettings();
-    }
-    throw err;
-  }
-}
-
-async function writeSettingsFile(settings: Record<string, any>) {
-  const file = getSettingsFilePath();
-  const dir = path.dirname(file);
-  await fs.mkdir(dir, { recursive: true });
-  await fs.writeFile(file, JSON.stringify(settings, null, 2), 'utf8');
-}
-
-function getDefaultSettings(): Record<string, any> {
-  return {
-    store_name: 'Mi Tienda POS',
-    store_address: '',
-    store_phone: '',
-    store_email: '',
-    store_website: '',
-    store_logo_url: '',
-    tax_rate: 10,
-    currency: 'PYG',
-    receipt_footer: '',
-    low_stock_threshold: 10,
-    auto_backup: true,
-    backup_frequency: 'daily',
-    email_notifications: true,
-    sms_notifications: false,
-    push_notifications: true,
-    timezone: 'America/Asuncion',
-    date_format: 'DD/MM/YYYY',
-    time_format: '24h',
-    decimal_places: 0,
-    enable_barcode_scanner: true,
-    enable_receipt_printer: true,
-    enable_cash_drawer: true,
-    max_discount_percentage: 50,
-    require_customer_info: false,
-    enable_loyalty_program: false
-  };
-}
-
-// Zod schema (flexible, allows partial updates and extra fields)
-const systemSettingsSchema = z.object({
-  store_name: z.string().optional(),
-  store_address: z.string().optional(),
-  store_phone: z.string().optional(),
-  store_email: z.string().optional(),
-  store_website: z.string().optional(),
-  store_logo_url: z.string().optional(),
-  tax_rate: z.number().optional(),
-  currency: z.string().optional(),
-  receipt_footer: z.string().optional(),
-  low_stock_threshold: z.number().optional(),
-  auto_backup: z.boolean().optional(),
-  backup_frequency: z.enum(['daily', 'weekly', 'monthly']).optional(),
-  email_notifications: z.boolean().optional(),
-  sms_notifications: z.boolean().optional(),
-  push_notifications: z.boolean().optional(),
-  timezone: z.string().optional(),
-  date_format: z.string().optional(),
-  time_format: z.enum(['12h', '24h']).optional(),
-  decimal_places: z.number().optional(),
-  enable_barcode_scanner: z.boolean().optional(),
-  enable_receipt_printer: z.boolean().optional(),
-  enable_cash_drawer: z.boolean().optional(),
-  max_discount_percentage: z.number().optional(),
-  require_customer_info: z.boolean().optional(),
-  enable_loyalty_program: z.boolean().optional()
-}).passthrough();
-
-// Public: GET settings for branding on login page
 router.get('/settings', asyncHandler(async (req, res) => {
-  const settings = await readSettingsFile();
-  res.json({ data: settings });
+  res.status(410).json({
+    error: 'Deprecated endpoint',
+    message: 'Use the tenant-scoped Next.js API /api/system/settings instead of the legacy file-based endpoint.'
+  });
 }));
 
-// Protected: update settings
 router.put('/settings', enhancedAuthMiddleware, asyncHandler(async (req, res) => {
-  const parsed = systemSettingsSchema.safeParse(req.body);
-  if (!parsed.success) {
-    throw createError('Validation failed', 400);
-  }
-
-  const existing = await readSettingsFile();
-  const merged = { ...existing, ...parsed.data };
-  await writeSettingsFile(merged);
-
-  res.json({ message: 'System settings updated', data: merged });
+  res.status(410).json({
+    error: 'Deprecated endpoint',
+    message: 'Use the tenant-scoped Next.js API /api/system/settings instead of the legacy file-based endpoint.'
+  });
 }));
 
 export default router;

@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { ReportCard } from '../ReportCard';
 import { ChartCard } from '../ChartCard';
 import { DataTable, Column } from '../DataTable';
-import { InventoryData } from '../../hooks/useReportData';
+import type { InventoryData } from '../../hooks/useOptimizedReportData';
 
 interface ReportsInventoryTabProps {
     data: InventoryData;

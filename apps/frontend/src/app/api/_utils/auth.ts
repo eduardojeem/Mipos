@@ -17,9 +17,28 @@ export async function assertAdmin(request: NextRequest): Promise<
     }
   | { ok: false; status: number; body: { error: string } }
 > {
-  // Solo permitir verificación real de sesión con Supabase
-
   try {
+    const mode = request.headers.get('x-env-mode')
+    const allowMock = (process.env.ALLOW_MOCK_AUTH === 'true') || (process.env.NODE_ENV !== 'production')
+    if (allowMock && mode === 'mock') {
+      const roleHeader = (request.headers.get('x-user-role') || '').toUpperCase()
+      const isAdminRole = roleHeader === 'ADMIN' || roleHeader === 'SUPER_ADMIN'
+      if (!isAdminRole) {
+        return { ok: false, status: 403, body: { error: 'Acceso denegado' } }
+      }
+      const isSuperAdmin = roleHeader === 'SUPER_ADMIN'
+      const orgHeader = request.headers.get('x-organization-id')
+      return {
+        ok: true,
+        userId: 'mock-user',
+        email: null,
+        organizationId: isSuperAdmin ? null : (orgHeader || null),
+        isSuperAdmin
+      }
+    }
+
+    // Solo permitir verificación real de sesión con Supabase
+
     const supabase = await createClient()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {
@@ -78,6 +97,60 @@ export async function assertAdmin(request: NextRequest): Promise<
     return { ok: false, status: 403, body: { error: 'Acceso denegado' } }
   } catch (e) {
     logAudit('auth.error', { mode: 'prod', reason: 'internal_error', url: request.url, error: String(e) })
+    return { ok: false, status: 500, body: { error: 'Error interno de autenticación' } }
+  }
+}
+
+// Variante: permite admins sin organización devolver organizationId = null
+export async function assertAdminAllowWithoutOrg(request: NextRequest): Promise<
+  | { 
+      ok: true
+      userId: string
+      email: string | null
+      organizationId: string | null
+      isSuperAdmin: boolean
+    }
+  | { ok: false; status: number; body: { error: string } }
+> {
+  try {
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return { ok: false, status: 401, body: { error: 'No autorizado' } }
+    }
+    const adminClient = await createAdminClient()
+    const { data: userRoles } = await adminClient
+      .from('user_roles')
+      .select('role:roles(name)')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+
+    const dbRoles = userRoles?.map((ur: any) => ur.role?.name?.toUpperCase()) || []
+    const metadataRole = (user.user_metadata as any)?.role?.toUpperCase()
+    const hasAdminRole = dbRoles.some((r: string) => r === 'ADMIN' || r === 'SUPER_ADMIN') || 
+                         metadataRole === 'ADMIN' || metadataRole === 'SUPER_ADMIN'
+
+    if (!hasAdminRole) {
+      return { ok: false, status: 403, body: { error: 'Acceso denegado' } }
+    }
+
+    const roleName = dbRoles.find((r: string) => r === 'ADMIN' || r === 'SUPER_ADMIN') || metadataRole
+    const isSuperAdmin = roleName === 'SUPER_ADMIN'
+
+    let organizationId: string | null = null
+    if (!isSuperAdmin) {
+      organizationId = await getUserOrganizationId(user.id)
+      // Diferencia clave: no denegar si falta organización
+    }
+
+    return { 
+      ok: true,
+      userId: user.id,
+      email: user.email ?? null,
+      organizationId,
+      isSuperAdmin
+    }
+  } catch {
     return { ok: false, status: 500, body: { error: 'Error interno de autenticación' } }
   }
 }
