@@ -53,6 +53,20 @@ export async function GET() {
 
       if (userRow?.organization_id) {
         organizationIds = [userRow.organization_id];
+
+        // Auto-repair: create missing organization_members entry
+        await admin
+          .from('organization_members')
+          .upsert(
+            { user_id: user.id, organization_id: userRow.organization_id },
+            { onConflict: 'user_id,organization_id', ignoreDuplicates: true }
+          )
+          .then(() => {
+            console.log(`Auto-repair: created organization_members for user ${user.id} → org ${userRow.organization_id}`);
+          })
+          .catch((err: unknown) => {
+            console.warn('Auto-repair organization_members failed:', err);
+          });
       }
     }
 
@@ -71,7 +85,7 @@ export async function GET() {
     }
 
     const activeOrganizations = ((organizations || []) as OrganizationRow[]).filter(
-      (org) => org.subscription_status !== 'INACTIVE' && org.subscription_status !== 'SUSPENDED',
+      (org) => org.subscription_status !== 'SUSPENDED',
     );
 
     return NextResponse.json({
