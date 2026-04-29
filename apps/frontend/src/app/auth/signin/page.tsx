@@ -192,12 +192,24 @@ export default function SignInPage() {
         detail: { organizationId: org.id, organization: org },
       }));
 
-      toast({
-        title: '¡Bienvenido!',
-        description: `Accediendo a ${org.name}...`,
-      });
+      // Detect first login: if user has never visited the dashboard before
+      const hasOnboarded = localStorage.getItem('onboarding_completed');
+      const isFirstLogin = !hasOnboarded;
 
-      router.replace(getReturnUrl());
+      if (isFirstLogin) {
+        localStorage.setItem('onboarding_completed', 'true');
+        toast({
+          title: '¡Bienvenido!',
+          description: `Configuremos tu negocio ${org.name}...`,
+        });
+        router.replace('/onboarding');
+      } else {
+        toast({
+          title: '¡Bienvenido!',
+          description: `Accediendo a ${org.name}...`,
+        });
+        router.replace(getReturnUrl());
+      }
       router.refresh();
     } catch (error: unknown) {
       console.error('Error selecting organization:', error);
