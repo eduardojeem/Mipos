@@ -1,16 +1,24 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 
 /**
- * Obtiene el organization_id del usuario autenticado
+ * Obtiene el organization_id del usuario autenticado.
+ * Usa admin client para evitar deadlock de RLS (necesitas org para leer org_members).
  * @param userId - ID del usuario
  * @returns organization_id o null si no pertenece a ninguna organización
  */
 export async function getUserOrganizationId(
   userId: string
 ): Promise<string | null> {
-  const supabase = await createClient()
-  
-  const { data, error } = await supabase
+  // Use admin client to bypass RLS — avoids circular dependency where
+  // RLS on organization_members requires an org context the user doesn't have yet.
+  let client: Awaited<ReturnType<typeof createAdminClient>> | Awaited<ReturnType<typeof createClient>>;
+  try {
+    client = await createAdminClient();
+  } catch {
+    client = await createClient();
+  }
+
+  const { data, error } = await client
     .from('organization_members')
     .select('organization_id')
     .eq('user_id', userId)
@@ -18,7 +26,16 @@ export async function getUserOrganizationId(
     .limit(1)
     .maybeSingle()
   
-  if (error || !data) return null
+  if (error || !data) {
+    // Fallback: check users table
+    const { data: userRow } = await client
+      .from('users')
+      .select('organization_id')
+      .eq('id', userId)
+      .maybeSingle();
+    
+    return userRow?.organization_id || null;
+  }
   return data.organization_id
 }
 
@@ -32,9 +49,14 @@ export async function validateOrganizationAccess(
   userId: string,
   organizationId: string
 ): Promise<boolean> {
-  const supabase = await createClient()
+  let client: Awaited<ReturnType<typeof createAdminClient>> | Awaited<ReturnType<typeof createClient>>;
+  try {
+    client = await createAdminClient();
+  } catch {
+    client = await createClient();
+  }
   
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('organization_members')
     .select('id')
     .eq('user_id', userId)
@@ -50,9 +72,14 @@ export async function validateOrganizationAccess(
  * @returns Información de la organización y membresía
  */
 export async function getUserOrganization(userId: string) {
-  const supabase = await createClient()
+  let client: Awaited<ReturnType<typeof createAdminClient>> | Awaited<ReturnType<typeof createClient>>;
+  try {
+    client = await createAdminClient();
+  } catch {
+    client = await createClient();
+  }
   
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('organization_members')
     .select(`
       organization_id,
@@ -83,9 +110,14 @@ export async function getUserOrganization(userId: string) {
  * @returns Array de organization_ids
  */
 export async function getUserOrganizationIds(userId: string): Promise<string[]> {
-  const supabase = await createClient()
+  let client: Awaited<ReturnType<typeof createAdminClient>> | Awaited<ReturnType<typeof createClient>>;
+  try {
+    client = await createAdminClient();
+  } catch {
+    client = await createClient();
+  }
   
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('organization_members')
     .select('organization_id')
     .eq('user_id', userId)
