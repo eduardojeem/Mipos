@@ -605,7 +605,7 @@ export function GlobalCatalogToolbar({
 export function GlobalCatalogDesktopFilters(props: SharedProps) {
   return (
     <div className="hidden xl:block">
-      <div className="sticky top-24 rounded-lg border border-white/10 bg-slate-950/55 p-5">
+      <div className="sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto rounded-lg border border-white/10 bg-slate-950/55 p-5 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10">
         <div className="mb-5">
           <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Filtros</p>
           <h2 className="mt-2 text-lg font-semibold text-white">Refina el catalogo</h2>
