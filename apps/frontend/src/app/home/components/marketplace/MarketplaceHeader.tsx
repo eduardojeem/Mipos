@@ -60,7 +60,7 @@ export function MarketplaceHeader({ searchQuery = '' }: MarketplaceHeaderProps) 
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="search"
-              name="q"
+              name="search"
               defaultValue={searchQuery}
               placeholder="Buscar productos o marcas"
               className="h-10 w-full rounded-full border border-slate-200 bg-white/60 pl-10 pr-4 text-sm outline-none transition-all focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-500/5 shadow-sm dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:bg-slate-900"
@@ -115,7 +115,7 @@ export function MarketplaceHeader({ searchQuery = '' }: MarketplaceHeaderProps) 
                 <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
                   type="search"
-                  name="q"
+                  name="search"
                   autoFocus
                   defaultValue={searchQuery}
                   placeholder="Que estas buscando"

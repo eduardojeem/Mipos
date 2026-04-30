@@ -45,6 +45,11 @@ export interface FeaturedOrganizationCard {
   tagline: string;
   description: string;
   location: string;
+  website?: string;
+  heroImage?: string;
+  productCount?: number;
+  categoryCount?: number;
+  createdAt?: string | null;
 }
 
 export interface GlobalCategoryCard {
@@ -60,11 +65,18 @@ export interface GlobalProductCard {
   description: string;
   image: string;
   categoryName: string;
+  categoryKey?: string;
   brand?: string;
   basePrice: number;
   offerPrice?: number;
+  discountPercentage?: number;
+  stockQuantity?: number;
+  rating?: number | null;
   organizationName: string;
   organizationHref: string;
+  organizationId?: string;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 }
 
 export interface GlobalMarketplaceHomeData {
