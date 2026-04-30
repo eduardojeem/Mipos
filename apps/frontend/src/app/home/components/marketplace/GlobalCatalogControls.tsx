@@ -159,10 +159,17 @@ function CatalogFiltersForm({
     [effectiveMaxPrice, state]
   );
   const [draft, setDraft] = useState<FilterDraft>(defaultDraft);
+  const [categorySearch, setCategorySearch] = useState('');
 
   useEffect(() => {
     setDraft(defaultDraft);
   }, [defaultDraft]);
+
+  const filteredCategories = useMemo(() => {
+    if (!categorySearch.trim()) return categories;
+    const term = categorySearch.toLowerCase();
+    return categories.filter((c) => c.label.toLowerCase().includes(term));
+  }, [categories, categorySearch]);
 
   const toggleCategory = (categoryKey: string, checked: boolean) => {
     setDraft((current) => ({
@@ -190,6 +197,7 @@ function CatalogFiltersForm({
   };
 
   const resetFilters = () => {
+    setCategorySearch('');
     navigate({
       ...state,
       categories: [],
@@ -198,50 +206,53 @@ function CatalogFiltersForm({
       minPrice: 0,
       maxPrice: null,
       rating: null,
+      search: '',
       page: CATALOG_DEFAULT_PAGE,
     });
     onApplied?.();
   };
 
-  return (
-    <div className={cn('space-y-6', className)}>
-      <div className="rounded-lg border border-white/10 bg-white/5 p-5">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-medium text-white">Disponibilidad</p>
-            <p className="mt-1 text-xs text-slate-500">Controla estado y promociones visibles.</p>
-          </div>
-        </div>
+  const selectedCount = draft.categories.length +
+    (draft.onSale ? 1 : 0) +
+    (draft.rating ? 1 : 0) +
+    (draft.minPrice > 0 ? 1 : 0) +
+    (draft.maxPrice < effectiveMaxPrice ? 1 : 0) +
+    (draft.inStock === false ? 1 : 0);
 
-        <div className="mt-5 space-y-4">
-          <label className="flex items-center gap-3 text-sm text-slate-300">
+  return (
+    <div className={cn('space-y-5', className)}>
+      {/* Disponibilidad */}
+      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-5">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Disponibilidad</p>
+        <div className="mt-4 space-y-3">
+          <label className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-1.5 text-sm text-slate-300 transition-colors hover:bg-white/5">
             <Checkbox
               checked={draft.inStock}
               onCheckedChange={(checked) =>
                 setDraft((current) => ({ ...current, inStock: checked !== false }))
               }
             />
-            Solo productos con stock
+            Solo con stock
           </label>
-          <label className="flex items-center gap-3 text-sm text-slate-300">
+          <label className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-1.5 text-sm text-slate-300 transition-colors hover:bg-white/5">
             <Checkbox
               checked={draft.onSale}
               onCheckedChange={(checked) =>
                 setDraft((current) => ({ ...current, onSale: checked === true }))
               }
             />
-            Solo productos con oferta
+            <span className="flex items-center gap-2">
+              Solo ofertas
+              <Tag className="h-3.5 w-3.5 text-amber-400" />
+            </span>
           </label>
         </div>
       </div>
 
-      <div className="rounded-lg border border-white/10 bg-white/5 p-5">
-        <div>
-          <p className="text-sm font-medium text-white">Precio publico</p>
-          <p className="mt-1 text-xs text-slate-500">Ajusta el rango visible del catalogo.</p>
-        </div>
-
-        <div className="mt-5">
+      {/* Precio */}
+      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-5">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Rango de precio</p>
+        <div className="mt-4">
           <Slider
             min={0}
             max={effectiveMaxPrice}
@@ -256,10 +267,9 @@ function CatalogFiltersForm({
             }
           />
         </div>
-
-        <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="catalog-min-price" className="text-xs uppercase tracking-[0.16em] text-slate-500">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="catalog-min-price" className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
               Minimo
             </Label>
             <Input
@@ -275,11 +285,11 @@ function CatalogFiltersForm({
                   minPrice: Math.max(0, Math.min(nextValue, current.maxPrice)),
                 }));
               }}
-              className="border-white/10 bg-slate-950/40 text-white"
+              className="h-9 border-white/10 bg-slate-950/40 text-sm text-white"
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="catalog-max-price" className="text-xs uppercase tracking-[0.16em] text-slate-500">
+          <div className="space-y-1.5">
+            <Label htmlFor="catalog-max-price" className="text-[10px] uppercase tracking-[0.16em] text-slate-500">
               Maximo
             </Label>
             <Input
@@ -295,38 +305,34 @@ function CatalogFiltersForm({
                   maxPrice: Math.max(current.minPrice, Math.min(nextValue, effectiveMaxPrice)),
                 }));
               }}
-              className="border-white/10 bg-slate-950/40 text-white"
+              className="h-9 border-white/10 bg-slate-950/40 text-sm text-white"
             />
           </div>
         </div>
-
-        <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
+        <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500">
           <span>{formatCurrency(draft.minPrice)}</span>
           <span>{formatCurrency(draft.maxPrice)}</span>
         </div>
       </div>
 
-      <div className="rounded-lg border border-white/10 bg-white/5 p-5">
-        <div>
-          <p className="text-sm font-medium text-white">Valoracion minima</p>
-          <p className="mt-1 text-xs text-slate-500">Filtra productos mejor valorados.</p>
-        </div>
-
-        <div className="mt-5 grid grid-cols-4 gap-2">
+      {/* Valoracion */}
+      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-5">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Valoracion</p>
+        <div className="mt-4 flex gap-2">
           {[null, 3, 4, 5].map((value) => {
             const active = draft.rating === value;
-            const label = value === null ? 'Todas' : `${value}+`;
-
+            const label = value === null ? 'Todas' : `${value}★`;
             return (
               <Button
                 key={label}
                 type="button"
                 variant={active ? 'default' : 'outline'}
+                size="sm"
                 className={cn(
-                  'rounded-lg border-white/10 text-xs',
+                  'flex-1 rounded-lg text-xs',
                   active
                     ? 'gradient-primary text-white'
-                    : 'bg-transparent text-slate-300 hover:bg-white/5'
+                    : 'border-white/10 bg-transparent text-slate-300 hover:bg-white/5'
                 )}
                 onClick={() => setDraft((current) => ({ ...current, rating: value }))}
               >
@@ -337,25 +343,53 @@ function CatalogFiltersForm({
         </div>
       </div>
 
-      <div className="rounded-lg border border-white/10 bg-white/5 p-5">
-        <div>
-          <p className="text-sm font-medium text-white">Categorias</p>
-          <p className="mt-1 text-xs text-slate-500">Filtra por rubros presentes en el resultado actual.</p>
+      {/* Categorias con buscador */}
+      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-5">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+            Categorias
+          </p>
+          {draft.categories.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setDraft((current) => ({ ...current, categories: [] }))}
+              className="text-[10px] font-medium text-amber-400 hover:text-amber-300"
+            >
+              Limpiar ({draft.categories.length})
+            </button>
+          )}
         </div>
 
-        <div className="mt-5 max-h-[320px] space-y-3 overflow-auto pr-1">
-          {categories.length === 0 ? (
-            <p className="text-sm text-slate-500">No hay categorias disponibles con los criterios actuales.</p>
+        {categories.length > 6 && (
+          <div className="relative mt-3">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+            <Input
+              value={categorySearch}
+              onChange={(e) => setCategorySearch(e.target.value)}
+              placeholder="Buscar categoria..."
+              className="h-8 border-white/10 bg-slate-950/40 pl-8 text-xs text-white placeholder:text-slate-500"
+            />
+          </div>
+        )}
+
+        <div className="mt-3 max-h-[280px] space-y-1 overflow-auto pr-1">
+          {filteredCategories.length === 0 ? (
+            <p className="py-3 text-center text-xs text-slate-500">
+              {categorySearch ? 'Sin resultados' : 'No hay categorias disponibles'}
+            </p>
           ) : (
-            categories.map((category) => (
-              <label key={category.key} className="flex items-start gap-3 text-sm text-slate-300">
+            filteredCategories.map((category) => (
+              <label
+                key={category.key}
+                className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-1.5 text-sm text-slate-300 transition-colors hover:bg-white/5"
+              >
                 <Checkbox
                   checked={draft.categories.includes(category.key)}
                   onCheckedChange={(checked) => toggleCategory(category.key, checked === true)}
                 />
-                <span className="flex min-w-0 flex-1 items-start justify-between gap-3">
+                <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
                   <span className="truncate">{category.label}</span>
-                  <span className="text-xs text-slate-500">
+                  <span className="shrink-0 rounded-full bg-white/5 px-2 py-0.5 text-[10px] tabular-nums text-slate-500">
                     {category.productCount}
                   </span>
                 </span>
@@ -365,13 +399,14 @@ function CatalogFiltersForm({
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 sm:flex-row">
+      {/* Acciones */}
+      <div className="flex gap-3">
         <Button
           type="button"
           onClick={applyFilters}
-          className="gradient-primary rounded-lg text-white"
+          className="gradient-primary flex-1 rounded-lg text-white"
         >
-          Aplicar filtros
+          Aplicar{selectedCount > 0 ? ` (${selectedCount})` : ''}
         </Button>
         <Button
           type="button"
@@ -379,6 +414,7 @@ function CatalogFiltersForm({
           onClick={resetFilters}
           className="rounded-lg border-white/10 bg-transparent text-white hover:bg-white/5"
         >
+          <X className="mr-1.5 h-3.5 w-3.5" />
           Limpiar
         </Button>
       </div>

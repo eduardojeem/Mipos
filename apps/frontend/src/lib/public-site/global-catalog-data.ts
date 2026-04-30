@@ -60,6 +60,7 @@ export interface GlobalCatalogCategoryOption {
 
 export interface GlobalCatalogSnapshot {
   products: GlobalProductCard[];
+  heroProducts: GlobalProductCard[];
   totalProducts: number;
   totalOrganizations: number;
   matchingOrganizations: number;
@@ -97,7 +98,8 @@ function buildSelectClause(baseColumns: string[], optionalColumns: string[], mis
 }
 
 function sanitizeSearchTerm(search: string): string {
-  return search.replace(/[,%]/g, ' ').trim();
+  // Escape SQL LIKE wildcards: % and _ are special characters
+  return search.replace(/[%_,]/g, ' ').trim();
 }
 
 function normalizePositiveNumber(value: unknown): number | null {
@@ -326,6 +328,20 @@ async function fetchMatchingProducts(
       query = query.gte('rating', input.rating);
     }
 
+    // Apply price filters at DB level for performance
+    if (input.minPrice > 0) {
+      query = query.gte('sale_price', input.minPrice);
+    }
+
+    if (input.maxPrice !== null && input.maxPrice > 0) {
+      query = query.lte('sale_price', input.maxPrice);
+    }
+
+    // Filter products with active offers at DB level
+    if (input.onSale && !unavailableColumns.has('offer_price')) {
+      query = query.gt('offer_price', 0);
+    }
+
     if (!unavailableColumns.has('updated_at')) {
       query = query.order('updated_at', { ascending: false });
     }
@@ -524,6 +540,81 @@ function resolveMaxPrice(products: GlobalProductCard[]): number {
   return highestPrice > 0 ? highestPrice : CATALOG_DEFAULT_MAX_PRICE;
 }
 
+function resolveRecencyScore(product: GlobalProductCard): number {
+  return Math.max(
+    new Date(String(product.createdAt || 0)).getTime(),
+    new Date(String(product.updatedAt || 0)).getTime()
+  );
+}
+
+function buildHeroProducts(products: GlobalProductCard[]): GlobalProductCard[] {
+  const slides: GlobalProductCard[] = [];
+  const selectedIds = new Set<string>();
+
+  const pickFirst = (candidates: GlobalProductCard[]) => {
+    const product = candidates.find((entry) => !selectedIds.has(entry.id));
+    if (!product) {
+      return;
+    }
+
+    selectedIds.add(product.id);
+    slides.push(product);
+  };
+
+  const offered = [...products]
+    .filter((product) => hasOffer(product))
+    .sort((left, right) => {
+      const leftDiscount = Number(left.discountPercentage || 0);
+      const rightDiscount = Number(right.discountPercentage || 0);
+      if (rightDiscount !== leftDiscount) {
+        return rightDiscount - leftDiscount;
+      }
+      return resolveRecencyScore(right) - resolveRecencyScore(left);
+    });
+
+  const rated = [...products]
+    .filter((product) => Number(product.rating || 0) > 0)
+    .sort((left, right) => {
+      const scoreDiff = Number(right.rating || 0) - Number(left.rating || 0);
+      if (scoreDiff !== 0) {
+        return scoreDiff;
+      }
+      return resolveRecencyScore(right) - resolveRecencyScore(left);
+    });
+
+  const newest = [...products].sort((left, right) => resolveRecencyScore(right) - resolveRecencyScore(left));
+
+  const inStock = [...products]
+    .filter((product) => Number(product.stockQuantity || 0) > 0)
+    .sort((left, right) => {
+      const stockDiff = Number(right.stockQuantity || 0) - Number(left.stockQuantity || 0);
+      if (stockDiff !== 0) {
+        return stockDiff;
+      }
+      return resolveRecencyScore(right) - resolveRecencyScore(left);
+    });
+
+  pickFirst(offered);
+  pickFirst(rated);
+  pickFirst(newest);
+  pickFirst(inStock);
+
+  for (const product of products) {
+    if (slides.length >= 4) {
+      break;
+    }
+
+    if (selectedIds.has(product.id)) {
+      continue;
+    }
+
+    selectedIds.add(product.id);
+    slides.push(product);
+  }
+
+  return slides.slice(0, 4);
+}
+
 export async function fetchGlobalCatalogSnapshot(
   requestHost: string | null | undefined,
   input: CatalogQueryState
@@ -532,6 +623,7 @@ export async function fetchGlobalCatalogSnapshot(
   if (organizations.length === 0) {
     return {
       products: [],
+      heroProducts: [],
       totalProducts: 0,
       totalOrganizations: 0,
       matchingOrganizations: 0,
@@ -551,24 +643,25 @@ export async function fetchGlobalCatalogSnapshot(
   );
   const categoryMap = await fetchCategoryMap(categoryIds);
   const mappedProducts = mapProductsToCards(rawProducts, organizations, categoryMap, requestHost);
-  const categories = buildCategoryOptions(mappedProducts);
-  const categoryFilteredProducts = mappedProducts.filter((product) => {
-    if (input.categories.length === 0) {
-      return true;
-    }
 
-    return Boolean(product.categoryKey && input.categories.includes(product.categoryKey));
+  // Build category options from ALL products (before category filter) so user can see all available categories
+  // but apply other filters (price, stock, sale) so counts reflect the current non-category filters
+  const productsForCategoryOptions = filterProducts(mappedProducts, {
+    ...input,
+    categories: [], // Don't filter by category when building category options
   });
-  const productsForMaxPrice = input.onSale
-    ? categoryFilteredProducts.filter((product) => hasOffer(product))
-    : categoryFilteredProducts;
+  const categories = buildCategoryOptions(productsForCategoryOptions);
   const filteredProducts = filterProducts(mappedProducts, input);
   const sortedProducts = sortProducts(filteredProducts, input.sortBy);
   const start = (input.page - 1) * input.itemsPerPage;
   const matchingOrganizations = new Set(filteredProducts.map((product) => product.organizationId).filter(Boolean)).size;
+  const productsForMaxPrice = input.categories.length > 0 || input.onSale
+    ? productsForCategoryOptions
+    : mappedProducts;
 
   return {
     products: sortedProducts.slice(start, start + input.itemsPerPage),
+    heroProducts: buildHeroProducts(sortedProducts),
     totalProducts: sortedProducts.length,
     totalOrganizations,
     matchingOrganizations,
