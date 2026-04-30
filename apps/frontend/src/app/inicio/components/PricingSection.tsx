@@ -5,25 +5,11 @@ import { PricingCard } from './PricingCard';
 import { Loader2 } from 'lucide-react';
 import { usePlans } from '@/hooks/use-plans';
 import type { Plan } from '@/hooks/use-subscription';
+import { getBillingBadgeDiscount, getRecommendedPlan } from '@/lib/public-plan-utils';
 
 interface PricingSectionProps {
     onPlanSelect: (plan: Plan) => void;
     selectedPlanId?: string;
-}
-
-function getRecommendedPlan(plans: Plan[]) {
-    const paidPlans = plans.filter((plan) => plan.priceMonthly > 0);
-    if (!paidPlans.length) {
-        return plans[0] || null;
-    }
-
-    return [...paidPlans].sort((a, b) => {
-        if ((b.yearlyDiscount || 0) !== (a.yearlyDiscount || 0)) {
-            return (b.yearlyDiscount || 0) - (a.yearlyDiscount || 0);
-        }
-
-        return a.priceMonthly - b.priceMonthly;
-    })[0];
 }
 
 export function PricingSection({ onPlanSelect, selectedPlanId }: PricingSectionProps) {
@@ -31,13 +17,7 @@ export function PricingSection({ onPlanSelect, selectedPlanId }: PricingSectionP
     const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
 
     const recommendedPlan = useMemo(() => getRecommendedPlan(plans), [plans]);
-    const billingBadgeDiscount = useMemo(() => {
-        const discounts = plans
-            .map((plan) => plan.yearlyDiscount || 0)
-            .filter((value) => value > 0);
-
-        return discounts.length ? Math.max(...discounts) : 0;
-    }, [plans]);
+    const billingBadgeDiscount = useMemo(() => getBillingBadgeDiscount(plans), [plans]);
 
     return (
         <section id="planes" className="py-20 lg:py-32 bg-[#0a0a0a] relative overflow-hidden">
@@ -94,7 +74,7 @@ export function PricingSection({ onPlanSelect, selectedPlanId }: PricingSectionP
                         <p>No hay planes disponibles</p>
                     </div>
                 ) : (
-                    <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 max-w-7xl mx-auto">
+                    <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3 max-w-6xl mx-auto">
                         {plans.map((plan) => (
                             <PricingCard
                                 key={plan.id}

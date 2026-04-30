@@ -14,6 +14,7 @@ import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { GlobalMarketplaceHomeData } from '@/lib/public-site/data';
+import { buildPublicRegistrationPath } from '@/lib/public-plan-utils';
 import { MarketplaceLayout } from './marketplace/MarketplaceLayout';
 import { ProductGrid } from './marketplace/ProductGrid';
 import { CategoryGrid } from './marketplace/CategoryGrid';
@@ -43,7 +44,7 @@ export function PublicMarketplaceHome({
   const stats = [
     { label: 'Empresas Activas', value: data.stats.organizations, icon: Building2, color: 'blue' },
     { label: 'Productos Publicos', value: data.stats.products, icon: ShoppingBag, color: 'amber' },
-    { label: 'Ventas en Tiempo Real', value: '24/7', icon: Zap, color: 'emerald' },
+    { label: 'Operacion continua', value: '24/7', icon: Zap, color: 'emerald' },
   ] as const;
 
   return (
@@ -58,10 +59,10 @@ export function PublicMarketplaceHome({
             >
               <Badge
                 variant="outline"
-                className="rounded-full border-blue-200 bg-blue-50/50 px-6 py-2 text-xs font-bold uppercase tracking-[0.2em] text-blue-700 backdrop-blur-sm dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200"
+                className="rounded-full border-emerald-200 bg-emerald-50/60 px-6 py-2 text-xs font-bold uppercase tracking-[0.2em] text-emerald-700 backdrop-blur-sm dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200"
               >
-                <Sparkles className="mr-2 h-3 w-3 fill-blue-500" />
-                Nueva Plataforma Global + Tenants
+                <Sparkles className="mr-2 h-3 w-3 fill-emerald-500" />
+                Ecosistema publico multiempresa
               </Badge>
             </motion.div>
 
@@ -71,9 +72,9 @@ export function PublicMarketplaceHome({
               transition={{ delay: 0.2, duration: 0.6 }}
               className="mt-8 font-['Outfit'] text-6xl font-black leading-tight tracking-tight text-slate-950 sm:text-7xl lg:text-8xl dark:text-slate-100"
             >
-              Tu negocio, <br />
-              <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-600 bg-clip-text text-transparent">
-                Sin Fronteras.
+              Directorio comercial <br />
+              <span className="bg-gradient-to-r from-emerald-600 via-teal-600 to-amber-500 bg-clip-text text-transparent">
+                conectado a MiPOS
               </span>
             </motion.h1>
 
@@ -83,8 +84,8 @@ export function PublicMarketplaceHome({
               transition={{ delay: 0.4, duration: 0.6 }}
               className="mx-auto mt-8 max-w-2xl text-xl leading-relaxed text-slate-600 dark:text-slate-300"
             >
-              El dominio principal muestra la oferta global, mientras que cada empresa conserva su
-              catalogo, branding y home propia por subdominio.
+              El dominio principal concentra empresas, categorias y productos publicados, mientras cada
+              negocio conserva su catalogo, marca y operacion propia.
             </motion.p>
 
             <motion.div
@@ -94,17 +95,17 @@ export function PublicMarketplaceHome({
               className="mt-12 flex flex-wrap items-center justify-center gap-4"
             >
               <Link href="/home/catalogo">
-                <Button className="h-16 rounded-2xl bg-slate-950 px-10 text-lg font-bold text-white shadow-2xl shadow-blue-500/20 transition-all hover:-translate-y-1 hover:bg-blue-600 dark:bg-blue-500 dark:text-slate-950 dark:hover:bg-blue-400 dark:hover:shadow-blue-950/40">
-                  Explorar Catalogo Global
+                <Button className="h-16 rounded-2xl bg-slate-950 px-10 text-lg font-bold text-white shadow-2xl shadow-emerald-500/20 transition-all hover:-translate-y-1 hover:bg-emerald-700 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400 dark:hover:shadow-emerald-950/40">
+                  Explorar catalogo global
                   <ArrowRight className="ml-3 h-5 w-5" />
                 </Button>
               </Link>
-              <Link href="/inicio?plan=starter#registro">
+              <Link href={buildPublicRegistrationPath('starter')}>
                 <Button
                   variant="outline"
                   className="h-16 rounded-2xl border-slate-200 bg-white/50 px-10 text-lg font-bold backdrop-blur-sm transition-all hover:bg-white dark:border-slate-700 dark:bg-slate-950/50 dark:text-slate-100 dark:hover:bg-slate-900"
                 >
-                  Publicar mi empresa
+                  Registrar mi empresa
                 </Button>
               </Link>
             </motion.div>
@@ -154,7 +155,7 @@ export function PublicMarketplaceHome({
               </Badge>
               <h2 className="text-4xl font-extrabold tracking-tight text-slate-950 sm:text-5xl dark:text-slate-100">
                 Marcas y negocios <br />
-                <span className="text-blue-600 dark:text-blue-400">destacados</span> hoy
+                <span className="text-blue-600 dark:text-blue-400">publicados</span> hoy
               </h2>
             </div>
             <Link href="/home/empresas">
@@ -208,7 +209,7 @@ export function PublicMarketplaceHome({
               </Badge>
               <h2 className="text-4xl font-extrabold tracking-tight text-slate-950 sm:text-5xl dark:text-slate-100">
                 Productos <br />
-                <span className="text-amber-600 dark:text-amber-400">recientes</span>
+                <span className="text-amber-600 dark:text-amber-400">destacados</span>
               </h2>
             </div>
             <Link href="/home/catalogo">
@@ -235,14 +236,14 @@ export function PublicMarketplaceHome({
                 variant="outline"
                 className="mb-6 border-white/20 px-4 py-1 text-xs font-bold uppercase tracking-widest text-white/60"
               >
-                Multi-tenant Architecture
+                Publicacion para negocios
               </Badge>
               <h2 className="text-4xl font-extrabold tracking-tight sm:text-5xl">
-                Lleva tu marca al siguiente nivel con MiPOS.
+                Publica tu negocio y conecta tu marca al ecosistema MiPOS
               </h2>
               <p className="mt-6 text-xl leading-relaxed text-slate-400">
-                Vende bajo tu propio subdominio y aparece automaticamente en nuestro ecosistema
-                global.
+                Registra tu empresa, publica catalogo bajo tu propio espacio y gana presencia dentro
+                del directorio general.
               </p>
 
               <div className="mt-10 flex flex-wrap gap-4">
@@ -251,12 +252,9 @@ export function PublicMarketplaceHome({
                     Ver planes y precios
                   </Button>
                 </Link>
-                <Link href="/auth/signin">
-                  <Button
-                    variant="outline"
-                    className="h-14 rounded-2xl border-white/20 bg-transparent px-8 text-lg font-bold text-white transition-all hover:bg-white/10"
-                  >
-                    Ir al panel de control
+                <Link href={buildPublicRegistrationPath('starter')}>
+                  <Button variant="outline" className="h-14 rounded-2xl border-white/20 bg-transparent px-8 text-lg font-bold text-white transition-all hover:bg-white/10">
+                    Registrar empresa
                   </Button>
                 </Link>
               </div>

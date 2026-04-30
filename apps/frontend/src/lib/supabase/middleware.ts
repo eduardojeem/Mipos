@@ -136,7 +136,7 @@ export async function updateSession(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  const publicPaths = ['/home', '/inicio', '/onboarding', '/offers', '/catalog', '/orders/track', '/'];
+  const publicPaths = ['/home', '/inicio', '/empresas', '/onboarding', '/offers', '/catalog', '/orders/track', '/'];
   const isPublic = publicPaths.some((p) => path === p || path.startsWith(p + '/'));
 
   // --- Unauthenticated user checks ---

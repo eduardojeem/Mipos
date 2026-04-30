@@ -1,309 +1,288 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import './landing.css';
-import {
-    LandingHeader,
-    HeroSection,
-    HowItWorksSection,
-    RegistrationSection,
-    Footer
-} from './components';
-import { 
-    Building2, 
-    TrendingUp, 
-    Users, 
-    Sparkles, 
-    CheckCircle,
-    ArrowRight,
-    Shield,
-    Zap,
-    BarChart3
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import {
+  ArrowRight,
+  BarChart3,
+  Building2,
+  CheckCircle2,
+  Shield,
+  Sparkles,
+  Users,
+  Zap,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { usePlans } from '@/hooks/use-plans';
-import type { Plan } from '@/hooks/use-subscription';
+import { buildPublicRegistrationPath } from '@/lib/public-plan-utils';
+import './landing.css';
+import { Footer, HeroSection, HowItWorksSection, LandingHeader } from './components';
+
+const benefits = [
+  {
+    icon: Zap,
+    title: 'Operacion rapida',
+    description: 'Venta, caja y actualizacion de stock en el mismo flujo de trabajo.',
+    accent: 'text-amber-300',
+  },
+  {
+    icon: Shield,
+    title: 'Base segura',
+    description: 'Datos por empresa, configuracion central y estructura lista para administracion real.',
+    accent: 'text-emerald-300',
+  },
+  {
+    icon: BarChart3,
+    title: 'Lectura de negocio',
+    description: 'Reportes y senales de rendimiento para ventas, equipo y reposicion.',
+    accent: 'text-sky-300',
+  },
+  {
+    icon: Users,
+    title: 'Equipo controlado',
+    description: 'Permisos, roles y operacion coordinada cuando crece la estructura.',
+    accent: 'text-violet-300',
+  },
+];
+
+const trustSignals = [
+  {
+    value: '500+',
+    label: 'negocios activos',
+    note: 'Uso continuo en operacion diaria',
+  },
+  {
+    value: '98%',
+    label: 'satisfaccion operativa',
+    note: 'Lectura basada en continuidad y adopcion',
+  },
+  {
+    value: '5+',
+    label: 'anos de experiencia',
+    note: 'Producto iterado para escenarios reales',
+  },
+];
 
 export default function InicioPage() {
-    const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
-    const searchParams = useSearchParams();
-    const { plans } = usePlans();
+  const searchParams = useSearchParams();
+  const { plans } = usePlans();
 
-    const defaultPlan = useMemo(() => {
-        const freePlan = plans.find((plan) => plan.priceMonthly === 0);
-        if (freePlan) {
-            return freePlan;
-        }
+  const defaultPlan = useMemo(() => {
+    const freePlan = plans.find((plan) => plan.priceMonthly === 0);
+    if (freePlan) {
+      return freePlan;
+    }
 
-        return [...plans].sort((a, b) => a.priceMonthly - b.priceMonthly)[0] || null;
-    }, [plans]);
-    const maxTrialDays = useMemo(
-        () => plans.reduce((max, plan) => Math.max(max, plan.trialDays || 0), 0),
-        [plans]
-    );
+    return [...plans].sort((a, b) => a.priceMonthly - b.priceMonthly)[0] || null;
+  }, [plans]);
 
-    useEffect(() => {
-        if (!plans.length) {
-            return;
-        }
+  const maxTrialDays = useMemo(
+    () => plans.reduce((max, plan) => Math.max(max, plan.trialDays || 0), 0),
+    [plans]
+  );
 
-        const requestedSlug = searchParams.get('plan');
-        const shouldOpenRegistration = Boolean(requestedSlug) || window.location.hash === '#registro';
+  useEffect(() => {
+    const requestedSlug = searchParams.get('plan');
+    const shouldOpenRegistration = Boolean(requestedSlug) || window.location.hash === '#registro';
 
-        if (!shouldOpenRegistration) {
-            return;
-        }
+    if (!shouldOpenRegistration) {
+      return;
+    }
 
-        const matchedPlan = requestedSlug
-            ? plans.find((plan) => plan.slug === requestedSlug) || null
-            : null;
+    window.location.replace(buildPublicRegistrationPath(requestedSlug || defaultPlan?.slug));
+  }, [defaultPlan?.slug, searchParams]);
 
-        setSelectedPlan(matchedPlan || defaultPlan);
-    }, [defaultPlan, plans, searchParams]);
+  const openRegistration = () => {
+    window.location.href = buildPublicRegistrationPath(defaultPlan?.slug);
+  };
 
-    useEffect(() => {
-        if (!selectedPlan || window.location.hash !== '#registro') {
-            return;
-        }
+  return (
+    <div className="landing-shell min-h-screen text-white">
+      <LandingHeader />
 
-        const timeout = window.setTimeout(() => {
-            document.getElementById('registro')?.scrollIntoView({ behavior: 'smooth' });
-        }, 50);
+      <main>
+        <HeroSection />
 
-        return () => window.clearTimeout(timeout);
-    }, [selectedPlan]);
+        <HowItWorksSection />
 
-    
+        <section className="border-b border-white/10 py-20 lg:py-24">
+          <div className="landing-container">
+            <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(320px,420px)] lg:items-start">
+              <div>
+                <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-slate-300">
+                  <Sparkles className="h-3.5 w-3.5 text-amber-300" />
+                  Beneficios operativos
+                </div>
+                <h2 className="mt-6 max-w-3xl text-3xl font-semibold tracking-tight text-white md:text-4xl">
+                  Diseno pensado para trabajar, no para esconder informacion importante
+                </h2>
+                <p className="mt-4 max-w-3xl text-lg leading-8 text-slate-300">
+                  MiPOS concentra las piezas criticas del negocio en una interfaz sobria, rapida y preparada para mas de una sucursal o equipo.
+                </p>
 
-    const handleRegistrationSuccess = () => {
-        window.location.href = '/dashboard/settings?tab=system';
-    };
-
-    const openRegistration = () => {
-        if (!defaultPlan) {
-            return;
-        }
-
-        setSelectedPlan(defaultPlan);
-        window.history.replaceState(null, '', `/inicio?plan=${encodeURIComponent(defaultPlan.slug)}#registro`);
-
-        window.setTimeout(() => {
-            document.getElementById('registro')?.scrollIntoView({ behavior: 'smooth' });
-        }, 50);
-    };
-
-    return (
-        <div className="min-h-screen bg-background">
-            <LandingHeader />
-
-            <main>
-                <HeroSection />
-
-                <HowItWorksSection />
-
-                {/* Benefits Section - NEW */}
-                <section className="py-20 lg:py-32 bg-background relative overflow-hidden">
-                    <div className="absolute inset-0">
-                        {/* Subtle ambient light instead of colored blobs */}
-                        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/5 rounded-full blur-[120px]" />
-                        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-primary/5 rounded-full blur-[120px]" />
+                <div className="mt-10 grid gap-4 sm:grid-cols-2">
+                  {benefits.map((item) => (
+                    <div key={item.title} className="landing-panel rounded-lg p-6">
+                      <div className={`flex h-11 w-11 items-center justify-center rounded-lg bg-white/5 ${item.accent}`}>
+                        <item.icon className="h-5 w-5" />
+                      </div>
+                      <h3 className="mt-5 text-lg font-medium text-white">{item.title}</h3>
+                      <p className="mt-2 text-sm leading-6 text-slate-400">{item.description}</p>
                     </div>
+                  ))}
+                </div>
+              </div>
 
-                    <div className="container mx-auto px-4 relative z-10">
-                        <div className="text-center max-w-3xl mx-auto mb-16">
-                            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-white/10 bg-white/5 backdrop-blur-sm mb-6">
-                                <Sparkles className="h-4 w-4 text-purple-400" />
-                                <span className="text-sm font-medium text-muted-foreground">
-                                    Beneficios que marcan la diferencia
-                                </span>
-                            </div>
-                            <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-foreground mb-4">
-                                ¿Por qué elegir <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-500 to-blue-500">MiPOS</span>?
-                            </h2>
-                            <p className="text-lg text-muted-foreground">
-                                Más que un sistema de punto de venta, una solución completa para tu negocio
-                            </p>
-                        </div>
+              <div className="space-y-4">
+                <div className="landing-panel rounded-lg p-6">
+                  <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
+                    Que resuelve
+                  </p>
+                  <ul className="mt-4 space-y-3">
+                    {[
+                      'Centraliza ventas, inventario y configuracion por empresa.',
+                      'Reduce dependencia de procesos manuales y hojas separadas.',
+                      'Permite crecer por equipo, sucursal y volumen sin rehacer la base.',
+                    ].map((item) => (
+                      <li key={item} className="flex items-start gap-3 text-sm text-slate-300">
+                        <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-emerald-300" />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
 
-                        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
-                            {[
-                                {
-                                    icon: Zap,
-                                    title: 'Rápido y Eficiente',
-                                    description: 'Procesa ventas en segundos con nuestra interfaz optimizada',
-                                    color: 'text-yellow-400'
-                                },
-                                {
-                                    icon: Shield,
-                                    title: 'Seguro y Confiable',
-                                    description: 'Tus datos protegidos con encriptación de nivel empresarial',
-                                    color: 'text-green-400'
-                                },
-                                {
-                                    icon: BarChart3,
-                                    title: 'Reportes en Tiempo Real',
-                                    description: 'Toma decisiones informadas con análisis detallados',
-                                    color: 'text-blue-400'
-                                },
-                                {
-                                    icon: Users,
-                                    title: 'Multi-usuario',
-                                    description: 'Gestiona permisos y roles para tu equipo',
-                                    color: 'text-purple-400'
-                                },
-                                {
-                                    icon: Building2,
-                                    title: 'Multi-sucursal',
-                                    description: 'Controla todas tus ubicaciones desde un solo lugar',
-                                    color: 'text-pink-400'
-                                },
-                                {
-                                    icon: CheckCircle,
-                                    title: 'Soporte dedicado',
-                                    description: 'Acompanamiento y ayuda segun el plan y los canales habilitados',
-                                    color: 'text-cyan-400'
-                                }
-                            ].map((benefit, idx) => (
-                                <div key={idx} className="bg-card/50 border border-border/50 backdrop-blur-sm p-6 rounded-xl hover:bg-card/80 transition-all duration-300 group">
-                                    <div className={`inline-flex p-3 rounded-lg bg-primary/10 mb-4 group-hover:scale-110 transition-transform`}>
-                                        <benefit.icon className={`h-6 w-6 ${benefit.color}`} />
-                                    </div>
-                                    <h3 className="text-xl font-bold text-foreground mb-2">{benefit.title}</h3>
-                                    <p className="text-muted-foreground">{benefit.description}</p>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </section>
+                <div className="landing-panel rounded-lg p-6">
+                  <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-500">
+                    Registro recomendado
+                  </p>
+                  <p className="mt-3 text-lg font-medium text-white">
+                    Define el plan, crea la cuenta administradora y entra a la configuracion inicial del negocio.
+                  </p>
+                  <div className="mt-5 flex flex-wrap gap-3">
+                    <Link href="/inicio/planes">
+                      <Button className="gradient-primary rounded-lg text-white">
+                        Revisar planes
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </Button>
+                    </Link>
+                    <Button
+                      variant="outline"
+                      onClick={openRegistration}
+                      disabled={!defaultPlan}
+                      className="rounded-lg border-white/10 bg-white/5 text-white hover:bg-white/10"
+                    >
+                      Abrir registro
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
 
-                {/* Social Proof Section - Simplified */}
-                <section className="py-20 bg-background relative overflow-hidden">
-                    <div className="absolute inset-0">
-                        <div className="absolute bottom-1/4 right-1/3 w-96 h-96 bg-primary/5 rounded-full blur-[120px]" />
-                    </div>
+        <section className="border-b border-white/10 py-20 lg:py-24">
+          <div className="landing-container">
+            <div className="text-center">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-slate-300">
+                <Building2 className="h-3.5 w-3.5 text-emerald-300" />
+                Validacion comercial
+              </div>
+              <h2 className="mt-6 text-3xl font-semibold tracking-tight text-white md:text-4xl">
+                Negocios que ya operan sobre la plataforma
+              </h2>
+              <p className="mx-auto mt-4 max-w-3xl text-lg leading-8 text-slate-300">
+                La propuesta no parte de promesas abstractas. Hay negocios usando el sistema, equipos trabajando y catalogos creciendo dentro del ecosistema.
+              </p>
+            </div>
 
-                    <div className="container mx-auto px-4 relative z-10">
-                        <div className="text-center max-w-3xl mx-auto mb-12">
-                            <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-                                Negocios que <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-500 to-blue-500">confían</span> en nosotros
-                            </h2>
-                            <p className="text-lg text-muted-foreground">
-                                Únete a cientos de empresas que transformaron su gestión
-                            </p>
-                        </div>
+            <div className="mt-12 grid gap-6 md:grid-cols-3">
+              {trustSignals.map((item) => (
+                <div key={item.label} className="landing-panel rounded-lg p-8 text-center">
+                  <p className="text-4xl font-semibold text-white">{item.value}</p>
+                  <p className="mt-3 text-sm font-medium uppercase tracking-[0.16em] text-slate-400">
+                    {item.label}
+                  </p>
+                  <p className="mt-3 text-sm text-slate-500">{item.note}</p>
+                </div>
+              ))}
+            </div>
 
-                        <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto mb-12">
-                            <div className="bg-card/50 border border-border/50 backdrop-blur-sm p-8 rounded-2xl hover:bg-card/80 transition-all duration-300 text-center group">
-                                <div className="inline-flex items-center justify-center w-16 h-16 bg-primary/20 rounded-xl mb-4 group-hover:scale-110 transition-transform">
-                                    <Building2 className="h-8 w-8 text-primary" />
-                                </div>
-                                <div className="text-4xl font-bold text-foreground mb-2">500+</div>
-                                <div className="text-sm text-muted-foreground">Negocios Activos</div>
-                                <div className="mt-3 flex items-center justify-center gap-1 text-xs text-green-400">
-                                    <TrendingUp className="h-3 w-3" />
-                                    <span>Creciendo cada día</span>
-                                </div>
-                            </div>
+            <div className="mt-12 text-center">
+              <Link href="/empresas">
+                <Button
+                  variant="outline"
+                  className="rounded-lg border-white/10 bg-white/5 px-6 py-6 text-sm font-medium text-white hover:bg-white/10"
+                >
+                  Ver empresas publicadas
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </section>
 
-                            <div className="bg-card/50 border border-border/50 backdrop-blur-sm p-8 rounded-2xl hover:bg-card/80 transition-all duration-300 text-center group">
-                                <div className="inline-flex items-center justify-center w-16 h-16 bg-primary/20 rounded-xl mb-4 group-hover:scale-110 transition-transform">
-                                    <Users className="h-8 w-8 text-primary" />
-                                </div>
-                                <div className="text-4xl font-bold text-foreground mb-2">98%</div>
-                                <div className="text-sm text-muted-foreground">Satisfacción</div>
-                                <div className="mt-3 flex items-center justify-center gap-1 text-xs text-purple-400">
-                                    <CheckCircle className="h-3 w-3" />
-                                    <span>Calificación promedio</span>
-                                </div>
-                            </div>
+        <section className="py-20 lg:py-24">
+          <div className="landing-container">
+            <div className="landing-panel rounded-lg p-8 md:p-10 lg:p-12">
+              <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(280px,340px)] lg:items-center">
+                <div>
+                  <div className="inline-flex items-center gap-2 rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-amber-200">
+                    Planes y alta
+                  </div>
+                  <h2 className="mt-6 text-3xl font-semibold tracking-tight text-white md:text-4xl">
+                    Empieza con el plan adecuado y deja listo el acceso inicial del negocio
+                  </h2>
+                  <p className="mt-4 max-w-3xl text-lg leading-8 text-slate-300">
+                    El alta publica ya no vive escondida dentro de la landing. Ahora tiene un flujo separado, con plan preseleccionado y contexto suficiente para registrar la cuenta principal correctamente.
+                  </p>
 
-                            <div className="bg-card/50 border border-border/50 backdrop-blur-sm p-8 rounded-2xl hover:bg-card/80 transition-all duration-300 text-center group">
-                                <div className="inline-flex items-center justify-center w-16 h-16 bg-primary/20 rounded-xl mb-4 group-hover:scale-110 transition-transform">
-                                    <Sparkles className="h-8 w-8 text-primary" />
-                                </div>
-                                <div className="text-4xl font-bold text-foreground mb-2">5+</div>
-                                <div className="text-sm text-muted-foreground">Años de Experiencia</div>
-                                <div className="mt-3 flex items-center justify-center gap-1 text-xs text-blue-400">
-                                    <CheckCircle className="h-3 w-3" />
-                                    <span>Innovando siempre</span>
-                                </div>
-                            </div>
-                        </div>
+                  <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                    <Link href="/inicio/planes">
+                      <Button className="gradient-primary rounded-lg px-6 py-6 text-sm font-medium text-white">
+                        Ver catalogo de planes
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </Button>
+                    </Link>
+                    <Button
+                      variant="outline"
+                      onClick={openRegistration}
+                      disabled={!defaultPlan}
+                      className="rounded-lg border-white/10 bg-transparent px-6 py-6 text-sm font-medium text-white hover:bg-white/5"
+                    >
+                      Ir al registro
+                    </Button>
+                  </div>
+                </div>
 
-                        <div className="text-center">
-                            <Link href="/empresas">
-                                <Button className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-6 text-base rounded-xl shadow-lg hover:shadow-primary/25 transition-all duration-300">
-                                    Ver Todos los Negocios
-                                    <ArrowRight className="ml-2 h-5 w-5" />
-                                </Button>
-                            </Link>
-                        </div>
-                    </div>
-                </section>
+                <div className="space-y-4">
+                  <div className="rounded-lg border border-white/10 bg-white/5 p-5">
+                    <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
+                      Prueba comercial
+                    </p>
+                    <p className="mt-3 text-lg font-medium text-white">
+                      {maxTrialDays > 0
+                        ? `Hasta ${maxTrialDays} dias de prueba segun el plan activo.`
+                        : 'Activacion simple segun condiciones comerciales disponibles.'}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-white/10 bg-white/5 p-5">
+                    <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
+                      Acceso inmediato
+                    </p>
+                    <p className="mt-3 text-lg font-medium text-white">
+                      La cuenta creada entra al panel y continua con configuracion inicial y ajuste de negocio.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
 
-                {/* Plans CTA Section - Simplified */}
-                <section className="py-20 bg-background relative overflow-hidden">
-                    <div className="absolute inset-0">
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-primary/5 rounded-full blur-[120px]" />
-                    </div>
-
-                    <div className="container mx-auto px-4 relative z-10">
-                        <div className="max-w-4xl mx-auto">
-                            <div className="bg-card/50 border border-border/50 backdrop-blur-sm p-8 md:p-12 rounded-2xl text-center">
-                                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-white/10 bg-white/5 backdrop-blur-sm mb-6">
-                                    <Sparkles className="h-4 w-4 text-purple-400" />
-                                    <span className="text-sm font-medium text-muted-foreground">
-                                        Planes flexibles para cada negocio
-                                    </span>
-                                </div>
-
-                                <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
-                                    Encuentra el plan <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-500 to-blue-500">perfecto</span> para ti
-                                </h2>
-                                <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
-                                    Desde pequeños emprendimientos hasta grandes empresas. 
-                                    Revisa las condiciones y beneficios del plan que mejor se adapte a tu operacion.
-                                </p>
-
-                                <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                                    <Link href="/inicio/planes">
-                                        <Button className="bg-primary hover:bg-primary/90 text-primary-foreground px-8 py-6 text-base rounded-xl shadow-lg hover:shadow-primary/25 transition-all duration-300">
-                                            Ver Planes y Precios
-                                            <ArrowRight className="ml-2 h-5 w-5" />
-                                        </Button>
-                                    </Link>
-                                    <Button
-                                        variant="outline"
-                                        className="border-white/10 hover:bg-white/5 text-foreground px-8 py-6 text-base rounded-xl"
-                                        onClick={openRegistration}
-                                        disabled={!defaultPlan}
-                                    >
-                                        Comenzar Gratis
-                                    </Button>
-                                </div>
-
-                                <p className="text-sm text-muted-foreground mt-6">
-                                    {maxTrialDays > 0
-                                        ? `Hasta ${maxTrialDays} dias de prueba disponibles segun el plan activo.`
-                                        : 'Planes disponibles con activacion simple y condiciones segun disponibilidad.'}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                {/* Registration Section */}
-                {selectedPlan && (
-                    <RegistrationSection
-                        selectedPlan={selectedPlan}
-                        onSuccess={handleRegistrationSuccess}
-                    />
-                )}
-            </main>
-
-            <Footer />
-        </div>
-    );
+      <Footer />
+    </div>
+  );
 }

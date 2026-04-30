@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/server';
 import { dedupeCanonicalPlans, getCanonicalPlanAliases, getCanonicalPlanDisplayName, normalizePlanSlug } from '@/lib/plan-catalog';
+import { getPlanNarrative, resolvePlanLimits } from '@/lib/public-plan-utils';
 
 interface SaasPlanRow {
     id: string;
@@ -23,7 +24,8 @@ interface SaasPlanRow {
 
 export async function GET() {
     try {
-        const supabase = await createClient();
+        // Public catalog should not depend on anon RLS evaluation.
+        const supabase = await createAdminClient();
 
         // Obtener todos los planes activos
         const { data: plans, error } = await supabase
@@ -51,14 +53,17 @@ export async function GET() {
             slug: normalizePlanSlug(plan.slug),
             priceMonthly: Number(plan.price_monthly || 0),
             priceYearly: Number(plan.price_yearly || 0),
-            features: plan.features || [],
-            limits: plan.limits || {
-                maxUsers: Number(plan.max_users || 0) || 1,
-                maxProducts: Number(plan.max_products || 0) || 20,
-                maxTransactionsPerMonth: Number(plan.max_transactions_per_month || 0) || 50,
-                maxLocations: Number(plan.max_locations || 0) || 1,
-            },
-            description: plan.description,
+            features: (plan.features || []).map((feature) => String(feature)),
+            limits: resolvePlanLimits({
+                slug: plan.slug,
+                limits: plan.limits,
+                max_users: plan.max_users,
+                max_products: plan.max_products,
+                max_transactions_per_month: plan.max_transactions_per_month,
+                max_locations: plan.max_locations,
+                features: plan.features,
+            }),
+            description: String(plan.description || '').trim() || getPlanNarrative(plan.slug).summary,
             currency: plan.currency || 'PYG',
             trialDays: plan.trial_days || 0,
             // Calcular ahorro anual
@@ -67,10 +72,17 @@ export async function GET() {
                 : 0,
         }));
 
-        return NextResponse.json({
-            success: true,
-            plans: formattedPlans,
-        });
+        return NextResponse.json(
+            {
+                success: true,
+                plans: formattedPlans,
+            },
+            {
+                headers: {
+                    'Cache-Control': 'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
+                },
+            }
+        );
 
     } catch (error) {
         console.error('Error in plans API:', error);

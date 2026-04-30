@@ -1,177 +1,99 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { ArrowRight, LockKeyhole, LogIn, ShieldCheck, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Eye, EyeOff, Loader2, LogIn, Sparkles } from 'lucide-react';
-import { useAuth } from '@/hooks/use-auth';
-import { toast } from '@/lib/toast';
+import { buildPublicRegistrationPath } from '@/lib/public-plan-utils';
+
+const accessNotes = [
+  'El acceso principal vive en una pantalla dedicada de inicio de sesion.',
+  'La cuenta administradora entra directo al panel y continua configuracion inicial.',
+  'Si aun no tienes negocio registrado, primero elige plan y completa el alta publica.',
+];
 
 export function LoginSection() {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [showPassword, setShowPassword] = useState(false);
-    const [loading, setLoading] = useState(false);
+  return (
+    <section id="login" className="border-b border-white/10 py-20 lg:py-24">
+      <div className="landing-container">
+        <div className="mx-auto max-w-5xl">
+          <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+            <div className="landing-panel rounded-lg p-8 md:p-10">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-slate-300">
+                <LockKeyhole className="h-3.5 w-3.5 text-emerald-300" />
+                Acceso existente
+              </div>
 
-    const router = useRouter();
-    const { signIn } = useAuth();
+              <h2 className="mt-6 text-3xl font-semibold tracking-tight text-white md:text-4xl">
+                Ya tienes cuenta. Entra por el flujo de acceso dedicado
+              </h2>
+              <p className="mt-4 max-w-3xl text-lg leading-8 text-slate-300">
+                El login publico ya no se duplica dentro de la landing. El acceso se gestiona en una pantalla preparada para autenticacion, retorno y continuidad operativa.
+              </p>
 
-    const handleLogin = async (e: React.FormEvent) => {
-        e.preventDefault();
-
-        if (!email || !password) {
-            toast.error('Por favor completa todos los campos');
-            return;
-        }
-
-        setLoading(true);
-        try {
-            await signIn(email, password);
-            toast.success('¡Bienvenido!');
-            router.push('/dashboard');
-        } catch (error: any) {
-            toast.error('Error al iniciar sesión', {
-                description: error.message || 'Verifica tus credenciales'
-            });
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    return (
-        <section id="login" className="py-20 lg:py-32 bg-[#0a0a0a] relative overflow-hidden">
-            {/* Background gradient */}
-            <div className="absolute inset-0">
-                <div className="absolute top-1/2 left-1/3 w-96 h-96 radial-gradient-purple opacity-20" />
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                <Link href="/auth/signin">
+                  <Button className="gradient-primary rounded-lg text-white">
+                    Ir a iniciar sesion
+                    <LogIn className="ml-2 h-4 w-4" />
+                  </Button>
+                </Link>
+                <Link href={buildPublicRegistrationPath('starter')}>
+                  <Button
+                    variant="outline"
+                    className="rounded-lg border-white/10 bg-white/5 text-white hover:bg-white/10"
+                  >
+                    Crear cuenta nueva
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </Link>
+              </div>
             </div>
 
-            <div className="container mx-auto px-4 relative z-10">
-                <div className="max-w-md mx-auto">
-                    {/* Header */}
-                    <div className="text-center mb-8">
-                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-card mb-6">
-                            <Sparkles className="h-4 w-4 text-purple-400" />
-                            <span className="text-sm font-medium text-gray-300">
-                                Accede a tu cuenta
-                            </span>
-                        </div>
-
-                        <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-                            Iniciar Sesión
-                        </h2>
-                        <p className="text-gray-400">
-                            Ingresa con tu cuenta existente
-                        </p>
-                    </div>
-
-                    {/* Login Form */}
-                    <div className="glass-card rounded-2xl p-8">
-                        <form onSubmit={handleLogin} className="space-y-6">
-                            {/* Email */}
-                            <div className="space-y-2">
-                                <Label htmlFor="login-email" className="text-white">
-                                    Email
-                                </Label>
-                                <Input
-                                    id="login-email"
-                                    type="email"
-                                    placeholder="tu@email.com"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    disabled={loading}
-                                    className="bg-white/5 border-white/10 text-white placeholder:text-gray-500"
-                                />
-                            </div>
-
-                            {/* Password */}
-                            <div className="space-y-2">
-                                <div className="flex items-center justify-between">
-                                    <Label htmlFor="login-password" className="text-white">
-                                        Contraseña
-                                    </Label>
-                                    <a
-                                        href="/recuperar-password"
-                                        className="text-sm text-purple-400 hover:text-purple-300"
-                                    >
-                                        ¿Olvidaste tu contraseña?
-                                    </a>
-                                </div>
-                                <div className="relative">
-                                    <Input
-                                        id="login-password"
-                                        type={showPassword ? 'text' : 'password'}
-                                        placeholder="••••••••"
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                        disabled={loading}
-                                        className="pr-10 bg-white/5 border-white/10 text-white placeholder:text-gray-500"
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowPassword(!showPassword)}
-                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200"
-                                    >
-                                        {showPassword ? (
-                                            <EyeOff className="h-4 w-4" />
-                                        ) : (
-                                            <Eye className="h-4 w-4" />
-                                        )}
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* Submit button */}
-                            <Button
-                                type="submit"
-                                disabled={loading}
-                                className="w-full gradient-primary text-white py-6 text-base rounded-xl shadow-dark-lg glow-purple hover:scale-105 transition-all duration-300"
-                            >
-                                {loading ? (
-                                    <>
-                                        <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                                        Ingresando...
-                                    </>
-                                ) : (
-                                    <>
-                                        <LogIn className="h-5 w-5 mr-2" />
-                                        Iniciar Sesión
-                                    </>
-                                )}
-                            </Button>
-                        </form>
-
-                        {/* Divider */}
-                        <div className="relative my-6">
-                            <div className="absolute inset-0 flex items-center">
-                                <div className="w-full border-t border-white/10"></div>
-                            </div>
-                            <div className="relative flex justify-center text-sm">
-                                <span className="px-2 bg-[#0a0a0a] text-gray-400">
-                                    ¿No tienes cuenta?
-                                </span>
-                            </div>
-                        </div>
-
-                        {/* Register link */}
-                        <Button
-                            variant="outline"
-                            className="w-full glass-card border-white/10 text-white hover:border-purple-500/50"
-                            onClick={() => document.getElementById('planes')?.scrollIntoView({ behavior: 'smooth' })}
-                        >
-                            Crear una cuenta nueva
-                        </Button>
-                    </div>
-
-                    {/* Trust indicator */}
-                    <div className="mt-8 text-center">
-                        <p className="text-sm text-gray-500">
-                            🔒 Conexión segura con encriptación SSL
-                        </p>
-                    </div>
+            <div className="space-y-4">
+              <div className="landing-panel rounded-lg p-6">
+                <div className="flex items-start gap-4">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-amber-400/10 text-amber-300">
+                    <Sparkles className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-white">Flujo mas limpio</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-400">
+                      Menos ruido en la landing y mejor separacion entre captacion, registro y acceso.
+                    </p>
+                  </div>
                 </div>
+              </div>
+
+              <div className="landing-panel rounded-lg p-6">
+                <div className="flex items-start gap-4">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-emerald-400/10 text-emerald-300">
+                    <ShieldCheck className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-white">Acceso preparado</p>
+                    <p className="mt-1 text-sm leading-6 text-slate-400">
+                      El signin conserva validacion, retorno y manejo de organizacion sin depender de un bloque embebido.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="landing-panel rounded-lg p-6">
+                <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
+                  Antes de entrar
+                </p>
+                <ul className="mt-4 space-y-3">
+                  {accessNotes.map((item) => (
+                    <li key={item} className="text-sm leading-6 text-slate-300">
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
-        </section>
-    );
+          </div>
+        </div>
+      </div>
+    </section>
+  );
 }

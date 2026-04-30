@@ -1,186 +1,190 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { Building2, TrendingUp, Users, Loader2, Sparkles, CheckCircle } from 'lucide-react';
+import { Building2, CheckCircle2, Loader2, Sparkles, TrendingUp, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { buildPublicRegistrationPath } from '@/lib/public-plan-utils';
 
 interface Organization {
-    id: string;
-    name: string;
-    slug: string;
-    created_at: string;
+  id: string;
+  name: string;
+  slug: string;
+  created_at: string;
+}
+
+interface PublicOrganizationsResponse {
+  success?: boolean;
+  organizations?: Organization[];
+  count?: number;
 }
 
 export function TrustedBusinesses() {
-    const [organizations, setOrganizations] = useState<Organization[]>([]);
-    const [loading, setLoading] = useState(true);
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        fetchOrganizations();
-    }, []);
+  useEffect(() => {
+    void fetchOrganizations();
+  }, []);
 
-    const fetchOrganizations = async () => {
-        setLoading(true);
-        try {
-            const response = await fetch('/api/organizations/public');
-            const data = await response.json();
-            if (data.success) {
-                setOrganizations(data.organizations || []);
-            }
-        } catch (error) {
-            console.error('Error fetching organizations:', error);
-        } finally {
-            setLoading(false);
-        }
-    };
+  const fetchOrganizations = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/organizations/public', { cache: 'no-store' });
+      const data = (await response.json()) as PublicOrganizationsResponse;
 
-    const getInitials = (name: string) => {
-        return name
-            .split(' ')
-            .map(word => word[0])
-            .join('')
-            .toUpperCase()
-            .slice(0, 2);
-    };
+      if (data.success) {
+        setOrganizations(Array.isArray(data.organizations) ? data.organizations : []);
+        setTotalCount(typeof data.count === 'number' ? data.count : 0);
+      }
+    } catch (error) {
+      console.error('Error fetching organizations:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    return (
-        <section id="negocios" className="py-20 lg:py-32 bg-[#0a0a0a] relative overflow-hidden">
-            {/* Background gradient */}
-            <div className="absolute inset-0">
-                <div className="absolute bottom-1/4 right-1/3 w-96 h-96 radial-gradient-blue opacity-20" />
-                <div className="absolute top-1/3 left-1/4 w-96 h-96 radial-gradient-purple opacity-15" />
+  const normalizeDisplayText = (value: string) => {
+    try {
+      const decoded = new TextDecoder('utf-8').decode(
+        Uint8Array.from(value, (char) => char.charCodeAt(0))
+      );
+      return decoded.includes('�') ? value : decoded;
+    } catch {
+      return value;
+    }
+  };
+
+  const getInitials = (name: string) =>
+    normalizeDisplayText(name)
+      .trim()
+      .split(' ')
+      .map((word) => word[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+
+  const organizationsCountLabel = totalCount > 0 ? `${totalCount}+` : '500+';
+
+  return (
+    <section id="negocios" className="border-b border-white/10 py-20 lg:py-24">
+      <div className="landing-container">
+        <div className="mx-auto max-w-3xl text-center">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-slate-300">
+            <Building2 className="h-3.5 w-3.5 text-emerald-300" />
+            Negocios publicados
+          </div>
+          <h2 className="mt-6 text-3xl font-semibold tracking-tight text-white md:text-4xl lg:text-5xl">
+            Empresas que ya operan dentro del ecosistema MiPOS
+          </h2>
+          <p className="mt-4 text-lg leading-8 text-slate-300">
+            Directorio vivo de negocios que usan la plataforma para vender, administrar catalogo y crecer con una base ordenada.
+          </p>
+        </div>
+
+        <div className="mt-12 grid gap-6 md:grid-cols-3">
+          <div className="landing-panel rounded-lg p-8 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-emerald-400/10 text-emerald-300">
+              <Building2 className="h-7 w-7" />
             </div>
+            <p className="mt-5 text-4xl font-semibold text-white">{organizationsCountLabel}</p>
+            <p className="mt-2 text-sm text-slate-400">Negocios activos o publicados</p>
+            <div className="mt-3 inline-flex items-center gap-1 text-xs text-emerald-300">
+              <TrendingUp className="h-3.5 w-3.5" />
+              Crecimiento comercial visible
+            </div>
+          </div>
 
-            <div className="container mx-auto px-4 relative z-10">
-                {/* Header */}
-                <div className="text-center max-w-3xl mx-auto mb-16">
-                    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass-card mb-6">
-                        <Building2 className="h-4 w-4 text-purple-400" />
-                        <span className="text-sm font-medium text-gray-300">
-                            Empresas que confían en nosotros
-                        </span>
-                    </div>
+          <div className="landing-panel rounded-lg p-8 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-amber-400/10 text-amber-300">
+              <Users className="h-7 w-7" />
+            </div>
+            <p className="mt-5 text-4xl font-semibold text-white">98%</p>
+            <p className="mt-2 text-sm text-slate-400">Continuidad operativa</p>
+            <div className="mt-3 inline-flex items-center gap-1 text-xs text-amber-300">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Adopcion sostenida
+            </div>
+          </div>
 
-                    <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-6">
-                        Negocios que ya <span className="gradient-text">optimizaron</span> su gestión
-                    </h2>
-                    <p className="text-lg text-gray-400">
-                        Únete a cientos de empresas que transformaron su forma de trabajar
-                    </p>
-                </div>
+          <div className="landing-panel rounded-lg p-8 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-sky-400/10 text-sky-300">
+              <Sparkles className="h-7 w-7" />
+            </div>
+            <p className="mt-5 text-4xl font-semibold text-white">5+</p>
+            <p className="mt-2 text-sm text-slate-400">Anos de evolucion</p>
+            <div className="mt-3 inline-flex items-center gap-1 text-xs text-sky-300">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Producto iterado sobre casos reales
+            </div>
+          </div>
+        </div>
 
-                {/* Stats Cards - Bento style */}
-                <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto mb-16">
-                    <div className="glass-card p-8 rounded-2xl hover-glow text-center group">
-                        <div className="inline-flex items-center justify-center w-16 h-16 gradient-primary rounded-xl mb-4 group-hover:scale-110 transition-transform">
-                            <Building2 className="h-8 w-8 text-white" />
-                        </div>
-                        <div className="text-4xl font-bold gradient-text mb-2">{organizations.length || 500}+</div>
-                        <div className="text-sm text-gray-400">Negocios Activos</div>
-                        <div className="mt-3 flex items-center justify-center gap-1 text-xs text-green-400">
-                            <TrendingUp className="h-3 w-3" />
-                            <span>Creciendo cada día</span>
-                        </div>
-                    </div>
-
-                    <div className="glass-card p-8 rounded-2xl hover-glow text-center group">
-                        <div className="inline-flex items-center justify-center w-16 h-16 gradient-primary rounded-xl mb-4 group-hover:scale-110 transition-transform">
-                            <Users className="h-8 w-8 text-white" />
-                        </div>
-                        <div className="text-4xl font-bold gradient-text mb-2">98%</div>
-                        <div className="text-sm text-gray-400">Satisfacción del Cliente</div>
-                        <div className="mt-3 flex items-center justify-center gap-1 text-xs text-purple-400">
-                            <CheckCircle className="h-3 w-3" />
-                            <span>Calificación promedio</span>
-                        </div>
-                    </div>
-
-                    <div className="glass-card p-8 rounded-2xl hover-glow text-center group">
-                        <div className="inline-flex items-center justify-center w-16 h-16 gradient-primary rounded-xl mb-4 group-hover:scale-110 transition-transform">
-                            <Sparkles className="h-8 w-8 text-white" />
-                        </div>
-                        <div className="text-4xl font-bold gradient-text mb-2">5+</div>
-                        <div className="text-sm text-gray-400">Años de Experiencia</div>
-                        <div className="mt-3 flex items-center justify-center gap-1 text-xs text-blue-400">
-                            <CheckCircle className="h-3 w-3" />
-                            <span>Innovando siempre</span>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Organizations Grid - Premium Bento style */}
-                {loading ? (
-                    <div className="flex items-center justify-center py-20">
-                        <div className="text-center">
-                            <Loader2 className="h-12 w-12 animate-spin text-purple-500 mx-auto mb-4" />
-                            <p className="text-gray-400">Cargando negocios...</p>
-                        </div>
-                    </div>
-                ) : organizations.length === 0 ? (
-                    <div className="text-center py-20">
-                        <div className="inline-flex items-center justify-center w-20 h-20 glass-card rounded-2xl mb-6">
-                            <Building2 className="h-10 w-10 text-gray-600" />
-                        </div>
-                        <p className="text-xl text-gray-400 mb-2">Próximamente más negocios</p>
-                        <p className="text-sm text-gray-500">Sé de los primeros en unirte</p>
-                    </div>
-                ) : (
-                    <>
-                        <div className="bento-grid max-w-6xl mx-auto mb-12">
-                            {organizations.slice(0, 12).map((org) => (
-                                <div
-                                    key={org.id}
-                                    className="glass-card p-6 rounded-xl hover-glow group cursor-pointer"
-                                >
-                                    <div className="flex flex-col items-center text-center">
-                                        <div className="w-20 h-20 rounded-xl gradient-primary flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                                            <span className="text-white font-bold text-xl">
-                                                {getInitials(org.name)}
-                                            </span>
-                                        </div>
-
-                                        <h3 className="font-semibold text-white text-base line-clamp-2 mb-2 group-hover:text-purple-300 transition-colors">
-                                            {org.name}
-                                        </h3>
-                                        <p className="text-xs text-gray-500 flex items-center gap-1">
-                                            <CheckCircle className="h-3 w-3 text-green-400" />
-                                            Desde {new Date(org.created_at).getFullYear()}
-                                        </p>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-
-                        {/* Show more if there are more organizations */}
-                        {organizations.length > 12 && (
-                            <div className="text-center">
-                                <p className="text-sm text-gray-400 mb-4">
-                                    Y {organizations.length - 12} negocios más confían en MiPOS
-                                </p>
-                            </div>
-                        )}
-                    </>
-                )}
-
-                {/* CTA Section */}
-                <div className="mt-16 text-center">
-                    <div className="glass-card max-w-2xl mx-auto p-8 rounded-2xl">
-                        <h3 className="text-2xl font-bold text-white mb-3">
-                            ¿Quieres ser parte de esta comunidad?
+        <div className="mt-12">
+          {loading ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="inline-flex items-center gap-3 text-sm text-slate-400">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Cargando negocios publicados
+              </div>
+            </div>
+          ) : organizations.length === 0 ? (
+            <div className="landing-panel rounded-lg p-10 text-center">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-xl bg-white/5 text-slate-500">
+                <Building2 className="h-8 w-8" />
+              </div>
+              <p className="mt-5 text-xl font-medium text-white">Todavia no hay negocios visibles</p>
+              <p className="mt-2 text-sm text-slate-400">Puedes ser de los primeros en publicar tu empresa.</p>
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                {organizations.map((organization) => (
+                  <div key={organization.id} className="landing-panel rounded-lg p-5">
+                    <div className="flex items-start gap-4">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-emerald-400/10 text-sm font-semibold text-emerald-200">
+                        {getInitials(organization.name)}
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="truncate text-sm font-medium text-white">
+                          {normalizeDisplayText(organization.name)}
                         </h3>
-                        <p className="text-gray-400 mb-6">
-                            Únete a cientos de negocios que ya optimizaron su gestión empresarial
+                        <p className="mt-1 text-xs text-slate-500">@{organization.slug}</p>
+                        <p className="mt-3 text-xs text-slate-400">
+                          Presente desde {new Date(organization.created_at).getFullYear()}
                         </p>
-                        <Button
-                            onClick={() => document.getElementById('planes')?.scrollIntoView({ behavior: 'smooth' })}
-                            className="gradient-primary px-8 py-6 text-base rounded-xl glow-purple hover:scale-105 transition-transform"
-                        >
-                            Ver Planes y Precios
-                            <TrendingUp className="ml-2 h-5 w-5" />
-                        </Button>
+                      </div>
                     </div>
-                </div>
-            </div>
-        </section>
-    );
+                  </div>
+                ))}
+              </div>
+
+              {totalCount > organizations.length ? (
+                <p className="mt-6 text-center text-sm text-slate-400">
+                  Y {totalCount - organizations.length} negocios mas forman parte del ecosistema.
+                </p>
+              ) : null}
+            </>
+          )}
+        </div>
+
+        <div className="mt-12 flex flex-col items-center justify-center gap-3 sm:flex-row">
+          <Link href="/empresas">
+            <Button className="gradient-primary rounded-lg text-white">
+              Ver directorio completo
+            </Button>
+          </Link>
+          <Link href={buildPublicRegistrationPath('starter')}>
+            <Button
+              variant="outline"
+              className="rounded-lg border-white/10 bg-white/5 text-white hover:bg-white/10"
+            >
+              Publicar mi empresa
+            </Button>
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
 }
