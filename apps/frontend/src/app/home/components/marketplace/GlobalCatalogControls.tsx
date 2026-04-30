@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   ArrowLeft,
   ArrowRight,
+  MapPin,
   Search,
   SlidersHorizontal,
   Tag,
@@ -39,7 +40,7 @@ import {
 } from '@/components/ui/sheet';
 import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
-import type { GlobalCatalogCategoryOption } from '@/lib/public-site/global-catalog-data';
+import type { GlobalCatalogCategoryOption, GlobalCatalogLocationOption } from '@/lib/public-site/global-catalog-data';
 
 const SORT_LABELS: Record<CatalogQueryState['sortBy'], string> = {
   popular: 'Mas recientes',
@@ -71,6 +72,8 @@ interface ToolbarProps extends SharedProps {
   totalProducts: number;
   totalOrganizations: number;
   matchingOrganizations: number;
+  departments: GlobalCatalogLocationOption[];
+  cities: GlobalCatalogLocationOption[];
 }
 
 interface PaginationProps {
@@ -118,6 +121,8 @@ function countActiveFilters(state: CatalogQueryState) {
     state.minPrice > 0 ? 1 : 0,
     state.maxPrice !== null ? 1 : 0,
     state.inStock === false ? 1 : 0,
+    state.department ? 1 : 0,
+    state.city ? 1 : 0,
   ].reduce((total, value) => total + value, 0);
 }
 
@@ -429,6 +434,8 @@ export function GlobalCatalogToolbar({
   totalProducts,
   totalOrganizations,
   matchingOrganizations,
+  departments,
+  cities,
 }: ToolbarProps) {
   const navigate = useCatalogNavigation(maxPrice);
   const [searchInput, setSearchInput] = useState(state.search);
@@ -463,6 +470,8 @@ export function GlobalCatalogToolbar({
       minPrice: 0,
       maxPrice: null,
       rating: null,
+      department: '',
+      city: '',
     });
   };
 
@@ -472,6 +481,8 @@ export function GlobalCatalogToolbar({
       key: `category:${categoryKey}`,
       label: categoriesMap.get(categoryKey) || categoryKey,
     })),
+    state.department ? { key: 'department', label: `Depto: ${state.department}` } : null,
+    state.city ? { key: 'city', label: `Ciudad: ${state.city}` } : null,
     state.onSale ? { key: 'sale', label: 'Solo ofertas' } : null,
     state.rating ? { key: 'rating', label: `${state.rating}+ estrellas` } : null,
     state.minPrice > 0 ? { key: 'min', label: `Desde ${formatCurrency(state.minPrice)}` } : null,
@@ -480,124 +491,178 @@ export function GlobalCatalogToolbar({
   ].filter(Boolean) as Array<{ key: string; label: string }>;
 
   return (
-    <div className="space-y-5">
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-lg border border-white/10 bg-white/5 p-5">
-          <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Resultados</p>
-          <p className="mt-3 text-2xl font-semibold text-white">{totalProducts}</p>
-          <p className="mt-1 text-sm text-slate-400">Productos coinciden con los criterios activos.</p>
-        </div>
-        <div className="rounded-lg border border-white/10 bg-white/5 p-5">
-          <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Empresas visibles</p>
-          <p className="mt-3 text-2xl font-semibold text-white">{matchingOrganizations}</p>
-          <p className="mt-1 text-sm text-slate-400">Sobre {totalOrganizations} empresas activas en la red.</p>
-        </div>
-        <div className="rounded-lg border border-white/10 bg-white/5 p-5">
-          <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Categorias activas</p>
-          <p className="mt-3 text-2xl font-semibold text-white">{categories.length}</p>
-          <p className="mt-1 text-sm text-slate-400">Rubros detectados en el universo filtrado.</p>
-        </div>
-      </div>
-
-      <div className="rounded-lg border border-white/10 bg-white/5 p-4 md:p-5">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-          <form onSubmit={handleSearchSubmit} className="flex flex-1 gap-3">
-            <div className="relative flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-              <Input
-                value={searchInput}
-                onChange={(event) => setSearchInput(event.target.value)}
-                placeholder="Buscar productos, descripcion o marca"
-                className="h-11 border-white/10 bg-slate-950/40 pl-10 text-white placeholder:text-slate-500"
-              />
-            </div>
-            <Button type="submit" className="gradient-primary h-11 rounded-lg text-white">
-              Buscar
-            </Button>
-          </form>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="min-w-[180px]">
-              <Select
-                value={state.sortBy}
-                onValueChange={(value) =>
-                  navigate({
-                    ...state,
-                    sortBy: value as CatalogQueryState['sortBy'],
-                    page: CATALOG_DEFAULT_PAGE,
-                  })
-                }
-              >
-                <SelectTrigger className="h-11 rounded-lg border-white/10 bg-slate-950/40 text-white">
-                  <SelectValue placeholder="Orden" />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(SORT_LABELS).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="min-w-[140px]">
-              <Select
-                value={String(state.itemsPerPage)}
-                onValueChange={(value) =>
-                  navigate({
-                    ...state,
-                    itemsPerPage: Number(value),
-                    page: CATALOG_DEFAULT_PAGE,
-                  })
-                }
-              >
-                <SelectTrigger className="h-11 rounded-lg border-white/10 bg-slate-950/40 text-white">
-                  <SelectValue placeholder="Por pagina" />
-                </SelectTrigger>
-                <SelectContent>
-                  {PER_PAGE_OPTIONS.map((option) => (
-                    <SelectItem key={option} value={String(option)}>
-                      {option} / pagina
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <GlobalCatalogMobileFilters
-              state={state}
-              categories={categories}
-              maxPrice={maxPrice}
-              activeFilterCount={activeFilterCount}
+    <div className="space-y-4">
+      {/* Row 1: Search + Stats inline */}
+      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 md:p-5">
+        <form onSubmit={handleSearchSubmit} className="flex gap-3">
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            <Input
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              placeholder="Buscar productos, descripcion o marca..."
+              className="h-11 rounded-xl border-white/10 bg-slate-950/40 pl-10 text-white placeholder:text-slate-500"
             />
           </div>
-        </div>
+          <Button type="submit" className="gradient-primary h-11 rounded-xl px-6 text-white">
+            Buscar
+          </Button>
+        </form>
 
-        {activeBadges.length > 0 ? (
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            {activeBadges.map((badge) => (
-              <Badge
-                key={badge.key}
-                variant="outline"
-                className="rounded-full border-white/10 bg-slate-950/40 px-3 py-1 text-slate-200"
-              >
-                <Tag className="mr-2 h-3.5 w-3.5 text-amber-300" />
-                {badge.label}
-              </Badge>
-            ))}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={clearAllFilters}
-              className="rounded-full px-3 text-slate-300 hover:bg-white/5 hover:text-white"
-            >
-              <X className="mr-2 h-3.5 w-3.5" />
-              Limpiar todo
-            </Button>
-          </div>
-        ) : null}
+        {/* Inline stats */}
+        <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-white/5 pt-4 text-xs text-slate-400">
+          <span>
+            <span className="font-semibold text-white">{totalProducts}</span> productos
+          </span>
+          <span>
+            <span className="font-semibold text-white">{matchingOrganizations}</span> de {totalOrganizations} empresas
+          </span>
+          <span>
+            <span className="font-semibold text-white">{categories.length}</span> categorias
+          </span>
+        </div>
       </div>
+
+      {/* Row 2: Filters bar */}
+      <div className="flex flex-wrap items-center gap-3">
+        {/* Sort */}
+        <Select
+          value={state.sortBy}
+          onValueChange={(value) =>
+            navigate({
+              ...state,
+              sortBy: value as CatalogQueryState['sortBy'],
+              page: CATALOG_DEFAULT_PAGE,
+            })
+          }
+        >
+          <SelectTrigger className="h-10 w-auto min-w-[160px] rounded-xl border-white/10 bg-white/[0.03] text-sm text-white">
+            <SelectValue placeholder="Ordenar por" />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(SORT_LABELS).map(([value, label]) => (
+              <SelectItem key={value} value={value}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Department */}
+        {departments.length > 0 && (
+          <Select
+            value={state.department || '__all__'}
+            onValueChange={(value) =>
+              navigate({
+                ...state,
+                department: value === '__all__' ? '' : value,
+                city: '',
+                page: CATALOG_DEFAULT_PAGE,
+              })
+            }
+          >
+            <SelectTrigger className="h-10 w-auto min-w-[160px] rounded-xl border-white/10 bg-white/[0.03] text-sm text-white">
+              <MapPin className="mr-2 h-3.5 w-3.5 text-amber-400" />
+              <SelectValue placeholder="Departamento" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">Todos los deptos.</SelectItem>
+              {departments.map((dept) => (
+                <SelectItem key={dept.key} value={dept.label}>
+                  {dept.label} ({dept.organizationCount})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        {/* City */}
+        {cities.length > 0 && (
+          <Select
+            value={state.city || '__all__'}
+            onValueChange={(value) =>
+              navigate({
+                ...state,
+                city: value === '__all__' ? '' : value,
+                page: CATALOG_DEFAULT_PAGE,
+              })
+            }
+          >
+            <SelectTrigger className="h-10 w-auto min-w-[160px] rounded-xl border-white/10 bg-white/[0.03] text-sm text-white">
+              <MapPin className="mr-2 h-3.5 w-3.5 text-emerald-400" />
+              <SelectValue placeholder="Ciudad" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">Todas las ciudades</SelectItem>
+              {cities.map((city) => (
+                <SelectItem key={city.key} value={city.label}>
+                  {city.label} ({city.productCount})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+
+        {/* Per page */}
+        <Select
+          value={String(state.itemsPerPage)}
+          onValueChange={(value) =>
+            navigate({
+              ...state,
+              itemsPerPage: Number(value),
+              page: CATALOG_DEFAULT_PAGE,
+            })
+          }
+        >
+          <SelectTrigger className="h-10 w-auto min-w-[120px] rounded-xl border-white/10 bg-white/[0.03] text-sm text-white">
+            <SelectValue placeholder="Por pagina" />
+          </SelectTrigger>
+          <SelectContent>
+            {PER_PAGE_OPTIONS.map((option) => (
+              <SelectItem key={option} value={String(option)}>
+                {option} / pag
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {/* Mobile filters trigger */}
+        <GlobalCatalogMobileFilters
+          state={state}
+          categories={categories}
+          maxPrice={maxPrice}
+          activeFilterCount={activeFilterCount}
+        />
+
+        {/* Clear all */}
+        {activeFilterCount > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={clearAllFilters}
+            className="h-10 rounded-xl px-3 text-xs text-slate-400 hover:bg-white/5 hover:text-white"
+          >
+            <X className="mr-1.5 h-3.5 w-3.5" />
+            Limpiar ({activeFilterCount})
+          </Button>
+        )}
+      </div>
+
+      {/* Row 3: Active filter badges */}
+      {activeBadges.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          {activeBadges.map((badge) => (
+            <Badge
+              key={badge.key}
+              variant="outline"
+              className="rounded-full border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-slate-200"
+            >
+              <Tag className="mr-1.5 h-3 w-3 text-amber-300" />
+              {badge.label}
+            </Badge>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

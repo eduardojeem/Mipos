@@ -27,6 +27,8 @@ export interface CatalogQueryState {
   minPrice: number;
   maxPrice: number | null;
   rating: number | null;
+  department: string;
+  city: string;
 }
 
 function isCatalogSortMode(value: string | null | undefined): value is CatalogSortMode {
@@ -123,6 +125,8 @@ export function normalizeCatalogQuery(
     minPrice,
     maxPrice,
     rating: ratingRaw > 0 ? Math.min(ratingRaw, 5) : null,
+    department: normalizeString(readFirstValue(source, 'department')),
+    city: normalizeString(readFirstValue(source, 'city')),
   };
 }
 
@@ -173,6 +177,14 @@ export function buildCatalogSearchParams(
 
   if (state.rating) {
     params.set('rating', String(state.rating));
+  }
+
+  if (state.department) {
+    params.set('department', state.department);
+  }
+
+  if (state.city) {
+    params.set('city', state.city);
   }
 
   if (state.page > CATALOG_DEFAULT_PAGE) {

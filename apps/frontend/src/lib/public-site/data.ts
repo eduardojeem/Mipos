@@ -7,9 +7,25 @@ import type { PublicOrganization } from '@/lib/domain/request-tenant';
 
 const PUBLIC_ORGANIZATION_STATUSES = ['ACTIVE', 'TRIAL'];
 const MARKETPLACE_ORGANIZATION_SELECT =
-  'id,name,slug,subdomain,custom_domain,subscription_status,created_at,branding';
+  'id,name,slug,subscription_status,created_at';
 const MARKETPLACE_ORGANIZATION_SELECT_FALLBACK =
-  'id,name,slug,subscription_status,created_at,branding';
+  'id,name,slug,subscription_status,created_at';
+const PRODUCT_BASE_COLUMNS = ['id', 'name', 'sale_price', 'organization_id'];
+const PRODUCT_OPTIONAL_COLUMNS = [
+  'description',
+  'offer_price',
+  'discount_percentage',
+  'stock_quantity',
+  'image_url',
+  'images',
+  'category_id',
+  'brand',
+  'updated_at',
+  'created_at',
+  'rating',
+  'is_active',
+];
+const CATEGORY_BASE_COLUMNS = ['id', 'name'];
 
 type SettingsRow = {
   organization_id: string | null;
@@ -22,18 +38,21 @@ type ProductRow = {
   description?: string | null;
   sale_price?: number | null;
   offer_price?: number | null;
+  discount_percentage?: number | null;
+  stock_quantity?: number | null;
   image_url?: string | null;
   images?: Array<{ url?: string | null }> | string[] | null;
   category_id?: string | null;
   brand?: string | null;
   organization_id?: string | null;
   updated_at?: string | null;
+  created_at?: string | null;
+  rating?: number | null;
 };
 
 type CategoryRow = {
   id: string;
   name: string;
-  organization_id?: string | null;
 };
 
 export interface FeaturedOrganizationCard {
@@ -50,6 +69,8 @@ export interface FeaturedOrganizationCard {
   productCount?: number;
   categoryCount?: number;
   createdAt?: string | null;
+  city?: string;
+  department?: string;
 }
 
 export interface GlobalCategoryCard {
@@ -75,6 +96,8 @@ export interface GlobalProductCard {
   organizationName: string;
   organizationHref: string;
   organizationId?: string;
+  department?: string;
+  city?: string;
   createdAt?: string | null;
   updatedAt?: string | null;
 }
@@ -97,6 +120,55 @@ function isPresent<T>(value: T | null): value is T {
 function isMissingColumnError(error: unknown): boolean {
   const message = String((error as { message?: string })?.message || '').toLowerCase();
   return message.includes('column') && message.includes('does not exist');
+}
+
+function getMissingColumnName(error: unknown): string | null {
+  const code = String((error as { code?: string })?.code || '');
+  const message = String((error as { message?: string })?.message || '');
+
+  if (code !== '42703' && !isMissingColumnError(error)) {
+    return null;
+  }
+
+  const qualifiedMatch = message.match(/column\s+[a-z0-9_]+\.(\w+)\s+does not exist/i);
+  if (qualifiedMatch?.[1]) {
+    return qualifiedMatch[1].toLowerCase();
+  }
+
+  const unqualifiedMatch = message.match(/column\s+(\w+)\s+does not exist/i);
+  return unqualifiedMatch?.[1]?.toLowerCase() || null;
+}
+
+function buildSelectClause(baseColumns: string[], optionalColumns: string[], missingColumns: Set<string>): string {
+  return [
+    ...baseColumns,
+    ...optionalColumns.filter((column) => !missingColumns.has(column)),
+  ].join(',');
+}
+
+function sanitizeSearchTerm(value: string): string {
+  return value.replace(/[,%]/g, ' ').trim();
+}
+
+function normalizePositiveNumber(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function normalizeDisplayText(value: string | null | undefined, fallback = ''): string {
+  const next = String(value || fallback).trim();
+  if (!next) {
+    return fallback;
+  }
+
+  try {
+    const decoded = new TextDecoder('utf-8').decode(
+      Uint8Array.from(next, (char) => char.charCodeAt(0))
+    );
+    return Array.from(decoded).some((char) => char.charCodeAt(0) === 65533) ? next : decoded;
+  } catch {
+    return next;
+  }
 }
 
 function mergeBusinessConfig(value: unknown, fallbackName?: string): BusinessConfig {
@@ -227,6 +299,260 @@ export async function getPublicBusinessConfig(organization: PublicOrganization):
 }
 
 export async function getGlobalMarketplaceHomeData(
+  requestHost?: string | null,
+  searchQuery?: string | null
+): Promise<GlobalMarketplaceHomeData> {
+  const adminClient = await createAdminClient();
+  const search = sanitizeSearchTerm(String(searchQuery || '')).toLowerCase();
+  const runOrganizationsQuery = async (selectClause: string) =>
+    adminClient
+      .from('organizations')
+      .select(selectClause, {
+        count: 'exact',
+      })
+      .in('subscription_status', PUBLIC_ORGANIZATION_STATUSES)
+      .order('created_at', { ascending: false })
+      .limit(24);
+
+  let organizationsResult = await runOrganizationsQuery(MARKETPLACE_ORGANIZATION_SELECT);
+
+  if (organizationsResult.error && isMissingColumnError(organizationsResult.error)) {
+    organizationsResult = await runOrganizationsQuery(MARKETPLACE_ORGANIZATION_SELECT_FALLBACK);
+  }
+
+  if (organizationsResult.error) {
+    throw organizationsResult.error;
+  }
+
+  const { data: organizations, count: organizationsCount } = organizationsResult;
+  const organizationRows = (organizations || []) as PublicOrganization[];
+  const organizationIds = organizationRows.map((organization) => organization.id);
+
+  if (organizationIds.length === 0) {
+    return {
+      stats: {
+        organizations: 0,
+        products: 0,
+        categories: 0,
+      },
+      featuredOrganizations: [],
+      featuredCategories: [],
+      featuredProducts: [],
+    };
+  }
+
+  const settingsResult = await adminClient
+    .from('settings')
+    .select('organization_id,value')
+    .eq('key', 'business_config')
+    .in('organization_id', organizationIds);
+
+  if (settingsResult.error) {
+    throw settingsResult.error;
+  }
+
+  const missingProductColumns = new Set<string>();
+  let productRows: ProductRow[] = [];
+
+  for (;;) {
+    const selectClause = buildSelectClause(
+      PRODUCT_BASE_COLUMNS,
+      PRODUCT_OPTIONAL_COLUMNS,
+      missingProductColumns
+    );
+    const orderColumn = missingProductColumns.has('updated_at') ? 'name' : 'updated_at';
+    const orderAscending = orderColumn === 'name';
+
+    let productsQuery = adminClient
+      .from('products')
+      .select(selectClause)
+      .in('organization_id', organizationIds)
+      .order(orderColumn, { ascending: orderAscending })
+      .limit(72);
+
+    if (!missingProductColumns.has('is_active')) {
+      productsQuery = productsQuery.eq('is_active', true);
+    }
+
+    if (search) {
+      const searchClauses = [`name.ilike.%${search}%`];
+
+      if (!missingProductColumns.has('description')) {
+        searchClauses.push(`description.ilike.%${search}%`);
+      }
+
+      if (!missingProductColumns.has('brand')) {
+        searchClauses.push(`brand.ilike.%${search}%`);
+      }
+
+      productsQuery = productsQuery.or(searchClauses.join(','));
+    }
+
+    const result = await productsQuery;
+    const missingColumn = getMissingColumnName(result.error);
+
+    if (
+      missingColumn &&
+      PRODUCT_OPTIONAL_COLUMNS.includes(missingColumn) &&
+      !missingProductColumns.has(missingColumn)
+    ) {
+      missingProductColumns.add(missingColumn);
+      continue;
+    }
+
+    if (result.error) {
+      throw result.error;
+    }
+
+    productRows = (result.data || []) as ProductRow[];
+    break;
+  }
+
+  const categoryIds = Array.from(
+    new Set(
+      productRows
+        .map((product) => product.category_id)
+        .filter((categoryId): categoryId is string => typeof categoryId === 'string' && categoryId.length > 0)
+    )
+  );
+
+  let categoryRows: CategoryRow[] = [];
+
+  if (categoryIds.length > 0) {
+    const categoryResult = await adminClient
+      .from('categories')
+      .select(CATEGORY_BASE_COLUMNS.join(','))
+      .in('id', categoryIds);
+
+    if (categoryResult.error) {
+      throw categoryResult.error;
+    }
+
+    categoryRows = (categoryResult.data || []) as CategoryRow[];
+  }
+
+  const configMap = buildConfigMap((settingsResult.data || []) as SettingsRow[]);
+  const organizationMap = new Map(organizationRows.map((organization) => [organization.id, organization]));
+  const categoryMap = new Map(categoryRows.map((category) => [category.id, category]));
+
+  const featuredOrganizations = organizationRows
+    .map((organization) => {
+      const config = configMap.get(organization.id);
+      const locationParts = [config?.address?.city, config?.address?.department].filter(Boolean);
+
+      return {
+        id: organization.id,
+        name: normalizeDisplayText(organization.name, 'Empresa'),
+        slug: organization.slug,
+        href: buildTenantHomeUrl(organization, requestHost),
+        logo: config?.branding?.logo,
+        tagline: normalizeDisplayText(config?.tagline, 'Experiencia publica lista para vender.'),
+        description: normalizeDisplayText(
+          config?.heroDescription,
+          'Explora el catalogo publico de esta empresa dentro del marketplace.'
+        ),
+        location: locationParts.length > 0 ? locationParts.join(', ') : 'Marketplace activo',
+      } satisfies FeaturedOrganizationCard;
+    })
+    .filter((organization) => {
+      if (!search) return true;
+
+      const haystack = `${organization.name} ${organization.tagline} ${organization.description}`.toLowerCase();
+      return haystack.includes(search);
+    })
+    .slice(0, 6);
+
+  const categoryAccumulator = new Map<
+    string,
+    { id: string; name: string; productIds: Set<string>; organizationIds: Set<string> }
+  >();
+
+  productRows.forEach((product) => {
+    const category = product.category_id ? categoryMap.get(product.category_id) : null;
+    const categoryName = normalizeDisplayText(category?.name, 'Sin categoria');
+    const accumulatorKey = categoryName.toLowerCase();
+    const current =
+      categoryAccumulator.get(accumulatorKey) || {
+        id: category?.id || accumulatorKey,
+        name: categoryName,
+        productIds: new Set<string>(),
+        organizationIds: new Set<string>(),
+      };
+
+    current.productIds.add(product.id);
+    if (product.organization_id) {
+      current.organizationIds.add(product.organization_id);
+    }
+
+    categoryAccumulator.set(accumulatorKey, current);
+  });
+
+  const featuredCategories = Array.from(categoryAccumulator.values())
+    .map((entry) => ({
+      id: entry.id,
+      name: entry.name,
+      productCount: entry.productIds.size,
+      organizationCount: entry.organizationIds.size,
+    }))
+    .sort((left, right) => right.productCount - left.productCount)
+    .slice(0, 8);
+
+  const featuredProducts = productRows
+    .map((product): GlobalProductCard | null => {
+      const organization = product.organization_id
+        ? organizationMap.get(product.organization_id)
+        : null;
+      if (!organization) {
+        return null;
+      }
+
+      const category = product.category_id ? categoryMap.get(product.category_id) : null;
+      const basePrice = Number(product.sale_price || 0);
+      const offerPrice = normalizePositiveNumber(product.offer_price);
+      const discountPercentage =
+        normalizePositiveNumber(product.discount_percentage) ||
+        (offerPrice && basePrice > offerPrice
+          ? Math.round(((basePrice - offerPrice) / basePrice) * 100)
+          : undefined);
+
+      return {
+        id: product.id,
+        name: normalizeDisplayText(product.name, 'Producto'),
+        description: normalizeDisplayText(
+          product.description,
+          'Producto publico disponible en el marketplace.'
+        ),
+        image: extractPrimaryImage(product.images, product.image_url),
+        categoryName: normalizeDisplayText(category?.name, 'Sin categoria'),
+        brand: normalizeDisplayText(product.brand, '') || undefined,
+        basePrice,
+        offerPrice: offerPrice || undefined,
+        discountPercentage,
+        stockQuantity: Number(product.stock_quantity || 0),
+        rating: Number.isFinite(Number(product.rating)) ? Number(product.rating) : null,
+        organizationName: normalizeDisplayText(organization.name, 'Empresa'),
+        organizationHref: buildTenantHomeUrl(organization, requestHost),
+        organizationId: organization.id,
+        createdAt: product.created_at || null,
+        updatedAt: product.updated_at || null,
+      };
+    })
+    .filter(isPresent)
+    .slice(0, 12);
+
+  return {
+    stats: {
+      organizations: organizationsCount || organizationRows.length,
+      products: productRows.length,
+      categories: categoryAccumulator.size,
+    },
+    featuredOrganizations,
+    featuredCategories,
+    featuredProducts,
+  };
+}
+
+async function _getGlobalMarketplaceHomeDataLegacy(
   requestHost?: string | null,
   searchQuery?: string | null
 ): Promise<GlobalMarketplaceHomeData> {

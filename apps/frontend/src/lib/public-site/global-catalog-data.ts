@@ -8,7 +8,7 @@ import type { GlobalProductCard } from '@/lib/public-site/data';
 
 const PUBLIC_ORGANIZATION_STATUSES = ['ACTIVE', 'TRIAL'];
 const ORGANIZATION_BASE_COLUMNS = ['id', 'name', 'slug'];
-const ORGANIZATION_OPTIONAL_COLUMNS = ['subdomain', 'custom_domain'];
+const ORGANIZATION_OPTIONAL_COLUMNS = ['subdomain', 'custom_domain', 'settings'];
 const PRODUCT_BASE_COLUMNS = ['id', 'name', 'sale_price', 'organization_id'];
 const PRODUCT_OPTIONAL_COLUMNS = [
   'description',
@@ -58,6 +58,13 @@ export interface GlobalCatalogCategoryOption {
   organizationCount: number;
 }
 
+export interface GlobalCatalogLocationOption {
+  key: string;
+  label: string;
+  organizationCount: number;
+  productCount: number;
+}
+
 export interface GlobalCatalogSnapshot {
   products: GlobalProductCard[];
   heroProducts: GlobalProductCard[];
@@ -65,6 +72,8 @@ export interface GlobalCatalogSnapshot {
   totalOrganizations: number;
   matchingOrganizations: number;
   categories: GlobalCatalogCategoryOption[];
+  departments: GlobalCatalogLocationOption[];
+  cities: GlobalCatalogLocationOption[];
   maxPrice: number;
 }
 
@@ -425,6 +434,28 @@ async function fetchCategoryMap(categoryIds: string[]): Promise<Map<string, stri
   return categoryMap;
 }
 
+function extractOrganizationLocation(organization: PublicOrganization): { department: string; city: string } {
+  const settings = (organization as { settings?: Record<string, unknown> }).settings;
+  let department = '';
+  let city = '';
+
+  if (settings && typeof settings === 'object') {
+    // Try settings.address.state / settings.address.city
+    const address = (settings as Record<string, unknown>).address;
+    if (address && typeof address === 'object') {
+      const addr = address as Record<string, unknown>;
+      department = String(addr.state || addr.department || '').trim();
+      city = String(addr.city || addr.ciudad || '').trim();
+    }
+
+    // Try settings.department / settings.city directly
+    if (!department) department = String((settings as Record<string, unknown>).department || '').trim();
+    if (!city) city = String((settings as Record<string, unknown>).city || '').trim();
+  }
+
+  return { department, city };
+}
+
 function mapProductsToCards(
   products: ProductRow[],
   organizations: PublicOrganization[],
@@ -447,6 +478,8 @@ function mapProductsToCards(
         ? categoryMap.get(product.category_id) || 'Sin categoria'
         : 'Sin categoria';
 
+      const location = extractOrganizationLocation(organization);
+
       return {
         id: product.id,
         name: normalizeDisplayText(product.name, 'Producto'),
@@ -463,6 +496,8 @@ function mapProductsToCards(
         organizationName: normalizeDisplayText(organization.name, 'Empresa'),
         organizationHref: buildTenantHomeUrl(organization, requestHost),
         organizationId: organization.id,
+        department: location.department || undefined,
+        city: location.city || undefined,
         createdAt: product.created_at || null,
         updatedAt: product.updated_at || null,
       } satisfies GlobalProductCard;
@@ -508,6 +543,55 @@ function buildCategoryOptions(products: GlobalProductCard[]): GlobalCatalogCateg
     });
 }
 
+function toLocationKey(value: string): string {
+  return value
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'sin-ubicacion';
+}
+
+function buildLocationOptions(
+  products: GlobalProductCard[],
+  field: 'department' | 'city'
+): GlobalCatalogLocationOption[] {
+  const accumulator = new Map<
+    string,
+    { key: string; label: string; organizationIds: Set<string>; productCount: number }
+  >();
+
+  products.forEach((product) => {
+    const value = product[field];
+    if (!value) return;
+
+    const key = toLocationKey(value);
+    const current = accumulator.get(key) || {
+      key,
+      label: value,
+      organizationIds: new Set<string>(),
+      productCount: 0,
+    };
+
+    current.productCount += 1;
+    if (product.organizationId) {
+      current.organizationIds.add(product.organizationId);
+    }
+
+    accumulator.set(key, current);
+  });
+
+  return Array.from(accumulator.values())
+    .map((entry) => ({
+      key: entry.key,
+      label: entry.label,
+      organizationCount: entry.organizationIds.size,
+      productCount: entry.productCount,
+    }))
+    .sort((left, right) => right.productCount - left.productCount);
+}
+
 function filterProducts(products: GlobalProductCard[], input: CatalogQueryState): GlobalProductCard[] {
   return products.filter((product) => {
     if (input.categories.length > 0 && (!product.categoryKey || !input.categories.includes(product.categoryKey))) {
@@ -524,6 +608,14 @@ function filterProducts(products: GlobalProductCard[], input: CatalogQueryState)
     }
 
     if (input.maxPrice !== null && input.maxPrice > 0 && effectivePrice > input.maxPrice) {
+      return false;
+    }
+
+    if (input.department && (!product.department || toLocationKey(product.department) !== toLocationKey(input.department))) {
+      return false;
+    }
+
+    if (input.city && (!product.city || toLocationKey(product.city) !== toLocationKey(input.city))) {
       return false;
     }
 
@@ -628,6 +720,8 @@ export async function fetchGlobalCatalogSnapshot(
       totalOrganizations: 0,
       matchingOrganizations: 0,
       categories: [],
+      departments: [],
+      cities: [],
       maxPrice: CATALOG_DEFAULT_MAX_PRICE,
     };
   }
@@ -651,6 +745,8 @@ export async function fetchGlobalCatalogSnapshot(
     categories: [], // Don't filter by category when building category options
   });
   const categories = buildCategoryOptions(productsForCategoryOptions);
+  const departments = buildLocationOptions(mappedProducts, 'department');
+  const cities = buildLocationOptions(mappedProducts, 'city');
   const filteredProducts = filterProducts(mappedProducts, input);
   const sortedProducts = sortProducts(filteredProducts, input.sortBy);
   const start = (input.page - 1) * input.itemsPerPage;
@@ -666,6 +762,8 @@ export async function fetchGlobalCatalogSnapshot(
     totalOrganizations,
     matchingOrganizations,
     categories,
+    departments,
+    cities,
     maxPrice: resolveMaxPrice(productsForMaxPrice),
   };
 }
