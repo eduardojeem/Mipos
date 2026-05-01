@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowRight, LogIn, Menu, Search, Store, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { buildPublicRegistrationPath } from '@/lib/public-plan-utils';
 
 interface MarketplaceHeaderProps {
   searchQuery?: string;
@@ -50,9 +49,6 @@ export function MarketplaceHeader({ searchQuery = '' }: MarketplaceHeaderProps) 
               <span className="absolute -bottom-1 left-0 h-0.5 w-0 bg-emerald-600 transition-all group-hover:w-full dark:bg-emerald-400" />
             </Link>
           ))}
-          <Link href="/inicio/planes" className="transition-colors hover:text-emerald-600 dark:hover:text-emerald-400">
-            Planes
-          </Link>
         </nav>
 
         <div className="flex items-center gap-2 sm:gap-4">
@@ -74,9 +70,9 @@ export function MarketplaceHeader({ searchQuery = '' }: MarketplaceHeaderProps) 
                 Ingresar
               </Button>
             </Link>
-            <Link href={buildPublicRegistrationPath('starter')}>
+            <Link href="/inicio/planes">
               <Button className="h-10 rounded-full bg-slate-950 px-6 text-white transition-all hover:bg-emerald-700 hover:shadow-lg hover:shadow-emerald-500/20 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white">
-                Publicar empresa
+                Crear empresa
               </Button>
             </Link>
           </div>
@@ -161,13 +157,6 @@ export function MarketplaceHeader({ searchQuery = '' }: MarketplaceHeaderProps) 
                     <ArrowRight className="h-5 w-5 text-slate-400 dark:text-slate-500" />
                   </Link>
                 ))}
-                <Link
-                  href="/inicio/planes"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="rounded-2xl border border-slate-100 p-4 text-lg font-semibold text-slate-700 dark:border-slate-800 dark:text-slate-200"
-                >
-                  Explorar planes
-                </Link>
               </nav>
 
               <div className="mt-auto flex flex-col gap-3 pt-8">
@@ -176,9 +165,9 @@ export function MarketplaceHeader({ searchQuery = '' }: MarketplaceHeaderProps) 
                     Ingresar
                   </Button>
                 </Link>
-                <Link href={buildPublicRegistrationPath('starter')} onClick={() => setIsMobileMenuOpen(false)}>
+                <Link href="/inicio/planes" onClick={() => setIsMobileMenuOpen(false)}>
                   <Button className="h-14 w-full rounded-2xl bg-slate-950 text-lg font-bold dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white">
-                    Publicar empresa
+                    Crear empresa
                   </Button>
                 </Link>
               </div>

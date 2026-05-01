@@ -11,6 +11,28 @@ export default function LoadingCatalogPage() {
         <SkeletonBlock className="h-5 w-28" />
         <SkeletonBlock className="mt-6 h-12 w-full max-w-4xl" />
         <SkeletonBlock className="mt-4 h-6 w-full max-w-3xl" />
+        <div className="mt-10 overflow-hidden rounded-lg border border-slate-200 bg-slate-950/80">
+          <div className="grid min-h-[440px] lg:grid-cols-[minmax(0,1.1fr)_minmax(340px,0.9fr)]">
+            <div className="order-2 flex flex-col justify-between p-6 sm:p-8 lg:order-1 lg:p-12">
+              <div className="flex flex-wrap gap-2">
+                <SkeletonBlock className="h-7 w-36 bg-white/10" />
+                <SkeletonBlock className="h-7 w-32 bg-white/10" />
+                <SkeletonBlock className="h-7 w-32 bg-white/10" />
+              </div>
+              <div className="mt-8 space-y-4">
+                <SkeletonBlock className="h-4 w-32 bg-white/10" />
+                <SkeletonBlock className="h-12 w-full max-w-2xl bg-white/10" />
+                <SkeletonBlock className="h-8 w-full max-w-xl bg-white/10" />
+                <SkeletonBlock className="h-20 w-full max-w-2xl bg-white/10" />
+              </div>
+              <div className="mt-8 flex gap-3">
+                <SkeletonBlock className="h-12 w-32 bg-white/10" />
+                <SkeletonBlock className="h-12 w-32 bg-white/10" />
+              </div>
+            </div>
+            <SkeletonBlock className="order-1 min-h-[280px] w-full rounded-none bg-slate-700/70 lg:order-2 lg:min-h-full" />
+          </div>
+        </div>
 
         <div className="mt-10 grid gap-4 md:grid-cols-3">
           <SkeletonBlock className="h-28 w-full" />

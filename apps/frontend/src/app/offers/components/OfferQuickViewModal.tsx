@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
@@ -175,7 +175,7 @@ export default function OfferQuickViewModal({
     const shareUrl = new URL(detailHref, window.location.origin).toString();
     const sharePayload = {
       title: item.product.name,
-      text: `${item.promotion.name} · ${formatPrice(item.offerPrice, config)}`,
+      text: `${item.promotion.name} - ${formatPrice(item.offerPrice, config)}`,
       url: shareUrl,
     };
 
@@ -264,7 +264,10 @@ export default function OfferQuickViewModal({
 
         <div className="grid max-h-[88vh] overflow-y-auto md:grid-cols-[1.02fr_0.98fr]">
           <section className="relative border-b border-slate-200 bg-gradient-to-br from-rose-50 via-white to-orange-50 p-5 dark:border-slate-800 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 md:border-b-0 md:border-r md:p-6">
-            <div className="relative aspect-square overflow-hidden rounded-[28px] border border-white/70 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.12)] dark:border-white/10 dark:bg-slate-900">
+            <Link
+              href={detailHref}
+              className="relative block aspect-square overflow-hidden rounded-[28px] border border-white/70 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.12)] dark:border-white/10 dark:bg-slate-900"
+            >
               {selectedImageSrc ? (
                 <Image
                   src={selectedImageSrc}
@@ -295,7 +298,7 @@ export default function OfferQuickViewModal({
                   {selectedImage + 1} / {images.length}
                 </div>
               ) : null}
-            </div>
+            </Link>
 
             {images.length > 1 ? (
               <div className="mt-4 grid grid-cols-4 gap-3 sm:grid-cols-5">
@@ -343,9 +346,11 @@ export default function OfferQuickViewModal({
                 ) : null}
 
                 <div>
-                  <h2 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">
-                    {item.product.name}
-                  </h2>
+                  <Link href={detailHref} className="block">
+                    <h2 className="text-2xl font-bold tracking-tight text-foreground transition-colors hover:text-rose-600 md:text-3xl">
+                      {item.product.name}
+                    </h2>
+                  </Link>
                   <p className="mt-2 inline-flex items-center gap-2 rounded-full bg-rose-50 px-3 py-1 text-sm font-medium text-rose-700 dark:bg-rose-950/30 dark:text-rose-300">
                     <Tag className="h-4 w-4" />
                     {item.promotion.name}
@@ -423,7 +428,7 @@ export default function OfferQuickViewModal({
                 <span>
                   {item.promotion.startDate ? `Desde ${formatDate(item.promotion.startDate, config)}` : 'Sin fecha de inicio'}
                 </span>
-                <span className="text-slate-300 dark:text-slate-700">•</span>
+                <span className="text-slate-300 dark:text-slate-700">/</span>
                 <span>
                   {item.promotion.endDate ? `Hasta ${formatDate(item.promotion.endDate, config)}` : 'Sin fecha de fin'}
                 </span>
@@ -520,3 +525,4 @@ export default function OfferQuickViewModal({
     </Dialog>
   );
 }
+

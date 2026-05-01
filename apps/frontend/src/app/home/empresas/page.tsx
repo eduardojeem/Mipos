@@ -33,6 +33,8 @@ function readFirstValue(value: string | string[] | undefined): string {
 function normalizeSearchParams(searchParams: OrganizationsQueryRecord): GlobalOrganizationsQueryState {
   const rawSearch = readFirstValue(searchParams.search) || readFirstValue(searchParams.q);
   const rawSort = readFirstValue(searchParams.sort);
+  const department = readFirstValue(searchParams.department);
+  const city = readFirstValue(searchParams.city);
   const sortBy = SORT_OPTIONS.some((option) => option.value === rawSort)
     ? (rawSort as GlobalOrganizationsSortMode)
     : 'featured';
@@ -40,6 +42,8 @@ function normalizeSearchParams(searchParams: OrganizationsQueryRecord): GlobalOr
   return {
     search: rawSearch,
     sortBy,
+    city,
+    department,
   };
 }
 
@@ -57,7 +61,11 @@ export default async function OrganizationsPage({
 
   const queryState = normalizeSearchParams(rawSearchParams);
   const snapshot = await fetchGlobalOrganizationsSnapshot(context.hostname, queryState);
-  const hasActiveFilters = Boolean(queryState.search) || queryState.sortBy !== 'featured';
+  const hasActiveFilters =
+    Boolean(queryState.search) ||
+    queryState.sortBy !== 'featured' ||
+    Boolean(queryState.department) ||
+    Boolean(queryState.city);
 
   return (
     <MarketplaceLayout searchQuery={queryState.search}>
@@ -81,6 +89,13 @@ export default async function OrganizationsPage({
             {queryState.search ? (
               <p className="mt-4 text-sm font-medium text-sky-700 dark:text-sky-300">
                 Mostrando resultados para &quot;{queryState.search}&quot;.
+              </p>
+            ) : null}
+            {queryState.department || queryState.city ? (
+              <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                {queryState.department ? `Departamento: ${queryState.department}` : null}
+                {queryState.department && queryState.city ? ' · ' : null}
+                {queryState.city ? `Ciudad: ${queryState.city}` : null}
               </p>
             ) : null}
           </div>
@@ -129,7 +144,7 @@ export default async function OrganizationsPage({
           action="/home/empresas"
           className="mt-8 rounded-lg border border-slate-200 bg-white/70 p-5 shadow-sm backdrop-blur-sm dark:border-slate-800 dark:bg-slate-950/70"
         >
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px_auto] lg:items-end">
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_220px_220px_220px_auto] xl:items-end">
             <div>
               <label
                 htmlFor="organizations-search"
@@ -147,6 +162,56 @@ export default async function OrganizationsPage({
                   placeholder="Ej. tienda, cosmeticos o ciudad"
                   className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-4 text-sm text-slate-900 outline-none transition-all focus:border-sky-400 focus:ring-4 focus:ring-sky-500/5 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500"
                 />
+              </div>
+            </div>
+
+            <div>
+              <label
+                htmlFor="organizations-department"
+                className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500"
+              >
+                Departamento
+              </label>
+              <div className="relative">
+                <Building2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <select
+                  id="organizations-department"
+                  name="department"
+                  defaultValue={queryState.department}
+                  className="h-11 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-10 pr-4 text-sm text-slate-900 outline-none transition-all focus:border-sky-400 focus:ring-4 focus:ring-sky-500/5 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                >
+                  <option value="">Todos</option>
+                  {snapshot.departments.map((option) => (
+                    <option key={option.value} value={option.label}>
+                      {option.label} ({option.count})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label
+                htmlFor="organizations-city"
+                className="mb-2 block text-xs font-semibold uppercase tracking-[0.16em] text-slate-500"
+              >
+                Ciudad
+              </label>
+              <div className="relative">
+                <Globe className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <select
+                  id="organizations-city"
+                  name="city"
+                  defaultValue={queryState.city}
+                  className="h-11 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-10 pr-4 text-sm text-slate-900 outline-none transition-all focus:border-sky-400 focus:ring-4 focus:ring-sky-500/5 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                >
+                  <option value="">Todas</option>
+                  {snapshot.cities.map((option) => (
+                    <option key={option.value} value={option.label}>
+                      {option.label} ({option.count})
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
@@ -195,6 +260,22 @@ export default async function OrganizationsPage({
             >
               {snapshot.visibleOrganizations} visibles
             </Badge>
+            {queryState.department ? (
+              <Badge
+                variant="outline"
+                className="rounded-full border-sky-200 bg-sky-50 px-3 py-1 text-xs text-sky-700 dark:border-sky-900/70 dark:bg-sky-950/40 dark:text-sky-200"
+              >
+                {queryState.department}
+              </Badge>
+            ) : null}
+            {queryState.city ? (
+              <Badge
+                variant="outline"
+                className="rounded-full border-sky-200 bg-sky-50 px-3 py-1 text-xs text-sky-700 dark:border-sky-900/70 dark:bg-sky-950/40 dark:text-sky-200"
+              >
+                {queryState.city}
+              </Badge>
+            ) : null}
             <Badge
               variant="outline"
               className="rounded-full border-slate-200 bg-white/80 px-3 py-1 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"

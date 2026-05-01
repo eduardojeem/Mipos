@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Building2, PackageCheck, Tag } from 'lucide-react';
+import { Building2, MapPin, PackageCheck, Tag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { GlobalProductCard } from '@/lib/public-site/data';
@@ -22,6 +22,17 @@ function formatCurrency(value: number) {
   }).format(value || 0);
 }
 
+function normalizeMarketplaceHref(href: string): string {
+  return String(href || '')
+    .replace(/^https?:\/\/localhost(?=\/)/i, '')
+    .replace(/^https?:\/\/127\.0\.0\.1(?=\/)/i, '');
+}
+
+function buildProductDetailHref(product: GlobalProductCard): string {
+  const baseUrl = normalizeMarketplaceHref(String(product.organizationHref || '')).replace(/\/home\/?$/, '');
+  return `${baseUrl}/catalog/${encodeURIComponent(product.id)}`;
+}
+
 export function ProductGrid({ products, className }: ProductGridProps) {
   return (
     <div className={cn('mt-12 grid gap-6 md:grid-cols-2 xl:grid-cols-3', className)}>
@@ -31,6 +42,8 @@ export function ProductGrid({ products, className }: ProductGridProps) {
           hasOffer && Number(product.discountPercentage || 0) > 0
             ? `Ahorra ${Math.round(Number(product.discountPercentage || 0))}%`
             : 'Precio en oferta';
+        const detailHref = buildProductDetailHref(product);
+        const organizationHref = normalizeMarketplaceHref(product.organizationHref);
 
         return (
         <motion.article
@@ -41,7 +54,7 @@ export function ProductGrid({ products, className }: ProductGridProps) {
           transition={{ delay: index * 0.05 }}
           className="group overflow-hidden rounded-lg border border-slate-200/80 bg-white/95 shadow-sm transition-all hover:-translate-y-1 hover:shadow-xl hover:shadow-slate-200/60 dark:border-slate-800/80 dark:bg-slate-950/80 dark:hover:shadow-slate-950/40"
         >
-          <Link href={product.organizationHref} className="block">
+          <Link href={detailHref} className="block">
             <div className="relative aspect-[4/3] overflow-hidden bg-slate-100 dark:bg-slate-900">
               <Image
                 src={product.image}
@@ -84,7 +97,7 @@ export function ProductGrid({ products, className }: ProductGridProps) {
               )}
             </div>
 
-            <Link href={product.organizationHref} className="block">
+            <Link href={detailHref} className="block">
               <h3 className="mt-5 text-xl font-bold tracking-tight text-slate-950 transition-colors group-hover:text-emerald-700 dark:text-slate-100 dark:group-hover:text-emerald-300">
                 {product.name}
               </h3>
@@ -125,18 +138,18 @@ export function ProductGrid({ products, className }: ProductGridProps) {
                   </div>
                 )}
               </div>
-              <Link href={product.organizationHref}>
+              <Link href={detailHref}>
                 <Button
                   variant="outline"
                   className="h-11 rounded-lg border-slate-200 px-5 font-bold hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:hover:bg-slate-900"
                 >
-                  Ver tienda
+                  Ver producto
                 </Button>
               </Link>
             </div>
 
             <div className="mt-6 grid gap-3 rounded-lg border border-slate-100/60 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-900/80">
-              <div className="flex items-center gap-3">
+              <Link href={organizationHref} className="flex items-center gap-3 rounded-md transition-colors hover:bg-slate-100/80 dark:hover:bg-slate-800/80">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white shadow-sm dark:bg-slate-900 dark:shadow-none">
                   <Building2 className="h-4 w-4 text-slate-400 group-hover:text-emerald-500 dark:text-slate-500 dark:group-hover:text-emerald-400" />
                 </div>
@@ -147,8 +160,14 @@ export function ProductGrid({ products, className }: ProductGridProps) {
                   <span className="line-clamp-1 text-xs font-bold text-slate-900 dark:text-slate-100">
                     {product.organizationName}
                   </span>
+                  {product.city ? (
+                    <span className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                      <MapPin className="h-3 w-3" />
+                      {product.city}
+                    </span>
+                  ) : null}
                 </div>
-              </div>
+              </Link>
               <div className="flex items-center gap-3">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white shadow-sm dark:bg-slate-900 dark:shadow-none">
                   <PackageCheck className="h-4 w-4 text-slate-400 dark:text-slate-500" />

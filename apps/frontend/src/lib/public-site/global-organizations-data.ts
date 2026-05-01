@@ -34,6 +34,14 @@ export type GlobalOrganizationsSortMode = 'featured' | 'products' | 'recent' | '
 export interface GlobalOrganizationsQueryState {
   search: string;
   sortBy: GlobalOrganizationsSortMode;
+  city: string;
+  department: string;
+}
+
+export interface GlobalOrganizationsLocationOption {
+  value: string;
+  label: string;
+  count: number;
 }
 
 export interface GlobalOrganizationsSnapshot {
@@ -44,6 +52,8 @@ export interface GlobalOrganizationsSnapshot {
   totalProducts: number;
   totalCategories: number;
   averageProductsPerOrganization: number;
+  departments: GlobalOrganizationsLocationOption[];
+  cities: GlobalOrganizationsLocationOption[];
 }
 
 function isMissingColumnError(error: unknown): boolean {
@@ -90,6 +100,14 @@ function normalizeDisplayText(value: string | null | undefined, fallback = ''): 
   } catch {
     return next;
   }
+}
+
+function normalizeLocationValue(value: string | null | undefined): string {
+  return normalizeDisplayText(value, '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
 }
 
 function normalizeConfig(value: unknown, fallbackName: string) {
@@ -336,29 +354,85 @@ function buildOrganizationCards(
       website: config.website || undefined,
       heroImage: config.heroImage || undefined,
       createdAt: organization.created_at || null,
+      city: config.city || undefined,
+      department: config.department || undefined,
     } satisfies FeaturedOrganizationCard;
   });
 }
 
-function filterOrganizations(items: FeaturedOrganizationCard[], search: string) {
-  const normalizedSearch = sanitizeSearchTerm(search).toLowerCase();
+function filterOrganizations(items: FeaturedOrganizationCard[], input: GlobalOrganizationsQueryState) {
+  const normalizedDepartment = normalizeLocationValue(input.department);
+  const normalizedCity = normalizeLocationValue(input.city);
+  const normalizedSearch = sanitizeSearchTerm(input.search).toLowerCase();
+
+  const filteredByLocation = items.filter((organization) => {
+    if (
+      normalizedDepartment &&
+      normalizeLocationValue(organization.department) !== normalizedDepartment
+    ) {
+      return false;
+    }
+
+    if (normalizedCity && normalizeLocationValue(organization.city) !== normalizedCity) {
+      return false;
+    }
+
+    return true;
+  });
+
   if (!normalizedSearch) {
-    return items;
+    return filteredByLocation;
   }
 
-  return items.filter((organization) => {
+  return filteredByLocation.filter((organization) => {
     const haystack = [
       organization.name,
       organization.tagline,
       organization.description,
       organization.location,
       organization.website || '',
+      organization.city || '',
+      organization.department || '',
     ]
       .join(' ')
       .toLowerCase();
 
     return haystack.includes(normalizedSearch);
   });
+}
+
+function buildLocationOptions(
+  items: FeaturedOrganizationCard[],
+  key: 'city' | 'department'
+): GlobalOrganizationsLocationOption[] {
+  const counts = new Map<string, { label: string; count: number }>();
+
+  items.forEach((organization) => {
+    const label = normalizeDisplayText(organization[key], '');
+    const value = normalizeLocationValue(label);
+
+    if (!value || !label) {
+      return;
+    }
+
+    const current = counts.get(value) || { label, count: 0 };
+    current.count += 1;
+    counts.set(value, current);
+  });
+
+  return Array.from(counts.entries())
+    .map(([value, meta]) => ({
+      value,
+      label: meta.label,
+      count: meta.count,
+    }))
+    .sort((left, right) => {
+      if (right.count !== left.count) {
+        return right.count - left.count;
+      }
+
+      return left.label.localeCompare(right.label, 'es');
+    });
 }
 
 function sortOrganizations(items: FeaturedOrganizationCard[], sortBy: GlobalOrganizationsSortMode) {
@@ -415,6 +489,8 @@ export async function fetchGlobalOrganizationsSnapshot(
       totalProducts: 0,
       totalCategories: 0,
       averageProductsPerOrganization: 0,
+      departments: [],
+      cities: [],
     };
   }
 
@@ -425,7 +501,15 @@ export async function fetchGlobalOrganizationsSnapshot(
   ]);
 
   const allOrganizations = buildOrganizationCards(organizations, settingsMap, productStats, requestHost);
-  const filteredOrganizations = filterOrganizations(allOrganizations, input.search);
+  const departments = buildLocationOptions(allOrganizations, 'department');
+  const organizationsForCities = input.department
+    ? allOrganizations.filter(
+        (organization) =>
+          normalizeLocationValue(organization.department) === normalizeLocationValue(input.department)
+      )
+    : allOrganizations;
+  const cities = buildLocationOptions(organizationsForCities, 'city');
+  const filteredOrganizations = filterOrganizations(allOrganizations, input);
   const sortedOrganizations = sortOrganizations(filteredOrganizations, input.sortBy);
   const featuredOrganizations = sortOrganizations(filteredOrganizations, 'featured').slice(0, 5);
   const totalProducts = allOrganizations.reduce((sum, organization) => sum + Number(organization.productCount || 0), 0);
@@ -440,5 +524,7 @@ export async function fetchGlobalOrganizationsSnapshot(
     totalCategories,
     averageProductsPerOrganization:
       totalOrganizations > 0 ? Math.round((totalProducts / totalOrganizations) * 10) / 10 : 0,
+    departments,
+    cities,
   };
 }

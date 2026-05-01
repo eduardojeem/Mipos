@@ -227,7 +227,10 @@ export default function QuickViewModal({
 
         <div className="grid max-h-[88vh] overflow-y-auto md:grid-cols-[1.02fr_0.98fr]">
           <section className="relative border-b border-slate-200 bg-gradient-to-br from-slate-100 via-white to-slate-100 p-5 dark:border-slate-800 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 md:border-b-0 md:border-r md:p-6">
-            <div className="relative aspect-square overflow-hidden rounded-[28px] border border-white/70 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.12)] dark:border-white/10 dark:bg-slate-900">
+            <Link
+              href={productHref}
+              className="relative block aspect-square overflow-hidden rounded-[28px] border border-white/70 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.12)] dark:border-white/10 dark:bg-slate-900"
+            >
               {selectedImageSrc ? (
                 <Image
                   src={selectedImageSrc}
@@ -266,7 +269,7 @@ export default function QuickViewModal({
                   {selectedImage + 1} / {images.length}
                 </div>
               ) : null}
-            </div>
+            </Link>
 
             {images.length > 1 ? (
               <div className="mt-4 grid grid-cols-4 gap-3 sm:grid-cols-5">
@@ -314,9 +317,11 @@ export default function QuickViewModal({
                 ) : null}
 
                 <div>
-                  <h2 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">
-                    {product.name}
-                  </h2>
+                  <Link href={productHref} className="block">
+                    <h2 className="text-2xl font-bold tracking-tight text-foreground transition-colors hover:text-rose-600 md:text-3xl">
+                      {product.name}
+                    </h2>
+                  </Link>
                   {product.rating ? (
                     <div className="mt-3 flex items-center gap-2">
                       <div className="flex items-center gap-0.5">
@@ -480,7 +485,7 @@ export default function QuickViewModal({
               <Button asChild variant="outline" size="lg" className="h-14 rounded-2xl px-5">
                 <Link href={productHref}>
                   <ExternalLink className="mr-2 h-4 w-4" />
-                  Ver pagina completa
+                  Ver producto
                 </Link>
               </Button>
             </div>

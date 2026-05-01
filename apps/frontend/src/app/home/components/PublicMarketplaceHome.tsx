@@ -3,12 +3,8 @@
 import Link from 'next/link';
 import {
   ArrowRight,
-  Building2,
-  ShoppingBag,
   ArrowUpRight,
   Sparkles,
-  Zap,
-  Globe,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
@@ -25,28 +21,10 @@ interface PublicMarketplaceHomeProps {
   searchQuery?: string;
 }
 
-const statStyles = {
-  blue: {
-    icon: 'bg-blue-100 text-blue-600 dark:bg-blue-950/70 dark:text-blue-300',
-  },
-  amber: {
-    icon: 'bg-amber-100 text-amber-600 dark:bg-amber-950/70 dark:text-amber-300',
-  },
-  emerald: {
-    icon: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/70 dark:text-emerald-300',
-  },
-} as const;
-
 export function PublicMarketplaceHome({
   data,
   searchQuery = '',
 }: PublicMarketplaceHomeProps) {
-  const stats = [
-    { label: 'Empresas Activas', value: data.stats.organizations, icon: Building2, color: 'blue' },
-    { label: 'Productos Publicos', value: data.stats.products, icon: ShoppingBag, color: 'amber' },
-    { label: 'Operacion continua', value: '24/7', icon: Zap, color: 'emerald' },
-  ] as const;
-
   return (
     <MarketplaceLayout searchQuery={searchQuery}>
       <section className="relative overflow-hidden pb-24 pt-16 lg:pb-32 lg:pt-24">
@@ -109,36 +87,6 @@ export function PublicMarketplaceHome({
                 </Button>
               </Link>
             </motion.div>
-          </div>
-        </div>
-
-        <div className="mx-auto mt-20 max-w-5xl px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-            {stats.map((stat, i) => {
-              const styles = statStyles[stat.color];
-
-              return (
-                <motion.div
-                  key={stat.label}
-                  initial={{ opacity: 0, y: 30 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.8 + i * 0.1 }}
-                  className="group relative rounded-[2.5rem] border border-white/70 bg-white/40 p-8 text-center backdrop-blur-sm transition-all hover:bg-white hover:shadow-2xl dark:border-slate-800/80 dark:bg-slate-950/55 dark:hover:bg-slate-950 dark:hover:shadow-slate-950/40"
-                >
-                  <div
-                    className={`mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl transition-transform group-hover:scale-110 ${styles.icon}`}
-                  >
-                    <stat.icon className="h-6 w-6" />
-                  </div>
-                  <p className="text-sm font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
-                    {stat.label}
-                  </p>
-                  <p className="mt-2 text-4xl font-black text-slate-950 dark:text-slate-100">
-                    {stat.value}
-                  </p>
-                </motion.div>
-              );
-            })}
           </div>
         </div>
       </section>
@@ -223,60 +171,6 @@ export function PublicMarketplaceHome({
             </Link>
           </div>
           <ProductGrid products={data.featuredProducts.slice(0, 3)} />
-        </section>
-
-        <section className="mx-auto max-w-7xl px-4 pb-20 sm:px-6 lg:px-8">
-          <div className="relative overflow-hidden rounded-[3rem] bg-slate-950 p-12 text-white shadow-2xl lg:flex lg:items-center lg:justify-between lg:p-20 dark:border dark:border-slate-800/80 dark:bg-slate-950/95">
-            <div className="pointer-events-none absolute right-0 top-0 h-full w-1/2 opacity-10">
-              <div className="absolute inset-0 translate-x-1/2 -translate-y-1/2 bg-blue-500 blur-[120px]" />
-            </div>
-
-            <div className="relative z-10 max-w-2xl">
-              <Badge
-                variant="outline"
-                className="mb-6 border-white/20 px-4 py-1 text-xs font-bold uppercase tracking-widest text-white/60"
-              >
-                Publicacion para negocios
-              </Badge>
-              <h2 className="text-4xl font-extrabold tracking-tight sm:text-5xl">
-                Publica tu negocio y conecta tu marca al ecosistema MiPOS
-              </h2>
-              <p className="mt-6 text-xl leading-relaxed text-slate-400">
-                Registra tu empresa, publica catalogo bajo tu propio espacio y gana presencia dentro
-                del directorio general.
-              </p>
-
-              <div className="mt-10 flex flex-wrap gap-4">
-                <Link href="/inicio/planes">
-                  <Button className="h-14 rounded-2xl bg-white px-8 text-lg font-bold text-slate-950 transition-all hover:bg-slate-100 dark:bg-blue-500 dark:text-slate-950 dark:hover:bg-blue-400">
-                    Ver planes y precios
-                  </Button>
-                </Link>
-                <Link href={buildPublicRegistrationPath('starter')}>
-                  <Button variant="outline" className="h-14 rounded-2xl border-white/20 bg-transparent px-8 text-lg font-bold text-white transition-all hover:bg-white/10">
-                    Registrar empresa
-                  </Button>
-                </Link>
-              </div>
-            </div>
-
-            <div className="relative z-10 mt-12 grid grid-cols-2 gap-4 lg:ml-12 lg:mt-0">
-              {[
-                { icon: Globe, label: 'Dominio Propio' },
-                { icon: Zap, label: 'Cloud API' },
-                { icon: Sparkles, label: 'Branding UX' },
-                { icon: Building2, label: 'Marketplace' },
-              ].map((item) => (
-                <div
-                  key={item.label}
-                  className="flex flex-col items-center justify-center rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm dark:border-slate-700/70 dark:bg-slate-900/40"
-                >
-                  <item.icon className="mb-3 h-8 w-8 text-blue-400" />
-                  <span className="text-sm font-bold">{item.label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
         </section>
       </div>
     </MarketplaceLayout>
