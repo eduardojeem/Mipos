@@ -434,32 +434,93 @@ async function fetchCategoryMap(categoryIds: string[]): Promise<Map<string, stri
   return categoryMap;
 }
 
-function extractOrganizationLocation(organization: PublicOrganization): { department: string; city: string } {
-  const settings = (organization as { settings?: Record<string, unknown> }).settings;
+function extractOrganizationLocation(organization: PublicOrganization, businessConfigMap: Map<string, Record<string, unknown>>): { department: string; city: string } {
   let department = '';
   let city = '';
 
-  if (settings && typeof settings === 'object') {
-    // Try settings.address.state / settings.address.city
-    const address = (settings as Record<string, unknown>).address;
+  // 1. Try from business_config in settings table (most reliable source)
+  const config = businessConfigMap.get(organization.id);
+  if (config) {
+    const address = config.address as Record<string, unknown> | undefined;
     if (address && typeof address === 'object') {
-      const addr = address as Record<string, unknown>;
-      department = String(addr.state || addr.department || '').trim();
-      city = String(addr.city || addr.ciudad || '').trim();
+      department = String(address.state || address.department || '').trim();
+      city = String(address.city || address.ciudad || '').trim();
     }
+    const contact = config.contact as Record<string, unknown> | undefined;
+    if (!city && contact && typeof contact === 'object') {
+      city = String(contact.city || '').trim();
+    }
+  }
 
-    // Try settings.department / settings.city directly
-    if (!department) department = String((settings as Record<string, unknown>).department || '').trim();
-    if (!city) city = String((settings as Record<string, unknown>).city || '').trim();
+  // 2. Fallback to organizations.settings JSONB
+  if (!department || !city) {
+    const settings = (organization as { settings?: Record<string, unknown> }).settings;
+    if (settings && typeof settings === 'object') {
+      const address = (settings as Record<string, unknown>).address;
+      if (address && typeof address === 'object') {
+        const addr = address as Record<string, unknown>;
+        if (!department) department = String(addr.state || addr.department || '').trim();
+        if (!city) city = String(addr.city || addr.ciudad || '').trim();
+      }
+      if (!department) department = String((settings as Record<string, unknown>).department || '').trim();
+      if (!city) city = String((settings as Record<string, unknown>).city || '').trim();
+    }
   }
 
   return { department, city };
+}
+
+async function fetchBusinessConfigLocations(organizationIds: string[]): Promise<Map<string, Record<string, unknown>>> {
+  const map = new Map<string, Record<string, unknown>>();
+  if (organizationIds.length === 0) return map;
+
+  const client = await createAdminClient();
+
+  // Try settings table first (new format)
+  const { data: settingsRows, error: settingsError } = await client
+    .from('settings')
+    .select('organization_id, value')
+    .eq('key', 'business_config')
+    .in('organization_id', organizationIds);
+
+  if (!settingsError && settingsRows) {
+    for (const row of settingsRows) {
+      if (row.value && typeof row.value === 'object' && row.organization_id) {
+        map.set(row.organization_id, row.value as Record<string, unknown>);
+      }
+    }
+  }
+
+  // Fallback: try business_config table for orgs not found
+  const missingIds = organizationIds.filter((id) => !map.has(id));
+  if (missingIds.length > 0) {
+    const { data: legacyRows, error: legacyError } = await client
+      .from('business_config')
+      .select('organization_id, address, phone, city, state, department')
+      .in('organization_id', missingIds);
+
+    if (!legacyError && legacyRows) {
+      for (const row of legacyRows as Array<Record<string, unknown>>) {
+        const orgId = String(row.organization_id || '');
+        if (!orgId) continue;
+        map.set(orgId, {
+          address: {
+            city: row.city || '',
+            state: row.state || row.department || '',
+          },
+        });
+      }
+    }
+  }
+
+  return map;
 }
 
 function mapProductsToCards(
   products: ProductRow[],
   organizations: PublicOrganization[],
   categoryMap: Map<string, string>,
+  businessConfigMap: Map<string, Record<string, unknown>>,
   requestHost?: string | null
 ): GlobalProductCard[] {
   const organizationMap = new Map(organizations.map((organization) => [organization.id, organization]));
@@ -478,7 +539,7 @@ function mapProductsToCards(
         ? categoryMap.get(product.category_id) || 'Sin categoria'
         : 'Sin categoria';
 
-      const location = extractOrganizationLocation(organization);
+      const location = extractOrganizationLocation(organization, businessConfigMap);
 
       return {
         id: product.id,
@@ -736,7 +797,8 @@ export async function fetchGlobalCatalogSnapshot(
     )
   );
   const categoryMap = await fetchCategoryMap(categoryIds);
-  const mappedProducts = mapProductsToCards(rawProducts, organizations, categoryMap, requestHost);
+  const businessConfigMap = await fetchBusinessConfigLocations(organizationIds);
+  const mappedProducts = mapProductsToCards(rawProducts, organizations, categoryMap, businessConfigMap, requestHost);
 
   // Build category options from ALL products (before category filter) so user can see all available categories
   // but apply other filters (price, stock, sale) so counts reflect the current non-category filters
