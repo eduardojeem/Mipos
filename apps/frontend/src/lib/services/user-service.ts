@@ -187,7 +187,7 @@ class UserService {
       location: undefined,
       last_login: apiUser.lastLogin,
       created_at: apiUser.createdAt,
-      updated_at: apiUser.lastLogin || apiUser.createdAt,
+      updated_at: apiUser.createdAt,
       // Campos calculados
       firstName: nameParts[0] || '',
       lastName: nameParts.slice(1).join(' ') || '',
@@ -196,7 +196,7 @@ class UserService {
       loginCount: 0,
       profileImage: undefined,
       createdAt: apiUser.createdAt,
-      updatedAt: apiUser.lastLogin || apiUser.createdAt
+      updatedAt: apiUser.createdAt
     }
   }
 

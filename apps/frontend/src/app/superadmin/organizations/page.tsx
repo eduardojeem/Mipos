@@ -31,6 +31,7 @@ import { SuperAdminGuard } from '../components/SuperAdminGuard';
 import { useOrganizations } from '../hooks/useOrganizations';
 import { Organization } from '../hooks/useAdminData';
 import { toast } from '@/lib/toast';
+import { buildTenantPublicBaseUrl } from '@/lib/domain/host-context';
 import { cn } from '@/lib/utils';
 import { exportCSV, exportExcel } from '@/lib/export-utils';
 import { Button } from '@/components/ui/button';
@@ -205,11 +206,14 @@ function getPrimaryDomain(org: Organization) {
     return org.custom_domain;
   }
 
-  if (typeof org.subdomain === 'string' && org.subdomain.length > 0) {
-    return `${org.subdomain}.mipos.app`;
-  }
-
-  return `/${org.slug}`;
+  return buildTenantPublicBaseUrl(
+    {
+      slug: org.slug,
+      subdomain: org.subdomain,
+      custom_domain: org.custom_domain,
+    },
+    process.env.NEXT_PUBLIC_BASE_DOMAIN || 'miposparaguay.vercel.app'
+  );
 }
 
 function buildPagination(currentPage: number, totalPages: number) {

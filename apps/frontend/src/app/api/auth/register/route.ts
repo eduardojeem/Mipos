@@ -40,23 +40,20 @@ export async function POST(request: NextRequest) {
             admin = null;
         }
 
-        // Verificar si el plan existe
+        // Verificar si el plan existe (optional — don't block registration if plan not found)
         let planId = null;
         if (planSlug) {
-            const { data: plan, error: planError } = await (admin || supabase)
+            const { data: plan } = await (admin || supabase)
                 .from('saas_plans')
                 .select('id')
                 .eq('slug', planSlug)
                 .eq('is_active', true)
                 .single();
 
-            if (planError || !plan) {
-                return NextResponse.json({
-                    success: false,
-                    error: 'Plan de suscripción no válido'
-                }, { status: 400 });
+            if (plan) {
+                planId = plan.id;
             }
-            planId = plan.id;
+            // If plan not found, continue registration without subscription
         }
 
         // Crear usuario en Supabase Auth
@@ -133,7 +130,37 @@ export async function POST(request: NextRequest) {
 
         if (memberError) {
             console.error('Member creation error:', memberError);
+            // Retry with upsert in case of conflict
+            await clientForWrites
+                .from('organization_members')
+                .upsert({
+                    organization_id: orgData.id,
+                    user_id: authData.user.id,
+                    is_owner: true
+                }, { onConflict: 'organization_id,user_id' })
+                .then(() => console.log('Member upsert succeeded'))
+                .catch((err: unknown) => console.error('Member upsert also failed:', err));
         }
+
+        // Update users.organization_id for fallback resolution
+        await clientForWrites
+            .from('users')
+            .update({ organization_id: orgData.id, role: 'ADMIN' })
+            .eq('id', authData.user.id)
+            .then(() => console.log('User organization_id updated'))
+            .catch((err: unknown) => {
+                console.warn('Could not update users.organization_id:', err);
+                // Try upsert if user row doesn't exist yet (trigger may not have fired)
+                return clientForWrites
+                    .from('users')
+                    .upsert({
+                        id: authData.user.id,
+                        email: email,
+                        full_name: name,
+                        role: 'ADMIN',
+                        organization_id: orgData.id,
+                    }, { onConflict: 'id' });
+            });
 
         // Si hay un plan seleccionado, crear la suscripción
         if (planId) {

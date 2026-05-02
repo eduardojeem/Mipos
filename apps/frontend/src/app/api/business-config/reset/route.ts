@@ -6,6 +6,11 @@ import { logAudit } from '../../admin/_utils/audit'
 import { requireCompanyAccess } from '@/app/api/_utils/company-authorization'
 import { COMPANY_FEATURE_KEYS, COMPANY_PERMISSIONS } from '@/lib/company-access'
 
+type SettingsValueRow = {
+  value?: typeof defaultBusinessConfig
+  updated_at?: string | null
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
@@ -27,17 +32,16 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = await createAdminClient()
-    const { data: prevData } = await supabase
-      .from('settings')
+    const settingsTable = (supabase as any).from('settings')
+    const { data: prevData } = await settingsTable
       .select('value')
       .eq('key', 'business_config')
       .eq('organization_id', organizationId)
       .single()
 
-    const prevConfig = prevData?.value || null
+    const prevConfig = ((prevData as SettingsValueRow | null)?.value || null) as typeof defaultBusinessConfig | null
 
-    const { error } = await supabase
-      .from('settings')
+    const { error } = await settingsTable
       .upsert(
         {
           key: 'business_config',
@@ -55,8 +59,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Error al restablecer configuracion' }, { status: 500 })
     }
 
-    const { data: persistedRow, error: persistedError } = await supabase
-      .from('settings')
+    const { data: persistedRow, error: persistedError } = await settingsTable
       .select('value,updated_at')
       .eq('key', 'business_config')
       .eq('organization_id', organizationId)
@@ -67,7 +70,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'La configuracion se restablecio pero no se pudo verificar' }, { status: 500 })
     }
 
-    const persistedConfig = persistedRow?.value || defaultBusinessConfig
+    const persistedConfig = ((persistedRow as SettingsValueRow | null)?.value || defaultBusinessConfig) as typeof defaultBusinessConfig
     try {
       invalidateCachedConfig(organizationId)
     } catch {}
@@ -91,7 +94,7 @@ export async function POST(request: NextRequest) {
       success: true,
       config: persistedConfig,
       persisted: true,
-      updatedAt: persistedRow?.updated_at || new Date().toISOString(),
+      updatedAt: (persistedRow as SettingsValueRow | null)?.updated_at || new Date().toISOString(),
       message: 'Configuracion restablecida a valores predeterminados',
     })
   } catch (error: any) {

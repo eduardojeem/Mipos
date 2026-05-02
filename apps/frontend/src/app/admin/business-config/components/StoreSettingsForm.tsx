@@ -1,40 +1,53 @@
-'use client';
+'use client'
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { Store, CreditCard, Truck, Package, Settings } from 'lucide-react';
-import { BusinessConfig } from '@/types/business-config';
-import { useConfigValidation } from '../hooks/useConfigValidation';
+import { CreditCard, Package, Settings, Store, Truck } from 'lucide-react'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
+import type { BusinessConfig } from '@/types/business-config'
+import { useConfigValidation } from '../hooks/useConfigValidation'
 
 interface StoreSettingsFormProps {
-  config: BusinessConfig;
-  onUpdate: (updates: Partial<BusinessConfig>) => void;
+  config: BusinessConfig
+  onUpdate: (updates: Partial<BusinessConfig>) => void
 }
 
 export function StoreSettingsForm({ config, onUpdate }: StoreSettingsFormProps) {
-  const { getFieldError } = useConfigValidation();
+  const { getFieldError } = useConfigValidation()
 
-  const handleStoreSettingsChange = (field: keyof BusinessConfig['storeSettings'], value: string | number | boolean) => {
+  const handleStoreSettingsChange = (
+    field: keyof BusinessConfig['storeSettings'],
+    value: string | number | boolean
+  ) => {
     onUpdate({
       storeSettings: {
         ...config.storeSettings,
-        [field]: value
-      }
-    });
-  };
+        [field]: value,
+      },
+    })
+  }
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('es-PY', {
+  const updateAutoShare = (field: 'whatsapp' | 'email', value: boolean) => {
+    onUpdate({
+      storeSettings: {
+        ...config.storeSettings,
+        autoShareReceipt: {
+          ...config.storeSettings.autoShareReceipt,
+          [field]: value,
+        },
+      },
+    })
+  }
+
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat('es-PY', {
       style: 'currency',
       currency: config.storeSettings.currency,
       minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(value);
-  };
+      maximumFractionDigits: 0,
+    }).format(value)
 
   return (
     <div className="space-y-6">
@@ -42,60 +55,63 @@ export function StoreSettingsForm({ config, onUpdate }: StoreSettingsFormProps) 
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Store className="h-5 w-5" />
-            Configuración Básica de Tienda
+            Base comercial
           </CardTitle>
+          <CardDescription>
+            Moneda de trabajo, minimo de compra y parametros visibles en el flujo publico.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="currency">Moneda *</Label>
-              <Select
-                value={config.storeSettings.currency}
-                onValueChange={(value) => handleStoreSettingsChange('currency', value)}
-              >
-                <SelectTrigger className={getFieldError('storeSettings.currency') ? 'border-red-500' : ''}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="PYG">Guaraní Paraguayo (PYG)</SelectItem>
-                  <SelectItem value="USD">Dólar Americano (USD)</SelectItem>
-                  <SelectItem value="ARS">Peso Argentino (ARS)</SelectItem>
-                  <SelectItem value="BRL">Real Brasileño (BRL)</SelectItem>
-                  <SelectItem value="EUR">Euro (EUR)</SelectItem>
-                </SelectContent>
-              </Select>
-              {getFieldError('storeSettings.currency') && (
-                <p className="text-sm text-red-500">{getFieldError('storeSettings.currency')}</p>
-              )}
-            </div>
+        <CardContent className="grid gap-4 md:grid-cols-3">
+          <div className="space-y-2">
+            <Label htmlFor="currency">Moneda *</Label>
+            <Select
+              value={config.storeSettings.currency}
+              onValueChange={(value) => handleStoreSettingsChange('currency', value)}
+            >
+              <SelectTrigger className={getFieldError('storeSettings.currency') ? 'border-red-500' : ''}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="PYG">Guarani paraguayo (PYG)</SelectItem>
+                <SelectItem value="USD">Dolar estadounidense (USD)</SelectItem>
+                <SelectItem value="ARS">Peso argentino (ARS)</SelectItem>
+                <SelectItem value="BRL">Real brasileno (BRL)</SelectItem>
+                <SelectItem value="EUR">Euro (EUR)</SelectItem>
+              </SelectContent>
+            </Select>
+            {getFieldError('storeSettings.currency') && (
+              <p className="text-sm text-red-500">{getFieldError('storeSettings.currency')}</p>
+            )}
+          </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="currencySymbol">Símbolo de Moneda *</Label>
-              <Input
-                id="currencySymbol"
-                value={config.storeSettings.currencySymbol}
-                onChange={(e) => handleStoreSettingsChange('currencySymbol', e.target.value)}
-                placeholder="₲"
-                className={getFieldError('storeSettings.currencySymbol') ? 'border-red-500' : ''}
-              />
-              {getFieldError('storeSettings.currencySymbol') && (
-                <p className="text-sm text-red-500">{getFieldError('storeSettings.currencySymbol')}</p>
-              )}
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="currencySymbol">Simbolo *</Label>
+            <Input
+              id="currencySymbol"
+              value={config.storeSettings.currencySymbol}
+              onChange={(event) => handleStoreSettingsChange('currencySymbol', event.target.value)}
+              placeholder="Gs."
+              className={getFieldError('storeSettings.currencySymbol') ? 'border-red-500' : ''}
+            />
+            {getFieldError('storeSettings.currencySymbol') && (
+              <p className="text-sm text-red-500">{getFieldError('storeSettings.currencySymbol')}</p>
+            )}
+          </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="minimumOrderAmount">Monto Mínimo de Pedido</Label>
-              <Input
-                id="minimumOrderAmount"
-                type="number"
-                value={config.storeSettings.minimumOrderAmount || 0}
-                onChange={(e) => handleStoreSettingsChange('minimumOrderAmount', parseFloat(e.target.value) || 0)}
-                placeholder="50000"
-              />
-              <p className="text-xs text-gray-500">
-                Actual: {formatCurrency(config.storeSettings.minimumOrderAmount || 0)}
-              </p>
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="minimumOrderAmount">Pedido minimo</Label>
+            <Input
+              id="minimumOrderAmount"
+              type="number"
+              value={config.storeSettings.minimumOrderAmount || 0}
+              onChange={(event) =>
+                handleStoreSettingsChange('minimumOrderAmount', Number(event.target.value) || 0)
+              }
+              placeholder="50000"
+            />
+            <p className="text-xs text-muted-foreground">
+              Actual: {formatCurrency(config.storeSettings.minimumOrderAmount || 0)}
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -104,47 +120,58 @@ export function StoreSettingsForm({ config, onUpdate }: StoreSettingsFormProps) 
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Settings className="h-5 w-5" />
-            Configuración Fiscal (Paraguay)
+            Impuestos y presentacion
           </CardTitle>
+          <CardDescription>
+            Define si el precio ya incluye IVA y que tasa comercial se muestra.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center justify-between rounded-2xl border px-4 py-3">
+            <div>
+              <p className="text-sm font-medium">Habilitar IVA</p>
+              <p className="text-xs text-muted-foreground">Aplica el calculo fiscal al flujo comercial.</p>
+            </div>
             <Switch
               id="taxEnabled"
               checked={config.storeSettings.taxEnabled}
               onCheckedChange={(checked) => handleStoreSettingsChange('taxEnabled', checked)}
             />
-            <Label htmlFor="taxEnabled">Habilitar IVA</Label>
           </div>
 
           {config.storeSettings.taxEnabled && (
-            <div className="space-y-4 pl-6 border-l-2 border-blue-200">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="taxRate">Tasa de IVA (%)</Label>
-                  <Input
-                    id="taxRate"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max="100"
-                    value={(config.storeSettings.taxRate * 100).toFixed(2)}
-                    onChange={(e) => handleStoreSettingsChange('taxRate', parseFloat(e.target.value) / 100 || 0)}
-                    placeholder="10.00"
-                  />
-                  <p className="text-xs text-gray-500">
-                    IVA estándar en Paraguay: 10%
+            <div className="grid gap-4 rounded-2xl border border-border/70 bg-muted/20 p-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="taxRate">Tasa de IVA (%)</Label>
+                <Input
+                  id="taxRate"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  value={(config.storeSettings.taxRate * 100).toFixed(2)}
+                  onChange={(event) =>
+                    handleStoreSettingsChange('taxRate', Number(event.target.value) / 100 || 0)
+                  }
+                  placeholder="10.00"
+                />
+                <p className="text-xs text-muted-foreground">Referencia habitual en Paraguay: 10%</p>
+              </div>
+
+              <div className="flex items-center justify-between rounded-xl border bg-background px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium">Precios con IVA incluido</p>
+                  <p className="text-xs text-muted-foreground">
+                    Evita dobles lecturas entre catalogo y checkout.
                   </p>
                 </div>
-
-                <div className="flex items-center space-x-2 pt-6">
-                  <Switch
-                    id="taxIncludedInPrices"
-                    checked={config.storeSettings.taxIncludedInPrices}
-                    onCheckedChange={(checked) => handleStoreSettingsChange('taxIncludedInPrices', checked)}
-                  />
-                  <Label htmlFor="taxIncludedInPrices">Precios incluyen IVA</Label>
-                </div>
+                <Switch
+                  id="taxIncludedInPrices"
+                  checked={config.storeSettings.taxIncludedInPrices}
+                  onCheckedChange={(checked) =>
+                    handleStoreSettingsChange('taxIncludedInPrices', checked)
+                  }
+                />
               </div>
             </div>
           )}
@@ -155,45 +182,57 @@ export function StoreSettingsForm({ config, onUpdate }: StoreSettingsFormProps) 
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Truck className="h-5 w-5" />
-            Configuración de Envíos
+            Envio y umbral gratis
           </CardTitle>
+          <CardDescription>
+            Define cuando mostrar envio gratis y que mensaje se expone al cliente.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center justify-between rounded-2xl border px-4 py-3">
+            <div>
+              <p className="text-sm font-medium">Activar envio gratis</p>
+              <p className="text-xs text-muted-foreground">
+                Muestra el beneficio en la experiencia publica y en las reglas comerciales.
+              </p>
+            </div>
             <Switch
               id="freeShippingEnabled"
-              checked={config.storeSettings.freeShippingEnabled || false}
+              checked={Boolean(config.storeSettings.freeShippingEnabled)}
               onCheckedChange={(checked) => handleStoreSettingsChange('freeShippingEnabled', checked)}
             />
-            <Label htmlFor="freeShippingEnabled">Habilitar envío gratis</Label>
           </div>
 
           {config.storeSettings.freeShippingEnabled && (
-            <div className="space-y-4 pl-6 border-l-2 border-green-200">
+            <div className="grid gap-4 rounded-2xl border border-border/70 bg-muted/20 p-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="freeShippingThreshold">Monto mínimo para envío gratis</Label>
+                <Label htmlFor="freeShippingThreshold">Monto minimo</Label>
                 <Input
                   id="freeShippingThreshold"
                   type="number"
                   value={config.storeSettings.freeShippingThreshold}
-                  onChange={(e) => handleStoreSettingsChange('freeShippingThreshold', parseFloat(e.target.value) || 0)}
+                  onChange={(event) =>
+                    handleStoreSettingsChange('freeShippingThreshold', Number(event.target.value) || 0)
+                  }
                   placeholder="150000"
                 />
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-muted-foreground">
                   Actual: {formatCurrency(config.storeSettings.freeShippingThreshold)}
                 </p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="freeShippingMessage">Mensaje de envío gratis</Label>
+                <Label htmlFor="freeShippingMessage">Mensaje visible</Label>
                 <Input
                   id="freeShippingMessage"
                   value={config.storeSettings.freeShippingMessage || ''}
-                  onChange={(e) => handleStoreSettingsChange('freeShippingMessage', e.target.value)}
-                  placeholder="Envío gratis a partir de {amount}"
+                  onChange={(event) =>
+                    handleStoreSettingsChange('freeShippingMessage', event.target.value)
+                  }
+                  placeholder="Envio gratis a partir de {amount}"
                 />
-                <p className="text-xs text-gray-500">
-                  Use {'{amount}'} para mostrar el monto dinámicamente
+                <p className="text-xs text-muted-foreground">
+                  Usa {'{amount}'} para insertar el umbral actual.
                 </p>
               </div>
             </div>
@@ -205,49 +244,54 @@ export function StoreSettingsForm({ config, onUpdate }: StoreSettingsFormProps) 
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <CreditCard className="h-5 w-5" />
-            Métodos de Pago
+            Metodos de pago
           </CardTitle>
+          <CardDescription>
+            Define que medios aparecen como disponibles para cobrar.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="acceptsCash"
-                  checked={config.storeSettings.acceptsCash}
-                  onCheckedChange={(checked) => handleStoreSettingsChange('acceptsCash', checked)}
-                />
-                <Label htmlFor="acceptsCash">Efectivo</Label>
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="acceptsDebitCards"
-                  checked={config.storeSettings.acceptsDebitCards}
-                  onCheckedChange={(checked) => handleStoreSettingsChange('acceptsDebitCards', checked)}
-                />
-                <Label htmlFor="acceptsDebitCards">Tarjetas de débito</Label>
-              </div>
+        <CardContent className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-3 rounded-2xl border p-4">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="acceptsCash">Efectivo</Label>
+              <Switch
+                id="acceptsCash"
+                checked={config.storeSettings.acceptsCash}
+                onCheckedChange={(checked) => handleStoreSettingsChange('acceptsCash', checked)}
+              />
             </div>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="acceptsDebitCards">Tarjetas de debito</Label>
+              <Switch
+                id="acceptsDebitCards"
+                checked={config.storeSettings.acceptsDebitCards}
+                onCheckedChange={(checked) =>
+                  handleStoreSettingsChange('acceptsDebitCards', checked)
+                }
+              />
+            </div>
+          </div>
 
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="acceptsCreditCards"
-                  checked={config.storeSettings.acceptsCreditCards}
-                  onCheckedChange={(checked) => handleStoreSettingsChange('acceptsCreditCards', checked)}
-                />
-                <Label htmlFor="acceptsCreditCards">Tarjetas de crédito</Label>
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="acceptsBankTransfer"
-                  checked={config.storeSettings.acceptsBankTransfer}
-                  onCheckedChange={(checked) => handleStoreSettingsChange('acceptsBankTransfer', checked)}
-                />
-                <Label htmlFor="acceptsBankTransfer">Transferencia bancaria</Label>
-              </div>
+          <div className="space-y-3 rounded-2xl border p-4">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="acceptsCreditCards">Tarjetas de credito</Label>
+              <Switch
+                id="acceptsCreditCards"
+                checked={config.storeSettings.acceptsCreditCards}
+                onCheckedChange={(checked) =>
+                  handleStoreSettingsChange('acceptsCreditCards', checked)
+                }
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="acceptsBankTransfer">Transferencia bancaria</Label>
+              <Switch
+                id="acceptsBankTransfer"
+                checked={config.storeSettings.acceptsBankTransfer}
+                onCheckedChange={(checked) =>
+                  handleStoreSettingsChange('acceptsBankTransfer', checked)
+                }
+              />
             </div>
           </div>
         </CardContent>
@@ -257,102 +301,104 @@ export function StoreSettingsForm({ config, onUpdate }: StoreSettingsFormProps) 
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Package className="h-5 w-5" />
-            Configuración de Inventario y POS
+            Inventario y POS
           </CardTitle>
+          <CardDescription>
+            Controles que afectan la operacion diaria y los comportamientos visibles del punto de venta.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="enableInventoryTracking"
-                  checked={config.storeSettings.enableInventoryTracking || false}
-                  onCheckedChange={(checked) => handleStoreSettingsChange('enableInventoryTracking', checked)}
-                />
-                <Label htmlFor="enableInventoryTracking">Seguimiento de inventario</Label>
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="enableBarcodeScanner"
-                  checked={config.storeSettings.enableBarcodeScanner || false}
-                  onCheckedChange={(checked) => handleStoreSettingsChange('enableBarcodeScanner', checked)}
-                />
-                <Label htmlFor="enableBarcodeScanner">Escáner de códigos de barras</Label>
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="printReceipts"
-                  checked={config.storeSettings.printReceipts || false}
-                  onCheckedChange={(checked) => handleStoreSettingsChange('printReceipts', checked)}
-                />
-                <Label htmlFor="printReceipts">Imprimir recibos</Label>
-              </div>
-
-            <div className="flex items-center space-x-2">
+        <CardContent className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-3 rounded-2xl border p-4">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="enableInventoryTracking">Seguimiento de inventario</Label>
+              <Switch
+                id="enableInventoryTracking"
+                checked={Boolean(config.storeSettings.enableInventoryTracking)}
+                onCheckedChange={(checked) =>
+                  handleStoreSettingsChange('enableInventoryTracking', checked)
+                }
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="enableBarcodeScanner">Escaner de codigos</Label>
+              <Switch
+                id="enableBarcodeScanner"
+                checked={Boolean(config.storeSettings.enableBarcodeScanner)}
+                onCheckedChange={(checked) =>
+                  handleStoreSettingsChange('enableBarcodeScanner', checked)
+                }
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="printReceipts">Imprimir comprobantes</Label>
+              <Switch
+                id="printReceipts"
+                checked={Boolean(config.storeSettings.printReceipts)}
+                onCheckedChange={(checked) => handleStoreSettingsChange('printReceipts', checked)}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="autoPrintOnSale">Impresion automatica al vender</Label>
               <Switch
                 id="autoPrintOnSale"
-                checked={config.storeSettings.autoPrintOnSale || false}
+                checked={Boolean(config.storeSettings.autoPrintOnSale)}
                 onCheckedChange={(checked) => handleStoreSettingsChange('autoPrintOnSale', checked)}
               />
-              <Label htmlFor="autoPrintOnSale">Imprimir ticket automáticamente al finalizar venta</Label>
+            </div>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="enableCashDrawer">Cajon de dinero</Label>
+              <Switch
+                id="enableCashDrawer"
+                checked={Boolean(config.storeSettings.enableCashDrawer)}
+                onCheckedChange={(checked) =>
+                  handleStoreSettingsChange('enableCashDrawer', checked)
+                }
+              />
+            </div>
+          </div>
+
+          <div className="space-y-4 rounded-2xl border p-4">
+            <div className="space-y-2">
+              <Label htmlFor="lowStockThreshold">Umbral de stock bajo</Label>
+              <Input
+                id="lowStockThreshold"
+                type="number"
+                min="0"
+                value={config.storeSettings.lowStockThreshold || 0}
+                onChange={(event) =>
+                  handleStoreSettingsChange('lowStockThreshold', Number(event.target.value) || 0)
+                }
+                placeholder="10"
+              />
+              <p className="text-xs text-muted-foreground">
+                Dispara alertas cuando el stock baje de este valor.
+              </p>
             </div>
 
-            <div className="flex items-center gap-6">
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="autoShareWhatsApp"
-                  checked={Boolean(config.storeSettings.autoShareReceipt?.whatsapp)}
-                  onCheckedChange={(checked) => {
-                    const next = { ...(config.storeSettings.autoShareReceipt || {}), whatsapp: checked };
-                    onUpdate({ storeSettings: { ...config.storeSettings, autoShareReceipt: next } });
-                  }}
-                />
-                <Label htmlFor="autoShareWhatsApp">Enviar comprobante por WhatsApp automáticamente</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="autoShareEmail"
-                  checked={Boolean(config.storeSettings.autoShareReceipt?.email)}
-                  onCheckedChange={(checked) => {
-                    const next = { ...(config.storeSettings.autoShareReceipt || {}), email: checked };
-                    onUpdate({ storeSettings: { ...config.storeSettings, autoShareReceipt: next } });
-                  }}
-                />
-                <Label htmlFor="autoShareEmail">Enviar comprobante por Email automáticamente</Label>
-              </div>
-            </div>
-            </div>
-
-            <div className="space-y-3">
-              <div className="space-y-2">
-                <Label htmlFor="lowStockThreshold">Umbral de stock bajo</Label>
-                <Input
-                  id="lowStockThreshold"
-                  type="number"
-                  min="0"
-                  value={config.storeSettings.lowStockThreshold || 0}
-                  onChange={(e) => handleStoreSettingsChange('lowStockThreshold', parseInt(e.target.value) || 0)}
-                  placeholder="10"
-                />
-                <p className="text-xs text-gray-500">
-                  Alertar cuando el stock sea menor a este número
-                </p>
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="enableCashDrawer"
-                  checked={config.storeSettings.enableCashDrawer || false}
-                  onCheckedChange={(checked) => handleStoreSettingsChange('enableCashDrawer', checked)}
-                />
-                <Label htmlFor="enableCashDrawer">Cajón de dinero automático</Label>
+            <div className="rounded-xl border bg-muted/20 p-3">
+              <p className="text-sm font-medium">Envio automatico de comprobantes</p>
+              <div className="mt-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="autoShareWhatsApp">WhatsApp</Label>
+                  <Switch
+                    id="autoShareWhatsApp"
+                    checked={Boolean(config.storeSettings.autoShareReceipt?.whatsapp)}
+                    onCheckedChange={(checked) => updateAutoShare('whatsapp', checked)}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="autoShareEmail">Email</Label>
+                  <Switch
+                    id="autoShareEmail"
+                    checked={Boolean(config.storeSettings.autoShareReceipt?.email)}
+                    onCheckedChange={(checked) => updateAutoShare('email', checked)}
+                  />
+                </div>
               </div>
             </div>
           </div>
         </CardContent>
       </Card>
     </div>
-  );
+  )
 }

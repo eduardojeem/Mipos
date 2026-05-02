@@ -98,23 +98,27 @@ async function promoteOrganizationAdminsForPaidPlan(
 
   const { data: existingAdminRoles } = await adminClient
     .from('user_roles')
-    .select('id,user_id,is_active')
+    .select('id,user_id,organization_id,is_active')
     .in('user_id', targetMemberships.map((target) => target.userId))
-    .eq('role_id', adminRole.id);
+    .eq('role_id', adminRole.id)
+    .in('organization_id', organizationIds);
 
-  const activeByUserId = new Map((existingAdminRoles || []).map((item: any) => [item.user_id, item]));
-  const missingUserIds = targetMemberships
-    .map((target) => target.userId)
-    .filter((userId) => !activeByUserId.has(userId));
+  const activeByMembershipKey = new Map(
+    (existingAdminRoles || []).map((item: any) => [`${item.organization_id}:${item.user_id}`, item])
+  );
+  const missingAssignments = Array.from(targets.entries())
+    .map(([organizationId, target]) => ({ organizationId, userId: target.userId }))
+    .filter((target) => !activeByMembershipKey.has(`${target.organizationId}:${target.userId}`));
 
-  if (missingUserIds.length > 0) {
+  if (missingAssignments.length > 0) {
     await adminClient.from('user_roles').upsert(
-      missingUserIds.map((userId) => ({
-        user_id: userId,
+      missingAssignments.map((target) => ({
+        user_id: target.userId,
         role_id: adminRole.id,
+        organization_id: target.organizationId,
         is_active: true,
       })),
-      { onConflict: 'user_id,role_id' }
+      { onConflict: 'user_id,role_id,organization_id' }
     );
   }
 

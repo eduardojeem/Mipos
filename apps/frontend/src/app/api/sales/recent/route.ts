@@ -47,6 +47,7 @@ export async function GET(request: NextRequest) {
     }));
 
     return NextResponse.json({
+      success: true,
       sales: transformedSales,
       total: count || 0,
       limit,
@@ -56,13 +57,13 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Recent sales error:', error);
     
-    // Return fallback data
     return NextResponse.json({
+      success: false,
       sales: [],
       total: 0,
       limit: 10,
       lastUpdated: new Date().toISOString(),
-      error: 'Could not fetch recent sales'
-    });
+      error: 'No se pudieron cargar las ventas recientes'
+    }, { status: 500 });
   }
 }

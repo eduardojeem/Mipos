@@ -29,6 +29,8 @@ interface TwoFactorStatus {
   backupCodes: string[]
   lastUsed?: string
   method: 'app' | 'sms' | null
+  available?: boolean
+  maintenanceMessage?: string
 }
 
 export default function TwoFactorPage() {
@@ -38,7 +40,8 @@ export default function TwoFactorPage() {
   const [twoFactorStatus, setTwoFactorStatus] = useState<TwoFactorStatus>({
     enabled: false,
     backupCodes: [],
-    method: null
+    method: null,
+    available: false
   })
   
   const [isLoading, setIsLoading] = useState(true)
@@ -231,12 +234,20 @@ export default function TwoFactorPage() {
     }
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text)
-    toast({
-      title: "Copiado",
-      description: "Texto copiado al portapapeles",
-    })
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      toast({
+        title: "Copiado",
+        description: "Texto copiado al portapapeles",
+      })
+    } catch {
+      toast({
+        title: "Error",
+        description: "No se pudo copiar el texto",
+        variant: "destructive",
+      })
+    }
   }
 
   const downloadBackupCodes = () => {
@@ -334,6 +345,14 @@ export default function TwoFactorPage() {
           </TabsList>
 
           <TabsContent value="setup" className="space-y-6">
+            {twoFactorStatus.available === false && (
+              <Alert>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  {twoFactorStatus.maintenanceMessage || 'La configuracion de 2FA esta temporalmente deshabilitada.'}
+                </AlertDescription>
+              </Alert>
+            )}
             {!showSetup ? (
               <Card>
                 <CardHeader>
@@ -352,7 +371,7 @@ export default function TwoFactorPage() {
                       </AlertDescription>
                     </Alert>
                     
-                    <Button onClick={generateQRCode} className="w-full">
+                    <Button onClick={generateQRCode} className="w-full" disabled={twoFactorStatus.available === false}>
                       <QrCode className="h-4 w-4 mr-2" />
                       Comenzar Configuración
                     </Button>
@@ -372,9 +391,14 @@ export default function TwoFactorPage() {
                     <div className="space-y-4">
                       {/* Aquí iría el QR Code real */}
                       <div className="flex justify-center">
-                        <div className="w-48 h-48 bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center">
-                          <QrCode className="h-16 w-16 text-gray-400" />
-                        </div>
+                        {qrCodeUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={qrCodeUrl} alt="Codigo QR para 2FA" className="h-48 w-48 rounded-lg border bg-white p-3" />
+                        ) : (
+                          <div className="w-48 h-48 bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center">
+                            <QrCode className="h-16 w-16 text-gray-400" />
+                          </div>
+                        )}
                       </div>
                       
                       <div className="space-y-2">

@@ -33,6 +33,7 @@ import { SuperAdminGuard } from '../../components/SuperAdminGuard';
 import { useOrganization, type OrganizationDetail } from '../../hooks/useOrganization';
 import { useUsers, type AdminUser } from '../../hooks/useUsers';
 import { toast } from '@/lib/toast';
+import { buildTenantPublicBaseUrl } from '@/lib/domain/host-context';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -285,9 +286,14 @@ function formatDateTime(value?: string | null) {
 
 function getDomainLabel(organization: OrganizationDetail | null) {
   if (!organization) return 'Sin dominio';
-  if (organization.custom_domain) return organization.custom_domain;
-  if (organization.subdomain) return `${organization.subdomain}.mipos.app`;
-  return `mipos.app/${organization.slug}`;
+  return buildTenantPublicBaseUrl(
+    {
+      slug: organization.slug,
+      subdomain: organization.subdomain,
+      custom_domain: organization.custom_domain,
+    },
+    process.env.NEXT_PUBLIC_BASE_DOMAIN || 'miposparaguay.vercel.app'
+  );
 }
 
 function getStatusMeta(status: string) {
@@ -558,8 +564,16 @@ export default function OrganizationDetailsPage() {
   const currentUsage = insights.currentUsage.data || null;
   const productsCount = currentUsage?.metrics.find((m) => m.key === 'products')?.used ?? usage.products;
   const locationsCount = currentUsage?.metrics.find((m) => m.key === 'locations')?.used ?? usage.locations;
-  const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || 'miposparaguay.vercel.app';
-  const publicAddress = organization?.custom_domain || (organization?.subdomain ? `${organization.subdomain}.${baseDomain}` : null);
+  const publicAddress = organization
+    ? buildTenantPublicBaseUrl(
+        {
+          slug: organization.slug,
+          subdomain: organization.subdomain,
+          custom_domain: organization.custom_domain,
+        },
+        process.env.NEXT_PUBLIC_BASE_DOMAIN || 'miposparaguay.vercel.app'
+      )
+    : null;
   const effectiveLimits = useMemo(() => ({
     users: subscription?.plan.limits.maxUsers ?? settingsDraft.limits.maxUsers,
     products: subscription?.plan.limits.maxProducts ?? settingsDraft.limits.maxProducts,
@@ -661,7 +675,7 @@ export default function OrganizationDetailsPage() {
     if (!publicAddress) {
       items.push({
         title: 'Sin direccion publica',
-        description: 'No tiene subdominio ni dominio propio configurado.',
+        description: 'No tiene identificador publico ni dominio propio configurado.',
         tone: 'warning',
       });
     }
@@ -990,12 +1004,12 @@ export default function OrganizationDetailsPage() {
                           <Copy className="h-3.5 w-3.5" />
                           Copiar dominio
                         </Button>
-                        {organization.custom_domain && (
+                        {publicAddress && (
                           <Button
                             variant="outline"
                             size="sm"
                             className="gap-2"
-                            onClick={() => window.open(`https://${organization.custom_domain}`, '_blank', 'noopener,noreferrer')}
+                            onClick={() => window.open(publicAddress, '_blank', 'noopener,noreferrer')}
                           >
                             <ExternalLink className="h-3.5 w-3.5" />
                             Abrir
@@ -1433,7 +1447,7 @@ export default function OrganizationDetailsPage() {
                 <CardHeader className="flex flex-row items-start justify-between gap-4">
                   <div>
                     <CardTitle>Perfil y dominio</CardTitle>
-                    <CardDescription>Nombre comercial, slug y direccion publica de la organizacion.</CardDescription>
+                    <CardDescription>Nombre comercial, slug e identificador publico de la organizacion.</CardDescription>
                   </div>
                   <div className="flex gap-2">
                     <Button variant="outline" size="sm" className="gap-2" onClick={resetProfileDraft} disabled={!profileDirty || orgUpdating}>
@@ -1456,7 +1470,7 @@ export default function OrganizationDetailsPage() {
                     <Input value={profileDraft.slug} onChange={(event) => setProfileDraft((current) => ({ ...current, slug: event.target.value }))} />
                   </div>
                   <div className="space-y-2">
-                    <Label>Subdominio</Label>
+                    <Label>Identificador publico</Label>
                     <Input value={profileDraft.subdomain} onChange={(event) => setProfileDraft((current) => ({ ...current, subdomain: event.target.value }))} placeholder="mi-negocio" />
                   </div>
                   <div className="space-y-2">
@@ -1468,7 +1482,16 @@ export default function OrganizationDetailsPage() {
                       <div>
                         <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Preview publica</div>
                         <div className="mt-1 text-sm font-medium text-slate-950 dark:text-slate-50">
-                          {profileDraft.customDomain || (profileDraft.subdomain ? `${profileDraft.subdomain}.${baseDomain}` : 'Sin direccion publica')}
+                          {profileDraft.customDomain || profileDraft.slug || profileDraft.subdomain
+                            ? buildTenantPublicBaseUrl(
+                                {
+                                  slug: profileDraft.slug || profileDraft.subdomain,
+                                  subdomain: profileDraft.subdomain,
+                                  custom_domain: profileDraft.customDomain || null,
+                                },
+                                process.env.NEXT_PUBLIC_BASE_DOMAIN || 'miposparaguay.vercel.app'
+                              )
+                            : 'Sin direccion publica'}
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-2">
@@ -1481,12 +1504,23 @@ export default function OrganizationDetailsPage() {
                           <Copy className="h-3.5 w-3.5" />
                           Copiar
                         </Button>
-                        {organization.custom_domain && (
+                        {(profileDraft.customDomain || profileDraft.slug || profileDraft.subdomain) && (
                           <Button
                             variant="outline"
                             size="sm"
                             className="gap-2"
-                            onClick={() => window.open(`https://${organization.custom_domain}`, '_blank', 'noopener,noreferrer')}
+                            onClick={() => window.open(
+                              buildTenantPublicBaseUrl(
+                                {
+                                  slug: profileDraft.slug || profileDraft.subdomain,
+                                  subdomain: profileDraft.subdomain,
+                                  custom_domain: profileDraft.customDomain || null,
+                                },
+                                process.env.NEXT_PUBLIC_BASE_DOMAIN || 'miposparaguay.vercel.app'
+                              ),
+                              '_blank',
+                              'noopener,noreferrer'
+                            )}
                           >
                             <ExternalLink className="h-3.5 w-3.5" />
                             Abrir

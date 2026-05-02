@@ -1,6 +1,6 @@
 'use client'
 
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertCircle,
   Building2,
@@ -16,8 +16,6 @@ import {
   Palette,
   Phone,
   Save,
-  Scale,
-  Settings,
   ShieldCheck,
   Sparkles,
   Store,
@@ -33,8 +31,9 @@ import { useToast } from '@/components/ui/use-toast'
 import { useBusinessConfig } from '@/contexts/BusinessConfigContext'
 import type { BusinessConfig } from '@/types/business-config'
 import { useAuth } from '@/hooks/use-auth'
+import { useAllOrganizations } from '@/hooks/use-all-organizations'
 import { useCompanyAccess } from '@/hooks/use-company-access'
-import { useUserOrganizations } from '@/hooks/use-user-organizations'
+import { useUserOrganizations, type Organization } from '@/hooks/use-user-organizations'
 import { COMPANY_FEATURE_KEYS, COMPANY_PERMISSIONS } from '@/lib/company-access'
 import { buildTenantPublicBaseUrl } from '@/lib/domain/host-context'
 import { getCanonicalPlanDisplayName, normalizePlanSlug } from '@/lib/plan-catalog'
@@ -49,15 +48,12 @@ const StoreSettingsForm = lazy(() => import('./components/StoreSettingsForm').th
 const CarouselEditor = lazy(() => import('./components/CarouselEditor').then((m) => ({ default: m.CarouselEditor })))
 const ConfigPreview = lazy(() => import('./components/ConfigPreview').then((m) => ({ default: m.ConfigPreview })))
 const OrganizationSelectorForConfig = lazy(() => import('./components/OrganizationSelectorForConfig').then((m) => ({ default: m.OrganizationSelectorForConfig })))
-const SystemSettingsForm = lazy(() => import('./components/SystemSettingsForm').then((m) => ({ default: m.SystemSettingsForm })))
 
 type TabConfig = {
   id: string
   label: string
   icon: typeof Building2
   description: string
-  superAdminOnly?: boolean
-  professionalOnly?: boolean
 }
 
 type LaunchCheck = {
@@ -69,66 +65,40 @@ type LaunchCheck = {
 
 const TAB_CONFIG: TabConfig[] = [
   {
-    id: 'business',
+    id: 'content',
     label: 'Contenido',
     icon: Sparkles,
-    description: 'Hero, mensaje comercial y texto principal que se ve en la home.',
+    description: 'Mensaje principal, copies publicos y carrusel de la pagina del negocio.',
   },
   {
-    id: 'carousel',
-    label: 'Carrusel',
-    icon: Sparkles,
-    description: 'Banners, rotacion e imagenes destacadas de la pagina publica.',
-  },
-  {
-    id: 'branding',
+    id: 'brand',
     label: 'Marca',
     icon: Palette,
     description: 'Colores, logo y personalidad visual de la experiencia publica.',
-    professionalOnly: true,
-  },
-  {
-    id: 'public',
-    label: 'Publico',
-    icon: Globe,
-    description: 'Visibilidad, copies y bloques que controlan el frontend del subdominio.',
   },
   {
     id: 'contact',
-    label: 'Contacto',
+    label: 'Contacto y legal',
     icon: Phone,
-    description: 'Telefono, email, direccion, horarios y presencia en canales publicos.',
+    description: 'Contacto, direccion, datos fiscales y documentos visibles al cliente.',
   },
   {
-    id: 'store',
+    id: 'commerce',
     label: 'Comercio',
     icon: Store,
     description: 'Moneda, impuestos, envios y reglas visibles para clientes.',
   },
   {
-    id: 'legal',
-    label: 'Legal',
-    icon: Scale,
-    description: 'RUC, datos fiscales y documentos publicos de privacidad y terminos.',
+    id: 'publication',
+    label: 'Publicacion',
+    icon: Globe,
+    description: 'Ruta publica, accesos directos y salida visible del negocio.',
   },
   {
     id: 'preview',
     label: 'Revision',
     icon: Eye,
     description: 'Resumen final para validar antes de publicar cambios.',
-  },
-  {
-    id: 'domain',
-    label: 'Dominio',
-    icon: Globe,
-    description: 'Subdominio, dominio personalizado y rutas publicas activas.',
-  },
-  {
-    id: 'system',
-    label: 'Sistema',
-    icon: Settings,
-    description: 'Backups, correo y opciones avanzadas no visibles al cliente final.',
-    superAdminOnly: true,
   },
 ]
 
@@ -152,24 +122,39 @@ function mergeConfig(base: BusinessConfig, updates: Partial<BusinessConfig>): Bu
 
 function getTabHealth(config: BusinessConfig, tabId: string): 'complete' | 'partial' | 'empty' {
   switch (tabId) {
-    case 'business':
-      return config.businessName && config.heroTitle && config.heroDescription ? 'complete' : config.businessName || config.heroTitle ? 'partial' : 'empty'
-    case 'branding':
+    case 'content': {
+      const completed = Boolean(config.businessName && config.heroTitle && config.heroDescription)
+      const partial = Boolean(
+        config.businessName ||
+        config.heroTitle ||
+        config.heroDescription ||
+        config.publicSite?.content?.heroSecondaryText ||
+        config.carousel?.images?.length
+      )
+      return completed ? 'complete' : partial ? 'partial' : 'empty'
+    }
+    case 'brand':
       return config.branding?.primaryColor && config.branding?.logo ? 'complete' : config.branding?.primaryColor ? 'partial' : 'empty'
-    case 'contact':
-      return config.contact?.phone && config.contact?.email && config.address?.street ? 'complete' : config.contact?.phone || config.contact?.email ? 'partial' : 'empty'
-    case 'public':
-      return config.publicSite?.content?.heroSecondaryText && config.publicSite?.content?.footerHeadline ? 'complete' : 'partial'
-    case 'carousel':
-      return config.carousel?.enabled && config.carousel?.images?.length ? 'complete' : config.carousel?.images?.length ? 'partial' : 'empty'
-    case 'store':
+    case 'contact': {
+      const completed = Boolean(
+        config.contact?.phone &&
+        config.contact?.email &&
+        config.address?.street &&
+        config.address?.city &&
+        config.legalInfo?.businessType
+      )
+      const partial = Boolean(
+        config.contact?.phone ||
+        config.contact?.email ||
+        config.address?.street ||
+        config.legalInfo?.ruc
+      )
+      return completed ? 'complete' : partial ? 'partial' : 'empty'
+    }
+    case 'commerce':
       return config.storeSettings?.currency && config.storeSettings?.currencySymbol ? 'complete' : 'empty'
-    case 'legal':
-      return config.legalInfo?.ruc && (config.legalDocuments?.termsUrl || config.legalDocuments?.privacyUrl) ? 'complete' : config.legalInfo?.ruc ? 'partial' : 'empty'
-    case 'domain':
-      return config.contact?.website ? 'complete' : 'empty'
-    case 'system':
-      return config.systemSettings?.autoBackup ? 'complete' : 'partial'
+    case 'publication':
+      return config.publicSite?.sections?.showCatalog || config.publicSite?.sections?.showOffers ? 'partial' : 'empty'
     case 'preview':
       return 'complete'
     default:
@@ -180,14 +165,16 @@ function getTabHealth(config: BusinessConfig, tabId: string): 'complete' | 'part
 export default function BusinessConfigPage() {
   const { config, updateConfig, loading, error, resetConfig, persisted, organizationId, organizationName } = useBusinessConfig()
   const { user } = useAuth()
-  const { selectedOrganization } = useUserOrganizations(user?.id)
+  const { selectedOrganization, selectOrganization } = useUserOrganizations(user?.id)
   const isSuperAdmin = user?.role === 'SUPER_ADMIN'
+  const allOrganizationsQuery = useAllOrganizations({ enabled: isSuperAdmin })
   const { toast } = useToast()
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState('business')
+  const [activeTab, setActiveTab] = useState('content')
   const [saving, setSaving] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [localChanges, setLocalChanges] = useState<Partial<BusinessConfig>>({})
+  const previousOrganizationId = useRef<string | null>(null)
   const accessQuery = useCompanyAccess({
     permission: COMPANY_PERMISSIONS.MANAGE_COMPANY,
     feature: COMPANY_FEATURE_KEYS.ADMIN_PANEL,
@@ -203,11 +190,10 @@ export default function BusinessConfigPage() {
   const availableTabs = useMemo(
     () =>
       TAB_CONFIG.filter((tab) => {
-        if (tab.superAdminOnly && !isSuperAdmin) return false
-        if (tab.professionalOnly && !canUseCustomBranding) return false
+        if (tab.id === 'brand' && !canUseCustomBranding) return false
         return true
       }),
-    [canUseCustomBranding, isSuperAdmin]
+    [canUseCustomBranding]
   )
   const currentConfig = useMemo(() => mergeConfig(config, localChanges), [config, localChanges])
 
@@ -303,9 +289,19 @@ export default function BusinessConfigPage() {
 
   useEffect(() => {
     if (!availableTabs.some((tab) => tab.id === activeTab)) {
-      setActiveTab(availableTabs[0]?.id || 'business')
+      setActiveTab(availableTabs[0]?.id || 'content')
     }
   }, [activeTab, availableTabs])
+
+  useEffect(() => {
+    if (previousOrganizationId.current && previousOrganizationId.current !== organizationId) {
+      setLocalChanges({})
+      setHasUnsavedChanges(false)
+      setActiveTab('content')
+    }
+
+    previousOrganizationId.current = organizationId
+  }, [organizationId])
 
   useEffect(() => {
     if (!accessQuery.isLoading && accessQuery.data && !accessQuery.data.allowed) {
@@ -318,6 +314,16 @@ export default function BusinessConfigPage() {
     setHasUnsavedChanges(true)
     setLocalChanges((prev) => mergeConfig(prev as BusinessConfig, updates))
   }, [])
+
+  const handleOrganizationSelection = useCallback((organization: Organization) => {
+    if (hasUnsavedChanges && !window.confirm('Hay cambios sin guardar. Deseas cambiar de organizacion y descartarlos?')) {
+      return
+    }
+
+    setLocalChanges({})
+    setHasUnsavedChanges(false)
+    selectOrganization(organization)
+  }, [hasUnsavedChanges, selectOrganization])
 
   const handleSave = useCallback(async () => {
     if (!hasUnsavedChanges) return
@@ -333,19 +339,20 @@ export default function BusinessConfigPage() {
         setHasUnsavedChanges(false)
         setLocalChanges({})
         toast({
-          title: 'Configuracion guardada',
-          description: 'La pagina publica ya puede reflejar estos cambios.',
+          title: '✓ Configuración guardada',
+          description: 'Los cambios ya están activos en tu página pública.',
         })
       } else {
         toast({
-          title: 'Cambios guardados localmente',
-          description: 'Se sincronizaran cuando vuelva la conexion.',
+          title: 'Guardado localmente',
+          description: 'Se sincronizará con el servidor cuando vuelva la conexión.',
+          variant: 'default',
         })
       }
     } catch {
       toast({
         title: 'Error al guardar',
-        description: 'No se pudieron guardar los cambios.',
+        description: 'No se pudieron guardar los cambios. Intenta de nuevo.',
         variant: 'destructive',
       })
     } finally {
@@ -440,35 +447,39 @@ export default function BusinessConfigPage() {
 
   const renderActiveTab = () => {
     switch (activeTab) {
-      case 'business':
-        return <BusinessInfoForm config={currentConfig} onUpdate={handleConfigUpdate} />
-      case 'carousel':
-        return <CarouselEditor config={currentConfig} onUpdate={handleConfigUpdate} onSave={handleSave} />
-      case 'domain':
+      case 'content':
+        return (
+          <div className="space-y-6">
+            <BusinessInfoForm config={currentConfig} onUpdate={handleConfigUpdate} />
+            <PublicExperienceForm config={currentConfig} onUpdate={handleConfigUpdate} />
+            <CarouselEditor config={currentConfig} onUpdate={handleConfigUpdate} onSave={handleSave} />
+          </div>
+        )
+      case 'brand':
+        return <BrandingForm config={currentConfig} onUpdate={handleConfigUpdate} />
+      case 'contact':
+        return (
+          <div className="space-y-6">
+            <ContactForm config={currentConfig} onUpdate={handleConfigUpdate} />
+            <LegalInfoForm config={currentConfig} onUpdate={handleConfigUpdate} />
+          </div>
+        )
+      case 'commerce':
+        return <StoreSettingsForm config={currentConfig} onUpdate={handleConfigUpdate} />
+      case 'publication':
         return (
           <DomainSettingsForm
+            selectedOrganization={selectedOrganization}
             allowCustomDomain={canUseCustomBranding}
             planName={getCanonicalPlanDisplayName(currentPlan)}
             onUpdate={() => {
               toast({
-                title: 'Dominio actualizado',
+                title: 'Publicacion actualizada',
                 description: 'La configuracion publica se actualizo correctamente.',
               })
             }}
           />
         )
-      case 'legal':
-        return <LegalInfoForm config={currentConfig} onUpdate={handleConfigUpdate} />
-      case 'contact':
-        return <ContactForm config={currentConfig} onUpdate={handleConfigUpdate} />
-      case 'branding':
-        return <BrandingForm config={currentConfig} onUpdate={handleConfigUpdate} />
-      case 'public':
-        return <PublicExperienceForm config={currentConfig} onUpdate={handleConfigUpdate} />
-      case 'store':
-        return <StoreSettingsForm config={currentConfig} onUpdate={handleConfigUpdate} />
-      case 'system':
-        return <SystemSettingsForm config={currentConfig} onUpdate={handleConfigUpdate} />
       case 'preview':
         return <ConfigPreview config={currentConfig} onUpdate={handleConfigUpdate} onReset={handleReset} />
       default:
@@ -538,11 +549,11 @@ export default function BusinessConfigPage() {
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                   <Globe className="h-4 w-4" />
-                  Centro de pagina publica
+                  Centro de publicacion
                 </div>
-                <CardTitle className="text-3xl tracking-tight">Business Config</CardTitle>
+                <CardTitle className="text-3xl tracking-tight">Publicacion del negocio</CardTitle>
                 <CardDescription className="max-w-2xl text-sm">
-                  Gestiona la home, el carrusel, el contacto, el dominio y la presencia publica de tu negocio desde una sola superficie. Esta vista prioriza lo que realmente impacta en `/home`, `/catalog` y `/offers`.
+                  Gestiona contenido, marca, comercio y salida publica del negocio desde una sola superficie. Esta vista se enfoca en lo que realmente impacta en `/home`, `/catalog` y `/offers`.
                 </CardDescription>
               </div>
 
@@ -561,7 +572,7 @@ export default function BusinessConfigPage() {
                   ) : (
                     <>
                       <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                      Pendiente
+                      Pendiente de sincronizacion
                     </>
                   )}
                 </Badge>
@@ -580,7 +591,7 @@ export default function BusinessConfigPage() {
               <div className="rounded-2xl border border-border/70 bg-background/80 p-4">
                 <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Modulos publicos</p>
                 <p className="mt-2 text-sm font-semibold text-foreground">{activeModulesCount} activos</p>
-                <p className="mt-1 text-xs text-muted-foreground">Home, contacto, legales y señales comerciales</p>
+                <p className="mt-1 text-xs text-muted-foreground">Home, contacto, legales y senales comerciales</p>
               </div>
               <div className="rounded-2xl border border-border/70 bg-background/80 p-4">
                 <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Plan activo</p>
@@ -588,14 +599,20 @@ export default function BusinessConfigPage() {
                   {getCanonicalPlanDisplayName(currentPlan)}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {canUseCustomBranding ? 'Branding y dominio personalizado habilitados' : 'Contenido, carrusel y subdominio habilitados'}
+                  {canUseCustomBranding ? 'Branding avanzado y dominio personalizado habilitados' : 'Contenido, comercio y ruta publica habilitados'}
                 </p>
               </div>
             </div>
 
             {isSuperAdmin && (
               <Suspense fallback={<div className="rounded-lg border px-3 py-2 text-sm text-muted-foreground">Cargando organizaciones...</div>}>
-                <OrganizationSelectorForConfig />
+                <OrganizationSelectorForConfig
+                  organizations={allOrganizationsQuery.organizations}
+                  selectedOrganization={selectedOrganization}
+                  loading={allOrganizationsQuery.loading}
+                  error={allOrganizationsQuery.error}
+                  onSelectOrganization={handleOrganizationSelection}
+                />
               </Suspense>
             )}
           </CardHeader>
@@ -786,9 +803,9 @@ export default function BusinessConfigPage() {
                 <p className="mt-2 break-all text-sm font-semibold text-foreground">{publicBaseUrl || 'Sin ruta resuelta'}</p>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-xl border border-border/70 px-3 py-3">
-                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Subdominio</p>
-                  <p className="mt-2 text-sm font-medium text-foreground">{selectedOrganization?.subdomain || selectedOrganization?.slug || 'Pendiente'}</p>
+              <div className="rounded-xl border border-border/70 px-3 py-3">
+                  <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Identificador</p>
+                  <p className="mt-2 text-sm font-medium text-foreground">{selectedOrganization?.slug || selectedOrganization?.subdomain || 'Pendiente'}</p>
                 </div>
                 <div className="rounded-xl border border-border/70 px-3 py-3">
                   <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Dominio personalizado</p>

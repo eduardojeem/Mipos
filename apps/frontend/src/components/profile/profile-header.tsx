@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Mail, Phone, MapPin, Calendar, Camera, RefreshCw, Edit, Lock, Copy, Check, X } from 'lucide-react';
+import { Mail, Phone, MapPin, Calendar, Camera, RefreshCw, Edit, Lock, Copy, Check } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 
 interface ProfileHeaderProps {

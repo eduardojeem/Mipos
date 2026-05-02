@@ -23,14 +23,26 @@ export interface Organization {
  * - useUserOrganizations: obtiene solo las orgs del usuario actual
  * - useAllOrganizations: obtiene TODAS las orgs (requiere permisos de super admin)
  */
-export function useAllOrganizations() {
+interface UseAllOrganizationsOptions {
+  enabled?: boolean;
+}
+
+export function useAllOrganizations(options: UseAllOrganizationsOptions = {}) {
+  const { enabled = true } = options;
   const [organizations, setOrganizations] = useState<Organization[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(Boolean(enabled));
   const [error, setError] = useState<string | null>(null);
   
   const supabase = createClient();
 
   const fetchAllOrganizations = useCallback(async () => {
+    if (!enabled) {
+      setOrganizations([]);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     
@@ -38,7 +50,7 @@ export function useAllOrganizations() {
       // Fetch ALL organizations (requires super admin permissions)
       const { data: orgsData, error: orgsError } = await supabase
         .from('organizations')
-        .select('*')
+        .select('id,name,slug,subscription_plan,subscription_status,created_at,subdomain,custom_domain,branding,settings')
         .order('name');
 
       if (orgsError) {
@@ -64,10 +76,10 @@ export function useAllOrganizations() {
     } finally {
       setLoading(false);
     }
-  }, [supabase]);
+  }, [enabled, supabase]);
 
   useEffect(() => {
-    fetchAllOrganizations();
+    void fetchAllOrganizations();
   }, [fetchAllOrganizations]);
 
   return {

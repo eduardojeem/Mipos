@@ -1,5 +1,4 @@
 import {
-  Activity,
   Building2,
   CreditCard,
   FileText,
@@ -86,19 +85,10 @@ export const adminNavigationConfig: AdminNavItemConfig[] = [
     requireAdminPanel: true,
   },
   {
-    title: 'Seguridad',
+    title: 'Seguridad y Sesiones',
     href: '/admin/sessions',
     icon: Shield,
-    description: 'Seguridad, accesos y politicas',
-    section: 'security',
-    requiredRoles: ['ADMIN', 'SUPER_ADMIN', 'OWNER'],
-    requireAdminPanel: true,
-  },
-  {
-    title: 'Sesiones',
-    href: '/admin/sessions',
-    icon: Activity,
-    description: 'Sesiones activas y control de acceso',
+    description: 'Sesiones activas, accesos y control de seguridad',
     section: 'security',
     requiredRoles: ['ADMIN', 'SUPER_ADMIN', 'OWNER'],
     requireAdminPanel: true,

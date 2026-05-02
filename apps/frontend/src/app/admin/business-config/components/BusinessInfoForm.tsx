@@ -1,11 +1,12 @@
 'use client';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Building2, Clock3, Plus, Trash2 } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Building2, Tag, FileText } from 'lucide-react';
-import { BusinessConfig } from '@/types/business-config';
+import { Button } from '@/components/ui/button';
+import type { BusinessConfig } from '@/types/business-config';
 import { useConfigValidation } from '../hooks/useConfigValidation';
 
 interface BusinessInfoFormProps {
@@ -20,23 +21,40 @@ export function BusinessInfoForm({ config, onUpdate }: BusinessInfoFormProps) {
     onUpdate({ [field]: value });
   };
 
+  const updateBusinessHour = (index: number, value: string) => {
+    const nextHours = [...config.businessHours];
+    nextHours[index] = value;
+    onUpdate({ businessHours: nextHours });
+  };
+
+  const removeBusinessHour = (index: number) => {
+    onUpdate({ businessHours: config.businessHours.filter((_, itemIndex) => itemIndex !== index) });
+  };
+
+  const addBusinessHour = () => {
+    onUpdate({ businessHours: [...config.businessHours, ''] });
+  };
+
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Building2 className="h-5 w-5" />
-            Información Básica del Negocio
+            Identidad comercial
           </CardTitle>
+          <CardDescription>
+            Nombre visible, promesa principal y mensaje corto para la parte publica del negocio.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <CardContent className="space-y-5">
+          <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="businessName">Nombre del Negocio *</Label>
+              <Label htmlFor="businessName">Nombre del negocio *</Label>
               <Input
                 id="businessName"
                 value={config.businessName}
-                onChange={(e) => handleChange('businessName', e.target.value)}
+                onChange={(event) => handleChange('businessName', event.target.value)}
                 placeholder="Mi Negocio Paraguay"
                 className={getFieldError('businessName') ? 'border-red-500' : ''}
               />
@@ -46,22 +64,22 @@ export function BusinessInfoForm({ config, onUpdate }: BusinessInfoFormProps) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="tagline">Eslogan</Label>
+              <Label htmlFor="tagline">Tagline</Label>
               <Input
                 id="tagline"
                 value={config.tagline}
-                onChange={(e) => handleChange('tagline', e.target.value)}
+                onChange={(event) => handleChange('tagline', event.target.value)}
                 placeholder="Calidad y servicio de excelencia"
               />
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="heroTitle">Título Principal *</Label>
+            <Label htmlFor="heroTitle">Titulo principal *</Label>
             <Input
               id="heroTitle"
               value={config.heroTitle}
-              onChange={(e) => handleChange('heroTitle', e.target.value)}
+              onChange={(event) => handleChange('heroTitle', event.target.value)}
               placeholder="Bienvenidos a"
               className={getFieldError('heroTitle') ? 'border-red-500' : ''}
             />
@@ -71,23 +89,23 @@ export function BusinessInfoForm({ config, onUpdate }: BusinessInfoFormProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="heroHighlight">Texto Destacado</Label>
+            <Label htmlFor="heroHighlight">Texto destacado</Label>
             <Input
               id="heroHighlight"
               value={config.heroHighlight}
-              onChange={(e) => handleChange('heroHighlight', e.target.value)}
+              onChange={(event) => handleChange('heroHighlight', event.target.value)}
               placeholder="nuestro negocio"
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="heroDescription">Descripción Principal</Label>
+            <Label htmlFor="heroDescription">Descripcion principal</Label>
             <Textarea
               id="heroDescription"
               value={config.heroDescription}
-              onChange={(e) => handleChange('heroDescription', e.target.value)}
-              placeholder="Ofrecemos productos y servicios de la más alta calidad..."
-              rows={3}
+              onChange={(event) => handleChange('heroDescription', event.target.value)}
+              placeholder="Describe en una frase clara que vende el negocio y por que deberian comprar aqui."
+              rows={4}
             />
           </div>
         </CardContent>
@@ -96,88 +114,39 @@ export function BusinessInfoForm({ config, onUpdate }: BusinessInfoFormProps) {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Tag className="h-5 w-5" />
-            Horarios de Atención
+            <Clock3 className="h-5 w-5" />
+            Horarios publicados
           </CardTitle>
+          <CardDescription>
+            Estos horarios se usan en home, footer y contacto cuando el modulo esta visible.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-3">
-            {config.businessHours.map((hour, index) => (
-              <div key={index} className="flex items-center gap-2">
-                <Input
-                  value={hour}
-                  onChange={(e) => {
-                    const newHours = [...config.businessHours];
-                    newHours[index] = e.target.value;
-                    onUpdate({ businessHours: newHours });
-                  }}
-                  placeholder="Lunes - Viernes: 8:00 - 18:00"
-                />
-                {config.businessHours.length > 1 && (
-                  <button
-                    onClick={() => {
-                      const newHours = config.businessHours.filter((_, i) => i !== index);
-                      onUpdate({ businessHours: newHours });
-                    }}
-                    className="text-red-500 hover:text-red-700 px-2"
-                  >
-                    ×
-                  </button>
-                )}
-              </div>
-            ))}
-            <button
-              onClick={() => {
-                const newHours = [...config.businessHours, ''];
-                onUpdate({ businessHours: newHours });
-              }}
-              className="text-blue-600 hover:text-blue-800 text-sm"
-            >
-              + Agregar horario
-            </button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Documentos Legales
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="termsUrl">URL Términos y Condiciones</Label>
+        <CardContent className="space-y-3">
+          {config.businessHours.map((hour, index) => (
+            <div key={index} className="flex items-center gap-2">
               <Input
-                id="termsUrl"
-                value={config.legalDocuments?.termsUrl || ''}
-                onChange={(e) => onUpdate({ 
-                  legalDocuments: { 
-                    ...config.legalDocuments, 
-                    termsUrl: e.target.value 
-                  } 
-                })}
-                placeholder="https://minegocio.com.py/terminos"
+                value={hour}
+                onChange={(event) => updateBusinessHour(index, event.target.value)}
+                placeholder="Lunes a Viernes: 08:00 a 18:00"
               />
+              {config.businessHours.length > 1 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="shrink-0"
+                  onClick={() => removeBusinessHour(index)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
             </div>
+          ))}
 
-            <div className="space-y-2">
-              <Label htmlFor="privacyUrl">URL Política de Privacidad</Label>
-              <Input
-                id="privacyUrl"
-                value={config.legalDocuments?.privacyUrl || ''}
-                onChange={(e) => onUpdate({ 
-                  legalDocuments: { 
-                    ...config.legalDocuments, 
-                    privacyUrl: e.target.value 
-                  } 
-                })}
-                placeholder="https://minegocio.com.py/privacidad"
-              />
-            </div>
-          </div>
+          <Button type="button" variant="outline" className="gap-2" onClick={addBusinessHour}>
+            <Plus className="h-4 w-4" />
+            Agregar horario
+          </Button>
         </CardContent>
       </Card>
     </div>

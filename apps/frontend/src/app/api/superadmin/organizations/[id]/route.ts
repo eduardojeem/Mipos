@@ -73,12 +73,18 @@ async function promoteOrganizationAdminsForPaidPlan(
     .select('id,is_active')
     .eq('user_id', targetMembership.user_id)
     .eq('role_id', adminRole.id)
+    .eq('organization_id', organizationId)
     .maybeSingle();
 
   if (!existingUserRole) {
     await adminClient.from('user_roles').upsert(
-      [{ user_id: targetMembership.user_id, role_id: adminRole.id, is_active: true }],
-      { onConflict: 'user_id,role_id' }
+      [{
+        user_id: targetMembership.user_id,
+        role_id: adminRole.id,
+        organization_id: organizationId,
+        is_active: true,
+      }],
+      { onConflict: 'user_id,role_id,organization_id' }
     );
     return;
   }

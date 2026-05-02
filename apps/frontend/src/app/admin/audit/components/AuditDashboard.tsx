@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { AlertTriangle, Calendar, Download, Filter, RefreshCw, Search, Shield } from 'lucide-react'
-import { COMPANY_FEATURE_KEYS, COMPANY_PERMISSIONS } from '@/lib/company-access'
+import { COMPANY_PERMISSIONS } from '@/lib/company-access'
 import { useCompanyAccess } from '@/hooks/use-company-access'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -35,11 +35,13 @@ interface AuditStats {
 export function AuditDashboard({ className }: { className?: string }) {
   const access = useCompanyAccess({
     permission: COMPANY_PERMISSIONS.VIEW_REPORTS,
-    feature: COMPANY_FEATURE_KEYS.AUDIT_LOGS,
   })
   const [logs, setLogs] = useState<AuditLogEntry[]>([])
   const [stats, setStats] = useState<AuditStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
+  const [totalLogs, setTotalLogs] = useState(0)
+  const pageSize = 20
   const [filters, setFilters] = useState({
     search: '',
     action: 'all',
@@ -49,7 +51,10 @@ export function AuditDashboard({ className }: { className?: string }) {
   const [debouncedSearch, setDebouncedSearch] = useState('')
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => setDebouncedSearch(filters.search.trim()), 250)
+    const timeout = window.setTimeout(() => {
+      setDebouncedSearch(filters.search.trim())
+      setPage(1) // Reset page on search change
+    }, 250)
     return () => window.clearTimeout(timeout)
   }, [filters.search])
 
@@ -58,7 +63,7 @@ export function AuditDashboard({ className }: { className?: string }) {
     setLoading(true)
 
     try {
-      const params = new URLSearchParams({ page: '1', limit: '20' })
+      const params = new URLSearchParams({ page: String(page), limit: String(pageSize) })
       if (debouncedSearch) params.set('q', debouncedSearch)
       if (filters.action !== 'all') params.set('actionEq', filters.action)
       if (filters.startDate) params.set('startDate', filters.startDate)
@@ -85,6 +90,7 @@ export function AuditDashboard({ className }: { className?: string }) {
         details: row.details || {},
         createdAt: String(row.created_at || row.timestamp || new Date().toISOString()),
       })))
+      setTotalLogs(Number(logsPayload.total || logsPayload.data?.length || 0))
       setStats({
         total: Number(statsPayload.total) || 0,
         byAction: Array.isArray(statsPayload.byAction) ? statsPayload.byAction : [],
@@ -97,7 +103,7 @@ export function AuditDashboard({ className }: { className?: string }) {
     } finally {
       setLoading(false)
     }
-  }, [access.data?.allowed, debouncedSearch, filters.action, filters.endDate, filters.startDate])
+  }, [access.data?.allowed, debouncedSearch, filters.action, filters.endDate, filters.startDate, page])
 
   useEffect(() => { loadAudit() }, [loadAudit])
 
@@ -300,6 +306,32 @@ export function AuditDashboard({ className }: { className?: string }) {
               </div>
             </div>
           ))}
+          {/* Pagination */}
+          {totalLogs > pageSize && (
+            <div className="flex items-center justify-between border-t border-border/50 pt-4 mt-4">
+              <p className="text-sm text-muted-foreground">
+                Mostrando {(page - 1) * pageSize + 1}-{Math.min(page * pageSize, totalLogs)} de {totalLogs}
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page <= 1 || loading}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  Anterior
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page * pageSize >= totalLogs || loading}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Siguiente
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

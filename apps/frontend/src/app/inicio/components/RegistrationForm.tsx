@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { AlertCircle, CheckCircle2, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,27 @@ interface RegistrationFormProps {
 
 type RegistrationField = 'name' | 'email' | 'organizationName' | 'password' | 'confirmPassword';
 
+function isValidEmail(email: string): boolean {
+  return /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/.test(email);
+}
+
+function getPasswordStrength(password: string): { score: number; label: string; color: string } {
+  if (!password) return { score: 0, label: '', color: '' };
+
+  let score = 0;
+  if (password.length >= 6) score += 1;
+  if (password.length >= 8) score += 1;
+  if (/[A-Z]/.test(password)) score += 1;
+  if (/[0-9]/.test(password)) score += 1;
+  if (/[^A-Za-z0-9]/.test(password)) score += 1;
+
+  if (score <= 1) return { score, label: 'Muy debil', color: 'bg-red-500' };
+  if (score === 2) return { score, label: 'Debil', color: 'bg-orange-500' };
+  if (score === 3) return { score, label: 'Aceptable', color: 'bg-amber-400' };
+  if (score === 4) return { score, label: 'Buena', color: 'bg-emerald-400' };
+  return { score, label: 'Fuerte', color: 'bg-emerald-500' };
+}
+
 export function RegistrationForm({ selectedPlan, onSuccess }: RegistrationFormProps) {
   const [formData, setFormData] = useState({
     name: '',
@@ -32,35 +53,44 @@ export function RegistrationForm({ selectedPlan, onSuccess }: RegistrationFormPr
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
-  const validateEmail = (email: string) => {
-    const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return regex.test(email);
-  };
+  const passwordStrength = useMemo(
+    () => getPasswordStrength(formData.password),
+    [formData.password]
+  );
+  const isFreePlan = selectedPlan.priceMonthly === 0 || selectedPlan.slug === 'free';
 
   const validateForm = () => {
     const errors: Record<string, string> = {};
 
     if (!formData.name.trim()) {
       errors.name = 'El nombre es requerido';
+    } else if (formData.name.trim().length < 2) {
+      errors.name = 'El nombre debe tener al menos 2 caracteres';
     }
 
     if (!formData.email.trim()) {
       errors.email = 'El email es requerido';
-    } else if (!validateEmail(formData.email)) {
-      errors.email = 'Email invalido';
+    } else if (!isValidEmail(formData.email.trim())) {
+      errors.email = 'Ingresa un email valido (ej: nombre@empresa.com)';
     }
 
     if (!formData.organizationName.trim()) {
-      errors.organizationName = 'El nombre de la organizacion es requerido';
+      errors.organizationName = 'El nombre del negocio es requerido';
+    } else if (formData.organizationName.trim().length < 2) {
+      errors.organizationName = 'El nombre debe tener al menos 2 caracteres';
     }
 
     if (!formData.password) {
       errors.password = 'La contrasena es requerida';
     } else if (formData.password.length < 6) {
-      errors.password = 'La contrasena debe tener al menos 6 caracteres';
+      errors.password = 'Minimo 6 caracteres';
+    } else if (passwordStrength.score < 2) {
+      errors.password = 'Agrega mayusculas, numeros o simbolos para mayor seguridad';
     }
 
-    if (formData.password !== formData.confirmPassword) {
+    if (!formData.confirmPassword) {
+      errors.confirmPassword = 'Confirma tu contrasena';
+    } else if (formData.password !== formData.confirmPassword) {
       errors.confirmPassword = 'Las contrasenas no coinciden';
     }
 
@@ -79,17 +109,12 @@ export function RegistrationForm({ selectedPlan, onSuccess }: RegistrationFormPr
       });
     }
 
-    if (error) {
-      setError(null);
-    }
+    if (error) setError(null);
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-
-    if (!validateForm()) {
-      return;
-    }
+    if (!validateForm()) return;
 
     setLoading(true);
     setError(null);
@@ -100,190 +125,246 @@ export function RegistrationForm({ selectedPlan, onSuccess }: RegistrationFormPr
 
       const response = await fetch('/api/auth/register', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: formData.name,
-          email: formData.email,
-          organizationName: formData.organizationName,
+          name: formData.name.trim(),
+          email: formData.email.trim().toLowerCase(),
+          organizationName: formData.organizationName.trim(),
           password: formData.password,
           planSlug: selectedPlan.slug,
         }),
       });
 
-      const data = await response.json();
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Error al crear la cuenta');
+      let data: Record<string, unknown> = {};
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error('Error de conexion. Verifica tu internet e intenta de nuevo.');
       }
 
-      toast.success('Cuenta creada exitosamente', {
-        description: data.message || 'Bienvenido a MiPOS',
+      if (!response.ok || !data.success) {
+        const serverError = String(data.error || '');
+        if (serverError.includes('already registered') || serverError.includes('ya esta registrado')) {
+          throw new Error('Este email ya tiene una cuenta. Querias iniciar sesion?');
+        }
+        throw new Error(serverError || 'Error al crear la cuenta');
+      }
+
+      toast.success('Cuenta creada', {
+        description: String(data.message || 'Bienvenido a MiPOS'),
       });
 
-      window.setTimeout(() => {
-        onSuccess();
-      }, 1000);
+      window.setTimeout(() => onSuccess(), 1000);
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error
+      const message = err instanceof Error
         ? err.message
-        : 'Error al crear la cuenta. Por favor intenta de nuevo.';
-
-      console.error('Registration error:', err);
-      setError(errorMessage);
-      toast.error('Error al registrarse', {
-        description: errorMessage,
-      });
+        : 'Error inesperado. Intenta de nuevo en unos segundos.';
+      setError(message);
+      toast.error('Error al registrarse', { description: message });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {error ? (
+    <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+      {error && (
         <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
+          <AlertCircle className="h-4 w-4" aria-hidden="true" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
-      ) : null}
+      )}
 
-      <div className="space-y-2">
-        <Label htmlFor="name" className="text-white">
+      <div className="space-y-1.5">
+        <Label htmlFor="reg-name" className="text-sm text-white">
           Nombre completo <span className="text-red-400">*</span>
         </Label>
         <Input
-          id="name"
+          id="reg-name"
           type="text"
+          autoComplete="name"
           placeholder="Juan Perez"
           value={formData.name}
-          onChange={(event) => handleInputChange('name', event.target.value)}
+          onChange={(e) => handleInputChange('name', e.target.value)}
           disabled={loading}
-          className={`bg-white/5 border-white/10 text-white placeholder:text-gray-500 ${validationErrors.name ? 'border-red-500' : ''}`}
+          aria-invalid={!!validationErrors.name}
+          aria-describedby={validationErrors.name ? 'reg-name-error' : undefined}
+          className={`border-white/10 bg-white/5 text-white placeholder:text-slate-500 focus:ring-2 focus:ring-emerald-400/50 ${validationErrors.name ? 'border-red-500' : ''}`}
         />
-        {validationErrors.name ? (
-          <p className="text-sm text-red-500">{validationErrors.name}</p>
-        ) : null}
+        {validationErrors.name && (
+          <p id="reg-name-error" className="text-xs text-red-400" role="alert">{validationErrors.name}</p>
+        )}
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="email" className="text-white">
+      <div className="space-y-1.5">
+        <Label htmlFor="reg-email" className="text-sm text-white">
           Email <span className="text-red-400">*</span>
         </Label>
         <Input
-          id="email"
+          id="reg-email"
           type="email"
-          placeholder="tu@email.com"
+          autoComplete="email"
+          placeholder="tu@empresa.com"
           value={formData.email}
-          onChange={(event) => handleInputChange('email', event.target.value)}
+          onChange={(e) => handleInputChange('email', e.target.value)}
           disabled={loading}
-          className={`bg-white/5 border-white/10 text-white placeholder:text-gray-500 ${validationErrors.email ? 'border-red-500' : ''}`}
+          aria-invalid={!!validationErrors.email}
+          aria-describedby={validationErrors.email ? 'reg-email-error' : undefined}
+          className={`border-white/10 bg-white/5 text-white placeholder:text-slate-500 focus:ring-2 focus:ring-emerald-400/50 ${validationErrors.email ? 'border-red-500' : ''}`}
         />
-        {validationErrors.email ? (
-          <p className="text-sm text-red-500">{validationErrors.email}</p>
-        ) : null}
+        {validationErrors.email && (
+          <p id="reg-email-error" className="text-xs text-red-400" role="alert">{validationErrors.email}</p>
+        )}
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="organizationName" className="text-white">
+      <div className="space-y-1.5">
+        <Label htmlFor="reg-org" className="text-sm text-white">
           Nombre de tu negocio <span className="text-red-400">*</span>
         </Label>
         <Input
-          id="organizationName"
+          id="reg-org"
           type="text"
+          autoComplete="organization"
           placeholder="Mi Tienda"
           value={formData.organizationName}
-          onChange={(event) => handleInputChange('organizationName', event.target.value)}
+          onChange={(e) => handleInputChange('organizationName', e.target.value)}
           disabled={loading}
-          className={`bg-white/5 border-white/10 text-white placeholder:text-gray-500 ${validationErrors.organizationName ? 'border-red-500' : ''}`}
+          aria-invalid={!!validationErrors.organizationName}
+          aria-describedby={validationErrors.organizationName ? 'reg-org-error' : undefined}
+          className={`border-white/10 bg-white/5 text-white placeholder:text-slate-500 focus:ring-2 focus:ring-emerald-400/50 ${validationErrors.organizationName ? 'border-red-500' : ''}`}
         />
-        {validationErrors.organizationName ? (
-          <p className="text-sm text-red-500">{validationErrors.organizationName}</p>
-        ) : null}
+        {validationErrors.organizationName && (
+          <p id="reg-org-error" className="text-xs text-red-400" role="alert">{validationErrors.organizationName}</p>
+        )}
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="password" className="text-white">
+      <div className="space-y-1.5">
+        <Label htmlFor="reg-password" className="text-sm text-white">
           Contrasena <span className="text-red-400">*</span>
         </Label>
         <div className="relative">
           <Input
-            id="password"
+            id="reg-password"
             type={showPassword ? 'text' : 'password'}
+            autoComplete="new-password"
             placeholder="Minimo 6 caracteres"
             value={formData.password}
-            onChange={(event) => handleInputChange('password', event.target.value)}
+            onChange={(e) => handleInputChange('password', e.target.value)}
             disabled={loading}
-            className={`pr-10 bg-white/5 border-white/10 text-white placeholder:text-gray-500 ${validationErrors.password ? 'border-red-500' : ''}`}
+            aria-invalid={!!validationErrors.password}
+            aria-describedby="reg-password-strength"
+            className={`border-white/10 bg-white/5 pr-10 text-white placeholder:text-slate-500 focus:ring-2 focus:ring-emerald-400/50 ${validationErrors.password ? 'border-red-500' : ''}`}
           />
           <button
             type="button"
-            onClick={() => setShowPassword((current) => !current)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200"
+            onClick={() => setShowPassword((c) => !c)}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded text-slate-400 hover:text-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
             aria-label={showPassword ? 'Ocultar contrasena' : 'Mostrar contrasena'}
           >
-            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            {showPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
           </button>
         </div>
-        {validationErrors.password ? (
-          <p className="text-sm text-red-500">{validationErrors.password}</p>
-        ) : null}
+        {formData.password && (
+          <div id="reg-password-strength" className="space-y-1">
+            <div className="flex gap-1">
+              {[1, 2, 3, 4, 5].map((level) => (
+                <div
+                  key={level}
+                  className={`h-1 flex-1 rounded-full transition-colors ${
+                    level <= passwordStrength.score ? passwordStrength.color : 'bg-white/10'
+                  }`}
+                />
+              ))}
+            </div>
+            <p className="text-[11px] text-slate-400">
+              Seguridad: <span className="font-medium text-slate-300">{passwordStrength.label}</span>
+            </p>
+          </div>
+        )}
+        {validationErrors.password && (
+          <p className="text-xs text-red-400" role="alert">{validationErrors.password}</p>
+        )}
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="confirmPassword" className="text-white">
+      <div className="space-y-1.5">
+        <Label htmlFor="reg-confirm" className="text-sm text-white">
           Confirmar contrasena <span className="text-red-400">*</span>
         </Label>
         <div className="relative">
           <Input
-            id="confirmPassword"
+            id="reg-confirm"
             type={showConfirmPassword ? 'text' : 'password'}
+            autoComplete="new-password"
             placeholder="Repite tu contrasena"
             value={formData.confirmPassword}
-            onChange={(event) => handleInputChange('confirmPassword', event.target.value)}
+            onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
             disabled={loading}
-            className={`pr-10 bg-white/5 border-white/10 text-white placeholder:text-gray-500 ${validationErrors.confirmPassword ? 'border-red-500' : ''}`}
+            aria-invalid={!!validationErrors.confirmPassword}
+            aria-describedby={validationErrors.confirmPassword ? 'reg-confirm-error' : undefined}
+            className={`border-white/10 bg-white/5 pr-10 text-white placeholder:text-slate-500 focus:ring-2 focus:ring-emerald-400/50 ${validationErrors.confirmPassword ? 'border-red-500' : ''}`}
           />
           <button
             type="button"
-            onClick={() => setShowConfirmPassword((current) => !current)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200"
-            aria-label={showConfirmPassword ? 'Ocultar confirmacion de contrasena' : 'Mostrar confirmacion de contrasena'}
+            onClick={() => setShowConfirmPassword((c) => !c)}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded text-slate-400 hover:text-white focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            aria-label={showConfirmPassword ? 'Ocultar confirmacion' : 'Mostrar confirmacion'}
           >
-            {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            {showConfirmPassword ? <EyeOff className="h-4 w-4" aria-hidden="true" /> : <Eye className="h-4 w-4" aria-hidden="true" />}
           </button>
         </div>
-        {validationErrors.confirmPassword ? (
-          <p className="text-sm text-red-500">{validationErrors.confirmPassword}</p>
-        ) : null}
+        {formData.confirmPassword && formData.password === formData.confirmPassword && (
+          <p className="flex items-center gap-1 text-[11px] text-emerald-400">
+            <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+            Las contrasenas coinciden
+          </p>
+        )}
+        {validationErrors.confirmPassword && (
+          <p id="reg-confirm-error" className="text-xs text-red-400" role="alert">{validationErrors.confirmPassword}</p>
+        )}
       </div>
 
       <Button
         type="submit"
         disabled={loading}
-        className="gradient-primary w-full rounded-lg px-4 py-6 text-lg text-white shadow-[0_18px_40px_-20px_rgba(16,185,129,0.95)] transition-opacity hover:opacity-95"
+        className="gradient-primary w-full rounded-lg px-4 py-6 text-lg text-white shadow-[0_18px_40px_-20px_rgba(16,185,129,0.95)] transition-opacity hover:opacity-95 focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 focus:ring-offset-slate-950"
       >
         {loading ? (
           <>
-            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+            <Loader2 className="mr-2 h-5 w-5 animate-spin" aria-hidden="true" />
             Creando cuenta...
           </>
         ) : (
           <>
-            <CheckCircle2 className="mr-2 h-5 w-5" />
-            Crear mi cuenta
+            <CheckCircle2 className="mr-2 h-5 w-5" aria-hidden="true" />
+            {isFreePlan ? 'Crear gratis' : 'Crear mi cuenta'}
           </>
         )}
       </Button>
 
-      <p className="text-center text-sm text-gray-400">
+      {isFreePlan ? (
+        <p className="text-center text-[11px] text-emerald-300">
+          Empiezas sin tarjeta y puedes mejorar el plan cuando quieras.
+        </p>
+      ) : (
+        <p className="text-center text-[11px] text-slate-500">
+          Puedes cambiar este plan mas adelante desde suscripcion.
+        </p>
+      )}
+
+      <p className="text-center text-xs text-slate-500">
+        Ya tienes cuenta?{' '}
+        <Link href="/auth/signin" className="font-medium text-emerald-300 underline transition-colors hover:text-emerald-200">
+          Inicia sesion
+        </Link>
+      </p>
+
+      <p className="text-center text-[11px] text-slate-600">
         Al crear una cuenta, aceptas nuestros{' '}
-        <Link href="/terminos" className="text-emerald-300 underline transition-colors hover:text-emerald-200">
+        <Link href="/inicio" className="text-slate-400 underline hover:text-slate-300">
           Terminos de Servicio
         </Link>{' '}
         y{' '}
-        <Link href="/privacidad" className="text-emerald-300 underline transition-colors hover:text-emerald-200">
+        <Link href="/inicio" className="text-slate-400 underline hover:text-slate-300">
           Politica de Privacidad
         </Link>
       </p>

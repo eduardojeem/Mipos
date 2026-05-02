@@ -8,6 +8,15 @@ import { getCachedConfig, setCachedConfig } from './cache'
 import { requireCompanyAccess } from '@/app/api/_utils/company-authorization'
 import { COMPANY_FEATURE_KEYS, COMPANY_PERMISSIONS } from '@/lib/company-access'
 
+function sanitizeBusinessConfigForAccess(config: BusinessConfig, isSuperAdmin: boolean): BusinessConfig {
+  if (isSuperAdmin) return config
+
+  return {
+    ...config,
+    systemSettings: undefined,
+  }
+}
+
 async function requireBusinessConfigAccess(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const orgFilter = searchParams.get('organizationId') || searchParams.get('organization_id')
@@ -18,6 +27,11 @@ async function requireBusinessConfigAccess(request: NextRequest) {
     feature: COMPANY_FEATURE_KEYS.ADMIN_PANEL,
     allowedRoles: ['OWNER', 'ADMIN'],
   })
+}
+
+type SettingsValueRow = {
+  value?: BusinessConfig
+  updated_at?: string | null
 }
 
 export async function GET(request: NextRequest) {
@@ -34,12 +48,15 @@ export async function GET(request: NextRequest) {
 
     const cached = getCachedConfig(organizationId)
     if (cached) {
-      return NextResponse.json({ success: true, config: cached })
+      return NextResponse.json({
+        success: true,
+        config: sanitizeBusinessConfigForAccess(cached, access.context.isSuperAdmin),
+      })
     }
 
     const supabase = await createAdminClient()
-    const { data, error } = await supabase
-      .from('settings')
+    const settingsTable = (supabase as any).from('settings')
+    const { data, error } = await settingsTable
       .select('value')
       .eq('key', 'business_config')
       .eq('organization_id', organizationId)
@@ -50,10 +67,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Error al obtener configuracion' }, { status: 500 })
     }
 
-    const config = data?.value || defaultBusinessConfig
+    const config = ((data as SettingsValueRow | null)?.value || defaultBusinessConfig) as BusinessConfig
     setCachedConfig(organizationId, config)
 
-    return NextResponse.json({ success: true, config })
+    return NextResponse.json({
+      success: true,
+      config: sanitizeBusinessConfigForAccess(config, access.context.isSuperAdmin),
+    })
   } catch (error: any) {
     console.error('Error in GET /api/business-config:', error)
     return NextResponse.json(
@@ -76,6 +96,15 @@ export async function PUT(request: NextRequest) {
     }
 
     const raw = await request.json()
+    const supabase = await createAdminClient()
+    const settingsTable = (supabase as any).from('settings')
+    const { data: prevData } = await settingsTable
+      .select('value')
+      .eq('key', 'business_config')
+      .eq('organization_id', organizationId)
+      .single()
+
+    const prevConfig = ((prevData as SettingsValueRow | null)?.value || null) as BusinessConfig | null
     const s = (v: any, d = '') => (typeof v === 'string' ? v : d)
     const n = (v: any, d: number) => {
       const num = Number(v)
@@ -83,27 +112,29 @@ export async function PUT(request: NextRequest) {
     }
     const b = (v: any, d: boolean) => (typeof v === 'boolean' ? v : d)
     const arrStr = (v: any, d: string[]) => (Array.isArray(v) ? v.filter((x: any) => typeof x === 'string') : d)
-    const systemSettings: NonNullable<BusinessConfig['systemSettings']> = raw?.systemSettings ? {
-      autoBackup: b(raw?.systemSettings?.autoBackup, defaultBusinessConfig.systemSettings!.autoBackup),
-      backupFrequency: s(raw?.systemSettings?.backupFrequency, defaultBusinessConfig.systemSettings!.backupFrequency) as NonNullable<BusinessConfig['systemSettings']>['backupFrequency'],
-      maxUsers: n(raw?.systemSettings?.maxUsers, defaultBusinessConfig.systemSettings!.maxUsers),
-      sessionTimeout: n(raw?.systemSettings?.sessionTimeout, defaultBusinessConfig.systemSettings!.sessionTimeout),
-      enableLogging: b(raw?.systemSettings?.enableLogging, defaultBusinessConfig.systemSettings!.enableLogging),
-      logLevel: s(raw?.systemSettings?.logLevel, defaultBusinessConfig.systemSettings!.logLevel) as NonNullable<BusinessConfig['systemSettings']>['logLevel'],
+    const baselineSystemSettings = prevConfig?.systemSettings || defaultBusinessConfig.systemSettings!
+    const systemSettings: NonNullable<BusinessConfig['systemSettings']> =
+      access.context.isSuperAdmin && raw?.systemSettings ? {
+      autoBackup: b(raw?.systemSettings?.autoBackup, baselineSystemSettings.autoBackup),
+      backupFrequency: s(raw?.systemSettings?.backupFrequency, baselineSystemSettings.backupFrequency) as NonNullable<BusinessConfig['systemSettings']>['backupFrequency'],
+      maxUsers: n(raw?.systemSettings?.maxUsers, baselineSystemSettings.maxUsers),
+      sessionTimeout: n(raw?.systemSettings?.sessionTimeout, baselineSystemSettings.sessionTimeout),
+      enableLogging: b(raw?.systemSettings?.enableLogging, baselineSystemSettings.enableLogging),
+      logLevel: s(raw?.systemSettings?.logLevel, baselineSystemSettings.logLevel) as NonNullable<BusinessConfig['systemSettings']>['logLevel'],
       security: {
-        requireStrongPasswords: b(raw?.systemSettings?.security?.requireStrongPasswords, defaultBusinessConfig.systemSettings!.security.requireStrongPasswords),
-        enableTwoFactor: b(raw?.systemSettings?.security?.enableTwoFactor, defaultBusinessConfig.systemSettings!.security.enableTwoFactor),
-        maxLoginAttempts: n(raw?.systemSettings?.security?.maxLoginAttempts, defaultBusinessConfig.systemSettings!.security.maxLoginAttempts),
-        lockoutDuration: n(raw?.systemSettings?.security?.lockoutDuration, defaultBusinessConfig.systemSettings!.security.lockoutDuration),
+        requireStrongPasswords: b(raw?.systemSettings?.security?.requireStrongPasswords, baselineSystemSettings.security.requireStrongPasswords),
+        enableTwoFactor: b(raw?.systemSettings?.security?.enableTwoFactor, baselineSystemSettings.security.enableTwoFactor),
+        maxLoginAttempts: n(raw?.systemSettings?.security?.maxLoginAttempts, baselineSystemSettings.security.maxLoginAttempts),
+        lockoutDuration: n(raw?.systemSettings?.security?.lockoutDuration, baselineSystemSettings.security.lockoutDuration),
       },
       email: {
         provider: 'smtp',
-        smtpHost: s(raw?.systemSettings?.email?.smtpHost, ''),
-        smtpPort: n(raw?.systemSettings?.email?.smtpPort, 587),
-        smtpUser: s(raw?.systemSettings?.email?.smtpUser, ''),
-        smtpPassword: s(raw?.systemSettings?.email?.smtpPassword),
+        smtpHost: s(raw?.systemSettings?.email?.smtpHost, baselineSystemSettings.email.smtpHost),
+        smtpPort: n(raw?.systemSettings?.email?.smtpPort, baselineSystemSettings.email.smtpPort),
+        smtpUser: s(raw?.systemSettings?.email?.smtpUser, baselineSystemSettings.email.smtpUser),
+        smtpPassword: s(raw?.systemSettings?.email?.smtpPassword, baselineSystemSettings.email.smtpPassword || ''),
       },
-    } : (defaultBusinessConfig.systemSettings as NonNullable<BusinessConfig['systemSettings']>)
+    } : baselineSystemSettings
 
     const body: BusinessConfigUpdate = {
       businessName: s(raw?.businessName, defaultBusinessConfig.businessName),
@@ -264,15 +295,6 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: false, errors: validation.errors }, { status: 400 })
     }
 
-    const supabase = await createAdminClient()
-    const { data: prevData } = await supabase
-      .from('settings')
-      .select('value')
-      .eq('key', 'business_config')
-      .eq('organization_id', organizationId)
-      .single()
-
-    const prevConfig: BusinessConfig | null = prevData?.value || null
     const canUseCustomBranding =
       access.context.isSuperAdmin || access.context.features.includes(COMPANY_FEATURE_KEYS.CUSTOM_BRANDING)
 
@@ -280,8 +302,7 @@ export async function PUT(request: NextRequest) {
       body.branding = prevConfig?.branding || defaultBusinessConfig.branding
     }
 
-    const { error } = await supabase
-      .from('settings')
+    const { error } = await settingsTable
       .upsert(
         {
           key: 'business_config',
@@ -299,8 +320,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Error al actualizar configuracion' }, { status: 500 })
     }
 
-    const { data: persistedRow, error: persistedError } = await supabase
-      .from('settings')
+    const { data: persistedRow, error: persistedError } = await settingsTable
       .select('value,updated_at')
       .eq('key', 'business_config')
       .eq('organization_id', organizationId)
@@ -311,7 +331,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'La configuracion se guardo pero no se pudo verificar' }, { status: 500 })
     }
 
-    const persistedConfig = (persistedRow?.value || body) as BusinessConfig
+    const persistedConfig = (((persistedRow as SettingsValueRow | null)?.value) || body) as BusinessConfig
     setCachedConfig(organizationId, persistedConfig)
 
     await logAudit(
@@ -331,9 +351,9 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      config: persistedConfig,
+      config: sanitizeBusinessConfigForAccess(persistedConfig, access.context.isSuperAdmin),
       persisted: true,
-      updatedAt: persistedRow?.updated_at || new Date().toISOString(),
+      updatedAt: (persistedRow as SettingsValueRow | null)?.updated_at || new Date().toISOString(),
     })
   } catch (error: any) {
     console.error('Error in PUT /api/business-config:', error)

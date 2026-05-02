@@ -1,31 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
-interface TwoFactorSetup {
-  secret: string;
-  qrCodeUrl: string;
-  backupCodes: string[];
-}
-
 interface TwoFactorStatus {
   enabled: boolean;
   backupCodes: string[];
   lastUsed?: string;
   method: 'app' | 'sms' | null;
+  available?: boolean;
+  maintenanceMessage?: string;
 }
 
 // Generar códigos de respaldo
-function generateBackupCodes(): string[] {
-  const codes: string[] = [];
-  for (let i = 0; i < 10; i++) {
-    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-    codes.push(code);
-  }
-  return codes;
-}
-
 // GET - Obtener estado actual del 2FA
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const supabase = await createClient();
     
@@ -78,7 +65,9 @@ export async function GET(request: NextRequest) {
       enabled: metadata?.two_factor_enabled || false,
       backupCodes: metadata?.two_factor_backup_codes || [],
       lastUsed: metadata?.two_factor_last_used,
-      method: metadata?.two_factor_enabled ? 'app' : null
+      method: metadata?.two_factor_enabled ? 'app' : null,
+      available: false,
+      maintenanceMessage: 'La configuracion de 2FA esta temporalmente deshabilitada mientras se migra la implementacion.'
     };
 
     return NextResponse.json({
@@ -108,7 +97,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { action } = body;
+    const { action: _action } = body;
 
     // TEMPORAL: 2FA deshabilitado para optimización de bundle
     // TODO: Implementar con alternativa ligera a speakeasy
@@ -188,8 +177,6 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Desactivar 2FA
-    const now = new Date().toISOString();
-    
     // Comentado temporalmente hasta configurar la tabla users en Supabase
     /*
     try {

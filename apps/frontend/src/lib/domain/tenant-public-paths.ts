@@ -11,6 +11,7 @@ const RESERVED_TENANT_PATH_SEGMENTS = new Set([
   'orders',
   'inicio',
   'empresas',
+  'onboarding',
   'signin',
   'signup',
   'signout',

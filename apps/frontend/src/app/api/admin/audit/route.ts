@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
 import { ADMIN_API_ACCESS, requireAdminApiAccess } from '@/app/api/admin/_utils/access'
 import { isSupabaseActive } from '@/lib/env'
 
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Supabase no esta activo.' }, { status: 503 })
     }
 
-    const supabase = await createClient()
+    const supabase = await createAdminClient()
     const companyId = access.context.companyId
 
     const applyFilters = (query: any) => {

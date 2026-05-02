@@ -87,14 +87,25 @@ type ApiErrorLike = {
   message?: string;
   response?: {
     status?: number;
-    data?: unknown;
+    data?: {
+      error?: string;
+      message?: string;
+    } | unknown;
   };
 };
 
+function extractApiErrorMessage(error: ApiErrorLike, fallback: string) {
+  const responseData = error.response?.data as { error?: string; message?: string } | undefined
+  return (
+    responseData?.error ||
+    responseData?.message ||
+    error.message ||
+    fallback
+  )
+}
+
 // API Service Class
 export class AdminApiService {
-  private static cache = new Map<string, { ts: number; value: { users: User[]; total: number } }>();
-  private static cacheTTL = 10000;
   // Users Management
   static async getUsers(params?: {
     page?: number;
@@ -104,14 +115,8 @@ export class AdminApiService {
     status?: string;
     organizationId?: string;  // NUEVO: Multi-tenant support
     source?: 'auth' | 'auto';
-  }): Promise<{ users: User[]; total: number }> {
+  }): Promise<{ users: User[]; total: number; teamTotal: number }> {
     try {
-      const key = JSON.stringify(params || {});
-      const now = Date.now();
-      const cached = this.cache.get(key);
-      if (cached && now - cached.ts < this.cacheTTL) {
-        return cached.value;
-      }
       const useMock = isMockAuthEnabled() || getEnvMode() === 'mock';
       const response = await api.get('/users', { 
         params,
@@ -119,34 +124,30 @@ export class AdminApiService {
       });
       const users: User[] = (response?.data?.data || response?.data?.users || []) as User[];
       const total: number = response?.data?.total ?? (Array.isArray(users) ? users.length : 0);
-      const value = { users, total };
-      this.cache.set(key, { ts: now, value });
-      return value;
+      const teamTotal: number = response?.data?.teamTotal ?? total;
+      
+      return { users, total, teamTotal };
     } catch (error: unknown) {
       const apiError = (error && typeof error === 'object' ? error : {}) as ApiErrorLike
       const status = apiError.response?.status;
       const details = apiError.response?.data;
+      const fallbackMessage = 'No se pudieron cargar los usuarios'
 
-      // Graceful fallback to keep UI stable
       if (status === 401 || status === 403) {
-        console.warn('AdminApiService.getUsers unauthorized; returning empty list for stability.');
-        return { users: [], total: 0 };
+        throw new Error(extractApiErrorMessage(apiError, 'No tienes permisos para ver usuarios'))
       }
       if (status === 404) {
-        console.warn('AdminApiService.getUsers not found (404); returning empty list.');
-        return { users: [], total: 0 };
+        throw new Error(extractApiErrorMessage(apiError, 'La ruta de usuarios no esta disponible'))
       }
       if (!apiError.response || apiError.code === 'NETWORK_ERROR' || (typeof apiError.message === 'string' && apiError.message.includes('fetch'))) {
-        console.warn('AdminApiService.getUsers network/backend error; returning empty list.');
-        return { users: [], total: 0 };
+        throw new Error(extractApiErrorMessage(apiError, 'No se pudo conectar con el servicio de usuarios'))
       }
       if (status && status >= 500) {
-        console.warn('AdminApiService.getUsers server error; returning empty list.');
-        return { users: [], total: 0 };
+        throw new Error(extractApiErrorMessage(apiError, 'El servidor no pudo devolver los usuarios'))
       }
 
       console.error('Error fetching users:', details || error);
-      throw error;
+      throw new Error(extractApiErrorMessage(apiError, fallbackMessage));
     }
   }
 
@@ -160,7 +161,6 @@ export class AdminApiService {
   }): Promise<User> {
     try {
       const response = await api.post('/users', userData);
-      this.invalidateUsersCache();
       return response.data.user;
     } catch (error) {
       console.error('Error creating user:', error);
@@ -178,7 +178,6 @@ export class AdminApiService {
   }): Promise<User> {
     try {
       const response = await api.put(`/users/${userId}`, userData);
-      this.invalidateUsersCache();
       return response.data.user;
     } catch (error) {
       console.error('Error updating user:', error);
@@ -189,7 +188,6 @@ export class AdminApiService {
   static async deleteUser(userId: string): Promise<void> {
     try {
       await api.delete(`/users/${userId}`);
-      this.invalidateUsersCache();
     } catch (error) {
       console.error('Error deleting user:', error);
       throw error;
@@ -197,6 +195,6 @@ export class AdminApiService {
   }
 
   static invalidateUsersCache() {
-    this.cache.clear();
+    // Deprecated: Cache is now fully handled by React Query
   }
 }

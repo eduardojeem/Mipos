@@ -757,7 +757,9 @@ export function BillingTab() {
           <Alert className="mt-5">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              No hay capacidades que coincidan con tu busqueda actual.
+              {!planData?.limits || planData.limits.length === 0
+                ? 'Los límites del plan se mostrarán cuando la suscripción esté activa. Si acabas de registrarte, esto es normal.'
+                : 'No hay capacidades que coincidan con tu búsqueda actual.'}
             </AlertDescription>
           </Alert>
         ) : (

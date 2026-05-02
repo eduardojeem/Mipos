@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createClient as createServiceClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -15,7 +15,8 @@ export async function POST(request: NextRequest) {
     const svc = createServiceClient(url as string, serviceKey as string)
 
     const roleName = 'CASHIER'
-    let { data: rolesData, error: rolesErr } = await svc.from('roles').select('id,name').eq('name', roleName).limit(1)
+    const { data: initialRolesData, error: rolesErr } = await svc.from('roles').select('id,name').eq('name', roleName).limit(1)
+    let rolesData = initialRolesData
     if (rolesErr) return NextResponse.json({ error: rolesErr.message }, { status: 500 })
     if (!rolesData || rolesData.length === 0) {
       const { error: upErr } = await svc.from('roles').upsert([{ name: roleName }], { onConflict: 'name' })
@@ -27,7 +28,8 @@ export async function POST(request: NextRequest) {
     const roleId = rolesData[0].id
 
     const permName = 'cash:open'
-    let { data: permData, error: permErr } = await svc.from('permissions').select('id,name,resource,action').eq('name', permName).limit(1)
+    const { data: initialPermData, error: permErr } = await svc.from('permissions').select('id,name,resource,action').eq('name', permName).limit(1)
+    let permData = initialPermData
     if (permErr) return NextResponse.json({ error: permErr.message }, { status: 500 })
     if (!permData || permData.length === 0) {
       const { error: upPErr } = await svc.from('permissions').upsert([{ name: permName, resource: 'cash', action: 'open' }], { onConflict: 'name' })
@@ -41,7 +43,21 @@ export async function POST(request: NextRequest) {
     const { error: rpErr } = await svc.from('role_permissions').upsert([{ role_id: roleId, permission_id: permId }], { onConflict: 'role_id,permission_id' })
     if (rpErr) return NextResponse.json({ error: rpErr.message }, { status: 500 })
 
-    const { error: urErr } = await svc.from('user_roles').upsert([{ user_id: user.id, role_id: roleId, is_active: true }], { onConflict: 'user_id,role_id' })
+    const { data: membership } = await svc
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', user.id)
+      .limit(1)
+      .maybeSingle()
+
+    const organizationId = membership?.organization_id || null
+
+    const { error: urErr } = await svc.from('user_roles').upsert([{
+      user_id: user.id,
+      role_id: roleId,
+      organization_id: organizationId,
+      is_active: true,
+    }], { onConflict: 'user_id,role_id,organization_id' })
     if (urErr) return NextResponse.json({ error: urErr.message }, { status: 500 })
 
     return NextResponse.json({ success: true })

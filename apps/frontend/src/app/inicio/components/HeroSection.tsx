@@ -4,12 +4,6 @@ import Link from 'next/link';
 import { ArrowRight, Play, ShieldCheck, Sparkles, Store, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-const heroStats = [
-  { label: 'Negocios activos', value: '500+' },
-  { label: 'Disponibilidad operativa', value: '99.9%' },
-  { label: 'Soporte comercial', value: '24/7' },
-];
-
 const heroSignals = [
   {
     icon: Store,
@@ -71,14 +65,6 @@ export function HeroSection() {
               </Link>
             </div>
 
-            <div className="mt-12 grid gap-4 sm:grid-cols-3">
-              {heroStats.map((item) => (
-                <div key={item.label} className="landing-panel rounded-lg p-5">
-                  <p className="text-3xl font-semibold text-white">{item.value}</p>
-                  <p className="mt-2 text-sm text-slate-400">{item.label}</p>
-                </div>
-              ))}
-            </div>
           </div>
 
           <div className="space-y-4">

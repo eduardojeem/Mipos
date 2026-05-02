@@ -22,6 +22,15 @@ async function syncOrganizationSettings(
   companyData: {
     name: string;
     primary_color?: string | null;
+    rfc?: string | null;
+    industry?: string | null;
+    size?: string | null;
+    tagline?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    website?: string | null;
+    city?: string | null;
+    department?: string | null;
   },
   organizationIdOverride?: string | null
 ) {
@@ -61,6 +70,65 @@ async function syncOrganizationSettings(
     ...defaultBusinessConfig,
     ...currentValue,
     businessName: companyData.name,
+    tagline:
+      companyData.tagline ||
+      String((currentValue as { tagline?: unknown }).tagline || defaultBusinessConfig.tagline),
+    legalInfo: {
+      ...defaultBusinessConfig.legalInfo,
+      ...((currentValue as { legalInfo?: Record<string, unknown> }).legalInfo || {}),
+      ruc:
+        companyData.rfc ??
+        String(
+          ((currentValue as { legalInfo?: Record<string, unknown> }).legalInfo || {}).ruc ||
+            defaultBusinessConfig.legalInfo.ruc ||
+            ''
+        ),
+      economicActivity:
+        companyData.industry ||
+        String(
+          ((currentValue as { legalInfo?: Record<string, unknown> }).legalInfo || {}).economicActivity ||
+            defaultBusinessConfig.legalInfo.economicActivity
+        ),
+    },
+    contact: {
+      ...defaultBusinessConfig.contact,
+      ...((currentValue as { contact?: Record<string, unknown> }).contact || {}),
+      phone:
+        companyData.phone ??
+        String(
+          ((currentValue as { contact?: Record<string, unknown> }).contact || {}).phone ||
+            defaultBusinessConfig.contact.phone
+        ),
+      email:
+        companyData.email ??
+        String(
+          ((currentValue as { contact?: Record<string, unknown> }).contact || {}).email ||
+            defaultBusinessConfig.contact.email
+        ),
+      website:
+        companyData.website ??
+        String(
+          ((currentValue as { contact?: Record<string, unknown> }).contact || {}).website ||
+            defaultBusinessConfig.contact.website ||
+            ''
+        ),
+    },
+    address: {
+      ...defaultBusinessConfig.address,
+      ...((currentValue as { address?: Record<string, unknown> }).address || {}),
+      city:
+        companyData.city ??
+        String(
+          ((currentValue as { address?: Record<string, unknown> }).address || {}).city ||
+            defaultBusinessConfig.address.city
+        ),
+      department:
+        companyData.department ??
+        String(
+          ((currentValue as { address?: Record<string, unknown> }).address || {}).department ||
+            defaultBusinessConfig.address.department
+        ),
+    },
     branding: {
       ...defaultBusinessConfig.branding,
       ...((currentValue as { branding?: Record<string, unknown> }).branding || {}),
@@ -116,26 +184,74 @@ type OrganizationProfileRow = {
   branding?: Record<string, unknown> | null;
 };
 
-function organizationToCompanyProfile(organization: OrganizationProfileRow) {
+function nestedRecord(record: Record<string, unknown>, key: string): Record<string, unknown> {
+  const value = record[key];
+  return isRecord(value) ? value : {};
+}
+
+function organizationToCompanyProfile(
+  organization: OrganizationProfileRow,
+  businessConfigValue?: Record<string, unknown> | null
+) {
   const settings = isRecord(organization.settings)
     ? organization.settings
     : {};
   const branding = isRecord(organization.branding)
     ? organization.branding
     : {};
+  const businessConfig = isRecord(businessConfigValue)
+    ? businessConfigValue
+    : {};
+  const legalInfo = nestedRecord(businessConfig, 'legalInfo');
+  const contact = nestedRecord(businessConfig, 'contact');
+  const address = nestedRecord(businessConfig, 'address');
+  const configBranding = nestedRecord(businessConfig, 'branding');
 
   return {
     id: organization.id,
     name: organization.name,
-    rfc: stringFromRecord(settings, 'rfc'),
-    industry: stringFromRecord(settings, 'industry', 'retail'),
+    rfc: stringFromRecord(legalInfo, 'ruc', stringFromRecord(settings, 'rfc')),
+    industry: stringFromRecord(
+      settings,
+      'industry',
+      stringFromRecord(legalInfo, 'economicActivity', 'retail')
+    ),
     size: stringFromRecord(settings, 'size', 'micro'),
-    logo_url: stringFromRecord(branding, 'logo'),
-    primary_color: stringFromRecord(branding, 'primaryColor', '#2563EB'),
+    tagline: stringFromRecord(businessConfig, 'tagline'),
+    phone: stringFromRecord(contact, 'phone'),
+    email: stringFromRecord(contact, 'email'),
+    website: stringFromRecord(contact, 'website'),
+    city: stringFromRecord(address, 'city'),
+    department: stringFromRecord(address, 'department'),
+    logo_url: stringFromRecord(configBranding, 'logo', stringFromRecord(branding, 'logo')),
+    primary_color: stringFromRecord(
+      configBranding,
+      'primaryColor',
+      stringFromRecord(branding, 'primaryColor', '#2563EB')
+    ),
     plan_type: String(organization.subscription_plan || 'free').toLowerCase(),
     subscription_start: undefined,
     subscription_end: undefined,
   };
+}
+
+async function getBusinessConfigValue(
+  client: Awaited<ReturnType<typeof createAdminClient>>,
+  organizationId: string | null
+): Promise<Record<string, unknown> | null> {
+  if (!organizationId) {
+    return null;
+  }
+
+  const { data } = await client
+    .from('settings')
+    .select('value')
+    .eq('key', 'business_config')
+    .eq('organization_id', organizationId)
+    .maybeSingle();
+
+  const typed = data as BusinessConfigRow | null;
+  return typed?.value && isRecord(typed.value) ? typed.value : null;
 }
 
 export async function GET(request: NextRequest) {
@@ -155,9 +271,11 @@ export async function GET(request: NextRequest) {
 
     const requestedOrganizationId = getRequestedOrganizationId(request);
     let companyId: string | null = null;
+    let organizationIdForProfile: string | null = null;
 
     if (requestedOrganizationId && await validateOrganizationMembership(supabaseAdmin, user.id, requestedOrganizationId)) {
       companyId = requestedOrganizationId;
+      organizationIdForProfile = requestedOrganizationId;
     }
 
     if (!companyId) {
@@ -175,6 +293,14 @@ export async function GET(request: NextRequest) {
       companyId = await getUserOrganizationId(user.id);
     }
 
+    if (!organizationIdForProfile) {
+      organizationIdForProfile = await getUserOrganizationId(user.id);
+    }
+
+    if (!organizationIdForProfile) {
+      organizationIdForProfile = companyId;
+    }
+
     if (!companyId) {
       return NextResponse.json(
         { success: false, error: 'No se encontró empresa asociada' },
@@ -183,6 +309,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Get company profile
+    const businessConfigValue = await getBusinessConfigValue(supabaseAdmin, organizationIdForProfile);
+
     const { data: company, error: companyError } = await supabaseAdmin
       .from('companies')
       .select('*')
@@ -205,7 +333,7 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        data: organizationToCompanyProfile(organization),
+        data: organizationToCompanyProfile(organization, businessConfigValue),
       });
     }
 
@@ -225,6 +353,29 @@ export async function GET(request: NextRequest) {
       success: true,
       data: {
         ...company,
+        tagline: stringFromRecord(businessConfigValue || {}, 'tagline'),
+        phone: stringFromRecord(
+          nestedRecord(businessConfigValue || {}, 'contact'),
+          'phone',
+          String((company as Record<string, unknown>).phone || '')
+        ),
+        email: stringFromRecord(
+          nestedRecord(businessConfigValue || {}, 'contact'),
+          'email',
+          String((company as Record<string, unknown>).email || '')
+        ),
+        website: stringFromRecord(
+          nestedRecord(businessConfigValue || {}, 'contact'),
+          'website',
+          String((company as Record<string, unknown>).website || '')
+        ),
+        city: stringFromRecord(nestedRecord(businessConfigValue || {}, 'address'), 'city'),
+        department: stringFromRecord(nestedRecord(businessConfigValue || {}, 'address'), 'department'),
+        logo_url: stringFromRecord(
+          nestedRecord(businessConfigValue || {}, 'branding'),
+          'logo',
+          String((company as Record<string, unknown>).logo_url || '')
+        ),
         plan_type: subscription?.plan_type || 'free',
         subscription_start: subscription?.start_date,
         subscription_end: subscription?.end_date
@@ -262,7 +413,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, rfc, industry, size, primary_color } = body;
+    const { name, rfc, industry, size, primary_color, tagline, phone, email, website, city, department } = body;
 
     // Validate required fields
     if (!name || !industry || !size) {
@@ -386,16 +537,22 @@ export async function PUT(request: NextRequest) {
           .from('organizations')
           .update({
             name,
-            settings: {
-              ...currentSettings,
-              rfc,
-              industry,
-              size,
-            },
-            branding: {
-              ...currentBranding,
-              primaryColor: primary_color || '#2563EB',
-            },
+          settings: {
+            ...currentSettings,
+            rfc,
+            industry,
+            size,
+            phone,
+            email,
+            website,
+            city,
+            department,
+            tagline,
+          },
+          branding: {
+            ...currentBranding,
+            primaryColor: primary_color || '#2563EB',
+          },
             updated_at: new Date().toISOString(),
           })
           .eq('id', companyId)
@@ -410,11 +567,26 @@ export async function PUT(request: NextRequest) {
           await syncOrganizationSettings(clientForUpdate, user.id, {
             name: updatedOrganization.name,
             primary_color: stringFromRecord(updatedBranding, 'primaryColor', primary_color || '#2563EB'),
+            rfc,
+            industry,
+            size,
+            tagline,
+            phone,
+            email,
+            website,
+            city,
+            department,
           }, companyId);
 
           return NextResponse.json({
             success: true,
-            data: organizationToCompanyProfile(updatedOrganization),
+            data: organizationToCompanyProfile(updatedOrganization, {
+              tagline,
+              contact: { phone, email, website },
+              address: { city, department },
+              legalInfo: { ruc: rfc, economicActivity: industry },
+              branding: { primaryColor: primary_color || '#2563EB' },
+            }),
             message: 'Empresa actualizada exitosamente',
           });
         }
@@ -430,11 +602,28 @@ export async function PUT(request: NextRequest) {
     await syncOrganizationSettings(clientForUpdate, user.id, {
       name: updatedCompany.name,
       primary_color: updatedCompany.primary_color,
+      rfc,
+      industry,
+      size,
+      tagline,
+      phone,
+      email,
+      website,
+      city,
+      department,
     }, organizationIdForSettings);
 
     return NextResponse.json({
       success: true,
-      data: updatedCompany,
+      data: {
+        ...updatedCompany,
+        tagline,
+        phone,
+        email,
+        website,
+        city,
+        department,
+      },
       message: 'Empresa actualizada exitosamente'
     });
 

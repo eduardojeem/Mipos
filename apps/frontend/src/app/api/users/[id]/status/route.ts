@@ -35,12 +35,6 @@ export async function PUT(
     }
 
     const admin = createAdminClient()
-
-    await admin
-      .from('users')
-      .update({ status, updated_at: new Date().toISOString() })
-      .eq('id', userId)
-
     const { data: membership } = await admin
       .from('organization_members')
       .select(`
@@ -50,7 +44,7 @@ export async function PUT(
         is_owner,
         created_at,
         updated_at,
-        user:users(id,email,full_name,phone,status,created_at,updated_at,last_login),
+        user:users(id,email,full_name,created_at,updated_at),
         role:roles(name,display_name),
         organization:organizations(id,name)
       `)
@@ -62,7 +56,89 @@ export async function PUT(
       return NextResponse.json({ error: 'Usuario no encontrado en la organizacion actual' }, { status: 404 })
     }
 
-    return NextResponse.json({ success: true, user: buildUserResponse(membership) })
+    const previousStatus = 'ACTIVE'
+    const { data: currentUserRole } = await admin
+      .from('user_roles')
+      .select('is_active')
+      .eq('user_id', userId)
+      .eq('organization_id', companyId)
+      .eq('role_id', membership.role_id)
+      .maybeSingle()
+
+    const previousRoleActive = currentUserRole?.is_active !== false
+
+    const { error: roleStatusError } = await admin
+      .from('user_roles')
+      .update({ is_active: status === 'ACTIVE' })
+      .eq('user_id', userId)
+      .eq('organization_id', companyId)
+      .eq('role_id', membership.role_id)
+
+    if (roleStatusError) {
+      return NextResponse.json({ error: 'No se pudo actualizar el rol activo de la organizacion' }, { status: 500 })
+    }
+
+    let { error: membershipStatusError } = await admin
+      .from('organization_members')
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq('organization_id', companyId)
+      .eq('user_id', userId)
+
+    const membershipStatusUnsupported = membershipStatusError?.code === '42703'
+    if (membershipStatusUnsupported) {
+      membershipStatusError = null
+    }
+
+    if (membershipStatusError) {
+      await admin
+        .from('user_roles')
+        .update({ is_active: previousRoleActive })
+        .eq('user_id', userId)
+        .eq('organization_id', companyId)
+        .eq('role_id', membership.role_id)
+
+      return NextResponse.json({ error: 'No se pudo actualizar el estado de la membresia' }, { status: 500 })
+    }
+
+    const { data: updatedMembership } = await admin
+      .from('organization_members')
+      .select(`
+        organization_id,
+        user_id,
+        role_id,
+        is_owner,
+        created_at,
+        updated_at,
+        user:users(id,email,full_name,created_at,updated_at),
+        role:roles(name,display_name),
+        organization:organizations(id,name)
+      `)
+      .eq('organization_id', companyId)
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    if (!updatedMembership) {
+      if (!membershipStatusUnsupported) {
+        await admin
+          .from('organization_members')
+          .update({ status: previousStatus, updated_at: new Date().toISOString() })
+          .eq('organization_id', companyId)
+          .eq('user_id', userId)
+      }
+      await admin
+        .from('user_roles')
+        .update({ is_active: previousRoleActive })
+        .eq('user_id', userId)
+        .eq('organization_id', companyId)
+        .eq('role_id', membership.role_id)
+
+      return NextResponse.json({ error: 'No se pudo confirmar el estado actualizado de la membresia' }, { status: 500 })
+    }
+
+    const responseUser = buildUserResponse(updatedMembership)
+    responseUser.status = status.toLowerCase()
+
+    return NextResponse.json({ success: true, user: responseUser })
   } catch (error) {
     console.error('Error in user status API:', error)
     return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })

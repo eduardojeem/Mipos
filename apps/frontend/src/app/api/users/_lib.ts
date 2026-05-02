@@ -12,7 +12,6 @@ type MembershipUserRecord = {
   full_name?: string | null
   name?: string | null
   phone?: string | null
-  status?: string | null
   created_at?: string | null
   updated_at?: string | null
   last_login?: string | null
@@ -33,11 +32,20 @@ type MembershipRecord = {
   user_id?: string | null
   role_id?: string | null
   is_owner?: boolean | null
+  status?: string | null
   created_at?: string | null
   updated_at?: string | null
-  user?: MembershipUserRecord | null
-  role?: MembershipRoleRecord | null
-  organization?: MembershipOrganizationRecord | null
+  user?: MembershipUserRecord | MembershipUserRecord[] | null
+  role?: MembershipRoleRecord | MembershipRoleRecord[] | null
+  organization?: MembershipOrganizationRecord | MembershipOrganizationRecord[] | null
+}
+
+function firstRelation<T>(value?: T | T[] | null): T | null {
+  if (Array.isArray(value)) {
+    return value[0] || null
+  }
+
+  return value || null
 }
 
 export function normalizeCompanyUserRole(role?: string | null): CompanyUserRole {
@@ -77,24 +85,82 @@ export async function syncMembershipRole(options: {
   roleName: CompanyUserRole
   isOwner?: boolean
   activate?: boolean
+  membershipStatus?: CompanyUserStatus
 }) {
   const admin = createAdminClient()
   const roleRecord = await getRoleRecord(options.roleName)
+  const nextIsOwner = Boolean(options.isOwner || options.roleName === 'OWNER')
+  const nextStatus = options.membershipStatus || 'ACTIVE'
+  const nextIsActive = options.activate !== false
+  const { data: previousMembership } = await admin
+    .from('organization_members')
+    .select('organization_id,user_id,role_id,is_owner')
+    .eq('organization_id', options.organizationId)
+    .eq('user_id', options.userId)
+    .maybeSingle()
 
-  const { error: membershipError } = await admin
+  const previousRoleId = previousMembership?.role_id || null
+  const previousWasOwner = Boolean(previousMembership?.is_owner)
+  const previousStatus = 'ACTIVE'
+
+  let { error: membershipError } = await admin
     .from('organization_members')
     .upsert(
       {
         organization_id: options.organizationId,
         user_id: options.userId,
         role_id: roleRecord.id,
-        is_owner: Boolean(options.isOwner || options.roleName === 'OWNER'),
+        is_owner: nextIsOwner,
+        status: nextStatus,
       },
       { onConflict: 'organization_id,user_id' }
     )
 
+  if (membershipError?.code === '42703') {
+    const retry = await admin
+      .from('organization_members')
+      .upsert(
+        {
+          organization_id: options.organizationId,
+          user_id: options.userId,
+          role_id: roleRecord.id,
+          is_owner: nextIsOwner,
+        },
+        { onConflict: 'organization_id,user_id' }
+      )
+    membershipError = retry.error
+  }
+
   if (membershipError) {
     throw membershipError
+  }
+
+  let previousRoleDeactivated = false
+  if (previousRoleId && previousRoleId !== roleRecord.id) {
+    const { error: previousRoleError } = await admin
+      .from('user_roles')
+      .update({ is_active: false })
+      .eq('user_id', options.userId)
+      .eq('organization_id', options.organizationId)
+      .eq('role_id', previousRoleId)
+
+    if (previousRoleError) {
+      await admin
+        .from('organization_members')
+        .upsert(
+          {
+            organization_id: options.organizationId,
+            user_id: options.userId,
+            role_id: previousRoleId,
+            is_owner: previousWasOwner,
+            status: previousStatus,
+          },
+          { onConflict: 'organization_id,user_id' }
+        )
+      throw previousRoleError
+    }
+
+    previousRoleDeactivated = true
   }
 
   const { error: roleError } = await admin
@@ -104,12 +170,42 @@ export async function syncMembershipRole(options: {
         user_id: options.userId,
         role_id: roleRecord.id,
         organization_id: options.organizationId,
-        is_active: options.activate !== false,
+        is_active: nextIsActive,
       },
-      { onConflict: 'user_id,role_id' }
+      { onConflict: 'user_id,role_id,organization_id' }
     )
 
   if (roleError) {
+    if (previousMembership?.role_id) {
+      await admin
+        .from('organization_members')
+        .upsert(
+          {
+            organization_id: options.organizationId,
+            user_id: options.userId,
+            role_id: previousMembership.role_id,
+            is_owner: previousWasOwner,
+            status: previousStatus,
+          },
+          { onConflict: 'organization_id,user_id' }
+        )
+    } else {
+      await admin
+        .from('organization_members')
+        .delete()
+        .eq('organization_id', options.organizationId)
+        .eq('user_id', options.userId)
+    }
+
+    if (previousRoleDeactivated && previousRoleId) {
+      await admin
+        .from('user_roles')
+        .update({ is_active: true })
+        .eq('user_id', options.userId)
+        .eq('organization_id', options.organizationId)
+        .eq('role_id', previousRoleId)
+    }
+
     throw roleError
   }
 
@@ -129,16 +225,6 @@ export async function deactivateMembershipRole(options: {
     .eq('user_id', options.userId)
     .maybeSingle()
 
-  const { error: membershipDeleteError } = await admin
-    .from('organization_members')
-    .delete()
-    .eq('organization_id', options.organizationId)
-    .eq('user_id', options.userId)
-
-  if (membershipDeleteError) {
-    throw membershipDeleteError
-  }
-
   if (membership?.role_id) {
     const { error: userRoleError } = await admin
       .from('user_roles')
@@ -151,23 +237,45 @@ export async function deactivateMembershipRole(options: {
       throw userRoleError
     }
   }
+
+  const { error: membershipDeleteError } = await admin
+    .from('organization_members')
+    .delete()
+    .eq('organization_id', options.organizationId)
+    .eq('user_id', options.userId)
+
+  if (membershipDeleteError) {
+    if (membership?.role_id) {
+      await admin
+        .from('user_roles')
+        .update({ is_active: true })
+        .eq('user_id', options.userId)
+        .eq('organization_id', options.organizationId)
+        .eq('role_id', membership.role_id)
+    }
+
+    throw membershipDeleteError
+  }
 }
 
 export function buildUserResponse(member: MembershipRecord | null | undefined) {
-  const roleName = normalizeCompanyUserRole(member?.role?.name || (member?.is_owner ? 'OWNER' : undefined))
-  const userStatus = normalizeCompanyUserStatus(member?.user?.status)
+  const user = firstRelation(member?.user)
+  const role = firstRelation(member?.role)
+  const organization = firstRelation(member?.organization)
+  const roleName = normalizeCompanyUserRole(role?.name || (member?.is_owner ? 'ADMIN' : undefined))
+  const userStatus = normalizeCompanyUserStatus(member?.status)
 
   return {
-    id: String(member?.user_id || member?.user?.id || ''),
-    email: member?.user?.email || null,
-    name: member?.user?.full_name || member?.user?.name || member?.user?.email?.split('@')[0] || 'Usuario',
-    role: member?.is_owner ? 'OWNER' : roleName,
+    id: String(member?.user_id || user?.id || ''),
+    email: user?.email || null,
+    name: user?.full_name || user?.name || user?.email?.split('@')[0] || 'Usuario',
+    role: roleName,
     status: userStatus.toLowerCase(),
-    createdAt: member?.user?.created_at || member?.created_at || new Date().toISOString(),
-    lastLogin: member?.user?.last_login || member?.user?.updated_at || member?.user?.created_at || member?.updated_at || member?.created_at || null,
-    organizationId: member?.organization_id || member?.organization?.id || null,
-    organizationName: member?.organization?.name || null,
+    createdAt: user?.created_at || member?.created_at || new Date().toISOString(),
+    lastLogin: user?.last_login || null,
+    organizationId: member?.organization_id || organization?.id || null,
+    organizationName: organization?.name || null,
     isOwner: Boolean(member?.is_owner),
-    phone: member?.user?.phone || null,
+    phone: user?.phone || null,
   }
 }

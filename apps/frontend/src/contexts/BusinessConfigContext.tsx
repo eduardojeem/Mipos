@@ -237,6 +237,53 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
     saveQueue(remaining)
   }, [getQueue, saveQueue, tryPersistToApi]);
 
+  // Merge onboarding data into business config if config is empty/default
+  const mergeOnboardingData = useCallback(async () => {
+    if (!organizationId) return;
+    try {
+      const response = await fetch('/api/company/profile', {
+        headers: { 'x-organization-id': organizationId },
+        cache: 'no-store',
+      });
+      if (!response.ok) return;
+      const result = await response.json();
+      const profile = result?.data || result;
+      if (!profile || !profile.name) return;
+
+      // Merge onboarding data into current config
+      setConfig((current) => {
+        const merged = { ...current };
+        if (profile.name && !current.businessName) merged.businessName = profile.name;
+        if (profile.tagline && !current.heroDescription) merged.heroDescription = profile.tagline;
+        if (profile.phone || profile.email) {
+          merged.contact = {
+            ...current.contact,
+            phone: profile.phone || current.contact.phone,
+            email: profile.email || current.contact.email,
+            website: profile.website || current.contact.website,
+          };
+        }
+        if (profile.city || profile.department) {
+          merged.address = {
+            ...current.address,
+            city: profile.city || current.address.city,
+            state: profile.department || current.address.state,
+          };
+        }
+        if (profile.primary_color) {
+          merged.branding = {
+            ...current.branding,
+            primaryColor: profile.primary_color,
+          };
+        }
+        return normalizeBusinessConfig(merged);
+      });
+      syncLogger.info('Datos de onboarding integrados en BusinessConfig', { organizationId });
+    } catch {
+      // Silent — onboarding data is optional
+    }
+  }, [organizationId]);
+
   const loadConfig = useCallback(async () => {
     if (!organizationId) {
       // No organization selected yet, use defaults
@@ -279,9 +326,15 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
             
             if (apiConfig && typeof apiConfig === 'object') {
               const normalized = normalizeBusinessConfig({ ...defaultBusinessConfig, ...apiConfig });
-              setConfig(normalized);
               
-              // Guardar en localStorage (scoped por organizaciÃ³n)
+              // If config is essentially empty (no business name), try to merge onboarding data
+              if (!normalized.businessName || normalized.businessName === defaultBusinessConfig.businessName) {
+                await mergeOnboardingData();
+              } else {
+                setConfig(normalized);
+              }
+              
+              // Guardar en localStorage (scoped por organización)
               localStorage.setItem(getStorageKey('businessConfig'), JSON.stringify(normalized));
               localStorage.setItem(getStorageKey('businessConfigPersisted'), 'true');
               setPersisted(true);
@@ -291,6 +344,9 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
                 organizationName 
               });
             }
+          } else {
+            // API returned error — try to merge onboarding data if config is empty
+            await mergeOnboardingData();
           }
         }
       } catch (apiErr) {
@@ -308,7 +364,7 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
     } finally {
       setLoading(false);
     }
-  }, [organizationId, organizationName, getStorageKey]); // Dependencias actualizadas
+  }, [organizationId, organizationName, getStorageKey, mergeOnboardingData]); // Dependencias actualizadas
 
   // Cargar configuraciÃ³n desde localStorage o API - cuando cambia la organizaciÃ³n
   useEffect(() => {

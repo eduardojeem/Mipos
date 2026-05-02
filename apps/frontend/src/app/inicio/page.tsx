@@ -6,7 +6,6 @@ import { useSearchParams } from 'next/navigation';
 import {
   ArrowRight,
   BarChart3,
-  Building2,
   CheckCircle2,
   Shield,
   Sparkles,
@@ -43,24 +42,6 @@ const benefits = [
     title: 'Equipo controlado',
     description: 'Permisos, roles y operacion coordinada cuando crece la estructura.',
     accent: 'text-violet-300',
-  },
-];
-
-const trustSignals = [
-  {
-    value: '500+',
-    label: 'negocios activos',
-    note: 'Uso continuo en operacion diaria',
-  },
-  {
-    value: '98%',
-    label: 'satisfaccion operativa',
-    note: 'Lectura basada en continuidad y adopcion',
-  },
-  {
-    value: '5+',
-    label: 'anos de experiencia',
-    note: 'Producto iterado para escenarios reales',
   },
 ];
 
@@ -178,47 +159,6 @@ export default function InicioPage() {
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="border-b border-white/10 py-20 lg:py-24">
-          <div className="landing-container">
-            <div className="text-center">
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-slate-300">
-                <Building2 className="h-3.5 w-3.5 text-emerald-300" />
-                Validacion comercial
-              </div>
-              <h2 className="mt-6 text-3xl font-semibold tracking-tight text-white md:text-4xl">
-                Negocios que ya operan sobre la plataforma
-              </h2>
-              <p className="mx-auto mt-4 max-w-3xl text-lg leading-8 text-slate-300">
-                La propuesta no parte de promesas abstractas. Hay negocios usando el sistema, equipos trabajando y catalogos creciendo dentro del ecosistema.
-              </p>
-            </div>
-
-            <div className="mt-12 grid gap-6 md:grid-cols-3">
-              {trustSignals.map((item) => (
-                <div key={item.label} className="landing-panel rounded-lg p-8 text-center">
-                  <p className="text-4xl font-semibold text-white">{item.value}</p>
-                  <p className="mt-3 text-sm font-medium uppercase tracking-[0.16em] text-slate-400">
-                    {item.label}
-                  </p>
-                  <p className="mt-3 text-sm text-slate-500">{item.note}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-12 text-center">
-              <Link href="/empresas">
-                <Button
-                  variant="outline"
-                  className="rounded-lg border-white/10 bg-white/5 px-6 py-6 text-sm font-medium text-white hover:bg-white/10"
-                >
-                  Ver empresas publicadas
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              </Link>
             </div>
           </div>
         </section>

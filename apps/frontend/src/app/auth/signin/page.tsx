@@ -23,6 +23,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/use-auth';
+import planService from '@/lib/services/plan-service';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
 import { LandingHeader } from '@/app/inicio/components/LandingHeader';
@@ -71,12 +72,6 @@ function shouldRouteToOnboarding(returnUrl: string): boolean {
   return getReturnUrlPath(returnUrl) === '/dashboard';
 }
 
-function getOnboardingStorageKey(userId: string | null | undefined, organizationId: string): string {
-  return userId
-    ? `onboarding_completed:${userId}:${organizationId}`
-    : `onboarding_completed:${organizationId}`;
-}
-
 function writeSelectedOrganizationCookies(org: Organization) {
   if (typeof document === 'undefined') {
     return;
@@ -96,7 +91,6 @@ export default function SignInPage() {
   const [showOrgSelector, setShowOrgSelector] = useState(false);
   const [userOrganizations, setUserOrganizations] = useState<Organization[]>([]);
   const [loadingOrgs, setLoadingOrgs] = useState(false);
-  const [authenticatedUserId, setAuthenticatedUserId] = useState<string | null>(null);
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -155,7 +149,7 @@ export default function SignInPage() {
     return false;
   };
 
-  const selectOrganization = async (org: Organization, options?: { userId?: string | null }) => {
+  const selectOrganization = async (org: Organization) => {
     try {
       localStorage.setItem('selected_organization', JSON.stringify(org));
       writeSelectedOrganizationCookies(org);
@@ -164,12 +158,10 @@ export default function SignInPage() {
       }));
 
       const returnUrl = getReturnUrl();
-      const onboardingStorageKey = getOnboardingStorageKey(options?.userId ?? authenticatedUserId, org.id);
-      const hasOnboarded = localStorage.getItem(onboardingStorageKey);
-      const shouldGoToOnboarding = !hasOnboarded && !isPublicReturnUrl(returnUrl) && shouldRouteToOnboarding(returnUrl);
+      const needsOnboarding = await planService.needsOnboarding(org.id);
+      const shouldGoToOnboarding = needsOnboarding && !isPublicReturnUrl(returnUrl) && shouldRouteToOnboarding(returnUrl);
 
       if (shouldGoToOnboarding) {
-        localStorage.setItem(onboardingStorageKey, 'true');
         toast({
           title: 'Bienvenido',
           description: `Configuremos tu negocio ${org.name}...`,
@@ -194,7 +186,7 @@ export default function SignInPage() {
     }
   };
 
-  const fetchUserOrganizations = async (userId: string) => {
+  const fetchUserOrganizations = async () => {
     setLoadingOrgs(true);
 
     try {
@@ -223,7 +215,7 @@ export default function SignInPage() {
       setUserOrganizations(orgsData);
 
       if (orgsData.length === 1) {
-        await selectOrganization(orgsData[0], { userId });
+        await selectOrganization(orgsData[0]);
       } else {
         setShowOrgSelector(true);
       }
@@ -281,8 +273,6 @@ export default function SignInPage() {
       const returnUrl = getReturnUrl();
 
       if (currentUser) {
-        setAuthenticatedUserId(currentUser.id);
-
         const rawRole = currentUser.user_metadata?.role;
         const role = typeof rawRole === 'string' ? rawRole.toUpperCase() : '';
 
@@ -306,7 +296,7 @@ export default function SignInPage() {
           return;
         }
 
-        await fetchUserOrganizations(currentUser.id);
+        await fetchUserOrganizations();
         return;
       }
 

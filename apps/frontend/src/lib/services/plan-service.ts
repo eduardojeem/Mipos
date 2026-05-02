@@ -6,6 +6,12 @@ export interface CompanyProfile {
   rfc?: string;
   industry: string;
   size: 'micro' | 'small' | 'medium' | 'large';
+  tagline?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+  city?: string;
+  department?: string;
   logo_url?: string;
   primary_color: string;
   plan_type: string;
@@ -124,18 +130,13 @@ class PlanService {
       });
 
       if (!response.ok) {
-        let serverMsg = 'Error al obtener límites del plan';
-        try {
-          const errJson = await response.json();
-          serverMsg = errJson?.error || serverMsg;
-        } catch {}
-        throw new Error(serverMsg);
+        // Normal for new organizations without subscription — return null silently
+        return null;
       }
 
       const result = await response.json();
       return result.success ? result.data : null;
-    } catch (error) {
-      console.error('Error getting plan limits:', error);
+    } catch {
       return null;
     }
   }
@@ -267,9 +268,12 @@ class PlanService {
         return true;
       }
 
-      // Check if company has basic info filled
-      const hasBasicInfo = companyProfile.name !== 'Mi Empresa' && 
-                          companyProfile.industry !== 'retail';
+      const hasBasicInfo =
+        Boolean(companyProfile.name && companyProfile.name.trim().length >= 2) &&
+        companyProfile.name !== 'Mi Empresa' &&
+        Boolean(companyProfile.size) &&
+        Boolean(companyProfile.city && companyProfile.city.trim()) &&
+        Boolean(companyProfile.department && companyProfile.department.trim());
 
       return !hasBasicInfo;
     } catch (error) {

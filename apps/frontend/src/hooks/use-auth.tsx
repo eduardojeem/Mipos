@@ -44,9 +44,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .join(' ');
   }, []);
 
+  const syncCurrentSessionRecord = useCallback(async (method: 'POST' | 'DELETE' = 'POST') => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      await fetch('/api/auth/sessions/sync', {
+        method,
+        credentials: 'include',
+        cache: 'no-store',
+      });
+    } catch {
+      // No bloquear el flujo de auth por errores de sincronizacion
+    }
+  }, []);
+
   useEffect(() => {
     userRef.current = user;
   }, [user]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined' || !user?.id) {
+      return;
+    }
+
+    const syncIfVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void syncCurrentSessionRecord('POST');
+      }
+    };
+
+    const intervalId = window.setInterval(syncIfVisible, 5 * 60 * 1000);
+    window.addEventListener('focus', syncIfVisible);
+    document.addEventListener('visibilitychange', syncIfVisible);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', syncIfVisible);
+      document.removeEventListener('visibilitychange', syncIfVisible);
+    };
+  }, [user?.id, syncCurrentSessionRecord]);
 
   // Enhanced fallback user creation with better functionality
   const createFallbackUser = useCallback((authUser: SupabaseUser): User => {
@@ -228,6 +264,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (session?.user) {
+        void syncCurrentSessionRecord('POST');
         const userData = await fetchUserData(session.user);
         setUser({ ...userData, role: normalizeRole(userData.role) });
       } else {
@@ -245,7 +282,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [supabase.auth, isDevMockMode, createMockAuthUser, createFallbackUser, fetchUserData]);
+  }, [supabase.auth, isDevMockMode, createMockAuthUser, createFallbackUser, fetchUserData, syncCurrentSessionRecord]);
 
   // Sign in function
   const signIn = useCallback(async (email: string, password: string): Promise<void> => {
@@ -294,6 +331,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (data.user) {
+        void syncCurrentSessionRecord('POST');
         const fallbackUser = createFallbackUser(data.user);
         setUser({ ...fallbackUser, role: normalizeRole(fallbackUser.role) });
 
@@ -344,7 +382,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [supabase.auth, createFallbackUser, fetchUserData, extractNameFromEmail]);
+  }, [supabase.auth, createFallbackUser, fetchUserData, extractNameFromEmail, syncCurrentSessionRecord]);
 
   // Sign out function
   const signOut = useCallback(async (): Promise<void> => {
@@ -360,6 +398,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (loggingError) {
         console.warn('No se pudo registrar actividad de logout:', loggingError);
       }
+
+      await syncCurrentSessionRecord('DELETE');
 
       const { error } = await supabase.auth.signOut();
 
@@ -378,7 +418,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, [supabase.auth, router]);
+  }, [supabase.auth, router, syncCurrentSessionRecord]);
 
   // Sign up function
   const signUp = useCallback(async (email: string, password: string, userData?: Record<string, unknown>): Promise<void> => {
@@ -487,6 +527,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setUser(null);
           }
         } else if (session?.user) {
+          void syncCurrentSessionRecord('POST');
           // Optimistic update for instant UI feedback
           const fallbackUser = createFallbackUser(session.user);
           // Normalizar rol desde fallback para que Sidebar no oculte secciones
@@ -551,6 +592,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       async (event: AuthChangeEvent, session: Session | null) => {
         try {
           if (event === 'SIGNED_IN' && session?.user) {
+            void syncCurrentSessionRecord('POST');
             // Optimistic update
             const fallbackUser = createFallbackUser(session.user);
             setUser({ ...fallbackUser, role: normalizeRole(fallbackUser.role) });
@@ -572,6 +614,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } else if (event === 'SIGNED_OUT') {
             setUser(null);
           } else if (event === 'TOKEN_REFRESHED' && session?.user) {
+            void syncCurrentSessionRecord('POST');
             // Background update is enough for token refresh, but we can be safe
             fetchUserData(session.user).then((ud) => {
               setUser({ ...ud, role: normalizeRole(ud.role) });
@@ -592,7 +635,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     );
 
     return () => subscription.unsubscribe();
-  }, [supabase.auth, fetchUserData, createMockAuthUser, createFallbackUser, isDevMockMode]);
+  }, [supabase.auth, fetchUserData, createMockAuthUser, createFallbackUser, isDevMockMode, syncCurrentSessionRecord]);
 
   const value = useMemo<AuthContextType>(() => ({
     user,

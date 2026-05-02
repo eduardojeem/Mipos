@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { getValidatedOrganizationId } from '@/lib/organization'
-import { getSubscriptionSnapshot, getUsageSnapshot } from '@/app/api/subscription/_lib'
+import { getSubscriptionSnapshot, getUsageSnapshot, resolveSubscriptionPlanLimits } from '@/app/api/subscription/_lib'
 
 type FeatureUsageKey = 'users' | 'products' | 'monthly_transactions' | 'locations'
 
@@ -14,23 +14,7 @@ type UsageLimitRow = {
   reset_date: string | null
 }
 
-const CORE_LIMITS: Array<{
-  feature: FeatureUsageKey
-  planKey: 'maxUsers' | 'maxProducts' | 'maxTransactionsPerMonth' | 'maxLocations'
-}> = [
-  { feature: 'users', planKey: 'maxUsers' },
-  { feature: 'products', planKey: 'maxProducts' },
-  { feature: 'monthly_transactions', planKey: 'maxTransactionsPerMonth' },
-  { feature: 'locations', planKey: 'maxLocations' },
-]
-
-function normalizeLimitValue(value: unknown) {
-  const parsed = Number(value || 0)
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return 999999
-  }
-  return parsed
-}
+const CORE_LIMITS: FeatureUsageKey[] = ['users', 'products', 'monthly_transactions', 'locations']
 
 function usagePercentage(currentUsage: number, limitValue: number) {
   if (limitValue === 999999) return 0
@@ -91,8 +75,22 @@ export async function GET(request: NextRequest) {
       locations: Number(liveUsage.locations || 0),
     }
 
-    const coreLimits = CORE_LIMITS.map(({ feature, planKey }) => {
-      const limitValue = normalizeLimitValue(snapshot.plan.limits[planKey])
+    const resolvedLimits = resolveSubscriptionPlanLimits(snapshot.plan)
+    const coreLimits = CORE_LIMITS.map((feature) => {
+      const limitValue = (() => {
+        switch (feature) {
+          case 'users':
+            return resolvedLimits.maxUsers
+          case 'products':
+            return resolvedLimits.maxProducts
+          case 'monthly_transactions':
+            return resolvedLimits.maxTransactionsPerMonth
+          case 'locations':
+            return resolvedLimits.maxLocations
+          default:
+            return 999999
+        }
+      })()
       const currentUsage = liveUsageByFeature[feature]
 
       return {
@@ -111,8 +109,8 @@ export async function GET(request: NextRequest) {
       .filter((limit) => !coveredFeatures.has(limit.feature_type))
       .map((limit) => ({
         ...limit,
-        usage_percentage: usagePercentage(Number(limit.current_usage || 0), normalizeLimitValue(limit.limit_value)),
-        is_unlimited: normalizeLimitValue(limit.limit_value) === 999999,
+        usage_percentage: usagePercentage(Number(limit.current_usage || 0), Number(limit.limit_value || 999999)),
+        is_unlimited: Number(limit.limit_value || 999999) === 999999,
       }))
 
     return NextResponse.json({
@@ -188,7 +186,7 @@ export async function POST(request: NextRequest) {
     }
 
     const currentUsage = Number(currentLimit.current_usage || 0)
-    const limitValue = normalizeLimitValue(currentLimit.limit_value)
+    const limitValue = Number(currentLimit.limit_value || 999999)
 
     if (action === 'increment' && limitValue !== 999999 && currentUsage + quantity > limitValue) {
       return NextResponse.json(

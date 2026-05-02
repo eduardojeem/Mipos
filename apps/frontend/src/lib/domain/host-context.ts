@@ -205,7 +205,7 @@ export function buildTenantPublicBaseUrl(
   },
   requestHost?: string | null
 ): string {
-  const tenantKey = organization.subdomain || organization.slug;
+  const tenantKey = organization.slug || organization.subdomain;
   const normalizedHost = normalizeHostname(requestHost);
   const port = extractPort(requestHost);
 
@@ -214,18 +214,32 @@ export function buildTenantPublicBaseUrl(
     return `${protocol}://${organization.custom_domain}`;
   }
 
-  if (tenantKey && isLocalDevelopmentHost(normalizedHost)) {
-    const protocol = 'http';
-    const portSuffix = port ? `:${port}` : '';
-    return `${protocol}://localhost${portSuffix}/${tenantKey}`;
+  if (!tenantKey) {
+    return '/';
   }
 
-  const baseDomain = getConfiguredBaseDomain();
-  if (tenantKey && baseDomain && !isLocalDevelopmentHost(baseDomain)) {
-    return `https://${tenantKey}.${baseDomain}`;
+  if (normalizedHost) {
+    if (isLocalDevelopmentHost(normalizedHost)) {
+      if (port) {
+        return `http://localhost:${port}/${tenantKey}`;
+      }
+
+      return `/${tenantKey}`;
+    }
+
+    const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+    return `${protocol}://${normalizedHost}/${tenantKey}`;
   }
 
-  return `/${organization.slug || tenantKey || ''}`;
+  const configuredAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+  if (configuredAppUrl) {
+    try {
+      const url = new URL(configuredAppUrl);
+      return `${url.origin}/${tenantKey}`;
+    } catch {}
+  }
+
+  return `/${tenantKey}`;
 }
 
 export function buildTenantHomeUrl(

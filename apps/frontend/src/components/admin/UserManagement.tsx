@@ -1,5 +1,6 @@
 'use client'
 
+import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import {
   AlertTriangle,
@@ -10,7 +11,6 @@ import {
   RefreshCw,
   Search,
   Shield,
-  Trash2,
   UserCog,
   Wifi,
   WifiOff,
@@ -20,14 +20,6 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
@@ -41,7 +33,6 @@ import {
 import {
   Table,
   TableBody,
-  TableCell,
   TableHead,
   TableHeader,
   TableRow,
@@ -52,26 +43,15 @@ import { useCompanyAccess } from '@/hooks/use-company-access'
 import { useCompanyUsers } from '@/hooks/use-company-users'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useUserOrganizations } from '@/hooks/use-user-organizations'
+import planService from '@/lib/services/plan-service'
 import type { User as CompanyUser } from '@/lib/services/admin-api'
+import { UserTableSkeleton, UserMobileListSkeleton } from '@/components/admin/users/UserSkeletons'
+import { UserTableRow } from '@/components/admin/users/UserTableRow'
+import { UserMobileCard } from '@/components/admin/users/UserMobileCard'
+import { UserFormDialog, DeleteUserDialog, type UserFormState } from '@/components/admin/users/UserDialogs'
 
 type CompanyRole = 'OWNER' | 'ADMIN' | 'SELLER' | 'WAREHOUSE'
 type UserStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED'
-
-type UserFormState = {
-  name: string
-  email: string
-  role: CompanyRole
-  status: UserStatus
-  password: string
-}
-
-const INITIAL_FORM: UserFormState = {
-  name: '',
-  email: '',
-  role: 'SELLER',
-  status: 'ACTIVE',
-  password: '',
-}
 
 const ROLE_OPTIONS: Array<{ value: CompanyRole; label: string; description: string }> = [
   { value: 'OWNER', label: 'Owner', description: 'Control total de empresa y facturacion' },
@@ -86,19 +66,6 @@ const STATUS_OPTIONS: Array<{ value: UserStatus; label: string }> = [
   { value: 'SUSPENDED', label: 'Suspendido' },
 ]
 
-const ROLE_STYLES: Record<CompanyRole, string> = {
-  OWNER: 'border-slate-300 bg-slate-100 text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200',
-  ADMIN: 'border-blue-300 bg-blue-100 text-blue-800 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300',
-  SELLER: 'border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300',
-  WAREHOUSE: 'border-amber-300 bg-amber-100 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300',
-}
-
-const STATUS_STYLES: Record<UserStatus, string> = {
-  ACTIVE: 'border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300',
-  INACTIVE: 'border-slate-300 bg-slate-100 text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200',
-  SUSPENDED: 'border-rose-300 bg-rose-100 text-rose-800 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-300',
-}
-
 function normalizeStatus(status?: string): UserStatus {
   const normalized = String(status || '').toUpperCase()
   if (normalized === 'INACTIVE') return 'INACTIVE'
@@ -112,24 +79,6 @@ function normalizeRole(role?: string): CompanyRole {
   if (normalized === 'ADMIN') return 'ADMIN'
   if (normalized === 'WAREHOUSE') return 'WAREHOUSE'
   return 'SELLER'
-}
-
-function getInitials(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return 'U'
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
-  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
-}
-
-function formatDateTime(value?: string | null) {
-  if (!value) return 'Sin registro'
-  return new Intl.DateTimeFormat('es-PY', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(value))
 }
 
 function getErrorMessage(error: unknown) {
@@ -177,20 +126,23 @@ export default function UserManagement() {
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<CompanyUser | null>(null)
-  const [form, setForm] = useState<UserFormState>(INITIAL_FORM)
   const [rowActionId, setRowActionId] = useState<string | null>(null)
   const [deleteUserId, setDeleteUserId] = useState<string | null>(null)
 
   const companyAccess = useCompanyAccess({
     permission: 'manage_users',
-    feature: 'team_management',
     companyId: selectedOrganizationId || undefined,
     enabled: Boolean(user) && (!isSuperAdmin || Boolean(selectedOrganizationId)),
   })
 
   const canManageUsers = isSuperAdmin || Boolean(companyAccess.data?.allowed)
   const accessContext = companyAccess.data?.context || null
-  const hasUnlimitedUsers = Boolean(accessContext?.features?.includes('unlimited_users'))
+  const { data: planData } = useQuery({
+    queryKey: ['company-user-plan-limits', selectedOrganizationId || ''],
+    enabled: Boolean(selectedOrganizationId) && (canManageUsers || isSuperAdmin),
+    staleTime: 60_000,
+    queryFn: async () => planService.getPlanLimits(selectedOrganizationId),
+  })
 
   const {
     users,
@@ -235,34 +187,36 @@ export default function UserManagement() {
     }
   }, [users])
 
-  const seatLimit = hasUnlimitedUsers ? null : 10
+  const userSeatLimitEntry = useMemo(
+    () => planData?.limits?.find((limit) => limit.feature_type === 'users') || null,
+    [planData]
+  )
+  const hasUnlimitedUsers = Boolean(userSeatLimitEntry?.is_unlimited) || Boolean(accessContext?.features?.includes('unlimited_users'))
+  const seatLimit = hasUnlimitedUsers
+    ? null
+    : (typeof userSeatLimitEntry?.limit_value === 'number' && userSeatLimitEntry.limit_value > 0
+      ? userSeatLimitEntry.limit_value
+      : null)
   const seatUsage = seatLimit ? Math.min(100, Math.round((totalTeamCount / seatLimit) * 100)) : 0
+  const isSeatLimitReached = seatLimit !== null && totalTeamCount >= seatLimit
+  const isSeatLimitNear = seatLimit !== null && totalTeamCount >= Math.max(seatLimit - 1, Math.ceil(seatLimit * 0.8))
   const hasFiltersApplied = Boolean(debouncedSearch || roleFilter !== 'ALL' || statusFilter !== 'ALL')
   const isMutating = creating || updating || deleting
   const filteredCountLabel = hasFiltersApplied ? `${totalCount} resultados` : `${totalTeamCount} miembros`
 
   const openCreateDialog = () => {
     setEditingUser(null)
-    setForm(INITIAL_FORM)
     setDialogOpen(true)
   }
 
   const openEditDialog = (targetUser: CompanyUser) => {
     setEditingUser(targetUser)
-    setForm({
-      name: targetUser.name,
-      email: targetUser.email,
-      role: normalizeRole(targetUser.role),
-      status: normalizeStatus(targetUser.status),
-      password: '',
-    })
     setDialogOpen(true)
   }
 
   const closeDialog = () => {
     setDialogOpen(false)
     setEditingUser(null)
-    setForm(INITIAL_FORM)
   }
 
   const handleRefresh = async () => {
@@ -278,19 +232,19 @@ export default function UserManagement() {
     }
   }
 
-  const submitUser = async () => {
+  const submitUser = async (formData: UserFormState) => {
     try {
       if (!selectedOrganizationId) {
         toast({ title: 'Selecciona una organizacion', variant: 'destructive' })
         return
       }
 
-      if (!form.name.trim() || !form.email.trim()) {
+      if (!formData.name.trim() || !formData.email.trim()) {
         toast({ title: 'Completa nombre y email', variant: 'destructive' })
         return
       }
 
-      if (!editingUser && form.password.trim().length < 8) {
+      if (!editingUser && formData.password.trim().length < 8) {
         toast({
           title: 'Contrasena invalida',
           description: 'La contrasena inicial debe tener al menos 8 caracteres.',
@@ -303,22 +257,22 @@ export default function UserManagement() {
         await updateUser({
           userId: editingUser.id,
           data: {
-            name: form.name.trim(),
-            email: form.email.trim(),
-            role: form.role,
-            status: form.status,
-            password: form.password.trim() || undefined,
+            name: formData.name.trim(),
+            email: formData.email.trim(),
+            role: formData.role,
+            status: formData.status,
+            password: formData.password.trim() || undefined,
             organizationId: selectedOrganizationId,
           },
         })
         toast({ title: 'Usuario actualizado', description: 'Los cambios ya quedaron sincronizados.' })
       } else {
         await createUser({
-          name: form.name.trim(),
-          email: form.email.trim(),
-          password: form.password.trim(),
-          role: form.role,
-          status: form.status,
+          name: formData.name.trim(),
+          email: formData.email.trim(),
+          password: formData.password.trim(),
+          role: formData.role,
+          status: formData.status,
           organizationId: selectedOrganizationId,
         })
         toast({ title: 'Usuario creado', description: 'El miembro fue agregado a la organizacion.' })
@@ -424,13 +378,62 @@ export default function UserManagement() {
 
   if (!canManageUsers) {
     return (
-      <Alert className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30">
-        <AlertTriangle className="h-4 w-4 text-amber-700 dark:text-amber-300" />
-        <AlertTitle>Acceso no disponible</AlertTitle>
-        <AlertDescription>
-          Tu rol o el plan actual de la empresa no habilitan la gestion de usuarios. Esta seccion requiere `manage_users` y la feature `team_management`.
-        </AlertDescription>
-      </Alert>
+      <div className="space-y-6">
+        <Card className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/20">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/30">
+                <Shield className="h-5 w-5 text-amber-700 dark:text-amber-300" />
+              </div>
+              <div>
+                <CardTitle className="text-lg text-amber-900 dark:text-amber-100">Gestión de equipo no disponible</CardTitle>
+                <CardDescription className="text-amber-700 dark:text-amber-300">
+                  Tu plan actual no incluye la administración de usuarios y roles.
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="rounded-lg border border-amber-200 bg-white p-4 dark:border-amber-800 dark:bg-amber-950/30">
+              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">¿Qué incluye esta sección?</p>
+              <ul className="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                <li className="flex items-center gap-2">
+                  <UserCog className="h-4 w-4 text-slate-400" />
+                  Crear y gestionar usuarios del equipo
+                </li>
+                <li className="flex items-center gap-2">
+                  <Crown className="h-4 w-4 text-slate-400" />
+                  Asignar roles (Admin, Vendedor, Depósito)
+                </li>
+                <li className="flex items-center gap-2">
+                  <Shield className="h-4 w-4 text-slate-400" />
+                  Controlar permisos y accesos por rol
+                </li>
+              </ul>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Button
+                variant="default"
+                className="gap-2"
+                onClick={() => window.location.href = '/dashboard/settings?tab=subscription'}
+              >
+                <Wifi className="h-4 w-4" />
+                Mejorar plan
+              </Button>
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => window.location.href = '/inicio/planes'}
+              >
+                Ver planes disponibles
+              </Button>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Los planes Pro y Enterprise incluyen gestión de equipo con usuarios ilimitados.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
     )
   }
 
@@ -470,7 +473,7 @@ export default function UserManagement() {
               <RefreshCw className={cn('mr-2 h-4 w-4', isFetching && 'animate-spin')} />
               Actualizar
             </Button>
-            <Button onClick={openCreateDialog} disabled={!selectedOrganizationId || isMutating}>
+            <Button onClick={openCreateDialog} disabled={!selectedOrganizationId || isMutating || isSeatLimitReached}>
               <Plus className="mr-2 h-4 w-4" />
               Nuevo usuario
             </Button>
@@ -492,32 +495,32 @@ export default function UserManagement() {
           <div className="rounded-2xl border border-border bg-background p-4">
             <div className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Capacidad del plan</div>
             <div className="mt-2 text-2xl font-semibold text-foreground">
-              {hasUnlimitedUsers ? 'Ilimitado' : `${totalTeamCount}/${seatLimit}`}
+              {hasUnlimitedUsers ? 'Ilimitado' : seatLimit !== null ? `${totalTeamCount}/${seatLimit}` : 'No definido'}
             </div>
             <div className="mt-1 text-sm text-muted-foreground">
-              {hasUnlimitedUsers ? 'Sin tope operativo de usuarios' : 'Límite aplicado por plan actual'}
+              {hasUnlimitedUsers ? 'Sin tope operativo de usuarios' : seatLimit !== null ? 'Limite aplicado por plan actual' : 'No se pudo resolver el limite de usuarios desde el plan'}
             </div>
-            {!hasUnlimitedUsers && (
+            {!hasUnlimitedUsers && seatLimit !== null && (
               <div className="mt-3 space-y-2">
                 <Progress value={seatUsage} className="h-2.5" />
                 <div className={cn('text-xs font-medium', seatUsage >= 90 ? 'text-rose-600' : seatUsage >= 70 ? 'text-amber-600' : 'text-muted-foreground')}>
-                  {seatUsage}% del límite utilizado
+                  {seatUsage}% del limite utilizado
                 </div>
               </div>
             )}
           </div>
         </div>
 
-        {!hasUnlimitedUsers && totalTeamCount >= 8 && (
+        {!hasUnlimitedUsers && seatLimit !== null && isSeatLimitNear && (
           <Alert className={cn(
-            totalTeamCount >= 10
+            isSeatLimitReached
               ? 'border-rose-200 bg-rose-50 dark:border-rose-900 dark:bg-rose-950/30'
               : 'border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30'
           )}>
-            <AlertTriangle className={cn('h-4 w-4', totalTeamCount >= 10 ? 'text-rose-700 dark:text-rose-300' : 'text-amber-700 dark:text-amber-300')} />
-            <AlertTitle>{totalTeamCount >= 10 ? 'Límite alcanzado' : 'Capacidad en observación'}</AlertTitle>
+            <AlertTriangle className={cn('h-4 w-4', isSeatLimitReached ? 'text-rose-700 dark:text-rose-300' : 'text-amber-700 dark:text-amber-300')} />
+            <AlertTitle>{isSeatLimitReached ? 'Límite alcanzado' : 'Capacidad en observación'}</AlertTitle>
             <AlertDescription>
-              {totalTeamCount >= 10
+              {isSeatLimitReached
                 ? 'El plan actual ya no permite agregar más miembros desde este panel.'
                 : 'La empresa está cerca del límite operativo de usuarios para su plan actual.'}
             </AlertDescription>
@@ -588,8 +591,22 @@ export default function UserManagement() {
         </CardHeader>
         <CardContent className="space-y-4">
           {loading ? (
-            <div className="flex min-h-[320px] items-center justify-center">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            <>
+              <UserTableSkeleton />
+              <UserMobileListSkeleton />
+            </>
+          ) : error && users.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-rose-200 bg-rose-50/70 px-6 py-16 text-center dark:border-rose-900 dark:bg-rose-950/20">
+              <p className="text-sm font-medium text-foreground">No se pudo cargar el equipo</p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {error}
+              </p>
+              <div className="mt-5">
+                <Button variant="outline" onClick={() => void handleRefresh()} disabled={isFetching}>
+                  <RefreshCw className={cn('mr-2 h-4 w-4', isFetching && 'animate-spin')} />
+                  Reintentar
+                </Button>
+              </div>
             </div>
           ) : users.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border px-6 py-16 text-center">
@@ -612,131 +629,33 @@ export default function UserManagement() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {users.map((item) => {
-                      const itemRole = normalizeRole(item.role)
-                      const itemStatus = normalizeStatus(item.status)
-                      const isBusy = rowActionId === item.id
-
-                      return (
-                        <TableRow key={item.id}>
-                          <TableCell>
-                            <div className="flex items-center gap-3">
-                              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted font-medium text-foreground">
-                                {getInitials(item.name)}
-                              </div>
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <p className="truncate text-sm font-medium text-foreground">{item.name}</p>
-                                  {itemRole === 'OWNER' && <Crown className="h-3.5 w-3.5 text-slate-500" />}
-                                </div>
-                                <p className="truncate text-xs text-muted-foreground">{item.email}</p>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className={ROLE_STYLES[itemRole]}>{itemRole}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className={STATUS_STYLES[itemStatus]}>{itemStatus}</Badge>
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {formatDateTime(item.lastLogin)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
-                              <Button variant="outline" size="sm" onClick={() => openEditDialog(item)} disabled={isBusy}>
-                                <UserCog className="mr-2 h-4 w-4" />
-                                Editar
-                              </Button>
-
-                              <Select value={itemStatus} onValueChange={(value) => void updateStatus(item, value as UserStatus)} disabled={isBusy}>
-                                <SelectTrigger className="w-[150px]">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {STATUS_OPTIONS.map((status) => (
-                                    <SelectItem key={status.value} value={status.value}>{status.label}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                onClick={() => setDeleteUserId(item.id)}
-                                disabled={isBusy}
-                              >
-                                {isBusy && deleteUserId === item.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })}
+                    {users.map((item) => (
+                      <UserTableRow
+                        key={item.id}
+                        item={item}
+                        isBusy={rowActionId === item.id}
+                        isDeleting={rowActionId === item.id && deleteUserId === item.id}
+                        onEdit={openEditDialog}
+                        onUpdateStatus={(user, status) => void updateStatus(user, status as UserStatus)}
+                        onDelete={setDeleteUserId}
+                      />
+                    ))}
                   </TableBody>
                 </Table>
               </div>
 
               <div className="space-y-3 md:hidden">
-                {users.map((item) => {
-                  const itemRole = normalizeRole(item.role)
-                  const itemStatus = normalizeStatus(item.status)
-                  const isBusy = rowActionId === item.id
-
-                  return (
-                    <div key={item.id} className="rounded-2xl border border-border bg-background p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted font-medium text-foreground">
-                              {getInitials(item.name)}
-                            </div>
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2">
-                                <p className="truncate text-sm font-medium text-foreground">{item.name}</p>
-                                {itemRole === 'OWNER' && <Crown className="h-3.5 w-3.5 text-slate-500" />}
-                              </div>
-                              <p className="truncate text-xs text-muted-foreground">{item.email}</p>
-                            </div>
-                          </div>
-                        </div>
-                        <Badge variant="outline" className={ROLE_STYLES[itemRole]}>{itemRole}</Badge>
-                      </div>
-
-                      <div className="mt-4 grid gap-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-muted-foreground">Estado</span>
-                          <Badge variant="outline" className={STATUS_STYLES[itemStatus]}>{itemStatus}</Badge>
-                        </div>
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-sm text-muted-foreground">Ultimo acceso</span>
-                          <span className="text-sm text-foreground">{formatDateTime(item.lastLogin)}</span>
-                        </div>
-                        <Select value={itemStatus} onValueChange={(value) => void updateStatus(item, value as UserStatus)} disabled={isBusy}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {STATUS_OPTIONS.map((status) => (
-                              <SelectItem key={status.value} value={status.value}>{status.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <div className="grid grid-cols-2 gap-2">
-                          <Button variant="outline" onClick={() => openEditDialog(item)} disabled={isBusy}>
-                            <UserCog className="mr-2 h-4 w-4" />
-                            Editar
-                          </Button>
-                          <Button variant="outline" className="text-destructive hover:text-destructive" onClick={() => setDeleteUserId(item.id)} disabled={isBusy}>
-                            {isBusy && deleteUserId === item.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-                            Remover
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
+                {users.map((item) => (
+                  <UserMobileCard
+                    key={item.id}
+                    item={item}
+                    isBusy={rowActionId === item.id}
+                    isDeleting={rowActionId === item.id && deleteUserId === item.id}
+                    onEdit={openEditDialog}
+                    onUpdateStatus={(user, status) => void updateStatus(user, status as UserStatus)}
+                    onDelete={setDeleteUserId}
+                  />
+                ))}
               </div>
 
               {totalCount > users.length && (
@@ -753,111 +672,25 @@ export default function UserManagement() {
         </CardContent>
       </Card>
 
-      <Dialog open={dialogOpen} onOpenChange={(open) => (!open ? closeDialog() : setDialogOpen(true))}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{editingUser ? 'Editar usuario' : 'Nuevo usuario'}</DialogTitle>
-            <DialogDescription>
-              {editingUser
-                ? 'Actualiza identidad, rol y estado dentro de la organizacion actual.'
-                : 'Crea un miembro nuevo usando los roles reales del sistema de empresa.'}
-            </DialogDescription>
-          </DialogHeader>
+      <UserFormDialog
+        isOpen={dialogOpen}
+        onClose={closeDialog}
+        editingUser={editingUser}
+        availableRoles={availableRoles}
+        isMutating={creating || updating}
+        onSubmit={(data) => void submitUser(data)}
+      />
 
-          <div className="grid gap-5 py-2 md:grid-cols-2">
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="name">Nombre completo</Label>
-              <Input id="name" value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Ej. Ana Perez" />
-            </div>
-
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} placeholder="usuario@empresa.com" />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Rol</Label>
-              <Select value={form.role} onValueChange={(value) => setForm((current) => ({ ...current, role: value as CompanyRole }))}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableRoles.map((role) => (
-                    <SelectItem key={role.value} value={role.value}>
-                      {role.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {availableRoles.find((role) => role.value === form.role)?.description}
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Estado</Label>
-              <Select value={form.status} onValueChange={(value) => setForm((current) => ({ ...current, status: value as UserStatus }))}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {STATUS_OPTIONS.map((status) => (
-                    <SelectItem key={status.value} value={status.value}>
-                      {status.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="password">{editingUser ? 'Nueva contrasena opcional' : 'Contrasena inicial'}</Label>
-              <Input
-                id="password"
-                type="password"
-                value={form.password}
-                onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
-                placeholder={editingUser ? 'Solo si quieres reemplazarla' : 'Minimo 8 caracteres'}
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={closeDialog}>Cancelar</Button>
-            <Button onClick={() => void submitUser()} disabled={creating || updating}>
-              {(creating || updating) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {editingUser ? 'Guardar cambios' : 'Crear usuario'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={Boolean(deleteUserId)} onOpenChange={(open) => (!open ? setDeleteUserId(null) : undefined)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Remover usuario</DialogTitle>
-            <DialogDescription>
-              Esta accion quita la membresia de la organizacion actual. El acceso puede seguir existiendo en otras empresas si el usuario tiene otras vinculaciones.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteUserId(null)}>Cancelar</Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                const target = users.find((item) => item.id === deleteUserId)
-                if (target) {
-                  void removeUser(target)
-                }
-              }}
-              disabled={!deleteUserId || deleting}
-            >
-              {deleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Remover
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteUserDialog
+        userId={deleteUserId}
+        users={users}
+        isDeleting={deleting}
+        onClose={() => setDeleteUserId(null)}
+        onConfirm={(target) => void removeUser(target)}
+      />
     </div>
   )
 }
+
+
+

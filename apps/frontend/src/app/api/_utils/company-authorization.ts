@@ -18,6 +18,28 @@ export {
 
 type RoleName = 'OWNER' | 'ADMIN' | 'SELLER' | 'WAREHOUSE' | 'SUPER_ADMIN' | 'UNKNOWN'
 
+type OrganizationSummaryRow = {
+  id?: string | null
+  subscription_plan?: string | null
+  subscription_status?: string | null
+}
+
+type MembershipAccessRow = {
+  organization_id?: string | null
+  role_id?: string | null
+  is_owner?: boolean | null
+  status?: string | null
+  organization?: OrganizationSummaryRow | OrganizationSummaryRow[] | null
+}
+
+function firstRelation<T>(value?: T | T[] | null): T | null {
+  if (Array.isArray(value)) {
+    return value[0] || null
+  }
+
+  return value || null
+}
+
 export interface CompanyAccessContext {
   userId: string
   email: string | null
@@ -139,7 +161,10 @@ async function getActiveRoleNames(
 
   const { data } = await query
   return (data || [])
-    .map((item: any) => String(item?.role?.name || '').toUpperCase())
+    .map((item: { role?: { name?: string | null } | Array<{ name?: string | null }> | null }) => {
+      const role = firstRelation(item.role)
+      return String(role?.name || '').toUpperCase()
+    })
     .filter(Boolean)
 }
 
@@ -213,22 +238,47 @@ export async function resolveCompanyAccess(
       membershipQuery = membershipQuery.eq('organization_id', requirement.companyId)
     }
 
-    const { data: membership } = await membershipQuery.maybeSingle()
+    const { data: membershipData, error: membershipError } = await membershipQuery.maybeSingle()
+
+    // If column 'status' caused the error, retry without it
+    let membership = (membershipData || null) as MembershipAccessRow | null
+    if (membershipError && !membership) {
+      const { data: fallbackData } = await adminClient
+        .from('organization_members')
+        .select(`
+          organization_id,
+          role_id,
+          is_owner,
+          organization:organizations(
+            id,
+            subscription_plan,
+            subscription_status
+          )
+        `)
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+      membership = (fallbackData || null) as MembershipAccessRow | null
+    }
+
+    const organization = firstRelation(membership?.organization)
 
     if (!membership && !isSuperAdmin) {
       return { ok: false, status: 403, body: { error: 'Usuario sin empresa asignada' } }
     }
 
     const companyId = requirement.companyId || membership?.organization_id || null
-    const planName = (membership as any)?.organization?.subscription_plan || 'FREE'
+    const planName = organization?.subscription_plan || 'FREE'
 
     let membershipRoleName = ''
     if (membership?.role_id) {
-      const { data: membershipRole } = await adminClient
+      const { data: membershipRoleData } = await adminClient
         .from('roles')
         .select('name')
         .eq('id', membership.role_id)
         .maybeSingle()
+      const membershipRole = (membershipRoleData || null) as { name?: string | null } | null
       membershipRoleName = String(membershipRole?.name || '').toUpperCase()
     }
 

@@ -221,12 +221,12 @@ export const defaultBusinessConfig: BusinessConfig = {
   tagline: "Calidad y servicio de excelencia",
   heroTitle: "Bienvenidos a",
   heroHighlight: "nuestro negocio",
-  heroDescription: "Ofrecemos productos y servicios de la más alta calidad con atención personalizada y precios justos.",
+  heroDescription: "Ofrecemos productos y servicios de la mas alta calidad con atencion personalizada y precios justos.",
 
   legalInfo: {
     ruc: "",
     businessType: "Empresa Individual",
-    taxRegime: "Régimen General",
+    taxRegime: "Regimen General",
     economicActivity: "Comercio al por menor",
     registrationNumber: ""
   },
@@ -245,9 +245,9 @@ export const defaultBusinessConfig: BusinessConfig = {
   },
 
   address: {
-    street: "Av. Mariscal López 1234",
+    street: "Av. Mariscal Lopez 1234",
     neighborhood: "Villa Morra",
-    city: "Asunción",
+    city: "Asuncion",
     department: "Central",
     zipCode: "1209",
     country: "Paraguay",
@@ -267,7 +267,7 @@ export const defaultBusinessConfig: BusinessConfig = {
 
   businessHours: [
     "Lunes - Viernes: 8:00 - 18:00",
-    "Sábados: 8:00 - 12:00",
+    "Sabados: 8:00 - 12:00",
     "Domingos: Cerrado"
   ],
 
@@ -285,15 +285,15 @@ export const defaultBusinessConfig: BusinessConfig = {
 
   storeSettings: {
     currency: "PYG",
-    currencySymbol: "₲",
+    currencySymbol: "Gs.",
     taxRate: 0.10, // IVA 10% en Paraguay
     taxEnabled: true, // IVA habilitado por defecto
     taxIncludedInPrices: true,
-    freeShippingThreshold: 150000, // 150,000 guaraníes
+    freeShippingThreshold: 150000, // 150,000 guaranies
     freeShippingEnabled: true,
-    freeShippingMessage: "Envío gratis a partir de {amount}",
+    freeShippingMessage: "Envio gratis a partir de {amount}",
     freeShippingRegions: [],
-    minimumOrderAmount: 50000, // 50,000 guaraníes
+    minimumOrderAmount: 50000, // 50,000 guaranies
     acceptsCreditCards: true,
     acceptsDebitCards: true,
     acceptsCash: true,
@@ -338,17 +338,17 @@ export const defaultBusinessConfig: BusinessConfig = {
       {
         id: "demo-1",
         url: "https://images.unsplash.com/photo-1512428559087-560fa5ceab42?auto=format&fit=crop&w=1600&q=80",
-        alt: "Promoción destacada 1"
+        alt: "Promocion destacada 1"
       },
       {
         id: "demo-2",
         url: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=1600&q=80",
-        alt: "Promoción destacada 2"
+        alt: "Promocion destacada 2"
       },
       {
         id: "demo-3",
         url: "https://images.unsplash.com/photo-1503602642458-232111445657?auto=format&fit=crop&w=1600&q=80",
-        alt: "Promoción destacada 3"
+        alt: "Promocion destacada 3"
       }
     ]
   },

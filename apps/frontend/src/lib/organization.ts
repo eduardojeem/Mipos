@@ -1,9 +1,18 @@
 import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase-admin';
 
 export interface OrganizationContext {
   organizationId: string;
   userId: string;
+}
+
+async function getDbClient() {
+  try {
+    return createAdminClient();
+  } catch {
+    return await createClient();
+  }
 }
 
 async function getAuthenticatedUserId(
@@ -11,34 +20,38 @@ async function getAuthenticatedUserId(
 ): Promise<string | null> {
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) {
-    console.warn('Organization validation: No authenticated user found');
     return null;
   }
-
   return user.id;
 }
 
 async function validateRequestedOrganizationId(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  _supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
   requestedOrgId: string
 ): Promise<string | null> {
   const normalizedOrgId = requestedOrgId.trim();
-  if (!normalizedOrgId) {
-    return null;
-  }
+  if (!normalizedOrgId) return null;
 
-  const { data, error } = await supabase
+  const client = await getDbClient();
+  const { data, error } = await client
     .from('organization_members')
     .select('organization_id')
     .eq('user_id', userId)
     .eq('organization_id', normalizedOrgId)
-    .single();
+    .maybeSingle();
 
   if (error || !data) {
-    console.warn(
-      `Organization validation: User ${userId} attempted to access org ${normalizedOrgId} without permission`
-    );
+    // Fallback: check users table
+    const { data: userRow } = await client
+      .from('users')
+      .select('organization_id')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (userRow?.organization_id === normalizedOrgId) {
+      return normalizedOrgId;
+    }
     return null;
   }
 
@@ -46,24 +59,29 @@ async function validateRequestedOrganizationId(
 }
 
 async function getFallbackOrganizationId(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  _supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string
 ): Promise<string | null> {
-  const { data: memberData, error: memberError } = await supabase
+  const client = await getDbClient();
+  const { data: memberData } = await client
     .from('organization_members')
     .select('organization_id')
     .eq('user_id', userId)
     .limit(1)
-    .single();
+    .maybeSingle();
 
-  if (memberError || !memberData) {
-    console.warn(
-      `Organization validation: User ${userId} has no organization memberships`
-    );
-    return null;
+  if (memberData?.organization_id) {
+    return memberData.organization_id;
   }
 
-  return memberData.organization_id;
+  // Fallback to users table
+  const { data: userRow } = await client
+    .from('users')
+    .select('organization_id')
+    .eq('id', userId)
+    .maybeSingle();
+
+  return userRow?.organization_id || null;
 }
 
 export async function getValidatedOrganizationId(

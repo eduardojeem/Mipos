@@ -9,6 +9,7 @@ type PlanRecord = {
   name: string
   slug: string
   features?: string[] | null
+  limits?: Record<string, unknown> | null
   price_monthly?: number | null
   price_yearly?: number | null
   max_users?: number | null
@@ -34,6 +35,7 @@ type OrganizationRecord = {
 type SaasSubscriptionRecord = {
   id: string
   organization_id: string
+  plan_id?: string | null
   status?: string | null
   billing_cycle?: string | null
   current_period_start?: string | null
@@ -107,6 +109,75 @@ const USAGE_FEATURES = [
   { key: 'monthly_transactions', planColumn: 'max_transactions_per_month' },
   { key: 'locations', planColumn: 'max_locations' },
 ] as const
+
+type ResolvedCorePlanLimits = {
+  maxUsers: number
+  maxProducts: number
+  maxTransactionsPerMonth: number
+  maxLocations: number
+}
+
+function toFiniteLimitValue(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return null
+}
+
+function getPlanLimitCandidate(plan: PlanRecord, key: keyof ResolvedCorePlanLimits): number | null {
+  const fromJson = toFiniteLimitValue(plan.limits?.[key])
+  if (fromJson !== null && fromJson !== 0) {
+    return fromJson
+  }
+
+  switch (key) {
+    case 'maxUsers':
+      return toFiniteLimitValue(plan.max_users)
+    case 'maxProducts':
+      return toFiniteLimitValue(plan.max_products)
+    case 'maxTransactionsPerMonth':
+      return toFiniteLimitValue(plan.max_transactions_per_month)
+    case 'maxLocations':
+      return toFiniteLimitValue(plan.max_locations)
+    default:
+      return null
+  }
+}
+
+function normalizeUnlimitedLimit(value: number | null | undefined, fallback: number) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
+  if (value < 0) return 999999
+  if (value === 0) return 999999
+  return value
+}
+
+export function resolveSubscriptionPlanLimits(plan: PlanRecord): ResolvedCorePlanLimits {
+  const features = new Set((plan.features || []).map((feature) => String(feature).trim()))
+
+  const maxUsers = features.has('unlimited_users')
+    ? 999999
+    : normalizeUnlimitedLimit(getPlanLimitCandidate(plan, 'maxUsers'), 1)
+
+  const maxProducts = features.has('unlimited_products')
+    ? 999999
+    : normalizeUnlimitedLimit(getPlanLimitCandidate(plan, 'maxProducts'), 20)
+
+  const maxTransactionsPerMonth = normalizeUnlimitedLimit(
+    getPlanLimitCandidate(plan, 'maxTransactionsPerMonth'),
+    50
+  )
+
+  const maxLocations = normalizeUnlimitedLimit(getPlanLimitCandidate(plan, 'maxLocations'), 1)
+
+  return {
+    maxUsers,
+    maxProducts,
+    maxTransactionsPerMonth,
+    maxLocations,
+  }
+}
 
 function getBillingCycle(settings?: Record<string, unknown> | null): BillingCycle {
   return settings?.billingCycle === 'yearly' ? 'yearly' : 'monthly'
@@ -281,14 +352,28 @@ export async function syncOrganizationSubscriptionState(params: {
       }
 
       if (planSubscriptionId) {
+        const resolvedLimits = resolveSubscriptionPlanLimits(plan)
         for (const feature of USAGE_FEATURES) {
-          const limitValue = Number((plan as any)?.[feature.planColumn] ?? 0) || 0
+          const limitValue = (() => {
+            switch (feature.key) {
+              case 'users':
+                return resolvedLimits.maxUsers
+              case 'products':
+                return resolvedLimits.maxProducts
+              case 'monthly_transactions':
+                return resolvedLimits.maxTransactionsPerMonth
+              case 'locations':
+                return resolvedLimits.maxLocations
+              default:
+                return 999999
+            }
+          })()
           await adminClient
             .from('usage_limits')
             .upsert({
               subscription_id: planSubscriptionId,
               feature_type: feature.key,
-              limit_value: limitValue <= 0 ? 999999 : limitValue,
+              limit_value: limitValue,
               period: billingCycle,
               reset_date: endDate,
             }, { onConflict: 'subscription_id,feature_type' })
@@ -320,7 +405,7 @@ export async function getSubscriptionSnapshot(organizationId: string): Promise<S
       .single(),
     adminClient
       .from('saas_subscriptions')
-      .select('id,organization_id,status,billing_cycle,current_period_start,current_period_end,cancel_at_period_end,created_at,updated_at')
+      .select('id,organization_id,plan_id,status,billing_cycle,current_period_start,current_period_end,cancel_at_period_end,created_at,updated_at')
       .eq('organization_id', organizationId)
       .maybeSingle(),
     adminClient
@@ -339,8 +424,9 @@ export async function getSubscriptionSnapshot(organizationId: string): Promise<S
   const saasSubscription = (saasSubscriptionResult.data || null) as SaasSubscriptionRecord | null
   const planSubscription = (planSubscriptionResult.data || null) as PlanSubscriptionRecord | null
   const plan = await getPlanRecord(
-    organization.subscription_plan ||
+    saasSubscription?.plan_id ||
     planSubscription?.plan_type ||
+    organization.subscription_plan ||
     'free'
   )
 
@@ -524,6 +610,7 @@ export function buildSubscriptionResponse(params: {
   } = params
   const endDate = new Date(currentPeriodEnd)
   const daysUntilRenewal = Math.max(0, Math.ceil((endDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+  const resolvedLimits = resolveSubscriptionPlanLimits(plan)
 
   return {
     id: organization.id,
@@ -535,12 +622,7 @@ export function buildSubscriptionResponse(params: {
       priceMonthly: Number(plan.price_monthly || 0),
       priceYearly: Number(plan.price_yearly || 0),
       features: Array.isArray(plan.features) ? plan.features.map(String) : [],
-      limits: {
-        maxUsers: Number(plan.max_users || 0) || 1,
-        maxProducts: Number(plan.max_products || 0) || 20,
-        maxTransactionsPerMonth: Number(plan.max_transactions_per_month || 0) || 50,
-        maxLocations: Number(plan.max_locations || 0) || 1,
-      },
+      limits: resolvedLimits,
       description: plan.description || null,
       currency: plan.currency || 'PYG',
       trialDays: Number(plan.trial_days || 0),

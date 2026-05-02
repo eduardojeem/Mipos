@@ -61,17 +61,9 @@ export function useCompanyUsers(options: UseCompanyUsersOptions = {}) {
     [organizationId, normalizedRole, normalizedSearch, normalizedStatus, page, pageSize]
   )
 
-  const totalKey = useMemo(
-    () => ['company-users-total', organizationId || ''],
-    [organizationId]
-  )
-
   const invalidateUsers = useCallback(async () => {
     AdminApiService.invalidateUsersCache()
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['company-users'] }),
-      queryClient.invalidateQueries({ queryKey: ['company-users-total'] }),
-    ])
+    await queryClient.invalidateQueries({ queryKey: ['company-users'] })
   }, [queryClient])
 
   const usersQuery = useQuery({
@@ -89,20 +81,6 @@ export function useCompanyUsers(options: UseCompanyUsersOptions = {}) {
     }),
   })
 
-  const totalUsersQuery = useQuery({
-    queryKey: totalKey,
-    enabled: isEnabled,
-    staleTime: 30_000,
-    queryFn: async () => {
-      const result = await AdminApiService.getUsers({
-        page: 1,
-        limit: 1,
-        organizationId,
-      })
-      return result.total
-    },
-  })
-
   useEffect(() => {
     if (!organizationId || !isEnabled) return
 
@@ -114,7 +92,7 @@ export function useCompanyUsers(options: UseCompanyUsersOptions = {}) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'user_roles', filter: `organization_id=eq.${organizationId}` }, () => {
         void invalidateUsers()
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'users', filter: `organization_id=eq.${organizationId}` }, () => {
         void invalidateUsers()
       })
       .subscribe((statusValue) => {
@@ -147,13 +125,13 @@ export function useCompanyUsers(options: UseCompanyUsersOptions = {}) {
 
   const refresh = useCallback(async () => {
     AdminApiService.invalidateUsersCache()
-    await Promise.all([usersQuery.refetch(), totalUsersQuery.refetch()])
-  }, [totalUsersQuery, usersQuery])
+    await usersQuery.refetch()
+  }, [usersQuery])
 
   return {
     users: (usersQuery.data?.users || []) as User[],
     totalCount: usersQuery.data?.total || 0,
-    totalTeamCount: totalUsersQuery.data || 0,
+    totalTeamCount: usersQuery.data?.teamTotal || 0,
     loading: usersQuery.isLoading,
     isFetching: usersQuery.isFetching,
     isRealtimeConnected,

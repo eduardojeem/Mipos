@@ -1,7 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { ADMIN_API_ACCESS, requireAdminApiAccess } from '@/app/api/admin/_utils/access'
-import { exportSessions, exportSessionsStreamCsv, SessionListFilters } from '@/app/api/admin/_services/sessions'
+import {
+  CurrentSessionContext,
+  DeviceType,
+  exportSessions,
+  exportSessionsStreamCsv,
+  LoginMethod,
+  RiskLevel,
+  resolveSessionKey,
+  SessionListFilters,
+} from '@/app/api/admin/_services/sessions'
 import { getAllowedUserIds } from '@/app/api/admin/_utils/orgCache'
+import { createClient } from '@/lib/supabase/server'
+
+function readStatus(value: string | null): SessionListFilters['status'] {
+  return value === 'active' || value === 'expired' || value === 'all' ? value : 'all'
+}
+
+function readDeviceType(value: string | null): DeviceType | 'all' {
+  return value === 'desktop' || value === 'mobile' || value === 'tablet' || value === 'unknown' || value === 'all'
+    ? value
+    : 'all'
+}
+
+function readRiskLevel(value: string | null): RiskLevel | 'all' {
+  return value === 'low' || value === 'medium' || value === 'high' || value === 'all' ? value : 'all'
+}
+
+function readLoginMethod(value: string | null): LoginMethod | 'all' {
+  return value === 'email' || value === 'google' || value === 'github' || value === 'sso' || value === 'all'
+    ? value
+    : 'all'
+}
+
+function readSortBy(value: string | null): SessionListFilters['sortBy'] | undefined {
+  return value === 'createdAt' || value === 'lastActivityAt' || value === 'expiresAt' || value === 'userName' || value === 'riskLevel'
+    ? value
+    : undefined
+}
 
 export async function GET(req: NextRequest) {
   const access = await requireAdminApiAccess(req, ADMIN_API_ACCESS.adminPanel)
@@ -19,19 +55,11 @@ export async function GET(req: NextRequest) {
 
   const filters: SessionListFilters = {
     search: searchParams.get('search') || undefined,
-    status: ['active', 'expired', 'all'].includes(searchParams.get('status') ?? '')
-      ? (searchParams.get('status') as any)
-      : 'all',
+    status: readStatus(searchParams.get('status')),
     userRole: searchParams.get('userRole') || undefined,
-    deviceType: ['desktop', 'mobile', 'tablet', 'unknown', 'all'].includes(searchParams.get('deviceType') ?? '')
-      ? (searchParams.get('deviceType') as any)
-      : 'all',
-    riskLevel: ['low', 'medium', 'high', 'all'].includes(searchParams.get('riskLevel') ?? '')
-      ? (searchParams.get('riskLevel') as any)
-      : 'all',
-    loginMethod: ['email', 'google', 'github', 'sso', 'all'].includes(searchParams.get('loginMethod') ?? '')
-      ? (searchParams.get('loginMethod') as any)
-      : 'all',
+    deviceType: readDeviceType(searchParams.get('deviceType')),
+    riskLevel: readRiskLevel(searchParams.get('riskLevel')),
+    loginMethod: readLoginMethod(searchParams.get('loginMethod')),
     isActive: searchParams.get('isActive') === null
       ? undefined
       : searchParams.get('isActive') === 'true'
@@ -48,23 +76,38 @@ export async function GET(req: NextRequest) {
           : undefined,
     dateFrom: searchParams.get('dateFrom') || undefined,
     dateTo: searchParams.get('dateTo') || undefined,
-    sortBy: (searchParams.get('sortBy') as any) || undefined,
+    sortBy: readSortBy(searchParams.get('sortBy')),
     sortDir: searchParams.get('sortDir') === 'asc' ? 'asc' : 'desc',
     allowedUserIds,
   }
 
-  if (format === 'csv') {
-    const stream = await exportSessionsStreamCsv(filters)
-    return new NextResponse(stream, {
-      headers: {
-        'Content-Type': 'text/csv',
-        'Content-Disposition': 'attachment; filename="sessions.csv"',
-      },
-    })
+  const supabase = await createClient()
+  const { data: { session } } = await supabase.auth.getSession()
+
+  const currentSession: CurrentSessionContext = {
+    userId: access.context.userId,
+    userAgent: req.headers.get('user-agent') || '',
+    ipAddress: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || '',
+    sessionKey: resolveSessionKey(session?.access_token, session?.refresh_token),
   }
 
-  const data = await exportSessions(filters, 'json')
-  return new NextResponse(data.body, {
-    headers: { 'Content-Type': data.contentType },
-  })
+  try {
+    if (format === 'csv') {
+      const stream = await exportSessionsStreamCsv(filters, currentSession)
+      return new NextResponse(stream, {
+        headers: {
+          'Content-Type': 'text/csv',
+          'Content-Disposition': 'attachment; filename="sessions.csv"',
+        },
+      })
+    }
+
+    const data = await exportSessions(filters, 'json', currentSession)
+    return new NextResponse(data.body, {
+      headers: { 'Content-Type': data.contentType },
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'No se pudo exportar'
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
 }

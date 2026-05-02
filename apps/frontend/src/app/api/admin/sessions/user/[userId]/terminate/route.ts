@@ -25,8 +25,8 @@ export async function POST(
 
   const result = await terminateUserSessions(userId, allowedUserIds)
   if (!result.ok) {
-    return NextResponse.json({ error: result.error }, { status: 404 })
+    return NextResponse.json({ error: result.error }, { status: result.status })
   }
 
-  return NextResponse.json({ ok: true, terminated: result.terminated })
+  return NextResponse.json({ ok: true, terminated: result.affected })
 }

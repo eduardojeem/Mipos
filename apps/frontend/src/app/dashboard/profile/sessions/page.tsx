@@ -1,31 +1,44 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { useToast } from '@/components/ui/use-toast'
-import { 
-  ArrowLeft, 
-  Monitor, 
-  Smartphone, 
-  Tablet, 
-  Globe, 
-  MapPin, 
-  Clock, 
-  Shield,
-  LogOut,
-  AlertTriangle,
-  Loader2
-} from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Clock,
+  Globe,
+  Loader2,
+  LogOut,
+  MapPin,
+  Monitor,
+  RefreshCw,
+  Shield,
+  Smartphone,
+  Tablet,
+} from 'lucide-react'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+import { useToast } from '@/components/ui/use-toast'
 
-interface Session {
+type ProfileSession = {
   id: string
-  deviceType: 'desktop' | 'mobile' | 'tablet'
+  deviceType: 'desktop' | 'mobile' | 'tablet' | 'unknown'
   browser: string
   os: string
   location: string
@@ -35,361 +48,400 @@ interface Session {
   createdAt: string
 }
 
+type SessionsResponse = {
+  success: boolean
+  data: ProfileSession[]
+  summary: {
+    active: number
+    expired: number
+    highRisk: number
+    uniqueUsers: number
+  }
+}
+
+function getDeviceIcon(deviceType: ProfileSession['deviceType']) {
+  switch (deviceType) {
+    case 'mobile':
+      return <Smartphone className="h-5 w-5" />
+    case 'tablet':
+      return <Tablet className="h-5 w-5" />
+    default:
+      return <Monitor className="h-5 w-5" />
+  }
+}
+
+function getDeviceLabel(deviceType: ProfileSession['deviceType']) {
+  switch (deviceType) {
+    case 'mobile':
+      return 'Movil'
+    case 'tablet':
+      return 'Tablet'
+    case 'desktop':
+      return 'Escritorio'
+    default:
+      return 'Desconocido'
+  }
+}
+
+function formatRelativeDate(value?: string) {
+  if (!value) return 'Sin actividad'
+  try {
+    return formatDistanceToNow(new Date(value), { addSuffix: true, locale: es })
+  } catch {
+    return 'Fecha invalida'
+  }
+}
+
+function formatAbsoluteDate(value?: string) {
+  if (!value) return 'Sin fecha'
+  try {
+    return new Intl.DateTimeFormat('es-PY', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(new Date(value))
+  } catch {
+    return value
+  }
+}
+
+async function fetchSessions(): Promise<SessionsResponse> {
+  const response = await fetch('/api/auth/sessions', {
+    cache: 'no-store',
+    credentials: 'include',
+  })
+
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    throw new Error((payload as { error?: string }).error || 'No se pudieron cargar las sesiones')
+  }
+
+  return payload as SessionsResponse
+}
+
+async function deleteSessions(body: { sessionId?: string; terminateAll?: boolean }) {
+  const response = await fetch('/api/auth/sessions', {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include',
+    body: JSON.stringify(body),
+  })
+
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    throw new Error((payload as { error?: string }).error || 'No se pudo actualizar la sesion')
+  }
+
+  return payload as { success: boolean; message?: string }
+}
+
+function StatCard({
+  title,
+  value,
+  helper,
+}: {
+  title: string
+  value: number | string
+  helper: string
+}) {
+  return (
+    <Card className="border-slate-200/80 bg-white/90 dark:border-slate-700/70 dark:bg-slate-900/85">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm text-slate-600 dark:text-slate-200">{title}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="text-3xl font-semibold text-slate-950 dark:text-slate-50">{value}</div>
+        <p className="mt-2 text-sm text-slate-500 dark:text-slate-300">{helper}</p>
+      </CardContent>
+    </Card>
+  )
+}
+
 export default function SessionsPage() {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const { toast } = useToast()
-  
-  const [sessions, setSessions] = useState<Session[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [terminatingSession, setTerminatingSession] = useState<string | null>(null)
+  const [pendingSessionId, setPendingSessionId] = useState<string | null>(null)
+  const [confirmTerminateOthers, setConfirmTerminateOthers] = useState(false)
 
-  useEffect(() => {
-    const fetchSessions = async () => {
-      try {
-        setIsLoading(true);
-        
-        const response = await fetch('/api/auth/sessions');
-        
-        if (!response.ok) {
-          throw new Error('Error al cargar las sesiones');
-        }
-        
-        const result = await response.json();
-        
-        if (result.success) {
-          setSessions(result.data);
-        } else {
-          throw new Error(result.error || 'Error desconocido');
-        }
-      } catch (error) {
-        console.error('Error fetching sessions:', error);
-        toast({
-          title: "Error",
-          description: "No se pudieron cargar las sesiones activas",
-          variant: "destructive",
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    };
+  const sessionsQuery = useQuery({
+    queryKey: ['profile-sessions'],
+    queryFn: fetchSessions,
+    staleTime: 30_000,
+    refetchInterval: 120_000,
+    refetchOnWindowFocus: true,
+  })
 
-    fetchSessions();
-  }, [toast])
+  const sessions = useMemo(() => sessionsQuery.data?.data ?? [], [sessionsQuery.data?.data])
+  const summary = sessionsQuery.data?.summary || {
+    active: 0,
+    expired: 0,
+    highRisk: 0,
+    uniqueUsers: 0,
+  }
 
-  const loadSessions = async () => {
-    // Esta función ya no es necesaria, se reemplazó por fetchSessions en useEffect
+  const sortedSessions = useMemo(
+    () => [...sessions].sort((left, right) => Number(right.isCurrent) - Number(left.isCurrent)),
+    [sessions]
+  )
+
+  const currentSession = sortedSessions.find((session) => session.isCurrent) || null
+  const otherSessionsCount = sortedSessions.filter((session) => !session.isCurrent).length
+  const uniqueLocations = new Set(
+    sortedSessions
+      .map((session) => session.location.trim())
+      .filter(Boolean)
+  ).size
+
+  const invalidateSessions = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['profile-sessions'] })
   }
 
   const terminateSession = async (sessionId: string) => {
-    if (sessionId === 'current') {
-      toast({
-        title: "Acción no permitida",
-        description: "No puedes cerrar tu sesión actual desde aquí",
-        variant: "destructive"
-      })
-      return
-    }
-
+    setPendingSessionId(sessionId)
     try {
-      setTerminatingSession(sessionId)
-      
-      const response = await fetch('/api/auth/sessions', {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ sessionId }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Error al terminar la sesión');
-      }
-
-      const result = await response.json();
-      
-      if (result.success) {
-        setSessions(prev => prev.filter(session => session.id !== sessionId));
-        
-        toast({
-          title: "Sesión terminada",
-          description: result.message || "La sesión ha sido terminada exitosamente",
-        });
-      } else {
-        throw new Error(result.error || 'Error desconocido');
-      }
-    } catch (error) {
-      console.error('Error terminating session:', error)
+      const result = await deleteSessions({ sessionId })
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "No se pudo terminar la sesión",
-        variant: "destructive"
+        title: 'Sesion terminada',
+        description: result.message || 'La sesion fue cerrada correctamente.',
+      })
+      await invalidateSessions()
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'No se pudo cerrar la sesion.',
+        variant: 'destructive',
       })
     } finally {
-      setTerminatingSession(null)
+      setPendingSessionId(null)
     }
   }
 
   const terminateAllOtherSessions = async () => {
+    setPendingSessionId('terminate-all')
     try {
-      setIsLoading(true);
-      
-      const response = await fetch('/api/auth/sessions', {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ terminateAll: true }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Error al terminar las sesiones');
-      }
-
-      const result = await response.json();
-      
-      if (result.success) {
-        setSessions(prev => prev.filter(session => session.isCurrent));
-        
-        toast({
-          title: "Sesiones terminadas",
-          description: result.message || "Todas las otras sesiones han sido terminadas",
-        });
-      } else {
-        throw new Error(result.error || 'Error desconocido');
-      }
-    } catch (error) {
-      console.error('Error terminating all sessions:', error);
+      const result = await deleteSessions({ terminateAll: true })
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "No se pudieron terminar las sesiones",
-        variant: "destructive",
-      });
+        title: 'Sesiones cerradas',
+        description: result.message || 'Las otras sesiones activas fueron cerradas.',
+      })
+      await invalidateSessions()
+      setConfirmTerminateOthers(false)
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'No se pudieron cerrar las otras sesiones.',
+        variant: 'destructive',
+      })
     } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const getDeviceIcon = (deviceType: string) => {
-    switch (deviceType) {
-      case 'mobile':
-        return <Smartphone className="h-5 w-5" />
-      case 'tablet':
-        return <Tablet className="h-5 w-5" />
-      default:
-        return <Monitor className="h-5 w-5" />
+      setPendingSessionId(null)
     }
   }
 
-  const getDeviceTypeLabel = (deviceType: string) => {
-    switch (deviceType) {
-      case 'mobile':
-        return 'Móvil'
-      case 'tablet':
-        return 'Tablet'
-      default:
-        return 'Escritorio'
-    }
-  }
-
-  if (isLoading) {
-    return (
-      <div className="container mx-auto py-6 max-w-4xl">
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin" />
-          <span className="ml-2">Cargando sesiones...</span>
-        </div>
-      </div>
-    )
+  if (sessionsQuery.isLoading) {
+    return <Skeleton className="h-[560px] rounded-3xl" />
   }
 
   return (
-    <div className="container mx-auto py-6 max-w-4xl">
-      <div className="mb-6">
-        <Button
-          variant="ghost"
-          onClick={() => router.back()}
-          className="mb-4"
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Volver al Perfil
-        </Button>
-        
-        <div className="flex items-center gap-3 mb-2">
-          <Shield className="h-6 w-6 text-blue-600" />
-          <h1 className="text-2xl font-bold">Sesiones Activas</h1>
-        </div>
-        <p className="text-muted-foreground">
-          Gestiona tus sesiones activas y dispositivos conectados
-        </p>
-      </div>
-
-      {/* Resumen */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <Shield className="h-5 w-5 text-green-600" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Sesiones Activas</p>
-                <p className="text-2xl font-bold">{sessions.length}</p>
-              </div>
+    <div className="space-y-6">
+      <section className="rounded-[28px] border border-slate-200/80 bg-white/90 p-6 shadow-sm dark:border-slate-700/70 dark:bg-slate-900/85">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <Button variant="ghost" onClick={() => router.back()} className="-ml-3 mb-3">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Volver al perfil
+            </Button>
+            <div className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200">
+              <Shield className="h-3.5 w-3.5" />
+              Seguridad de acceso
             </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Globe className="h-5 w-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Ubicaciones</p>
-                <p className="text-2xl font-bold">
-                  {new Set(sessions.map(s => s.location.split(',')[0])).size}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-orange-100 rounded-lg">
-                <Clock className="h-5 w-5 text-orange-600" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Última Actividad</p>
-                <p className="text-sm font-medium">
-                  {formatDistanceToNow(new Date(sessions[0]?.lastActivity || new Date()), {
-                    addSuffix: true,
-                    locale: es
-                  })}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Acciones Rápidas */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-orange-500" />
-            Acciones de Seguridad
-          </CardTitle>
-          <CardDescription>
-            Termina sesiones sospechosas o no reconocidas
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-3">
+            <h1 className="mt-4 text-3xl font-semibold text-slate-900 dark:text-slate-50">Tus sesiones</h1>
+            <p className="mt-2 max-w-2xl text-sm text-slate-600 dark:text-slate-300">
+              Revisa dispositivos conectados, ultima actividad y corta accesos que ya no correspondan.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => void sessionsQuery.refetch()} disabled={sessionsQuery.isFetching}>
+              {sessionsQuery.isFetching ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 h-4 w-4" />
+              )}
+              Actualizar
+            </Button>
             <Button
               variant="outline"
-              onClick={terminateAllOtherSessions}
-              disabled={isLoading || sessions.filter(s => !s.isCurrent).length === 0}
+              onClick={() => setConfirmTerminateOthers(true)}
+              disabled={otherSessionsCount === 0 || pendingSessionId !== null}
             >
-              <LogOut className="h-4 w-4 mr-2" />
-              Cerrar Todas las Otras Sesiones
+              {pendingSessionId === 'terminate-all' ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <LogOut className="mr-2 h-4 w-4" />
+              )}
+              Cerrar otras sesiones
             </Button>
           </div>
+        </div>
+      </section>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <StatCard
+          title="Sesiones activas"
+          value={summary.active}
+          helper={otherSessionsCount > 0 ? `${otherSessionsCount} adicionales fuera de este dispositivo` : 'Solo esta sesion sigue activa'}
+        />
+        <StatCard
+          title="Dispositivos visibles"
+          value={sortedSessions.length}
+          helper={uniqueLocations > 0 ? `${uniqueLocations} ubicaciones registradas` : 'Sin ubicacion disponible'}
+        />
+        <StatCard
+          title="Ultima actividad"
+          value={formatRelativeDate(currentSession?.lastActivity)}
+          helper={currentSession ? getDeviceLabel(currentSession.deviceType) : 'No hay sesion actual detectada'}
+        />
+      </div>
+
+      {sessionsQuery.error && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>No se pudieron cargar las sesiones</AlertTitle>
+          <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <span>{sessionsQuery.error instanceof Error ? sessionsQuery.error.message : 'Error desconocido'}</span>
+            <Button variant="outline" size="sm" onClick={() => void sessionsQuery.refetch()}>
+              Reintentar
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <Card className="border-slate-200/80 bg-white/90 shadow-sm dark:border-slate-700/70 dark:bg-slate-900/85">
+        <CardHeader>
+          <CardTitle className="text-slate-900 dark:text-slate-50">Dispositivos y sesiones</CardTitle>
+          <CardDescription className="text-slate-600 dark:text-slate-300">
+            La sesion actual se sincroniza automaticamente y el resto se ordena por actividad.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {sortedSessions.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 p-10 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-300">
+              No hay sesiones visibles para este usuario.
+            </div>
+          ) : (
+            sortedSessions.map((session) => (
+              <Card
+                key={session.id}
+                className={session.isCurrent
+                  ? 'border-emerald-200 bg-emerald-50/70 dark:border-emerald-500/30 dark:bg-emerald-500/10'
+                  : 'border-slate-200/80 bg-white/80 dark:border-slate-700/70 dark:bg-slate-900/70'}
+              >
+                <CardContent className="flex flex-col gap-5 p-5 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="flex gap-4">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                      {getDeviceIcon(session.deviceType)}
+                    </div>
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-50">
+                          {session.browser} en {session.os}
+                        </h2>
+                        {session.isCurrent ? (
+                          <Badge className="bg-emerald-600 text-white hover:bg-emerald-600">Sesion actual</Badge>
+                        ) : (
+                          <Badge variant="secondary">Otra sesion</Badge>
+                        )}
+                      </div>
+
+                      <div className="grid gap-2 text-sm text-slate-600 dark:text-slate-300 md:grid-cols-2">
+                        <div className="flex items-center gap-2">
+                          <Monitor className="h-4 w-4" />
+                          <span>{getDeviceLabel(session.deviceType)}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Globe className="h-4 w-4" />
+                          <span>{session.ipAddress || 'IP no disponible'}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4" />
+                          <span>Ultima actividad {formatRelativeDate(session.lastActivity)}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4" />
+                          <span>Creada {formatAbsoluteDate(session.createdAt)}</span>
+                        </div>
+                        {session.location ? (
+                          <div className="flex items-center gap-2 md:col-span-2">
+                            <MapPin className="h-4 w-4" />
+                            <span>{session.location}</span>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex shrink-0 flex-col gap-2 lg:min-w-44">
+                    {!session.isCurrent ? (
+                      <Button
+                        variant="outline"
+                        onClick={() => void terminateSession(session.id)}
+                        disabled={pendingSessionId !== null}
+                      >
+                        {pendingSessionId === session.id ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <LogOut className="mr-2 h-4 w-4" />
+                        )}
+                        Cerrar sesion
+                      </Button>
+                    ) : (
+                      <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200">
+                        Esta es la sesion que estas usando ahora.
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          )}
         </CardContent>
       </Card>
 
-      {/* Lista de Sesiones */}
-      <div className="space-y-4">
-        <h2 className="text-lg font-semibold">Dispositivos y Sesiones</h2>
-        
-        {sessions.map((session) => (
-          <Card key={session.id} className={session.isCurrent ? 'border-green-200 bg-green-50/50' : ''}>
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between">
-                <div className="flex items-start gap-4">
-                  <div className="p-2 bg-gray-100 rounded-lg">
-                    {getDeviceIcon(session.deviceType)}
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-medium">
-                        {session.browser} en {session.os}
-                      </h3>
-                      {session.isCurrent && (
-                        <Badge variant="default" className="bg-green-600">
-                          Sesión Actual
-                        </Badge>
-                      )}
-                    </div>
-                    
-                    <div className="space-y-1 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-2">
-                        <Monitor className="h-4 w-4" />
-                        <span>{getDeviceTypeLabel(session.deviceType)}</span>
-                      </div>
-                      
-                      <div className="flex items-center gap-2">
-                        <MapPin className="h-4 w-4" />
-                        <span>{session.location}</span>
-                      </div>
-                      
-                      <div className="flex items-center gap-2">
-                        <Globe className="h-4 w-4" />
-                        <span>{session.ipAddress}</span>
-                      </div>
-                      
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4" />
-                        <span>
-                          Última actividad: {formatDistanceToNow(new Date(session.lastActivity), {
-                            addSuffix: true,
-                            locale: es
-                          })}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                
-                {!session.isCurrent && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => terminateSession(session.id)}
-                    disabled={terminatingSession === session.id}
-                  >
-                    {terminatingSession === session.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <>
-                        <LogOut className="h-4 w-4 mr-2" />
-                        Terminar
-                      </>
-                    )}
-                  </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Información de Seguridad */}
-      <Alert className="mt-6">
+      <Alert className="border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/60">
         <Shield className="h-4 w-4" />
         <AlertDescription>
-          <strong>Consejos de seguridad:</strong>
-          <ul className="mt-2 space-y-1 text-sm">
-            <li>• Revisa regularmente tus sesiones activas</li>
-            <li>• Termina sesiones de dispositivos que no reconozcas</li>
-            <li>• Cierra sesión al usar dispositivos públicos</li>
-            <li>• Cambia tu contraseña si detectas actividad sospechosa</li>
-          </ul>
+          Si detectas una sesion desconocida, cierrala y cambia tu contrasena desde seguridad.
         </AlertDescription>
       </Alert>
+
+      <AlertDialog open={confirmTerminateOthers} onOpenChange={setConfirmTerminateOthers}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cerrar otras sesiones</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se cerraran todas las sesiones activas excepto la actual. Usa esta accion si perdiste acceso a otro dispositivo o detectaste actividad sospechosa.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pendingSessionId !== null}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault()
+                void terminateAllOtherSessions()
+              }}
+              disabled={pendingSessionId !== null}
+            >
+              {pendingSessionId === 'terminate-all' ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <LogOut className="mr-2 h-4 w-4" />
+              )}
+              Cerrar otras sesiones
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
