@@ -12,6 +12,24 @@ import {
 import { MarketplaceLayout } from '../components/marketplace/MarketplaceLayout';
 import { OrganizationGrid } from '../components/marketplace/OrganizationGrid';
 import { OrganizationsCarousel } from '../components/marketplace/OrganizationsCarousel';
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'Directorio de empresas | MiPOS Marketplace',
+  description:
+    'Explora negocios activos, compara presencia publica y entra directo a la tienda de cada empresa desde un directorio real.',
+  openGraph: {
+    title: 'Directorio de empresas | MiPOS Marketplace',
+    description:
+      'Directorio publico de organizaciones activas con catalogo y presencia comercial en MiPOS.',
+    type: 'website',
+    locale: 'es_PY',
+    url: '/home/empresas',
+  },
+  alternates: {
+    canonical: '/home/empresas',
+  },
+};
 
 type OrganizationsQueryRecord = Record<string, string | string[] | undefined>;
 
@@ -182,7 +200,7 @@ export default async function OrganizationsPage({
                 >
                   <option value="">Todos</option>
                   {snapshot.departments.map((option) => (
-                    <option key={option.value} value={option.label}>
+                    <option key={option.value} value={option.value}>
                       {option.label} ({option.count})
                     </option>
                   ))}
@@ -207,7 +225,7 @@ export default async function OrganizationsPage({
                 >
                   <option value="">Todas</option>
                   {snapshot.cities.map((option) => (
-                    <option key={option.value} value={option.label}>
+                    <option key={option.value} value={option.value}>
                       {option.label} ({option.count})
                     </option>
                   ))}

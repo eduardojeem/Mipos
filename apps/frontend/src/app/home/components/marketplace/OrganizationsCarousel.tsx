@@ -51,7 +51,11 @@ export function OrganizationsCarousel({ organizations }: OrganizationsCarouselPr
   const activeOrganization = items[activeIndex];
 
   return (
-    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white/80 shadow-sm backdrop-blur-sm dark:border-slate-800 dark:bg-slate-950/80">
+    <section
+      className="overflow-hidden rounded-lg border border-slate-200 bg-white/80 shadow-sm backdrop-blur-sm dark:border-slate-800 dark:bg-slate-950/80"
+      aria-roledescription="carousel"
+      aria-label="Empresas destacadas"
+    >
       <div className="grid lg:grid-cols-[minmax(320px,0.95fr)_minmax(0,1.05fr)]">
         <div className="relative min-h-[300px] overflow-hidden bg-slate-100 dark:bg-slate-900">
           {activeOrganization.heroImage ? (
@@ -108,6 +112,9 @@ export function OrganizationsCarousel({ organizations }: OrganizationsCarouselPr
               exit={{ opacity: 0, y: -16 }}
               transition={{ duration: 0.25 }}
               className="flex flex-1 flex-col"
+              role="group"
+              aria-roledescription="slide"
+              aria-label={`${activeIndex + 1} de ${items.length}: ${activeOrganization.name}`}
             >
               <div className="flex flex-wrap items-center gap-3">
                 <Badge

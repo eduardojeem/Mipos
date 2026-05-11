@@ -74,7 +74,7 @@ export function InfiniteLogoMarquee({ organizations }: InfiniteLogoMarqueeProps)
       <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-12 bg-gradient-to-r from-[#020617] to-transparent sm:w-24" />
       <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-gradient-to-l from-[#020617] to-transparent sm:w-24" />
 
-      <div className="flex w-max gap-4 [animation:empresas-logo-marquee_34s_linear_infinite] group-hover:[animation-play-state:paused]">
+      <div className="flex w-max gap-4 [animation:empresas-logo-marquee_34s_linear_infinite] group-hover:[animation-play-state:paused] motion-reduce:[animation-play-state:paused]">
         <div className="flex shrink-0 gap-4 pr-4">{renderItems('primary')}</div>
         <div aria-hidden className="flex shrink-0 gap-4">
           {renderItems('duplicate')}
@@ -89,6 +89,12 @@ export function InfiniteLogoMarquee({ organizations }: InfiniteLogoMarqueeProps)
 
           to {
             transform: translate3d(-50%, 0, 0);
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .flex.w-max {
+            animation: none !important;
           }
         }
       `}</style>

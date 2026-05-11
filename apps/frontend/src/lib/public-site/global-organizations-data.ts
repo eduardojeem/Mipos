@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { unstable_cache } from 'next/cache';
 import type { BusinessConfig } from '@/types/business-config';
 import { createAdminClient } from '@/lib/supabase/server';
 import { buildTenantHomeUrl } from '@/lib/domain/host-context';
@@ -475,11 +476,64 @@ function sortOrganizations(items: FeaturedOrganizationCard[], sortBy: GlobalOrga
   return sorted;
 }
 
+const CACHE_REVALIDATE_SECONDS = 60;
+
+interface CachedBaseData {
+  organizations: OrganizationRow[];
+  totalOrganizations: number;
+  settingsEntries: Array<[string, SettingsRow['value']]>;
+  productStats: ProductStatsRow[];
+}
+
+const fetchCachedBaseData = unstable_cache(
+  async (): Promise<CachedBaseData> => {
+    const { organizations, totalOrganizations } = await fetchActiveOrganizations();
+    if (organizations.length === 0) {
+      return { organizations: [], totalOrganizations: 0, settingsEntries: [], productStats: [] };
+    }
+
+    const organizationIds = organizations.map((org) => org.id);
+    const [settingsMap, productStats] = await Promise.all([
+      fetchSettingsMap(organizationIds),
+      fetchProductStats(organizationIds),
+    ]);
+
+    return {
+      organizations,
+      totalOrganizations,
+      settingsEntries: Array.from(settingsMap.entries()),
+      productStats,
+    };
+  },
+  ['global-organizations-base-data'],
+  { revalidate: CACHE_REVALIDATE_SECONDS, tags: ['organizations'] }
+);
+
 export async function fetchGlobalOrganizationsSnapshot(
   requestHost: string | null | undefined,
   input: GlobalOrganizationsQueryState
 ): Promise<GlobalOrganizationsSnapshot> {
-  const { organizations, totalOrganizations } = await fetchActiveOrganizations();
+  let baseData: CachedBaseData;
+
+  try {
+    baseData = await fetchCachedBaseData();
+  } catch (error) {
+    console.error('[GlobalOrganizations] Failed to fetch base data:', error);
+    return {
+      organizations: [],
+      featuredOrganizations: [],
+      totalOrganizations: 0,
+      visibleOrganizations: 0,
+      totalProducts: 0,
+      totalCategories: 0,
+      averageProductsPerOrganization: 0,
+      departments: [],
+      cities: [],
+    };
+  }
+
+  const { organizations, totalOrganizations, settingsEntries, productStats } = baseData;
+
   if (organizations.length === 0) {
     return {
       organizations: [],
@@ -494,12 +548,7 @@ export async function fetchGlobalOrganizationsSnapshot(
     };
   }
 
-  const organizationIds = organizations.map((organization) => organization.id);
-  const [settingsMap, productStats] = await Promise.all([
-    fetchSettingsMap(organizationIds),
-    fetchProductStats(organizationIds),
-  ]);
-
+  const settingsMap = new Map(settingsEntries);
   const allOrganizations = buildOrganizationCards(organizations, settingsMap, productStats, requestHost);
   const departments = buildLocationOptions(allOrganizations, 'department');
   const organizationsForCities = input.department
