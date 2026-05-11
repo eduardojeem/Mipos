@@ -13,6 +13,8 @@ export type PosInvoiceListItem = {
   dueDate: string | null;
   customerName: string | null;
   total: number;
+  saleId?: string | null;
+  saleNumber?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -43,6 +45,8 @@ export type PosInvoice = {
   discount: number;
   tax: number;
   total: number;
+  saleId?: string | null;
+  saleNumber?: string | null;
   notes: string;
   createdAt: string;
   updatedAt: string;
@@ -87,6 +91,8 @@ export type PosInvoiceCreateInput = {
   discount?: number;
   tax?: number;
   notes?: string;
+  saleId?: string | null;
+  saleNumber?: string | null;
 };
 
 export type PosInvoiceUpdateInput = Partial<PosInvoiceCreateInput> & {

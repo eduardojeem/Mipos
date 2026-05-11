@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useToast } from '@/components/ui/use-toast';
 import api from '@/lib/api';
+import { useCurrentOrganizationId } from '@/hooks/use-current-organization';
 
 interface CashSession {
     id: string;
@@ -28,6 +29,7 @@ interface UseCashSessionValidationReturn {
  */
 export function useCashSessionValidation(): UseCashSessionValidationReturn {
     const { toast } = useToast();
+    const organizationId = useCurrentOrganizationId();
 
     const {
         data: sessionData,
@@ -35,10 +37,11 @@ export function useCashSessionValidation(): UseCashSessionValidationReturn {
         error,
         refetch,
     } = useQuery({
-        queryKey: ['cashSession', 'validation'],
+        queryKey: ['cashSession', 'validation', organizationId ?? 'no-org'],
+        enabled: Boolean(organizationId),
         queryFn: async () => {
             try {
-                const res = await api.get('/cash/session/current');
+                const res = await api.get('/cash/session/current', { _noRetry: true } as any);
                 return res.data;
             } catch (err: any) {
                 // If 404 or no session, return null instead of throwing
@@ -50,7 +53,7 @@ export function useCashSessionValidation(): UseCashSessionValidationReturn {
         },
         refetchOnWindowFocus: true,
         staleTime: 30_000, // 30 seconds
-        retry: 1,
+        retry: false,
     });
 
     const session = sessionData?.session || null;
@@ -62,6 +65,15 @@ export function useCashSessionValidation(): UseCashSessionValidationReturn {
      * @returns true if cash payment is allowed, false otherwise
      */
     const validateCashPayment = async (): Promise<boolean> => {
+        if (!organizationId) {
+            toast({
+                title: 'Organizacion no seleccionada',
+                description: 'Selecciona una organizacion antes de aceptar pagos en efectivo.',
+                variant: 'destructive',
+            });
+            return false;
+        }
+
         // Refetch to get latest session state
         const { data } = await refetch();
         const currentSession = data?.session;

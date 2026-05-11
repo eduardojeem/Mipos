@@ -95,6 +95,7 @@ export default function InvoiceDetailPage() {
       </div>
 
       <PosInvoiceEditor
+        invoiceId={invoiceId}
         initial={mapInvoiceToEditorInitial(invoice)}
         isSaving={updateMutation.isPending}
         onSave={async (payload) => {

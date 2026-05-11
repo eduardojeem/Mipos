@@ -572,6 +572,7 @@ const COLOR_MAP: Record<string, string> = {
 function ThemeRuntime() {
   const { theme, setTheme } = useTheme();
   const { config } = useBusinessConfig();
+  // Only fires when the user is authenticated (guard is inside useUserSettings)
   const { data: userSettings } = useUserSettings();
   const lastSyncedServerTheme = useRef<UserSettings['theme'] | null>(null);
 

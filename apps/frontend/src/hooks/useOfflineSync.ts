@@ -57,28 +57,49 @@ export function useOfflineSync(options: Partial<SyncOptions> = {}): UseOfflineSy
 
   const syncSaleTransaction = useCallback(async (transaction: OfflineTransaction & { type: 'sale' }): Promise<boolean> => {
     const saleData = transaction.data as OfflineSale;
-    
+    const mixedPayments = saleData.payment_details?.payments;
+
     // We use the same API proxy to ensure all backend logic (stock, cash, rounding) is applied
     const response = await fetch('/api/pos/sales', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(saleData.organization_id ? { 'x-organization-id': saleData.organization_id } : {})
+        ...(saleData.organization_id ? { 'x-organization-id': saleData.organization_id } : {}),
+        ...(saleData.branch_id ? { 'x-branch-id': saleData.branch_id } : {}),
+        ...(saleData.pos_id ? { 'x-pos-id': saleData.pos_id } : {}),
+        ...(saleData.register_id ? { 'x-register-id': saleData.register_id } : {}),
       },
       body: JSON.stringify({
         items: saleData.items?.map(item => ({
-          productId: item.product_id,
+          product_id: item.product_id,
           quantity: item.quantity
         })) || [],
-        paymentMethod: saleData.payment_method,
-        customerId: saleData.customer_id,
-        notes: `${saleData.notes || ''} (Sync Offline: ${saleData.id})`.trim()
+        customer_id: saleData.customer_id,
+        discount_amount: saleData.discount_amount,
+        discount_type: saleData.discount_type || 'FIXED_AMOUNT',
+        discount_reason: saleData.discount_reason,
+        payment_method: saleData.payment_method,
+        document_type: saleData.document_type || 'internal_ticket',
+        currency: saleData.currency || 'USD',
+        mixedPayments: Array.isArray(mixedPayments) && mixedPayments.length > 0 ? mixedPayments : undefined,
+        total_amount: saleData.total_amount,
+        notes: `${saleData.notes || ''} (Sync Offline: ${saleData.id})`.trim(),
+        transfer_reference: saleData.transfer_reference,
+        cashReceived: saleData.cash_received,
+        change: saleData.change,
       })
     });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }));
       throw new Error(errorData.error || `Error HTTP: ${response.status}`);
+    }
+
+    const payload = await response.json().catch(() => null);
+    if (payload?.invoiceError) {
+      toast.warning('Venta offline sincronizada con observaciones', {
+        description: String(payload.invoiceError),
+      });
     }
 
     offlineStorage.updateTransactionStatus(transaction.id, 'synced');

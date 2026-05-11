@@ -3,6 +3,7 @@ import { useToast } from '@/components/ui/use-toast';
 import api from '@/lib/api';
 import { createLogger } from '@/lib/logger';
 import { useCurrentOrganizationId } from '@/hooks/use-current-organization';
+import { useAuth } from '@/components/auth/AuthProvider';
 
 // Types
 interface UserSettings {
@@ -226,6 +227,7 @@ function getResponseErrorMessage(error: unknown): string | undefined {
 
 // Optimized hooks
 export function useUserSettings() {
+  const { user } = useAuth();
   return useQuery({
     queryKey: ['user-settings'],
     queryFn: async (): Promise<UserSettings> => {
@@ -239,7 +241,9 @@ export function useUserSettings() {
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 10 * 60 * 1000, // 10 minutes
-    retry: 1
+    retry: 1,
+    // Only fire when the user is authenticated — prevents 401 on public pages
+    enabled: !!user
   });
 }
 

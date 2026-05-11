@@ -16,13 +16,17 @@ import { OrganizationSelector } from "@/components/organizations/OrganizationSel
 // Product is unused as a type here now, using CartItem and inferred types
 import { offlineStorage } from "@/lib/pos/offline-storage";
 import { useOfflineSync } from "@/hooks/useOfflineSync";
-import { getOperationalContextHeaders } from "@/lib/operational-context";
+import {
+  getClientOperationalContext,
+  getOperationalContextHeaders,
+} from "@/lib/operational-context";
 import { usePermissionsContext } from "@/hooks/use-unified-permissions";
 import {
   createOfflineInternalTicket,
   type PosInternalTicket,
 } from "@/lib/pos/internal-ticket";
 import { type CartItem } from "@/hooks/useCart";
+import type { Customer } from "@/types";
 
 // Importar componentes del nuevo diseño
 import SearchBar from "./SearchBar";
@@ -88,6 +92,19 @@ export default function OptimizedPOSLayout() {
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
   const [showOpenCashModal, setShowOpenCashModal] = useState(false);
   const [showCloseCashModal, setShowCloseCashModal] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [lastInvoice, setLastInvoice] = useState<{
+    id: string;
+    invoiceNumber: string;
+    status: string;
+    saleId?: string;
+    saleNumber?: string;
+  } | null>(null);
+
+  useEffect(() => {
+    setSelectedCustomer(null);
+    setLastInvoice(null);
+  }, [selectedOrganization?.id]);
 
   // Device detection
   const deviceType = useDeviceType();
@@ -158,6 +175,7 @@ export default function OptimizedPOSLayout() {
     setCartItems,
   } = useCart({
     products,
+    selectedCustomer,
     discount,
     isWholesaleMode: false,
   });
@@ -242,20 +260,29 @@ export default function OptimizedPOSLayout() {
           };
         }>;
       },
-      options?: { autoPrint?: boolean; autoSend?: { whatsapp?: boolean; email?: boolean }; recipientEmail?: string; recipientPhone?: string }
+      options?: {
+        autoPrint?: boolean;
+        autoSend?: { whatsapp?: boolean; email?: boolean };
+        recipientEmail?: string;
+        recipientPhone?: string;
+        documentType?: 'internal_ticket' | 'invoice';
+      }
     ) => {
+      const effectivePaymentMethod =
+        (paymentDetails?.paymentMethod || paymentMethod) as string;
+      const requestedDocumentType = options?.documentType || 'internal_ticket';
       try {
         const cashComponent =
           paymentDetails && Array.isArray(paymentDetails.mixedPayments)
             ? paymentDetails.mixedPayments
                 .filter((part) => String(part.type || "").toUpperCase() === "CASH")
                 .reduce((sum, part) => sum + Number(part.amount || 0), 0)
-            : paymentMethod === "CASH"
+            : effectivePaymentMethod === "CASH"
               ? Number(paymentDetails?.cashReceived || 0) - Number(paymentDetails?.change || 0)
               : 0;
 
         // Validate cash session if payment impacts physical cash
-        if (cashComponent > 0 || paymentMethod === "CASH") {
+        if (cashComponent > 0 || effectivePaymentMethod === "CASH") {
           const isValid = await validateCashPayment();
           if (!isValid) {
             toast.error(
@@ -287,7 +314,7 @@ export default function OptimizedPOSLayout() {
         );
 
         const payload: Record<string, unknown> = {
-          customer_id: undefined, // Add if selected in future
+          customer_id: selectedCustomer?.id || undefined,
           items: cart.map((item) => ({
             product_id: item.product_id,
             quantity: item.quantity,
@@ -296,9 +323,11 @@ export default function OptimizedPOSLayout() {
           tax_amount: totals.taxAmount,
           discount_type: newType,
           discount_reason: 'Manual discount', 
-          payment_method: paymentDetails?.paymentMethod || paymentMethod,
+          payment_method: effectivePaymentMethod,
           total_amount: totals.total,
           notes: _notes,
+          document_type: requestedDocumentType,
+          currency: config?.storeSettings?.currency || 'USD',
         };
 
         // Add payment details if provided
@@ -350,12 +379,22 @@ export default function OptimizedPOSLayout() {
         const sale = data.sale as PosInternalTicket;
 
         setLastSale(sale);
-        setAutoPrintReceipt(false);
+        setLastInvoice(data.invoice || null);
+        setAutoPrintReceipt(requestedDocumentType === 'internal_ticket' && Boolean(options?.autoPrint));
         setAutoShare({ whatsapp: false, email: false, recipientEmail: options?.recipientEmail, recipientPhone: options?.recipientPhone });
         handleClearCart();
+        setSelectedCustomer(null);
         setShowSaleModal(false);
         setShowReceiptModal(true);
-        toast.success(`¡Venta procesada exitosamente!`);
+        if (data.invoiceError) {
+          toast.warning("Venta registrada, pero la factura requiere revisión", {
+            description: String(data.invoiceError),
+          });
+        } else if (data.invoice) {
+          toast.success(`¡Venta y factura ${data.invoice.invoiceNumber} registradas exitosamente!`);
+        } else {
+          toast.success(`¡Venta procesada exitosamente!`);
+        }
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : "Error desconocido";
         console.error("Error processing sale:", error);
@@ -363,20 +402,32 @@ export default function OptimizedPOSLayout() {
         // SAVE OFFLINE if network error or explicitly offline
         if (!isOnline || errorMessage.includes("Failed to fetch") || errorMessage.includes("network")) {
           const totals = calculateCartWithIva(cart, products, newDiscount, newType, config);
+          const operationalContext = getClientOperationalContext();
           const offlineId = offlineStorage.addTransaction('sale', {
             id: `offline-${Date.now()}`,
             user_id: user?.id || 'unknown',
             organization_id: selectedOrganization?.id || 'unknown',
+            customer_id: selectedCustomer?.id,
             total_amount: totals.total,
             tax_amount: totals.taxAmount,
             discount_amount: totals.discountAmount,
-            payment_method: paymentDetails?.paymentMethod || paymentMethod,
+            discount_type: newType,
+            discount_reason: 'Manual discount',
+            payment_method: effectivePaymentMethod,
+            document_type: requestedDocumentType,
+            currency: config?.storeSettings?.currency || 'USD',
             payment_details: paymentDetails?.mixedPayments ? {
-              primaryMethod: paymentDetails.paymentMethod || paymentMethod,
+              primaryMethod: effectivePaymentMethod,
               payments: paymentDetails.mixedPayments,
             } : undefined,
             status: 'COMPLETED',
             notes: _notes,
+            transfer_reference: paymentDetails?.transferReference,
+            cash_received: paymentDetails?.cashReceived,
+            change: paymentDetails?.change,
+            branch_id: operationalContext.branchId,
+            pos_id: operationalContext.posId,
+            register_id: operationalContext.registerId,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
             items: cart.map(item => ({
@@ -391,11 +442,15 @@ export default function OptimizedPOSLayout() {
           });
           
           toast.warning("Venta guardada localmente", {
-            description: "Se sincronizará automáticamente cuando recuperes la conexión."
+            description: requestedDocumentType === 'invoice'
+              ? "La venta y la solicitud de factura se sincronizarán automáticamente cuando recuperes la conexión."
+              : "Se sincronizará automáticamente cuando recuperes la conexión."
           });
           
           handleClearCart();
+          setSelectedCustomer(null);
           setShowSaleModal(false);
+          setLastInvoice(null);
           setLastSale(createOfflineInternalTicket({
             id: offlineId,
             cart,
@@ -407,6 +462,12 @@ export default function OptimizedPOSLayout() {
             },
             paymentMethod: (paymentDetails?.paymentMethod || paymentMethod) as string,
             notes: _notes,
+            customer: selectedCustomer ? {
+              name: selectedCustomer.name,
+              phone: selectedCustomer.phone,
+              email: selectedCustomer.email,
+            } : null,
+            customerId: selectedCustomer?.id,
             transferReference: paymentDetails?.transferReference,
             cashReceived: paymentDetails?.cashReceived,
             change: paymentDetails?.change,
@@ -427,6 +488,7 @@ export default function OptimizedPOSLayout() {
       handleClearCart,
       validateCashPayment,
       _notes,
+      selectedCustomer,
       user?.id,
       config,
       isOnline,
@@ -723,6 +785,9 @@ export default function OptimizedPOSLayout() {
           products={products}
           initialDiscount={discount}
           initialDiscountType={discountType}
+          customer={selectedCustomer}
+          customers={_customers}
+          onSelectCustomer={setSelectedCustomer}
           paymentMethod={paymentMethod as any}
           onPaymentMethodChange={(method) => setPaymentMethod(method as any)}
           enableSplitPayment
@@ -736,6 +801,7 @@ export default function OptimizedPOSLayout() {
           isOpen={showReceiptModal}
           onClose={() => setShowReceiptModal(false)}
           saleData={lastSale}
+          invoice={lastInvoice}
           businessInfo={{
             name: config.businessName,
             address: `${config.address.street}, ${config.address.city}`,

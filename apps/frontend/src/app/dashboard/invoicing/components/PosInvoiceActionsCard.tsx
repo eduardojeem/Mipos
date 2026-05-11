@@ -28,6 +28,8 @@ export function PosInvoiceActionsCard({
   onPrint,
   onPdf,
   isGeneratingPdf,
+  canExport,
+  exportDisabledReason,
 }: {
   status: PosInvoiceStatus;
   onSave: () => void;
@@ -35,6 +37,8 @@ export function PosInvoiceActionsCard({
   onPrint: () => void;
   onPdf: () => void;
   isGeneratingPdf: boolean;
+  canExport: boolean;
+  exportDisabledReason?: string;
 }) {
   return (
     <Card>
@@ -48,15 +52,18 @@ export function PosInvoiceActionsCard({
           Guardar
         </Button>
         <div className="grid grid-cols-2 gap-2">
-          <Button variant="outline" onClick={onPrint}>
+          <Button variant="outline" onClick={onPrint} disabled={!canExport}>
             <Printer className="h-4 w-4 mr-2" />
             Imprimir
           </Button>
-          <Button variant="outline" onClick={onPdf} disabled={isGeneratingPdf}>
+          <Button variant="outline" onClick={onPdf} disabled={!canExport || isGeneratingPdf}>
             <Download className="h-4 w-4 mr-2" />
             {isGeneratingPdf ? 'Generando' : 'PDF'}
           </Button>
         </div>
+        {!canExport && exportDisabledReason ? (
+          <p className="text-xs text-muted-foreground">{exportDisabledReason}</p>
+        ) : null}
       </CardContent>
     </Card>
   );

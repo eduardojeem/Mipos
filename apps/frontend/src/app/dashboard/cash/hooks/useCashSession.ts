@@ -26,11 +26,12 @@ export function useCashSession(): UseCashSessionReturn {
         queryKey: ['cashSession', organizationId ?? 'no-org'],
         enabled: Boolean(organizationId),
         queryFn: async () => {
-            const res = await api.get('/cash/session/current');
+            const res = await api.get('/cash/session/current', { _noRetry: true } as any);
             return res.data;
         },
         refetchOnWindowFocus: false,
         staleTime: 60_000,
+        retry: false,
     });
 
     const invalidate = async () => {

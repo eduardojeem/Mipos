@@ -7,6 +7,7 @@ import {
   CheckCircle,
   Copy,
   Download,
+  FileText,
   Mail,
   MessageCircle,
   Printer,
@@ -33,6 +34,13 @@ interface ReceiptModalProps {
   isOpen: boolean;
   onClose: () => void;
   saleData: PosInternalTicket | null;
+  invoice?: {
+    id: string;
+    invoiceNumber: string;
+    status: string;
+    saleId?: string;
+    saleNumber?: string;
+  } | null;
   onPrint: () => void;
   onDownload: () => void;
   businessInfo?: {
@@ -62,6 +70,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
   isOpen,
   onClose,
   saleData,
+  invoice = null,
   onPrint,
   onDownload,
   businessInfo = {
@@ -442,6 +451,11 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
     }
   }, [saleData, buildTicketHtml, onDownload]);
 
+  const handleOpenInvoice = useCallback(() => {
+    if (!invoice?.id) return;
+    window.open(`/dashboard/invoicing/${encodeURIComponent(invoice.id)}`, '_blank');
+  }, [invoice?.id]);
+
   const handleThermalPrint = useCallback(async () => {
     setIsPrinting(true);
     try {
@@ -568,6 +582,18 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
                     <p className="mt-2 text-base font-bold">{saleData.documentDisclaimer}</p>
                     <p className="mt-2 text-xs leading-5 text-red-700/90">{saleData.documentDescription}</p>
                   </div>
+                  {invoice && (
+                    <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-4 text-left text-sky-900">
+                      <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.24em]">
+                        <FileText className="h-4 w-4" />
+                        Factura generada
+                      </div>
+                      <p className="mt-2 text-base font-bold">{invoice.invoiceNumber}</p>
+                      <p className="mt-1 text-xs text-sky-800/80">
+                        La factura quedó vinculada a esta venta y está lista para impresión desde el módulo de facturación.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid gap-3 border-b border-slate-100 px-6 py-5 sm:grid-cols-2">
@@ -703,6 +729,12 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
           </ScrollArea>
 
           <div className="space-y-4 border-t border-slate-200 bg-white px-5 py-4 sm:px-6">
+            {invoice && (
+              <Button variant="outline" className="w-full" onClick={handleOpenInvoice}>
+                <FileText className="mr-2 h-4 w-4" />
+                Abrir factura {invoice.invoiceNumber}
+              </Button>
+            )}
             <div className="grid grid-cols-4 gap-2">
               <TooltipProvider>
                 <Tooltip>

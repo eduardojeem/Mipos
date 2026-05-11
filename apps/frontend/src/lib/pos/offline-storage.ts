@@ -15,7 +15,11 @@ export interface OfflineSale {
   total_amount: number;
   tax_amount: number;
   discount_amount: number;
+  discount_type?: 'PERCENTAGE' | 'FIXED_AMOUNT' | string;
+  discount_reason?: string;
   payment_method: string;
+  document_type?: 'internal_ticket' | 'invoice' | string;
+  currency?: string;
   payment_details?: {
     primaryMethod?: string;
     payments?: Array<{
@@ -28,6 +32,12 @@ export interface OfflineSale {
   };
   status: string;
   notes?: string;
+  transfer_reference?: string;
+  cash_received?: number;
+  change?: number;
+  branch_id?: string | null;
+  pos_id?: string | null;
+  register_id?: string | null;
   created_at: string;
   updated_at: string;
   items?: Array<{

@@ -49,6 +49,18 @@ export function PosInvoicePreview({
 }) {
   const { config, organizationName } = useBusinessConfig();
   const headerName = organizationName || 'Mi Empresa';
+  const issuerAddress = [
+    config?.address?.street,
+    config?.address?.neighborhood,
+    config?.address?.city,
+    config?.address?.department,
+    config?.address?.country,
+  ]
+    .filter(Boolean)
+    .join(', ');
+  const issuerPhone = config?.contact?.phone || '';
+  const issuerEmail = config?.contact?.email || '';
+  const issuerTaxId = config?.legalInfo?.ruc || '';
 
   return (
     <Card>
@@ -61,9 +73,10 @@ export function PosInvoicePreview({
             </div>
             <div className="text-right">
               <div className="text-2xl font-bold text-blue-600">{headerName}</div>
-              <p className="text-gray-600">{(config as any)?.storeSettings?.address || ''}</p>
-              <p className="text-gray-600">{(config as any)?.storeSettings?.phone || ''}</p>
-              <p className="text-gray-600">{(config as any)?.storeSettings?.email || ''}</p>
+              {issuerAddress ? <p className="text-gray-600">{issuerAddress}</p> : null}
+              {issuerPhone ? <p className="text-gray-600">{issuerPhone}</p> : null}
+              {issuerEmail ? <p className="text-gray-600">{issuerEmail}</p> : null}
+              {issuerTaxId ? <p className="text-gray-600">RUC: {issuerTaxId}</p> : null}
             </div>
           </div>
 

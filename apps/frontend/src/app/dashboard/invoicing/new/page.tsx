@@ -53,6 +53,7 @@ export default function NewInvoicePage() {
 
       <div className="rounded-xl border border-border/50 shadow-sm bg-card overflow-hidden">
         <PosInvoiceEditor
+          invoiceId={null}
           initial={{ status: 'draft' }}
           isSaving={createMutation.isPending}
           onSave={async (payload) => {

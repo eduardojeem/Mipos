@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { createClient } from '@/lib/supabase/client';
+import { useCurrentOrganizationId } from '@/hooks/use-current-organization';
 
 interface CacheEntry<T> {
   data: T;
@@ -274,136 +274,121 @@ export function useOptimizedData<T>(
 // Hook especializado para datos del POS
 export function usePOSData() {
   const queryClient = useQueryClient();
-  const supabase = createClient();
-
-  // Helper to get current organization ID
-  const getOrganizationId = (): string | null => {
-    if (typeof window === 'undefined') return null;
-    try {
-      const raw = window.localStorage.getItem('selected_organization');
-      if (!raw) return null;
-      if (raw.startsWith('{')) {
-        const parsed = JSON.parse(raw);
-        return parsed?.id || parsed?.organization_id || null;
-      }
-      return raw;
-    } catch {
-      return null;
-    }
-  };
+  const organizationId = useCurrentOrganizationId();
 
   const productsQuery = useQuery({
-    queryKey: ['pos', 'products'],
+    queryKey: ['pos', 'products', organizationId ?? 'no-org'],
+    enabled: Boolean(organizationId),
     queryFn: async () => {
-      const orgId = getOrganizationId();
-      if (!orgId) return [];
+      if (!organizationId) return [];
 
-      // Primario: consulta directa sin relaciones anidadas
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .eq('organization_id', orgId)
-        .order('name');
-
-      if (!error && Array.isArray(data)) {
-        return data;
-      }
-
-      console.warn('[POS] Supabase products query failed, falling back to API:', (error as any)?.message || error);
-
-      // Fallback: API protegida del POS
       try {
-        const res = await fetch('/api/pos/products?limit=500', {
-          headers: { 'x-organization-id': orgId }
+        const res = await fetch('/api/pos/products?limit=2000', {
+          headers: { 'x-organization-id': organizationId }
         });
         if (res.ok) {
           const json = await res.json();
+          if (json?.error) {
+            console.warn('[POS] API /api/pos/products returned logical error:', json?.error, json?.details);
+            throw new Error(String(json.error));
+          }
           const items = json?.products || json?.data || [];
           // Mapear nombre de categoría si viene del API
           return (Array.isArray(items) ? items : []).map((p: any) => ({
             ...p,
-            category: p?.category_name ? { id: p?.category_id, name: p?.category_name } : undefined,
+            category: p?.category_name ? { id: p?.category_id, name: p?.category_name } : p?.category,
           }));
         }
-        console.error('[POS] Fallback API /api/pos/products responded with status', res.status);
+        let apiMessage = `POS products API responded with status ${res.status}`;
+        try {
+          const json = await res.json();
+          if (json?.error) {
+            apiMessage = String(json.error);
+          }
+        } catch { }
+        throw new Error(apiMessage);
       } catch (apiErr) {
-        console.error('[POS] Fallback API /api/pos/products error:', apiErr);
+        console.error('[POS] API /api/pos/products failed:', apiErr);
+        throw apiErr instanceof Error ? apiErr : new Error('Could not fetch POS products');
       }
-
-      // Si todo falla, propagar el error original para manejo superior
-      if (error) {
-        const anyErr: any = error as any;
-        console.error('Error fetching products in usePOSData:', error);
-        console.error('Supabase error props:', {
-          message: anyErr?.message,
-          code: anyErr?.code,
-          details: anyErr?.details,
-          hint: anyErr?.hint,
-        });
-        try { console.error('Error details:', JSON.stringify(error, null, 2)); } catch { }
-        throw error;
-      }
-      return data || [];
     },
-    staleTime: 10 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: false,
+    staleTime: 2 * 60 * 1000,
+    gcTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: true,
   });
 
   const categoriesQuery = useQuery({
-    queryKey: ['pos', 'categories'],
+    queryKey: ['pos', 'categories', organizationId ?? 'no-org'],
+    enabled: Boolean(organizationId),
     queryFn: async () => {
-      const orgId = getOrganizationId();
-      if (!orgId) return [];
+      if (!organizationId) return [];
 
-      const { data, error } = await supabase
-        .from('categories')
-        .select('*')
-        .eq('organization_id', orgId)
-        .order('name');
-
-      if (error) throw error;
-      return data || [];
-    },
-    staleTime: 15 * 60 * 1000,
-    gcTime: 15 * 60 * 1000,
-    refetchOnWindowFocus: false,
-  });
-
-  const customersQuery = useQuery({
-    queryKey: ['pos', 'customers'],
-    queryFn: async () => {
-      const orgId = getOrganizationId();
-      if (!orgId) return [];
-
-      // Intento 1: Supabase directo
-      const { data, error } = await supabase
-        .from('customers')
-        .select('*')
-        .eq('organization_id', orgId)
-        .order('name'); // Cambiado de full_name a name para mayor seguridad
-
-      if (!error && Array.isArray(data)) {
-        return data;
-      }
-
-      console.warn('[POS] Supabase customers query failed, falling back to API:', error?.message);
-
-      // Intento 2: Fallback a API
       try {
-        const res = await fetch('/api/customers', {
-          headers: { 'x-organization-id': orgId }
+        const res = await fetch('/api/categories?limit=200&status=active', {
+          headers: { 'x-organization-id': organizationId }
         });
         if (res.ok) {
           const json = await res.json();
-          return json?.data || json || [];
+          if (json?.error) {
+            console.warn('[POS] API /api/categories returned logical error:', json?.error, json?.details);
+            throw new Error(String(json.error));
+          }
+          const items = json?.categories || json?.data || [];
+          if (Array.isArray(items)) {
+            return items;
+          }
         }
+        let apiMessage = `Categories API responded with status ${res.status}`;
+        try {
+          const json = await res.json();
+          if (json?.error) {
+            apiMessage = String(json.error);
+          }
+        } catch { }
+        throw new Error(apiMessage);
       } catch (apiErr) {
-        console.error('[POS] Fallback API /api/customers error:', apiErr);
+        console.error('[POS] API /api/categories failed:', apiErr);
+        throw apiErr instanceof Error ? apiErr : new Error('Could not fetch POS categories');
       }
+    },
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: true,
+  });
 
-      if (error) throw error;
-      return [];
+  const customersQuery = useQuery({
+    queryKey: ['pos', 'customers', organizationId ?? 'no-org'],
+    enabled: Boolean(organizationId),
+    queryFn: async () => {
+      if (!organizationId) return [];
+
+      try {
+        const res = await fetch('/api/pos/customers?limit=300', {
+          headers: { 'x-organization-id': organizationId }
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json?.error) {
+            console.warn('[POS] API /api/pos/customers returned logical error:', json?.error, json?.details);
+            throw new Error(String(json.error));
+          }
+          const items = json?.customers || json?.data || [];
+          if (Array.isArray(items)) {
+            return items;
+          }
+        }
+        let apiMessage = `POS customers API responded with status ${res.status}`;
+        try {
+          const json = await res.json();
+          if (json?.error) {
+            apiMessage = String(json.error);
+          }
+        } catch { }
+        throw new Error(apiMessage);
+      } catch (apiErr) {
+        console.error('[POS] API /api/pos/customers failed:', apiErr);
+        throw apiErr instanceof Error ? apiErr : new Error('Could not fetch POS customers');
+      }
     },
     staleTime: 5 * 60 * 1000,
     gcTime: 5 * 60 * 1000,
@@ -411,30 +396,40 @@ export function usePOSData() {
   });
 
   const salesStatsQuery = useQuery({
-    queryKey: ['pos', 'sales-stats'],
+    queryKey: ['pos', 'sales-stats', organizationId ?? 'no-org'],
+    enabled: Boolean(organizationId),
     queryFn: async () => {
-      const orgId = getOrganizationId();
-      if (!orgId) return {};
+      if (!organizationId) return {};
 
-      // Direct query for stats instead of API to ensure consistency
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      
-      const { data: todaySales } = await supabase
-        .from('sales')
-        .select('total')
-        .eq('organization_id', orgId)
-        .gte('created_at', todayStart.toISOString());
-
-      const totalSales = todaySales?.reduce((sum, s) => sum + (s.total || 0), 0) || 0;
-      const count = todaySales?.length || 0;
-      
-      return {
-        total_sales: totalSales,
-        transaction_count: count,
-        average_ticket: count > 0 ? totalSales / count : 0,
-        top_selling_product: '' // Simplified for speed
-      };
+      try {
+        const res = await fetch('/api/pos/stats', {
+          headers: { 'x-organization-id': organizationId }
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json?.error) {
+            console.warn('[POS] API /api/pos/stats returned logical error:', json?.error, json?.details);
+            throw new Error(String(json.error));
+          }
+          return {
+            total_sales: Number(json?.todaySales || 0),
+            transaction_count: Number(json?.todayTransactions || 0),
+            average_ticket: Number(json?.averageTicket || 0),
+            top_selling_product: json?.topProducts?.[0]?.name || ''
+          };
+        }
+        let apiMessage = `POS stats API responded with status ${res.status}`;
+        try {
+          const json = await res.json();
+          if (json?.error) {
+            apiMessage = String(json.error);
+          }
+        } catch { }
+        throw new Error(apiMessage);
+      } catch (apiErr) {
+        console.error('[POS] API /api/pos/stats failed:', apiErr);
+        throw apiErr instanceof Error ? apiErr : new Error('Could not fetch POS stats');
+      }
     },
     staleTime: 2 * 60 * 1000,
     gcTime: 5 * 60 * 1000,
@@ -443,6 +438,27 @@ export function usePOSData() {
 
   const loading = productsQuery.isLoading || categoriesQuery.isLoading || customersQuery.isLoading || salesStatsQuery.isLoading;
   const error = productsQuery.error || categoriesQuery.error || customersQuery.error || salesStatsQuery.error;
+  const categories = Array.isArray(categoriesQuery.data) ? categoriesQuery.data : [];
+  const categoryMap = new Map(
+    categories
+      .filter((category: any) => category?.id)
+      .map((category: any) => [String(category.id), category])
+  );
+  const products = Array.isArray(productsQuery.data)
+    ? productsQuery.data.map((product: any) => {
+      const category =
+        product?.category && typeof product.category === 'object'
+          ? product.category
+          : (product?.category_id ? categoryMap.get(String(product.category_id)) : null);
+
+      return {
+        ...product,
+        category: category
+          ? { id: String(category.id), name: String(category.name || 'Sin categoría') }
+          : null,
+      };
+    })
+    : [];
 
   const { refetch: refetchProducts } = productsQuery;
   const { refetch: refetchCategories } = categoriesQuery;
@@ -458,15 +474,12 @@ export function usePOSData() {
   }, [refetchProducts, refetchCategories, refetchCustomers, refetchSalesStats]);
 
   const clearAllCache = useCallback(() => {
-    queryClient.removeQueries({ queryKey: ['pos', 'products'] });
-    queryClient.removeQueries({ queryKey: ['pos', 'categories'] });
-    queryClient.removeQueries({ queryKey: ['pos', 'customers'] });
-    queryClient.removeQueries({ queryKey: ['pos', 'sales-stats'] });
+    queryClient.removeQueries({ queryKey: ['pos'] });
   }, [queryClient]);
 
   return {
-    products: Array.isArray(productsQuery.data) ? productsQuery.data : [],
-    categories: Array.isArray(categoriesQuery.data) ? categoriesQuery.data : [],
+    products,
+    categories,
     customers: Array.isArray(customersQuery.data) ? customersQuery.data : [],
     salesStats: (salesStatsQuery.data && typeof salesStatsQuery.data === 'object' && !Array.isArray(salesStatsQuery.data))
       ? salesStatsQuery.data
@@ -482,53 +495,59 @@ export function usePOSData() {
 // Hook para precargar datos críticos
 export function usePreloadCriticalData() {
   const queryClient = useQueryClient();
-  const supabase = createClient();
+  const organizationId = useCurrentOrganizationId();
 
   const preloadData = useCallback(async () => {
+    if (!organizationId) return;
+
     await Promise.allSettled([
       queryClient.prefetchQuery({
-        queryKey: ['pos', 'products'],
+        queryKey: ['pos', 'products', organizationId],
         queryFn: async () => {
-          const { data, error } = await supabase
-            .from('products')
-            .select('*')
-            .order('name');
+          const res = await fetch('/api/pos/products?limit=500', {
+            headers: { 'x-organization-id': organizationId }
+          });
+          if (!res.ok) {
+            throw new Error(`POS products preload failed with status ${res.status}`);
+          }
 
-          if (!error && Array.isArray(data)) return data;
+          const json = await res.json();
+          if (json?.error) {
+            throw new Error(String(json.error));
+          }
 
-          try {
-            const res = await fetch('/api/pos/products?limit=500');
-            if (res.ok) {
-              const json = await res.json();
-              const items = json?.products || json?.data || [];
-              return (Array.isArray(items) ? items : []).map((p: any) => ({
-                ...p,
-                category: p?.category_name ? { id: p?.category_id, name: p?.category_name } : undefined,
-              }));
-            }
-          } catch { }
-          if (error) throw error;
-          return data || [];
+          const items = json?.products || json?.data || [];
+          return (Array.isArray(items) ? items : []).map((p: any) => ({
+            ...p,
+            category: p?.category_name ? { id: p?.category_id, name: p?.category_name } : p?.category,
+          }));
         },
         staleTime: 10 * 60 * 1000,
         gcTime: 10 * 60 * 1000,
       }),
       queryClient.prefetchQuery({
-        queryKey: ['pos', 'categories'],
+        queryKey: ['pos', 'categories', organizationId],
         queryFn: async () => {
-          const { data, error } = await supabase
-            .from('categories')
-            .select('*')
-            .order('name');
+          const res = await fetch('/api/categories?limit=200&status=active', {
+            headers: { 'x-organization-id': organizationId }
+          });
+          if (!res.ok) {
+            throw new Error(`POS categories preload failed with status ${res.status}`);
+          }
 
-          if (error) throw error;
-          return data || [];
+          const json = await res.json();
+          if (json?.error) {
+            throw new Error(String(json.error));
+          }
+
+          const items = json?.categories || json?.data || [];
+          return Array.isArray(items) ? items : [];
         },
         staleTime: 15 * 60 * 1000,
         gcTime: 15 * 60 * 1000,
       }),
     ]);
-  }, [queryClient, supabase]);
+  }, [organizationId, queryClient]);
 
   useEffect(() => {
     preloadData();

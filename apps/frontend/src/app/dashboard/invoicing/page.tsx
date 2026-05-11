@@ -296,6 +296,7 @@ export default function InvoicingPage() {
             )}
             {detailQuery.data && (
               <PosInvoiceEditor
+                invoiceId={selectedInvoiceId}
                 initial={mapInvoiceToEditorInitial(detailQuery.data)}
                 isSaving={updateMutation.isPending}
                 onSave={async (payload) => {
@@ -339,6 +340,7 @@ export default function InvoicingPage() {
 
           <div className="flex-1 overflow-y-auto p-6">
             <PosInvoiceEditor
+              invoiceId={null}
               initial={{ status: 'draft' }}
               isSaving={createMutation.isPending}
               onSave={async (payload) => {
@@ -348,6 +350,7 @@ export default function InvoicingPage() {
                   description: `La factura ${result.invoiceNumber} fue guardada como borrador.`,
                 });
                 setIsNewOpen(false);
+                setSelectedInvoiceId(result.id);
                 void listQuery.refetch();
               }}
             />

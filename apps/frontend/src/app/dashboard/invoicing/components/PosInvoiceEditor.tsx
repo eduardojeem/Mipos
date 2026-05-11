@@ -10,6 +10,7 @@ import { PosInvoicePreview } from './PosInvoicePreview';
 import { useInvoiceExport } from './useInvoiceExport';
 
 type Props = {
+  invoiceId?: string | null;
   initial: {
     invoiceNumber?: string;
     status?: PosInvoiceStatus;
@@ -31,14 +32,56 @@ type Props = {
   onSave: (payload: PosInvoiceCreateInput) => Promise<void> | void;
 };
 
-export function PosInvoiceEditor({ initial, isSaving, onSave }: Props) {
+function normalizeInvoiceSnapshot(input: {
+  invoiceNumber?: string;
+  status?: PosInvoiceStatus;
+  currency?: string;
+  issuedDate?: string;
+  dueDate?: string | null;
+  customerId?: string | null;
+  customerName?: string | null;
+  customerEmail?: string | null;
+  customerPhone?: string | null;
+  customerAddress?: string | null;
+  customerTaxId?: string | null;
+  items?: Array<{ description: string; quantity: number; unitPrice: number }>;
+  discount?: number;
+  tax?: number;
+  notes?: string | null;
+}) {
+  return {
+    invoiceNumber: input.invoiceNumber || '',
+    status: input.status || 'draft',
+    currency: input.currency || 'USD',
+    issuedDate: input.issuedDate || '',
+    dueDate: input.dueDate || null,
+    customerId: input.customerId || null,
+    customerName: input.customerName || '',
+    customerEmail: input.customerEmail || '',
+    customerPhone: input.customerPhone || '',
+    customerAddress: input.customerAddress || '',
+    customerTaxId: input.customerTaxId || '',
+    items: (input.items || []).map((it) => ({
+      description: String(it.description || '').trim(),
+      quantity: Number(it.quantity || 0),
+      unitPrice: Number(it.unitPrice || 0),
+    })),
+    discount: Number(input.discount || 0),
+    tax: Number(input.tax || 0),
+    notes: input.notes || '',
+  };
+}
+
+export function PosInvoiceEditor({ invoiceId = null, initial, isSaving, onSave }: Props) {
+  const defaultDueDate =
+    initial.dueDate !== undefined
+      ? initial.dueDate
+      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const [invoiceNumber, setInvoiceNumber] = useState(initial.invoiceNumber || '');
   const [status, setStatus] = useState<PosInvoiceStatus>(initial.status || 'draft');
   const [currency, setCurrency] = useState(initial.currency || 'USD');
   const [issuedDate, setIssuedDate] = useState(initial.issuedDate || new Date().toISOString().slice(0, 10));
-  const [dueDate, setDueDate] = useState<string | null>(
-    initial.dueDate ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-  );
+  const [dueDate, setDueDate] = useState<string | null>(defaultDueDate);
 
   const [customerId, setCustomerId] = useState<string | null>(initial.customerId ?? null);
   const [customerName, setCustomerName] = useState(initial.customerName ?? '');
@@ -84,6 +127,87 @@ export function PosInvoiceEditor({ initial, isSaving, onSave }: Props) {
 
   const exportTools = useInvoiceExport();
   const isDraft = status === 'draft';
+  const hasPersistedInvoice = Boolean(invoiceId);
+
+  const persistedSnapshot = useMemo(
+    () =>
+      JSON.stringify(
+        normalizeInvoiceSnapshot({
+          invoiceNumber: initial.invoiceNumber,
+          status: initial.status,
+          currency: initial.currency,
+          issuedDate: initial.issuedDate,
+          dueDate: initial.dueDate,
+          customerId: initial.customerId,
+          customerName: initial.customerName,
+          customerEmail: initial.customerEmail,
+          customerPhone: initial.customerPhone,
+          customerAddress: initial.customerAddress,
+          customerTaxId: initial.customerTaxId,
+          items: initial.items?.map((it) => ({
+            description: it.description,
+            quantity: it.quantity,
+            unitPrice: it.unitPrice,
+          })),
+          discount: initial.discount,
+          tax: initial.tax,
+          notes: initial.notes,
+        })
+      ),
+    [initial]
+  );
+
+  const currentSnapshot = useMemo(
+    () =>
+      JSON.stringify(
+        normalizeInvoiceSnapshot({
+          invoiceNumber,
+          status,
+          currency,
+          issuedDate,
+          dueDate,
+          customerId,
+          customerName,
+          customerEmail,
+          customerPhone,
+          customerAddress,
+          customerTaxId,
+          items: items.map((it) => ({
+            description: it.description,
+            quantity: it.quantity,
+            unitPrice: it.unitPrice,
+          })),
+          discount,
+          tax,
+          notes,
+        })
+      ),
+    [
+      customerAddress,
+      customerEmail,
+      customerId,
+      customerName,
+      customerPhone,
+      customerTaxId,
+      currency,
+      discount,
+      dueDate,
+      invoiceNumber,
+      issuedDate,
+      items,
+      notes,
+      status,
+      tax,
+    ]
+  );
+
+  const hasUnsavedChanges = hasPersistedInvoice && persistedSnapshot !== currentSnapshot;
+  const canExport = hasPersistedInvoice && !hasUnsavedChanges;
+  const exportDisabledReason = !hasPersistedInvoice
+    ? 'Guarda la factura primero para habilitar la impresión y el PDF.'
+    : hasUnsavedChanges
+      ? 'Guarda los cambios pendientes antes de imprimir o exportar.'
+      : undefined;
 
   const handleSave = async () => {
     const payload: PosInvoiceCreateInput = {
@@ -116,6 +240,8 @@ export function PosInvoiceEditor({ initial, isSaving, onSave }: Props) {
           onPrint={exportTools.handlePrint}
           onPdf={() => exportTools.generatePDF(`factura-${invoiceNumber || 'sin-numero'}.pdf`)}
           isGeneratingPdf={exportTools.isGenerating}
+          canExport={canExport}
+          exportDisabledReason={exportDisabledReason}
         />
         <PosInvoiceMetaCard
           invoiceNumber={invoiceNumber}

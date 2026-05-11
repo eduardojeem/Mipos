@@ -18,7 +18,7 @@ import { PaymentMethod } from '@/types';
 import type { CartItem } from '@/hooks/useCart';
 import {
   AlertTriangle, CheckCircle, Percent, Receipt,
-  Package2, CreditCard, Banknote, Smartphone, Wallet, QrCode, Trash2,
+  Package2, CreditCard, Banknote, Smartphone, Wallet, QrCode, Trash2, FileText,
 } from 'lucide-react';
 import { useBusinessConfig } from '@/contexts/BusinessConfigContext';
 import { usePOSStore } from '@/store';
@@ -47,7 +47,7 @@ interface ProcessSaleModalProps {
         details?: { reference?: string };
       }>;
     },
-    options?: { autoPrint?: boolean }
+    options?: { autoPrint?: boolean; documentType?: 'internal_ticket' | 'invoice' }
   ) => Promise<void> | void;
   customer?: Customer | null;
   paymentMethod?: PaymentMethod;
@@ -79,6 +79,8 @@ export default function ProcessSaleModal({
   initialDiscountType,
   onConfirm,
   customer,
+  customers,
+  onSelectCustomer,
   paymentMethod,
   onPaymentMethodChange,
   enableSplitPayment = false,
@@ -102,6 +104,7 @@ export default function ProcessSaleModal({
   const [splitPayments, setSplitPayments] = useState<Array<{ method: PaymentMethod; amount: number }>>([]);
   const [localNotes, setLocalNotes] = useState(globalNotes || '');
   const [autoPrint, setAutoPrint] = useState(Boolean(config?.storeSettings?.autoPrintOnSale));
+  const [selectedDocumentType, setSelectedDocumentType] = useState<'internal_ticket' | 'invoice'>('internal_ticket');
 
   // --- Reset on close ---
   useEffect(() => {
@@ -114,6 +117,7 @@ export default function ProcessSaleModal({
       setSplitPayments([]);
       setTransferRef('');
       setErrors([]);
+      setSelectedDocumentType('internal_ticket');
     }
   }, [isOpen, paymentMethod]);
 
@@ -171,9 +175,13 @@ export default function ProcessSaleModal({
       errs.push(`Stock insuficiente: ${insufficientStock.map((i) => i.product_name).join(', ')}`);
     }
 
+    if (selectedDocumentType === 'invoice' && !customer?.id) {
+      errs.push('Selecciona un cliente para emitir una factura desde el POS');
+    }
+
     setErrors(errs);
     return errs.length === 0;
-  }, [discount, discountType, totals, selectedMethod, splitEnabled, cashReceived, splitPayments, insufficientStock, fmtCurrency]);
+  }, [discount, discountType, totals, selectedMethod, splitEnabled, cashReceived, splitPayments, insufficientStock, fmtCurrency, selectedDocumentType, customer?.id]);
 
   const handleConfirm = useCallback(() => {
     if (!validate()) return;
@@ -184,7 +192,7 @@ export default function ProcessSaleModal({
       : `Pago con ${methodLabel}`;
 
     showConfirmation({
-      title: 'Confirmar venta',
+      title: selectedDocumentType === 'invoice' ? 'Confirmar venta y factura' : 'Confirmar venta',
       description: `${desc}. Total: ${fmtCurrency(totals.total)}${selectedMethod === PaymentMethod.CASH && !splitEnabled ? ` · Cambio: ${fmtCurrency(changeDue)}` : ''}`,
       confirmText: 'Confirmar',
       cancelText: 'Cancelar',
@@ -216,10 +224,13 @@ export default function ProcessSaleModal({
           }));
         }
 
-        await onConfirm(discount, discountType, details, { autoPrint });
+        await onConfirm(discount, discountType, details, {
+          autoPrint,
+          documentType: selectedDocumentType,
+        });
       },
     });
-  }, [validate, selectedMethod, splitEnabled, splitPayments, totals, changeDue, fmtCurrency, showConfirmation, onPaymentMethodChange, paymentMethod, setGlobalNotes, localNotes, transferRef, cashReceived, discount, discountType, onConfirm, autoPrint]);
+  }, [validate, selectedMethod, splitEnabled, splitPayments, totals, changeDue, fmtCurrency, showConfirmation, onPaymentMethodChange, paymentMethod, setGlobalNotes, localNotes, transferRef, cashReceived, discount, discountType, onConfirm, autoPrint, selectedDocumentType]);
 
   // --- Keyboard ---
   useEffect(() => {
@@ -285,9 +296,15 @@ export default function ProcessSaleModal({
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
           <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            <div className="font-semibold">Se emitirá un ticket interno temporal.</div>
+            <div className="font-semibold">
+              {selectedDocumentType === 'invoice'
+                ? 'Se registrará la venta y se generará una factura asociada.'
+                : 'Se emitirá un ticket interno temporal.'}
+            </div>
             <div className="mt-1 text-xs font-medium uppercase tracking-wide">
-              {INTERNAL_TICKET_DISCLAIMER}
+              {selectedDocumentType === 'invoice'
+                ? 'La factura quedará disponible para impresión al finalizar.'
+                : INTERNAL_TICKET_DISCLAIMER}
             </div>
           </div>
 
@@ -343,6 +360,86 @@ export default function ProcessSaleModal({
               </div>
 
               <Separator />
+
+              <Card>
+                <CardContent className="p-4 space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold">Comprobante</Label>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDocumentType('internal_ticket')}
+                        className={cn(
+                          'rounded-xl border p-3 text-left transition-all',
+                          selectedDocumentType === 'internal_ticket'
+                            ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-200'
+                            : 'border-border hover:border-amber-300'
+                        )}
+                      >
+                        <div className="flex items-center gap-2 text-sm font-semibold">
+                          <Receipt className="h-4 w-4" />
+                          Ticket interno
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Registra la venta y permite imprimir el comprobante interno.
+                        </p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDocumentType('invoice')}
+                        className={cn(
+                          'rounded-xl border p-3 text-left transition-all',
+                          selectedDocumentType === 'invoice'
+                            ? 'border-sky-400 bg-sky-50 ring-2 ring-sky-200'
+                            : 'border-border hover:border-sky-300'
+                        )}
+                      >
+                        <div className="flex items-center gap-2 text-sm font-semibold">
+                          <FileText className="h-4 w-4" />
+                          Factura
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Genera una factura ligada a esta venta para imprimirla después.
+                        </p>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-sm font-semibold">
+                      Cliente {selectedDocumentType === 'invoice' ? '(requerido)' : '(opcional)'}
+                    </Label>
+                    <Select
+                      value={customer?.id || '__general__'}
+                      onValueChange={(value) => {
+                        const nextCustomer = value === '__general__'
+                          ? null
+                          : customers?.find((item) => String(item.id) === String(value)) || null;
+                        onSelectCustomer?.(nextCustomer);
+                        setErrors([]);
+                      }}
+                    >
+                      <SelectTrigger className="h-10">
+                        <SelectValue placeholder="Selecciona un cliente" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__general__">Cliente general</SelectItem>
+                        {(customers || []).map((item) => (
+                          <SelectItem key={item.id} value={item.id}>
+                            {item.name}
+                            {item.ruc || item.tax_id ? ` - ${item.ruc || item.tax_id}` : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {selectedDocumentType === 'invoice'
+                        ? 'La factura tomará los datos del cliente seleccionado.'
+                        : 'Puedes dejar la venta sin cliente si solo necesitas ticket interno.'}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
 
               {/* Discount */}
               <div className="space-y-2">
@@ -558,7 +655,7 @@ export default function ProcessSaleModal({
                 ) : (
                   <span className="flex items-center gap-2">
                     <CheckCircle className="h-4 w-4" />
-                    Registrar venta
+                    {selectedDocumentType === 'invoice' ? 'Registrar venta y factura' : 'Registrar venta'}
                   </span>
                 )}
               </Button>
