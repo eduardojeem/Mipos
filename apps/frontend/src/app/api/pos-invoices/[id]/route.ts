@@ -138,6 +138,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       customerPhone: (data as any).customer_phone,
       customerAddress: (data as any).customer_address,
       customerTaxId: (data as any).customer_tax_id,
+      saleId: (data as any).sale_id || null,
+      saleNumber: (data as any).sale_number || null,
       items: (data as any).items || [],
       subtotal: Number((data as any).subtotal || 0),
       discount: Number((data as any).discount || 0),

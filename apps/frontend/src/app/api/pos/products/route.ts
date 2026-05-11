@@ -1,7 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/server';
 import { requirePOSPermissions } from '@/app/api/_utils/role-validation';
-import { getUserOrganizationId } from '@/app/api/_utils/organization';
+import { getUserOrganizationId, validateOrganizationAccess } from '@/app/api/_utils/organization';
+
+function normalizeString(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const lowered = trimmed.toLowerCase();
+  if (lowered === 'undefined' || lowered === 'null') {
+    return null;
+  }
+
+  return trimmed;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,12 +29,21 @@ export async function GET(request: NextRequest) {
     const categoryId = searchParams.get('categoryId');
     const activeOnly = searchParams.get('activeOnly') !== 'false'; // Default true
 
-    const supabase = await createClient();
+    const supabase = await createAdminClient();
 
-    const headerOrgId = request.headers.get('x-organization-id') || request.headers.get('X-Organization-Id')
-    const organizationId = headerOrgId || (auth.userId ? await getUserOrganizationId(auth.userId) : null)
+    const headerOrgId = normalizeString(
+      request.headers.get('x-organization-id') || request.headers.get('X-Organization-Id')
+    )
+    const organizationId = headerOrgId || (auth.userId ? normalizeString(await getUserOrganizationId(auth.userId)) : null)
     if (!organizationId) {
       return NextResponse.json({ error: 'Organization context is required' }, { status: 400 })
+    }
+
+    if (auth.userId && auth.userRole !== 'SUPER_ADMIN') {
+      const hasOrganizationAccess = await validateOrganizationAccess(auth.userId, organizationId)
+      if (!hasOrganizationAccess) {
+        return NextResponse.json({ error: 'Access denied to selected organization' }, { status: 403 })
+      }
     }
 
     // Optimized query for POS - only essential fields
@@ -41,11 +63,7 @@ export async function GET(request: NextRequest) {
         is_active,
         image_url,
         barcode,
-        brand,
-        categories!products_category_id_fkey (
-          id,
-          name
-        )
+        brand
       `)
       .order('name');
 
@@ -85,7 +103,10 @@ export async function GET(request: NextRequest) {
       image_url: string | null;
       barcode: string | null;
       brand: string | null;
-      categories?: { id: string; name: string } | null;
+    };
+    type CategoryRow = {
+      id: string;
+      name: string | null;
     };
     type PosProduct = {
       id: string;
@@ -108,6 +129,33 @@ export async function GET(request: NextRequest) {
       has_wholesale: boolean;
     };
     const baseProducts = (products ?? []) as ProductRow[];
+    const categoryIds = Array.from(new Set(
+      baseProducts
+        .map((product) => product.category_id)
+        .filter((categoryId): categoryId is string => Boolean(categoryId))
+    ));
+
+    const categoryMap = new Map<string, { id: string; name: string }>();
+    if (categoryIds.length > 0) {
+      const { data: categories, error: categoriesError } = await supabase
+        .from('categories')
+        .select('id, name')
+        .eq('organization_id', organizationId)
+        .in('id', categoryIds);
+
+      if (categoriesError) {
+        console.warn('POS products categories lookup warning:', categoriesError);
+      } else {
+        ((categories ?? []) as CategoryRow[]).forEach((category) => {
+          if (!category?.id) return;
+          categoryMap.set(category.id, {
+            id: category.id,
+            name: category.name || 'Sin categoría'
+          });
+        });
+      }
+    }
+
     const transformedProducts: PosProduct[] = baseProducts.map((product) => ({
       id: product.id,
       name: product.name,
@@ -123,7 +171,7 @@ export async function GET(request: NextRequest) {
       image_url: product.image_url,
       barcode: product.barcode,
       brand: product.brand,
-      category: product.categories ? { id: product.categories.id, name: product.categories.name } : null,
+      category: product.category_id ? (categoryMap.get(product.category_id) || null) : null,
       in_stock: (product.stock_quantity || 0) > 0,
       low_stock: (product.stock_quantity || 0) <= (product.min_stock || 5),
       has_wholesale: (product.wholesale_price || 0) > 0

@@ -134,7 +134,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('pos_invoices')
       .select(
-        'id, invoice_number, status, currency, issued_date, due_date, customer_name, total, created_at, updated_at',
+        'id, invoice_number, status, currency, issued_date, due_date, customer_name, total, sale_id, sale_number, created_at, updated_at',
         { count: 'exact' }
       )
       .eq('organization_id', auth.organizationId);
@@ -172,12 +172,14 @@ export async function GET(request: NextRequest) {
         status: row.status,
         currency: row.currency,
         issuedDate: row.issued_date,
-        dueDate: row.due_date,
-        customerName: row.customer_name,
-        total: Number(row.total || 0),
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      })),
+          dueDate: row.due_date,
+          customerName: row.customer_name,
+          total: Number(row.total || 0),
+          saleId: row.sale_id || null,
+          saleNumber: row.sale_number || null,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+        })),
       pagination: {
         page,
         limit,
@@ -222,6 +224,8 @@ export async function POST(request: NextRequest) {
     const customerPhone = safeText(body?.customerPhone, 80);
     const customerAddress = safeText(body?.customerAddress, 240);
     const customerTaxId = safeText(body?.customerTaxId, 80);
+    const saleId = safeText(body?.saleId, 80);
+    const saleNumber = safeText(body?.saleNumber, 80);
 
     const itemsInput = Array.isArray(body?.items) ? (body.items as InvoiceItemInput[]) : [];
     const discount = Number(body?.discount || 0);
@@ -253,6 +257,8 @@ export async function POST(request: NextRequest) {
           customer_phone: customerPhone,
           customer_address: customerAddress,
           customer_tax_id: customerTaxId,
+          sale_id: saleId,
+          sale_number: saleNumber,
           items: totals.items,
           subtotal: totals.subtotal,
           discount: totals.discount,

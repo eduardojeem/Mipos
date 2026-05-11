@@ -106,16 +106,22 @@ const PAYMENT_METHOD_LABELS: Record<PaymentMethodKey, string> = {
   UNKNOWN: 'Sin definir',
 };
 
-function isMissingColumnError(error: unknown): boolean {
+function isSchemaCompatibilityError(error: unknown): boolean {
   const message = String((error as { message?: unknown } | null)?.message ?? '').toLowerCase();
   const details = String((error as { details?: unknown } | null)?.details ?? '').toLowerCase();
   const code = String((error as { code?: unknown } | null)?.code ?? '').toUpperCase();
 
   return (
     code === 'PGRST204' ||
+    code === 'PGRST200' ||
     code === '42703' ||
+    code === '42P01' ||
     (message.includes('column') && message.includes('does not exist')) ||
-    (details.includes('column') && details.includes('does not exist'))
+    (details.includes('column') && details.includes('does not exist')) ||
+    message.includes('could not find a relationship') ||
+    details.includes('could not find a relationship') ||
+    message.includes('relation') && message.includes('does not exist') ||
+    details.includes('relation') && details.includes('does not exist')
   );
 }
 
@@ -402,35 +408,38 @@ function isConflictingOpenSession(
 }
 
 async function fetchOpenCashSessionRows(client: SupabaseLike, organizationId: string) {
-  const scoped = await client
-    .from('cash_sessions')
-    .select(SESSION_SELECT)
-    .eq('organization_id', organizationId)
-    .or('status.eq.OPEN,status.eq.open')
-    .order('opened_at', { ascending: false })
-    .limit(50);
+  const attempts = [
+    { select: SESSION_SELECT, orderColumn: 'opened_at' },
+    { select: '*', orderColumn: 'opened_at' },
+    { select: '*', orderColumn: 'created_at' },
+  ] as const;
 
-  if (!scoped.error) {
-    return (scoped.data || []) as CashSessionRow[];
+  let lastSchemaError: unknown = null;
+  for (const attempt of attempts) {
+    const result = await client
+      .from('cash_sessions')
+      .select(attempt.select)
+      .eq('organization_id', organizationId)
+      .or('status.eq.OPEN,status.eq.open')
+      .order(attempt.orderColumn, { ascending: false })
+      .limit(50);
+
+    if (!result.error) {
+      return (result.data || []) as CashSessionRow[];
+    }
+
+    if (!isSchemaCompatibilityError(result.error)) {
+      throw new Error(result.error.message || 'Failed to fetch open cash session');
+    }
+
+    lastSchemaError = result.error;
   }
 
-  if (!isMissingColumnError(scoped.error)) {
-    throw new Error(scoped.error.message || 'Failed to fetch open cash session');
+  if (lastSchemaError) {
+    return [];
   }
 
-  const fallback = await client
-    .from('cash_sessions')
-    .select(SESSION_SELECT)
-    .eq('organization_id', organizationId)
-    .or('status.eq.OPEN,status.eq.open')
-    .order('created_at', { ascending: false })
-    .limit(50);
-
-  if (fallback.error) {
-    throw new Error(fallback.error.message || 'Failed to fetch open cash session');
-  }
-
-  return (fallback.data || []) as CashSessionRow[];
+  return [];
 }
 
 export async function fetchOpenCashSession(
@@ -500,16 +509,16 @@ export async function enrichCashSessions(
       .order('created_at', { ascending: false }),
   ]);
 
-  if (countsResult.error) {
+  if (countsResult.error && !isSchemaCompatibilityError(countsResult.error)) {
     throw new Error(countsResult.error.message || 'Failed to fetch cash counts');
   }
 
-  if (movementsResult.error) {
+  if (movementsResult.error && !isSchemaCompatibilityError(movementsResult.error)) {
     throw new Error(movementsResult.error.message || 'Failed to fetch cash movements');
   }
 
-  const counts = (countsResult.data || []) as CashCountRow[];
-  const movements = (movementsResult.data || []) as CashMovementRow[];
+  const counts = countsResult.error ? [] : ((countsResult.data || []) as CashCountRow[]);
+  const movements = movementsResult.error ? [] : ((movementsResult.data || []) as CashMovementRow[]);
 
   // Enrich movements with user data
   const uniqueUserIds = [...new Set(movements.map((m) => m.created_by).filter(Boolean))] as string[];

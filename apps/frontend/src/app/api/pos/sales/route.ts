@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { requirePOSPermissions } from '@/app/api/_utils/role-validation';
-import { getUserOrganizationId } from '@/app/api/_utils/organization';
+import { getUserOrganizationId, validateOrganizationAccess } from '@/app/api/_utils/organization';
 import { getRequestOperationalContext } from '@/app/api/_utils/operational-context';
 import {
   buildInternalTicketMetadata,
@@ -19,6 +19,102 @@ function normalizeString(value: unknown): string | null {
   }
 
   return trimmed;
+}
+
+function generateInvoiceNumber() {
+  const now = new Date();
+  const y = String(now.getFullYear());
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  const rand = Math.floor(Math.random() * 9000) + 1000;
+  return `INV-${y}${m}${d}-${rand}`;
+}
+
+type InvoiceCustomerSnapshot = {
+  id: string;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  taxId: string | null;
+};
+
+async function createInvoiceForSale({
+  organizationId,
+  userId,
+  currency,
+  notes,
+  customer,
+  sale,
+}: {
+  organizationId: string;
+  userId?: string | null;
+  currency: string;
+  notes?: string;
+  customer: InvoiceCustomerSnapshot;
+  sale: ReturnType<typeof normalizePosSaleDocument>;
+}) {
+  const admin = await createAdminClient();
+  let invoiceNumber = generateInvoiceNumber();
+  const invoiceItems = sale.items.map((item) => ({
+    id: item.id,
+    description: item.productName,
+    quantity: Number(item.quantity || 0),
+    unitPrice: Number(item.unitPrice || 0),
+    total: Number(item.totalPrice || 0),
+  }));
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const { data, error } = await admin
+      .from('pos_invoices')
+      .insert({
+        organization_id: organizationId,
+        sale_id: sale.id,
+        sale_number: sale.saleNumber,
+        invoice_number: invoiceNumber,
+        status: 'paid',
+        currency: currency || 'USD',
+        issued_date: new Date().toISOString().slice(0, 10),
+        due_date: null,
+        customer_id: customer.id,
+        customer_name: customer.name,
+        customer_email: customer.email,
+        customer_phone: customer.phone,
+        customer_address: customer.address,
+        customer_tax_id: customer.taxId,
+        items: invoiceItems,
+        subtotal: Number(sale.subtotal || 0),
+        discount: Number(sale.discountAmount || 0),
+        tax: Number(sale.taxAmount || 0),
+        total: Number(sale.totalAmount || 0),
+        notes: notes || null,
+        updated_at: new Date().toISOString(),
+        updated_by: userId || null,
+      })
+      .select('id, invoice_number, status, sale_id, sale_number')
+      .single();
+
+    if (!error) {
+      return {
+        id: (data as any).id,
+        invoiceNumber: (data as any).invoice_number,
+        status: (data as any).status,
+        saleId: (data as any).sale_id || sale.id,
+        saleNumber: (data as any).sale_number || sale.saleNumber,
+      };
+    }
+
+    const code = String((error as any)?.code || '').toUpperCase();
+    const message = String((error as any)?.message || '').toLowerCase();
+    const isUnique = code === '23505' || message.includes('duplicate key');
+    if (!isUnique) {
+      throw new Error(error.message || 'Failed to create invoice');
+    }
+
+    invoiceNumber = generateInvoiceNumber();
+  }
+
+  throw new Error('Failed to generate unique invoice number');
 }
 
 // POST /api/pos/sales - Process a new sale
@@ -45,6 +141,8 @@ export async function POST(request: NextRequest) {
       transfer_reference,
       cashReceived,
       change,
+      document_type = 'internal_ticket',
+      currency = 'USD',
       total_amount // Agregar para validación cruzada
     } = body;
 
@@ -92,6 +190,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Organization context is required' }, { status: 400 });
     }
 
+    if (auth.userId && auth.userRole !== 'SUPER_ADMIN') {
+      const hasOrganizationAccess = await validateOrganizationAccess(auth.userId, organizationId);
+      if (!hasOrganizationAccess) {
+        return NextResponse.json({ error: 'Access denied to selected organization' }, { status: 403 });
+      }
+    }
+
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     if (sessionError || !session?.access_token) {
       return NextResponse.json({ error: 'Backend session is required' }, { status: 401 });
@@ -99,6 +204,51 @@ export async function POST(request: NextRequest) {
 
     const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001/api';
     const customerId = normalizeString(customer_id);
+    const requestedDocumentType = String(document_type || 'internal_ticket').trim().toLowerCase();
+    const shouldCreateInvoice = requestedDocumentType === 'invoice';
+    let invoiceCustomer: InvoiceCustomerSnapshot | null = null;
+
+    if (shouldCreateInvoice) {
+      if (!customerId) {
+        return NextResponse.json(
+          { error: 'Customer is required to issue an invoice from POS' },
+          { status: 400 }
+        );
+      }
+
+      const admin = await createAdminClient();
+      const { data: customerRecord, error: customerError } = await admin
+        .from('customers')
+        .select('id, name, email, phone, address, tax_id, ruc')
+        .eq('organization_id', organizationId)
+        .eq('id', customerId)
+        .maybeSingle();
+
+      if (customerError) {
+        return NextResponse.json(
+          { error: customerError.message || 'Failed to load customer for invoice' },
+          { status: 500 }
+        );
+      }
+
+      if (!customerRecord) {
+        return NextResponse.json(
+          { error: 'Selected customer was not found for invoicing' },
+          { status: 400 }
+        );
+      }
+
+      invoiceCustomer = {
+        id: String((customerRecord as any).id),
+        name: normalizeString((customerRecord as any).name),
+        email: normalizeString((customerRecord as any).email),
+        phone: normalizeString((customerRecord as any).phone),
+        address: normalizeString((customerRecord as any).address),
+        taxId:
+          normalizeString((customerRecord as any).ruc) ||
+          normalizeString((customerRecord as any).tax_id),
+      };
+    }
 
     // SECURITY FIX: Only send product IDs and quantities, NOT prices
     const backendPayload: any = {
@@ -208,12 +358,46 @@ export async function POST(request: NextRequest) {
       backendSale?.summary,
     );
 
+    let invoice: {
+      id: string;
+      invoiceNumber: string;
+      status: string;
+      saleId?: string;
+      saleNumber?: string;
+    } | null = null;
+    let invoiceError: string | null = null;
+
+    if (shouldCreateInvoice && invoiceCustomer) {
+      try {
+        invoice = await createInvoiceForSale({
+          organizationId,
+          userId: auth.userId,
+          currency: normalizeString(currency) || 'USD',
+          notes,
+          customer: invoiceCustomer,
+          sale: normalizedSale,
+        });
+      } catch (invoiceCreationError) {
+        console.error('Invoice creation after POS sale failed:', invoiceCreationError);
+        invoiceError =
+          invoiceCreationError instanceof Error
+            ? invoiceCreationError.message
+            : 'Failed to create invoice after sale';
+      }
+    }
+
     return NextResponse.json({
       success: true,
       sale: normalizedSale,
+      invoice,
+      invoiceError,
       summary: backendSale?.summary || null,
       document: buildInternalTicketMetadata(normalizedSale.id),
-      message: 'Internal ticket sale processed successfully',
+      message: shouldCreateInvoice
+        ? invoice
+          ? 'Sale processed and invoice generated successfully'
+          : 'Sale processed, but invoice generation requires attention'
+        : 'Internal ticket sale processed successfully',
     });
 
   } catch (error) {
@@ -250,7 +434,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Organization context is required' }, { status: 400 });
     }
 
-    const { data: sales, error } = await supabase
+    if (auth.userId && auth.userRole !== 'SUPER_ADMIN') {
+      const hasOrganizationAccess = await validateOrganizationAccess(auth.userId, organizationId);
+      if (!hasOrganizationAccess) {
+        return NextResponse.json({ error: 'Access denied to selected organization' }, { status: 403 });
+      }
+    }
+
+    const admin = await createAdminClient();
+    const { data: sales, error } = await admin
       .from('sales')
       .select(`
         id,

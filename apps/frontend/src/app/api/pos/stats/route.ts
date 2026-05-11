@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/server';
 import { requirePOSPermissions } from '@/app/api/_utils/role-validation';
 import { getUserOrganizationId } from '@/app/api/_utils/organization';
 
@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(auth.body, { status: auth.status })
     }
 
-    const supabase = await createClient();
+    const supabase = await createAdminClient();
     const headerOrgId = request.headers.get('x-organization-id') || request.headers.get('X-Organization-Id')
     const organizationId = headerOrgId || (auth.userId ? await getUserOrganizationId(auth.userId) : null)
 

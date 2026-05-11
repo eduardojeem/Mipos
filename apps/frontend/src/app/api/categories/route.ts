@@ -1,10 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { getValidatedOrganizationId } from '@/lib/organization'
+
+type CategoryRow = {
+  id: string
+  name: string
+  description: string | null
+  is_active: boolean
+  parent_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+type CategoryWithProductCount = CategoryRow & {
+  products: Array<{ count: number }>
+}
 
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
+    const adminSupabase = await createAdminClient()
     const { data: { user }, error: userError } = await (supabase as any).auth.getUser()
     const canUseSupabase = typeof (supabase as any).from === 'function'
     const canQuery = canUseSupabase && !!user && !userError
@@ -24,10 +39,10 @@ export async function GET(request: NextRequest) {
     const from = (page - 1) * limit
     const to = from + limit - 1
 
-    let query = (supabase as any)
+    let query = (adminSupabase as any)
       .from('categories')
       .select(
-        'id,name,description,is_active,parent_id,created_at,updated_at,products:products!products_category_id_fkey(count)',
+        'id,name,description,is_active,parent_id,created_at,updated_at',
         { count: 'exact' }
       )
       .eq('organization_id', orgId)
@@ -51,16 +66,43 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    const baseCategories = (categories || []) as CategoryRow[]
+    const categoryIds = baseCategories.map((category) => category.id).filter(Boolean)
+    const productCountMap = new Map<string, number>()
+
+    if (categoryIds.length > 0) {
+      const { data: productCounts, error: productCountsError } = await (adminSupabase as any)
+        .from('products')
+        .select('category_id')
+        .eq('organization_id', orgId)
+        .in('category_id', categoryIds)
+
+      if (productCountsError) {
+        console.warn('Error fetching category product counts:', productCountsError)
+      } else {
+        for (const row of (productCounts || []) as Array<{ category_id?: string | null }>) {
+          const categoryId = typeof row.category_id === 'string' ? row.category_id : null
+          if (!categoryId) continue
+          productCountMap.set(categoryId, (productCountMap.get(categoryId) || 0) + 1)
+        }
+      }
+    }
+
+    const categoriesWithCounts: CategoryWithProductCount[] = baseCategories.map((category) => ({
+      ...category,
+      products: [{ count: productCountMap.get(category.id) || 0 }],
+    }))
+
     return NextResponse.json({
       success: true,
-      categories: categories || [],
-      data: categories || [],
-      count: Number(count ?? (categories?.length || 0)),
+      categories: categoriesWithCounts,
+      data: categoriesWithCounts,
+      count: Number(count ?? baseCategories.length),
       pagination: {
         page,
         limit,
-        total: Number(count ?? (categories?.length || 0)),
-        totalPages: Math.max(1, Math.ceil(Number(count ?? (categories?.length || 0)) / limit)),
+        total: Number(count ?? baseCategories.length),
+        totalPages: Math.max(1, Math.ceil(Number(count ?? baseCategories.length) / limit)),
       },
     })
 

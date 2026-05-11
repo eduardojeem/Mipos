@@ -1,7 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/server';
 import { requirePOSPermissions } from '@/app/api/_utils/role-validation';
-import { getUserOrganizationId } from '@/app/api/_utils/organization';
+import { getUserOrganizationId, validateOrganizationAccess } from '@/app/api/_utils/organization';
+
+function normalizeString(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const lowered = trimmed.toLowerCase();
+  if (lowered === 'undefined' || lowered === 'null') {
+    return null;
+  }
+
+  return trimmed;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,13 +28,21 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(parseInt(searchParams.get('limit') || '100'), 500);
     const activeOnly = searchParams.get('activeOnly') !== 'false';
 
-    const supabase = await createClient();
+    const supabase = await createAdminClient();
 
     // Optimized query for POS - only essential customer fields
-    const headerOrgId = request.headers.get('x-organization-id') || request.headers.get('X-Organization-Id')
-    const organizationId = headerOrgId || (auth.userId ? await getUserOrganizationId(auth.userId) : null)
+    const headerOrgId = normalizeString(
+      request.headers.get('x-organization-id') || request.headers.get('X-Organization-Id')
+    )
+    const organizationId = headerOrgId || (auth.userId ? normalizeString(await getUserOrganizationId(auth.userId)) : null)
     if (!organizationId) {
       return NextResponse.json({ error: 'Organization context is required' }, { status: 400 })
+    }
+    if (auth.userId && auth.userRole !== 'SUPER_ADMIN') {
+      const hasOrganizationAccess = await validateOrganizationAccess(auth.userId, organizationId)
+      if (!hasOrganizationAccess) {
+        return NextResponse.json({ error: 'Access denied to selected organization' }, { status: 403 })
+      }
     }
     let query = supabase
       .from('customers')
@@ -148,11 +169,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = await createClient();
-    const headerOrgId = request.headers.get('x-organization-id') || request.headers.get('X-Organization-Id')
-    const organizationId = headerOrgId || (auth.userId ? await getUserOrganizationId(auth.userId) : null)
+    const supabase = await createAdminClient();
+    const headerOrgId = normalizeString(
+      request.headers.get('x-organization-id') || request.headers.get('X-Organization-Id')
+    )
+    const organizationId = headerOrgId || (auth.userId ? normalizeString(await getUserOrganizationId(auth.userId)) : null)
     if (!organizationId) {
       return NextResponse.json({ error: 'Organization context is required' }, { status: 400 })
+    }
+
+    if (auth.userId && auth.userRole !== 'SUPER_ADMIN') {
+      const hasOrganizationAccess = await validateOrganizationAccess(auth.userId, organizationId)
+      if (!hasOrganizationAccess) {
+        return NextResponse.json({ error: 'Access denied to selected organization' }, { status: 403 })
+      }
     }
 
     // Check for existing customer with same email or phone
@@ -190,20 +220,25 @@ export async function POST(request: NextRequest) {
       ...(organizationId ? { organization_id: organizationId } : {})
     };
 
-    const { data: customer, error } = await supabase
+    const { data: customer, error } = await (supabase as any)
       .from('customers')
       .insert(customerData)
       .select()
       .single();
 
     if (error) throw error;
+    const createdCustomer = customer as {
+      name?: string | null;
+      email?: string | null;
+      customer_type?: string | null;
+    } & Record<string, unknown>;
 
     return NextResponse.json({
       success: true,
       customer: {
-        ...customer,
-        display_name: customer.name || customer.email || 'Cliente Sin Nombre',
-        is_wholesale: customer.customer_type === 'WHOLESALE',
+        ...createdCustomer,
+        display_name: createdCustomer.name || createdCustomer.email || 'Cliente Sin Nombre',
+        is_wholesale: createdCustomer.customer_type === 'WHOLESALE',
         has_discount: false
       },
       message: 'Customer created successfully'
