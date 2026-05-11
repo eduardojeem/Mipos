@@ -198,22 +198,25 @@ async function findOrganizationByField(
             return null;
           }
 
-          throw fallback.error;
+          throw new Error(fallback.error.message || JSON.stringify(fallback.error));
         }
 
         return (fallback.data as MiddlewareOrganization | null) || null;
       }
 
-      throw error;
+      throw new Error(error.message || JSON.stringify(error));
     }
 
     return (data as MiddlewareOrganization | null) || null;
   } catch (error) {
-    if (isColumnMissingError(error)) {
+    if (error instanceof Error && isColumnMissingError({ message: error.message })) {
+      return null;
+    }
+    if (!(error instanceof Error) && isColumnMissingError(error)) {
       return null;
     }
 
-    throw error;
+    throw error instanceof Error ? error : new Error(JSON.stringify(error));
   }
 }
 
@@ -239,42 +242,51 @@ async function resolveTenantContext(
     };
   }
 
-  const supabase = createClient(supabaseUrl, supabaseKey);
+  try {
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
-  let organization: MiddlewareOrganization | null = null;
+    let organization: MiddlewareOrganization | null = null;
 
-  if (candidate.source === 'path') {
-    organization = await findOrganizationByField(supabase, 'slug', candidate.tenantKey);
-  } else if (candidate.source === 'subdomain') {
-    organization = await findOrganizationByField(supabase, 'subdomain', candidate.tenantKey);
-    if (!organization) {
+    if (candidate.source === 'path') {
       organization = await findOrganizationByField(supabase, 'slug', candidate.tenantKey);
+    } else if (candidate.source === 'subdomain') {
+      organization = await findOrganizationByField(supabase, 'subdomain', candidate.tenantKey);
+      if (!organization) {
+        organization = await findOrganizationByField(supabase, 'slug', candidate.tenantKey);
+      }
+    } else {
+      organization = await findOrganizationByField(supabase, 'custom_domain', candidate.hostname);
+      if (!organization && candidate.hostname.startsWith('www.')) {
+        organization = await findOrganizationByField(
+          supabase,
+          'custom_domain',
+          candidate.hostname.slice(4)
+        );
+      }
     }
-  } else {
-    organization = await findOrganizationByField(supabase, 'custom_domain', candidate.hostname);
-    if (!organization && candidate.hostname.startsWith('www.')) {
-      organization = await findOrganizationByField(
-        supabase,
-        'custom_domain',
-        candidate.hostname.slice(4)
-      );
-    }
-  }
 
-  if (!organization) {
+    if (!organization) {
+      return {
+        kind: 'tenant-unresolved',
+        source: candidate.source,
+        tenantKey: candidate.tenantKey,
+      };
+    }
+
+    return {
+      kind: 'tenant',
+      source: candidate.source,
+      tenantKey: candidate.tenantKey,
+      organization,
+    };
+  } catch (error) {
+    console.error('[Middleware] resolveTenantContext failed:', error instanceof Error ? error.message : JSON.stringify(error));
     return {
       kind: 'tenant-unresolved',
       source: candidate.source,
       tenantKey: candidate.tenantKey,
     };
   }
-
-  return {
-    kind: 'tenant',
-    source: candidate.source,
-    tenantKey: candidate.tenantKey,
-    organization,
-  };
 }
 
 function isRedirectResponse(response: NextResponse): boolean {

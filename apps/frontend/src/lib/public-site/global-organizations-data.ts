@@ -186,7 +186,7 @@ async function fetchActiveOrganizations(): Promise<{ organizations: Organization
       }
 
       if (result.error) {
-        throw result.error;
+        throw new Error(result.error.message || JSON.stringify(result.error));
       }
 
       if (typeof result.count === 'number') {
@@ -223,7 +223,7 @@ async function fetchSettingsMap(organizationIds: string[]) {
     .in('organization_id', organizationIds);
 
   if (error) {
-    throw error;
+    throw new Error(error.message || JSON.stringify(error));
   }
 
   ((data || []) as SettingsRow[]).forEach((row) => {
@@ -283,7 +283,7 @@ async function fetchProductStats(organizationIds: string[]): Promise<ProductStat
       }
 
       if (result.error) {
-        throw result.error;
+        throw new Error(result.error.message || JSON.stringify(result.error));
       }
 
       rows.push(...((result.data || []) as ProductStatsRow[]));
