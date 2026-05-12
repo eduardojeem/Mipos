@@ -47,7 +47,7 @@ export function useRealtimeProducts(options: UseRealtimeProductsOptions = {}): U
   const {
     enableRealtime = true,
     showNotifications = true,
-    autoRefresh = true,
+    autoRefresh: _autoRefresh = true,  // prefijo _ = intencionalmente no usado aún
     filters = {}
   } = options;
 
@@ -59,7 +59,8 @@ export function useRealtimeProducts(options: UseRealtimeProductsOptions = {}): U
   const [hasMore, setHasMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   
-  const subscriptionRef = useRef<any>(null);
+  // RealtimeChannel es el tipo retornado por supabase.channel(...).subscribe()
+  const subscriptionRef = useRef<ReturnType<typeof realtimeService['subscribeToProducts']> | null>(null);
   const mountedRef = useRef(true);
 
   // Función para cargar productos
@@ -79,16 +80,14 @@ export function useRealtimeProducts(options: UseRealtimeProductsOptions = {}): U
     } catch (err) {
       console.error('Error fetching products:', err);
       if (mountedRef.current) {
-        const message = (err && typeof err === 'object' && 'message' in err)
-          ? String((err as any).message)
+        const message = err instanceof Error
+          ? err.message
           : (typeof err === 'string' ? err : 'Error desconocido');
         setError(message);
         if (showNotifications) {
+          const errObj = err as Record<string, unknown>;
           const info = (err && typeof err === 'object')
-            ? [
-                (err as any).code,
-                (err as any).details
-              ].filter(Boolean).join(' ')
+            ? [errObj['code'], errObj['details']].filter(Boolean).join(' ')
             : '';
           toast.error(info ? `Error al cargar productos ${info}` : 'Error al cargar productos');
         }
@@ -103,8 +102,6 @@ export function useRealtimeProducts(options: UseRealtimeProductsOptions = {}): U
   // Manejar cambios en tiempo real
   const handleRealtimeChange = useCallback((payload: ProductChangePayload) => {
     if (!mountedRef.current) return;
-
-    console.log('Realtime change received:', payload);
 
     switch (payload.eventType) {
       case 'INSERT':
@@ -257,7 +254,7 @@ export function useRealtimeProducts(options: UseRealtimeProductsOptions = {}): U
 
   const loadMore = useCallback(async () => {
     const base = filters || {};
-    const cursor = nextCursor || (products.length ? products[products.length - 1].updated_at as any : null);
+    const cursor = nextCursor ?? (products.length ? (products[products.length - 1].updated_at as string | null | undefined) ?? null : null);
     const limit = base.limit || 10;
     try {
       setLoading(true);

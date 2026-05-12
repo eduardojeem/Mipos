@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { api } from '@/lib/api'
-import { createClient } from '@/lib/supabase'
+import { getSupabaseClient } from '@/lib/supabase-singleton'
 import { isSupabaseActive } from '@/lib/env'
 import { useAuth } from '@/hooks/use-auth'
 
@@ -91,6 +91,27 @@ function getOrganizationId(): string | null {
   }
 }
 
+/**
+ * Helper: normaliza la lista de top productos proveniente del endpoint REST.
+ * Evita duplicar el mismo bloque any[] en múltiples lugares.
+ */
+function normalizeTopProducts(rawList: unknown, limit: number): TopProduct[] {
+  const list: unknown[] = Array.isArray(rawList) ? rawList : []
+  return list
+    .map((item) => {
+      const p = item as Record<string, unknown>
+      return {
+        id: String(p['id'] ?? p['productId'] ?? ''),
+        name: String(p['name'] ?? 'Producto desconocido'),
+        sales_count: Number(p['totalQuantity'] ?? (p['_sum'] as Record<string, unknown>)?.['quantity'] ?? 0),
+        revenue: Number(p['totalRevenue'] ?? 0),
+        category: p['category'] ? String(p['category']) : undefined,
+        image: p['image'] ? String(p['image']) : undefined,
+      } satisfies TopProduct
+    })
+    .slice(0, limit)
+}
+
 export function useDashboardData(options: UseDashboardDataOptions = {}) {
   const {
     refreshInterval = 30000, // 30 segundos
@@ -149,36 +170,42 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
 
   const loadFastStats = useCallback(async (): Promise<DashboardStats> => {
     if (isSupabaseActive()) {
-      const supabase = createClient()
-      const now = new Date()
-      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
-      const orgId = getOrganizationId()
-
-      const [{ data: today }, { data: counts }] = await Promise.all([
-        supabase.rpc('get_today_sales_summary', { date_start: startOfDay, org_id: orgId }).single(),
-        supabase.rpc('get_dashboard_counts', { org_id: orgId }).single()
-      ])
-      const todayTotal = Number((today as any)?.total_sales || 0)
-      const todayCount = Number((today as any)?.sales_count || 0)
-      const averageTicket = todayCount ? todayTotal / todayCount : 0
-      const totalProducts = Number((counts as any)?.products_count || 0)
-      const lowStockCount = Number((counts as any)?.low_stock_count || 0)
-      const activeCustomers = Number((counts as any)?.customers_count || 0)
-      return {
-        todaySales: todayTotal,
-        monthSales: todayTotal,
-        lowStockCount,
-        activeCustomers,
-        averageTicket,
-        efficiency: 0,
-        salesPerHour: 0,
-        previousDaySales: 0,
-        previousMonthSales: 0,
-        growthRate: 0,
-        totalProducts,
-        pendingOrders: 0,
-        customerSatisfaction: 0,
-        conversionRate: 0
+      // ⭐ Preferir RPC consolidada: 1 llamada en lugar de 6 queries separadas
+      try {
+        const supabase = getSupabaseClient()
+        const now = new Date()
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
+        const orgId = getOrganizationId()
+        const [{ data: today }, { data: counts }] = await Promise.all([
+          supabase.rpc('get_today_sales_summary', { date_start: startOfDay, org_id: orgId }).single(),
+          supabase.rpc('get_dashboard_counts', { org_id: orgId }).single()
+        ])
+        const todayRpc = today as { total_sales?: number; sales_count?: number } | null
+        const countsRpc = counts as { products_count?: number; low_stock_count?: number; customers_count?: number } | null
+        const todayTotal = Number(todayRpc?.total_sales || 0)
+        const todayCount = Number(todayRpc?.sales_count || 0)
+        const averageTicket = todayCount ? todayTotal / todayCount : 0
+        const totalProducts = Number(countsRpc?.products_count || 0)
+        const lowStockCount = Number(countsRpc?.low_stock_count || 0)
+        const activeCustomers = Number(countsRpc?.customers_count || 0)
+        return {
+          todaySales: todayTotal,
+          monthSales: todayTotal,
+          lowStockCount,
+          activeCustomers,
+          averageTicket,
+          efficiency: 0,
+          salesPerHour: 0,
+          previousDaySales: 0,
+          previousMonthSales: 0,
+          growthRate: 0,
+          totalProducts,
+          pendingOrders: 0,
+          customerSatisfaction: 0,
+          conversionRate: 0
+        }
+      } catch {
+        // RPC no disponible, caer al endpoint REST
       }
     }
     try {
@@ -213,7 +240,8 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
 
   const loadDashboardStats = useCallback(async (): Promise<DashboardStats> => {
     if (isSupabaseActive()) {
-      const supabase = createClient()
+      // ⭐ Reutiliza el singleton — NO crea nueva instancia en cada llamada
+      const supabase = getSupabaseClient()
       const now = new Date()
       const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
       const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString()
@@ -223,34 +251,47 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
 
       const orgId = getOrganizationId()
 
-      const todayQuery = supabase.from('sales').select('total, created_at').gte('created_at', startOfDay).lte('created_at', endOfDay)
-      const monthQuery = supabase.from('sales').select('total, created_at').gte('created_at', startOfMonth)
-      const lastMonthQuery = supabase.from('sales').select('total, created_at').gte('created_at', startOfLastMonth).lte('created_at', endOfLastMonth)
-      const lowStockQuery = supabase.from('products').select('id, stock_quantity, min_stock')
-      const activeSalesQuery = supabase.from('sales').select('customer_name, created_at').gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-      const totalProductsQuery = supabase.from('products').select('id', { count: 'exact', head: true })
+      // Tipos de las filas que retorna Supabase para estas queries
+      type SaleRow = { total: number | null; created_at: string; customer_name?: string | null }
+      type StockRow = { id: string; stock_quantity: number | null; min_stock: number | null }
 
-      if (orgId) {
-        (todayQuery as any).eq('organization_id', orgId);
-        (monthQuery as any).eq('organization_id', orgId);
-        (lastMonthQuery as any).eq('organization_id', orgId);
-        (lowStockQuery as any).eq('organization_id', orgId);
-        (activeSalesQuery as any).eq('organization_id', orgId);
-        (totalProductsQuery as any).eq('organization_id', orgId);
-      }
+      const todayQuery = supabase.from('sales')
+        .select('total, created_at')
+        .gte('created_at', startOfDay)
+        .lte('created_at', endOfDay)
+        .eq('organization_id', orgId ?? '')
+      const monthQuery = supabase.from('sales')
+        .select('total, created_at')
+        .gte('created_at', startOfMonth)
+        .eq('organization_id', orgId ?? '')
+      const lastMonthQuery = supabase.from('sales')
+        .select('total, created_at')
+        .gte('created_at', startOfLastMonth)
+        .lte('created_at', endOfLastMonth)
+        .eq('organization_id', orgId ?? '')
+      const lowStockQuery = supabase.from('products')
+        .select('id, stock_quantity, min_stock')
+        .eq('organization_id', orgId ?? '')
+      const activeSalesQuery = supabase.from('sales')
+        .select('customer_name, created_at')
+        .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
+        .eq('organization_id', orgId ?? '')
+      const totalProductsQuery = supabase.from('products')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', orgId ?? '')
 
       const [{ data: todaySales }, { data: monthSales }, { data: lastMonthSales }, { data: lowStock }, { data: activeSales }, { count: totalProducts }] = await Promise.all([
         todayQuery, monthQuery, lastMonthQuery, lowStockQuery, activeSalesQuery, totalProductsQuery
       ])
 
-      const todayTotal = (todaySales || []).reduce((s: number, v: any) => s + (v.total || 0), 0)
-      const monthTotal = (monthSales || []).reduce((s: number, v: any) => s + (v.total || 0), 0)
-      const lastMonthTotal = (lastMonthSales || []).reduce((s: number, v: any) => s + (v.total || 0), 0)
-      const activeCustomers = new Set((activeSales || []).map((v: any) => v.customer_name).filter(Boolean)).size
-      const todayCount = (todaySales || []).length
+      const todayTotal = (todaySales as SaleRow[] | null || []).reduce((s, v) => s + (v.total ?? 0), 0)
+      const monthTotal = (monthSales as SaleRow[] | null || []).reduce((s, v) => s + (v.total ?? 0), 0)
+      const lastMonthTotal = (lastMonthSales as SaleRow[] | null || []).reduce((s, v) => s + (v.total ?? 0), 0)
+      const activeCustomers = new Set((activeSales as SaleRow[] | null || []).map(v => v.customer_name).filter(Boolean)).size
+      const todayCount = (todaySales ?? []).length
       const averageTicket = todayCount ? todayTotal / todayCount : 0
       // Filter low stock in memory since PostgREST can't do column-to-column comparison
-      const lowStockFiltered = (lowStock || []).filter((p: any) => {
+      const lowStockFiltered = (lowStock as StockRow[] | null || []).filter((p) => {
         const stock = p.stock_quantity ?? 0
         const min = p.min_stock ?? 0
         return stock <= min
@@ -310,7 +351,8 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
   // Función para cargar ventas recientes con paginación
   const loadRecentSales = useCallback(async (limit: number = 10): Promise<RecentSale[]> => {
     if (isSupabaseActive()) {
-      const supabase = createClient()
+      // ⭐ Singleton reutilizado
+      const supabase = getSupabaseClient()
       let query = supabase
         .from('sales')
         .select('id, total, payment_method, created_at, customer_name')
@@ -323,12 +365,13 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
       } catch {}
 
       const { data } = await query
-      return (data || []).map((sale: any) => ({
+      type SaleDbRow = { id: string; total: number | null; payment_method: string | null; created_at: string; customer_name?: string | null }
+      return (data as SaleDbRow[] | null || []).map((sale) => ({
         id: sale.id,
-        total: sale.total || 0,
-        payment_method: sale.payment_method || 'CASH',
+        total: sale.total ?? 0,
+        payment_method: sale.payment_method ?? 'CASH',
         created_at: sale.created_at,
-        customer_name: sale.customer_name || 'Cliente General',
+        customer_name: sale.customer_name ?? 'Cliente General',
         items_count: 0
       }))
     }
@@ -336,17 +379,21 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
       const { data } = await api.get('/sales', {
         params: { page: 1, limit, order: 'created_at.desc' }
       })
-      const list = data?.sales || data?.data || []
-      const recentSales: RecentSale[] = (list as any[]).map((sale: any) => ({
-        id: sale.id,
-        total: sale.total || sale.subtotal || 0,
-        payment_method: sale.payment_method || sale.paymentMethod || 'CASH',
-        created_at: sale.created_at || sale.createdAt || new Date().toISOString(),
-        customer_name: sale.customers?.name || sale.customer?.name || 'Cliente General',
-        items_count: Array.isArray(sale.sale_items)
-          ? sale.sale_items.reduce((sum: number, it: any) => sum + (it.quantity || 0), 0)
-          : sale.items_count || 0
-      }))
+      const list: unknown[] = data?.sales || data?.data || []
+      const recentSales: RecentSale[] = list.map((item) => {
+        const sale = item as Record<string, unknown>
+        const saleItems = Array.isArray(sale['sale_items']) ? (sale['sale_items'] as Record<string, unknown>[]) : []
+        return {
+          id: String(sale['id'] ?? ''),
+          total: Number(sale['total'] ?? sale['subtotal'] ?? 0),
+          payment_method: String(sale['payment_method'] ?? sale['paymentMethod'] ?? 'CASH'),
+          created_at: String(sale['created_at'] ?? sale['createdAt'] ?? new Date().toISOString()),
+          customer_name: String((sale['customers'] as Record<string, unknown>)?.['name'] ?? (sale['customer'] as Record<string, unknown>)?.['name'] ?? 'Cliente General'),
+          items_count: saleItems.length > 0
+            ? saleItems.reduce((sum, it) => sum + Number(it['quantity'] ?? 0), 0)
+            : Number(sale['items_count'] ?? 0)
+        }
+      })
       return recentSales
     } catch {
       return []
@@ -355,79 +402,47 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
 
   const loadTopProducts = useCallback(async (limit: number = 5): Promise<TopProduct[]> => {
     if (isSupabaseActive()) {
-      const supabase = createClient()
+      const supabase = getSupabaseClient()
       const orgId = getOrganizationId()
-
-      const canQuery = typeof (supabase as any)?.from === 'function'
-      if (!canQuery) {
-        // ... existing fallback code ...
-        try {
-          const controller = new AbortController()
-          abortRef.current?.abort()
-          abortRef.current = controller
-          const { data } = await api.get('/dashboard/stats', { signal: controller.signal })
-          const list = data?.data?.topProducts || []
-          const normalized: TopProduct[] = (list as any[])
-            .map((p: any) => ({
-              id: p.id || p.productId,
-              name: p.name || 'Producto desconocido',
-              sales_count: Number(p.totalQuantity || p._sum?.quantity || 0),
-              revenue: Number(p.totalRevenue || 0),
-              category: p.category || undefined,
-              image: p.image || undefined
-            }))
-            .slice(0, limit)
-          return normalized
-        } catch {
-          return []
-        }
-      }
       
-      let query = (supabase as any)
+      type SaleItemRow = {
+        product_id: string
+        quantity: number | null
+        unit_price: number | null
+        products: { name: string; organization_id: string } | null
+      }
+
+      const baseQuery = supabase
         .from('sale_items')
         .select('product_id, quantity, unit_price, products!inner(name, organization_id)')
-        .limit(100);
-      
-      if (orgId) {
-        // Filter by organization via product relation
-        query = query.eq('products.organization_id', orgId)
-      }
+        .limit(100)
 
-      const { data, error } = await query;
-      // ... rest of processing ...
+      const { data, error } = orgId
+        ? await baseQuery.eq('products.organization_id', orgId)
+        : await baseQuery
+
       if (error) {
         try {
           const controller = new AbortController()
           abortRef.current?.abort()
           abortRef.current = controller
-          const { data } = await api.get('/dashboard/stats', { signal: controller.signal })
-          const list = data?.data?.topProducts || []
-          const normalized: TopProduct[] = (list as any[])
-            .map((p: any) => ({
-              id: p.id || p.productId,
-              name: p.name || 'Producto desconocido',
-              sales_count: Number(p.totalQuantity || p._sum?.quantity || 0),
-              revenue: Number(p.totalRevenue || 0),
-              category: p.category || undefined,
-              image: p.image || undefined
-            }))
-            .slice(0, limit)
-          return normalized
+          const { data: apiData } = await api.get('/dashboard/stats', { signal: controller.signal })
+          return normalizeTopProducts(apiData?.data?.topProducts, limit)
         } catch {
           return []
         }
       }
       const stats = new Map<string, TopProduct>();
-      (data || []).forEach((it: any) => {
+      (data as SaleItemRow[] | null || []).forEach((it) => {
         const id = it.product_id
-        const name = it.products?.name || 'Producto desconocido'
-        const revenue = (it.quantity || 0) * (it.unit_price || it.price || 0)
+        const name = it.products?.name ?? 'Producto desconocido'
+        const revenue = (it.quantity ?? 0) * (it.unit_price ?? 0)
         const existing = stats.get(id)
         if (existing) {
-          existing.sales_count += it.quantity || 0
+          existing.sales_count += it.quantity ?? 0
           existing.revenue += revenue
         } else {
-          stats.set(id, { id, name, sales_count: it.quantity || 0, revenue })
+          stats.set(id, { id, name, sales_count: it.quantity ?? 0, revenue })
         }
       })
       return Array.from(stats.values()).sort((a, b) => b.revenue - a.revenue).slice(0, limit)
@@ -437,18 +452,7 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
       abortRef.current?.abort()
       abortRef.current = controller
       const { data } = await api.get('/dashboard/stats', { signal: controller.signal })
-      const list = data?.data?.topProducts || []
-      const normalized: TopProduct[] = (list as any[])
-        .map((p: any) => ({
-          id: p.id || p.productId,
-          name: p.name || 'Producto desconocido',
-          sales_count: Number(p.totalQuantity || p._sum?.quantity || 0),
-          revenue: Number(p.totalRevenue || 0),
-          category: p.category || undefined,
-          image: p.image || undefined
-        }))
-        .slice(0, limit)
-      return normalized
+      return normalizeTopProducts(data?.data?.topProducts, limit)
     } catch {
       return []
     }
@@ -457,7 +461,8 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
   // Función para cargar productos con stock bajo
   const loadLowStockProducts = useCallback(async (limit: number = 10): Promise<LowStockProduct[]> => {
     if (isSupabaseActive()) {
-      const supabase = createClient()
+      // ⭐ Singleton reutilizado
+      const supabase = getSupabaseClient()
       const orgId = getOrganizationId()
 
       // Fetch products with stock info — filter in memory since PostgREST
@@ -475,14 +480,22 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
 
       const { data } = await query
       
-      return (data || [])
-        .filter((p: any) => {
+      type ProductStockRow = {
+        id: string
+        name: string
+        stock_quantity: number | null
+        min_stock: number | null
+        category_id: string | null
+        category: { name: string } | null
+      }
+      return (data as ProductStockRow[] | null || [])
+        .filter((p) => {
           const stock = p.stock_quantity ?? 0
           const min = p.min_stock ?? 0
           return min > 0 && stock <= min
         })
         .slice(0, limit)
-        .map((p: any) => {
+        .map((p) => {
           const current = p.stock_quantity ?? 0
           const min = p.min_stock ?? 0
           const ratio = min > 0 ? current / min : 1
@@ -491,25 +504,29 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
             name: p.name,
             current_stock: current,
             min_stock: min,
-            category: p.category?.name || 'Sin categoría',
+            category: p.category?.name ?? 'Sin categoría',
             urgency: ratio < 0.3 ? 'high' as const : ratio < 0.6 ? 'medium' as const : 'low' as const
           }
         })
     }
     try {
       const { data } = await api.get('/products/low-stock')
-      const list = data?.products || data?.data || []
-      const normalized: LowStockProduct[] = (list as any[]).map((p: any) => {
-        const current = p.currentStock ?? p.stockQuantity ?? p.current_stock ?? p.stock_quantity ?? 0
-        const min = p.minStock ?? p.min_stock ?? 0
+      const list: unknown[] = data?.products || data?.data || []
+      const normalized: LowStockProduct[] = list.map((item) => {
+        const p = item as Record<string, unknown>
+        const current = Number(p['currentStock'] ?? p['stockQuantity'] ?? p['current_stock'] ?? p['stock_quantity'] ?? 0)
+        const min = Number(p['minStock'] ?? p['min_stock'] ?? 0)
         const ratio = min > 0 ? current / min : 1
+        const cat = p['category']
         return {
-          id: p.id,
-          name: p.name,
+          id: String(p['id'] ?? ''),
+          name: String(p['name'] ?? ''),
           current_stock: current,
           min_stock: min,
-          category: p.category?.name || p.category || 'Sin categoría',
-          urgency: ratio < 0.3 ? 'high' : ratio < 0.6 ? 'medium' : 'low'
+          category: (typeof cat === 'object' && cat !== null
+            ? String((cat as Record<string, unknown>)['name'] ?? '')
+            : String(cat ?? '')) || 'Sin categoría',
+          urgency: ratio < 0.3 ? 'high' as const : ratio < 0.6 ? 'medium' as const : 'low' as const
         }
       })
       return normalized
@@ -581,7 +598,7 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
     } finally {
       setLoading(false)
     }
-  }, [cacheKey, getFromCache, saveToCache, loadDashboardStats, loadRecentSales, loadTopProducts, loadLowStockProducts])
+  }, [cacheKey, getFromCache, saveToCache, loadFastStats, loadDashboardStats, loadRecentSales, loadTopProducts, loadLowStockProducts])
 
   // Función para refrescar datos forzando recarga
   const refreshData = useCallback(async (): Promise<void> => {
@@ -600,17 +617,29 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
     }
   }, [user, loadDashboardData])
 
-  // Efecto para actualizaciones automáticas
+  // Efecto para actualizaciones automáticas con Realtime o polling
   useEffect(() => {
     if (!enableRealtime || !user) return
     if (isSupabaseActive()) {
-      const supabase = createClient()
+      // ⭐ Singleton reutilizado para el canal realtime
+      const supabase = getSupabaseClient()
       const orgId = getOrganizationId()
-      
+
+      // Debounce: evitar recargar en cada evento individual
+      // Si hay una ráfaga de ventas, esperamos 3s antes de recargar
+      let debounceTimer: ReturnType<typeof setTimeout> | null = null
+      const scheduleReload = () => {
+        if (debounceTimer) clearTimeout(debounceTimer)
+        debounceTimer = setTimeout(() => {
+          loadDashboardData(true)
+          debounceTimer = null
+        }, 3000) // 3 segundos de debounce
+      }
+
       // Build realtime channel with organization filter to avoid
       // receiving changes from other tenants
       const channelBuilder = supabase.channel('dashboard-sync')
-      
+
       if (orgId) {
         channelBuilder
           .on('postgres_changes', {
@@ -618,32 +647,26 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
             schema: 'public',
             table: 'sales',
             filter: `organization_id=eq.${orgId}`
-          }, () => {
-            loadDashboardData(true)
-          })
+          }, scheduleReload)
           .on('postgres_changes', {
             event: '*',
             schema: 'public',
             table: 'products',
             filter: `organization_id=eq.${orgId}`
-          }, () => {
-            loadDashboardData(true)
-          })
+          }, scheduleReload)
       } else {
         channelBuilder
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, () => {
-            loadDashboardData(true)
-          })
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
-            loadDashboardData(true)
-          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'sales' }, scheduleReload)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, scheduleReload)
       }
-      
+
       const channel = channelBuilder.subscribe()
       return () => {
+        if (debounceTimer) clearTimeout(debounceTimer)
         supabase.removeChannel(channel)
       }
     }
+    // Fallback: polling solo cuando Supabase Realtime no está activo
     const interval = setInterval(() => {
       loadDashboardData(true)
     }, refreshInterval)

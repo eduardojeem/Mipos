@@ -30,9 +30,9 @@ interface UseOptimizedDataReturn<T> {
 }
 
 // Cache global para compartir entre componentes
-const globalCache = new Map<string, CacheEntry<any>>();
+const globalCache = new Map<string, CacheEntry<unknown>>();
 // Nuevo: deduplicación de peticiones en vuelo por cacheKey
-const inflightRequests = new Map<string, Promise<any>>();
+const inflightRequests = new Map<string, Promise<unknown>>();
 
 // Función para limpiar cache expirado
 const cleanExpiredCache = () => {
@@ -283,7 +283,7 @@ export function usePOSData() {
       if (!organizationId) return [];
 
       try {
-        const res = await fetch('/api/pos/products?limit=2000', {
+        const res = await fetch('/api/pos/products?limit=500', {
           headers: { 'x-organization-id': organizationId }
         });
         if (res.ok) {
@@ -294,9 +294,9 @@ export function usePOSData() {
           }
           const items = json?.products || json?.data || [];
           // Mapear nombre de categoría si viene del API
-          return (Array.isArray(items) ? items : []).map((p: any) => ({
+          return (Array.isArray(items) ? items : []).map((p: Record<string, unknown>) => ({
             ...p,
-            category: p?.category_name ? { id: p?.category_id, name: p?.category_name } : p?.category,
+            category: p?.['category_name'] ? { id: p?.['category_id'], name: p?.['category_name'] } : p?.['category'],
           }));
         }
         let apiMessage = `POS products API responded with status ${res.status}`;
@@ -314,7 +314,7 @@ export function usePOSData() {
     },
     staleTime: 2 * 60 * 1000,
     gcTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,  // los productos del POS se actualizan por realtime
   });
 
   const categoriesQuery = useQuery({
@@ -353,7 +353,7 @@ export function usePOSData() {
     },
     staleTime: 5 * 60 * 1000,
     gcTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,  // las categorías se actualizan por realtime
   });
 
   const customersQuery = useQuery({
@@ -439,13 +439,13 @@ export function usePOSData() {
   const loading = productsQuery.isLoading || categoriesQuery.isLoading || customersQuery.isLoading || salesStatsQuery.isLoading;
   const error = productsQuery.error || categoriesQuery.error || customersQuery.error || salesStatsQuery.error;
   const categories = Array.isArray(categoriesQuery.data) ? categoriesQuery.data : [];
-  const categoryMap = new Map(
+  const categoryMap = new Map<string, (typeof categories)[number]>(
     categories
-      .filter((category: any) => category?.id)
-      .map((category: any) => [String(category.id), category])
+      .filter((category) => category?.id)
+      .map((category) => [String(category.id), category])
   );
   const products = Array.isArray(productsQuery.data)
-    ? productsQuery.data.map((product: any) => {
+    ? productsQuery.data.map((product: Record<string, unknown>) => {
       const category =
         product?.category && typeof product.category === 'object'
           ? product.category
@@ -502,7 +502,8 @@ export function usePreloadCriticalData() {
 
     await Promise.allSettled([
       queryClient.prefetchQuery({
-        queryKey: ['pos', 'products', organizationId],
+        // Query key unificada con usePOSData para reutilizar cache
+        queryKey: ['pos', 'products', organizationId ?? 'no-org'],
         queryFn: async () => {
           const res = await fetch('/api/pos/products?limit=500', {
             headers: { 'x-organization-id': organizationId }
@@ -517,16 +518,17 @@ export function usePreloadCriticalData() {
           }
 
           const items = json?.products || json?.data || [];
-          return (Array.isArray(items) ? items : []).map((p: any) => ({
+          return (Array.isArray(items) ? items : []).map((p: Record<string, unknown>) => ({
             ...p,
-            category: p?.category_name ? { id: p?.category_id, name: p?.category_name } : p?.category,
+            category: p?.['category_name'] ? { id: p?.['category_id'], name: p?.['category_name'] } : p?.['category'],
           }));
         },
-        staleTime: 10 * 60 * 1000,
+        staleTime: 2 * 60 * 1000,   // igual que usePOSData → reutiliza cache
         gcTime: 10 * 60 * 1000,
       }),
       queryClient.prefetchQuery({
-        queryKey: ['pos', 'categories', organizationId],
+        // Query key unificada con usePOSData para reutilizar cache
+        queryKey: ['pos', 'categories', organizationId ?? 'no-org'],
         queryFn: async () => {
           const res = await fetch('/api/categories?limit=200&status=active', {
             headers: { 'x-organization-id': organizationId }
@@ -543,7 +545,7 @@ export function usePreloadCriticalData() {
           const items = json?.categories || json?.data || [];
           return Array.isArray(items) ? items : [];
         },
-        staleTime: 15 * 60 * 1000,
+        staleTime: 5 * 60 * 1000,   // igual que usePOSData → reutiliza cache
         gcTime: 15 * 60 * 1000,
       }),
     ]);

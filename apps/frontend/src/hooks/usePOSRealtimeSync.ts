@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { realtimeService } from '@/lib/supabase-realtime';
-import { createClient } from '@/lib/supabase';
 import { usePOSStore } from '@/store';
 
 interface POSRealtimeSyncOptions {
@@ -77,51 +76,17 @@ export function usePOSRealtimeSync(options: POSRealtimeSyncOptions = {}): POSRea
 
   useEffect(() => {
     mountedRef.current = true;
-    const supabase = createClient();
 
-    // Intentar suscripciones en serie para obtener estado
+    // ─── Canal único multiplexado para el POS ────────────────────────────────
+    // Consolidamos 10 suscripciones previas en 1 canal con múltiples listeners,
+    // reduciendo el consumo de conexiones WebSocket de Supabase drásticamente.
+    let posChannel: ReturnType<typeof realtimeService.createPOSMultiplexedChannel> | null = null;
+
     try {
       setStatus('connecting');
 
-      const salesSub = realtimeService.subscribeToSales((payload) => {
-        // INSERT/UPDATE/DELETE de ventas
-        setLastUpdate(new Date());
-        if (payload.eventType === 'INSERT') {
-          setNewSalesCount(c => c + 1);
-        }
-        scheduleRefresh();
-      });
-
-      const saleItemsSub = realtimeService.subscribeToSaleItemsGlobal((payload) => {
-        setLastUpdate(new Date());
-        try {
-          const entityId = payload.new?.id || payload.old?.id;
-          supabase.from('sync_acks').insert({ entity: 'sale_items', entity_id: String(entityId || ''), event: payload.eventType, node_id: typeof navigator !== 'undefined' ? navigator.userAgent : 'pos-node' }).then(() => { }).catch(() => { });
-        } catch { }
-        if (payload.eventType === 'INSERT') {
-          setNewSalesCount(c => c + 1);
-        }
-        scheduleRefresh();
-      });
-
-      const invMovSub = realtimeService.subscribeToInventoryMovementsGlobal((payload) => {
-        // Movimientos de inventario (SALE/RETURN/ADJUSTMENT)
-        setLastUpdate(new Date());
-        try {
-          const entityId = payload.new?.id || payload.old?.id;
-          supabase.from('sync_acks').insert({ entity: 'inventory_movements', entity_id: String(entityId || ''), event: payload.eventType, node_id: typeof navigator !== 'undefined' ? navigator.userAgent : 'pos-node' }).then(() => { }).catch(() => { });
-        } catch { }
-        scheduleRefresh();
-      });
-
-      // Suscripción a cambios en Productos (Precios, Nombres, etc.)
-      const productsSub = realtimeService.subscribeToTable('products', (_payload) => {
-        setLastUpdate(new Date());
-        scheduleRefresh();
-      });
-
-      // Promociones: invalidar cachés locales y refrescar listado activo
       const store = usePOSStore.getState();
+
       const invalidatePromotionsCaches = () => {
         try {
           store.invalidate('promotions:list:{}');
@@ -131,64 +96,59 @@ export function usePOSRealtimeSync(options: POSRealtimeSyncOptions = {}): POSRea
         } catch { }
       };
 
-      const promotionsSub = realtimeService.subscribeToTable<any>('promotions', (_payload) => {
-        setLastUpdate(new Date());
-        invalidatePromotionsCaches();
-        // Refrescar activas para el POS
-        store.fetchPromotions({ status: 'active' }).catch(() => { });
-      });
-
-      const promotionsProductsSub = realtimeService.subscribeToTable<any>('promotions_products', (_payload) => {
-        setLastUpdate(new Date());
-        invalidatePromotionsCaches();
-        store.fetchPromotions({ status: 'active' }).catch(() => { });
-      });
-
-      const couponsSub = realtimeService.subscribeToTable<any>('coupons', (_payload) => {
-        setLastUpdate(new Date());
-        try {
-          store.invalidate('coupons:list:{}');
-          store.invalidate('coupons:list:{"status":"active"}');
-        } catch { }
-      });
-
-      const couponUsagesSub = realtimeService.subscribeToTable<any>('coupon_usages', (_payload) => {
-        setLastUpdate(new Date());
-        try {
-          store.invalidate('coupons:list:{}');
-        } catch { }
-      });
-
-      const rolesSub = realtimeService.subscribeToRoles((_payload) => {
-        setLastUpdate(new Date());
-        try { usePOSStore.getState().invalidate('session'); } catch { }
-      });
-
-      const permissionsSub = realtimeService.subscribeToPermissions((_payload) => {
-        setLastUpdate(new Date());
-        try { usePOSStore.getState().invalidate('session'); } catch { }
+      posChannel = realtimeService.createPOSMultiplexedChannel({
+        onSaleChange: (payload) => {
+          if (!mountedRef.current) return;
+          setLastUpdate(new Date());
+          if (payload.eventType === 'INSERT') setNewSalesCount(c => c + 1);
+          scheduleRefresh();
+        },
+        onSaleItemChange: (payload) => {
+          if (!mountedRef.current) return;
+          setLastUpdate(new Date());
+          if (payload.eventType === 'INSERT') setNewSalesCount(c => c + 1);
+          scheduleRefresh();
+        },
+        onInventoryChange: (_payload) => {
+          if (!mountedRef.current) return;
+          setLastUpdate(new Date());
+          scheduleRefresh();
+        },
+        onProductChange: (_payload) => {
+          if (!mountedRef.current) return;
+          setLastUpdate(new Date());
+          scheduleRefresh();
+        },
+        onPromotionChange: (_payload) => {
+          if (!mountedRef.current) return;
+          setLastUpdate(new Date());
+          invalidatePromotionsCaches();
+          store.fetchPromotions({ status: 'active' }).catch(() => { });
+        },
+        onCouponChange: (_payload) => {
+          if (!mountedRef.current) return;
+          setLastUpdate(new Date());
+          try {
+            store.invalidate('coupons:list:{}');
+            store.invalidate('coupons:list:{"status":"active"}');
+          } catch { }
+        },
+        onRoleOrPermissionChange: (_payload) => {
+          if (!mountedRef.current) return;
+          setLastUpdate(new Date());
+          try { usePOSStore.getState().invalidate('session'); } catch { }
+        },
       });
 
       setIsConnected(true);
       setStatus('connected');
 
       return () => {
-        // Cleanup suscripciones y timers
+        // Un solo cleanup para el canal consolidado
         try {
-          realtimeService.unsubscribe('sales');
-          // Cancelar canales globales usados por el hook
-          realtimeService.unsubscribe('global-sale-items');
-          realtimeService.unsubscribe('global-inventory-movements');
-          realtimeService.unsubscribe('table-sale_items-changes');
-          // Promociones
-          realtimeService.unsubscribe('table-promotions-changes');
-          realtimeService.unsubscribe('table-promotions_products-changes');
-          realtimeService.unsubscribe('table-coupons-changes');
-          realtimeService.unsubscribe('table-coupon_usages-changes');
-          realtimeService.unsubscribe('roles');
-          realtimeService.unsubscribe('permissions');
+          posChannel?.unsubscribe();
         } catch (err) {
-          console.warn('Error unsubscribing realtime channels:', err);
+          console.warn('[POS] Error al desuscribir canal:', err);
         }
         if (refreshTimerRef.current) {
           clearTimeout(refreshTimerRef.current);

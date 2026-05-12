@@ -5,6 +5,11 @@ import type { BusinessConfig } from '@/types/business-config'
 import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { createLogger } from '@/lib/logger';
 
+/** Tipo genérico para filas de Supabase Realtime cuya estructura exacta no está en Database */
+type RowData = Record<string, unknown>;
+/** Tipo para errores tipados de PostgrestError (message, code, details, hint) */
+type DbError = { message?: string; code?: string; details?: string; hint?: string };
+
 type Product = Database['public']['Tables']['products']['Row'];
 type ProductInsert = Database['public']['Tables']['products']['Insert'];
 type ProductUpdate = Database['public']['Tables']['products']['Update'];
@@ -58,16 +63,16 @@ export interface PermissionChangePayload {
 
 export interface SettingsChangePayload {
   eventType: 'INSERT' | 'UPDATE' | 'DELETE';
-  new?: any;
-  old?: any;
+  new?: RowData;
+  old?: RowData;
   version?: number;
 }
 
 export interface BusinessConfigChangePayload {
   eventType: 'INSERT' | 'UPDATE' | 'DELETE';
   config?: BusinessConfig;
-  rawNew?: any;
-  rawOld?: any;
+  rawNew?: RowData;
+  rawOld?: RowData;
   version?: number;
 }
 
@@ -102,58 +107,58 @@ export type EntityName = 'products' | 'categories' | 'customers' | 'sales' | 'sa
 export interface EntityChangePayload {
   entity: EntityName;
   eventType: 'INSERT' | 'UPDATE' | 'DELETE';
-  new?: any;
-  old?: any;
+  new?: RowData;
+  old?: RowData;
 }
 
 // Type guards to ensure real-time payload rows conform to expected types
-const isProductRow = (row: any): row is Product => {
+const isProductRow = (row: unknown): row is Product => {
   return !!row && typeof row === 'object' && 'id' in row && 'name' in row && 'sku' in row;
 };
-const isSaleRow = (row: any): row is Sale => {
+const isSaleRow = (row: unknown): row is Sale => {
   return !!row && typeof row === 'object' && 'id' in row && 'user_id' in row && 'total_amount' in row;
 };
-const isSaleItemRow = (row: any): row is SaleItem => {
+const isSaleItemRow = (row: unknown): row is SaleItem => {
   return !!row && typeof row === 'object' && 'id' in row && 'sale_id' in row && 'product_id' in row;
 };
-const isInventoryMovementRow = (row: any): row is InventoryMovement => {
+const isInventoryMovementRow = (row: unknown): row is InventoryMovement => {
   return !!row && typeof row === 'object' && 'id' in row && 'product_id' in row && 'movement_type' in row;
 };
-const isRoleRow = (row: any): row is RoleRow => {
+const isRoleRow = (row: unknown): row is RoleRow => {
   return !!row && typeof row === 'object' && 'id' in row && 'name' in row && 'is_active' in row;
 };
-const isPermissionRow = (row: any): row is PermissionRow => {
+const isPermissionRow = (row: unknown): row is PermissionRow => {
   return !!row && typeof row === 'object' && 'id' in row && 'name' in row && 'resource' in row && 'action' in row;
 };
-const isCategoryRow = (row: any): row is Category => {
+const isCategoryRow = (row: unknown): row is Category => {
   return !!row && typeof row === 'object' && 'id' in row && 'name' in row && 'is_active' in row;
 };
-const isCustomerRow = (row: any): row is Customer => {
+const isCustomerRow = (row: unknown): row is Customer => {
   return !!row && typeof row === 'object' && 'id' in row && 'name' in row && 'is_active' in row;
 };
-const isCashSessionRow = (row: any): row is CashSessionRow => {
+const isCashSessionRow = (row: unknown): row is CashSessionRow => {
   return !!row && typeof row === 'object' && 'id' in row && ('user_id' in row || 'opened_by' in row) && ('status' in row || 'session_status' in row);
 };
-const isCashMovementRow = (row: any): row is CashMovementRow => {
+const isCashMovementRow = (row: unknown): row is CashMovementRow => {
   return !!row && typeof row === 'object' && 'id' in row && 'session_id' in row && 'amount' in row;
 };
 export class SupabaseRealtimeService {
   private supabase = createClient();
-  private subscriptions = new Map<string, any>();
+  private subscriptions = new Map<string, ReturnType<typeof this.supabase.channel>>();
   /** Cache simple del estado de conexión */
   private lastConnectionCheck = 0;
   private lastIsConnected = false;
   /** Listeners para cambios de conexión y errores */
   private connectionListeners: Set<(status: string) => void> = new Set();
-  private errorListeners: Set<(error: any) => void> = new Set();
+  private errorListeners: Set<(error: unknown) => void> = new Set();
   /** Canal dedicado para monitorear estado de conexión */
-  private connectionChannel?: any;
+  private connectionChannel?: ReturnType<typeof this.supabase.channel>;
   /** Throttling y versionado para settings */
-  private settingsThrottleTimer?: any;
+  private settingsThrottleTimer?: ReturnType<typeof setTimeout>;
   private settingsPendingPayload?: SettingsChangePayload;
   private settingsVersionCounter = 0;
   /** Throttling para business_config específico */
-  private businessConfigThrottleTimer?: any;
+  private businessConfigThrottleTimer?: ReturnType<typeof setTimeout>;
   private businessConfigPendingPayload?: BusinessConfigChangePayload;
   private canTextSearch?: boolean;
   private textSearchProbeAt?: number;
@@ -176,14 +181,11 @@ export class SupabaseRealtimeService {
           table: 'products'
         },
         (payload: RealtimePostgresChangesPayload<Product>) => {
-          console.log('Product change detected:', payload);
-          
           const changePayload: ProductChangePayload = {
             eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
             new: isProductRow(payload.new) ? payload.new : undefined,
             old: isProductRow(payload.old) ? payload.old : undefined
           };
-          
           // Invalida caché simple ante cualquier cambio
           this.productCache.clear();
           callback(changePayload);
@@ -198,32 +200,28 @@ export class SupabaseRealtimeService {
   /**
    * Suscribirse a cambios en tiempo real de una tabla genérica
    */
-  subscribeToTable<T extends { [key: string]: any } = { [key: string]: any }>(
+  private metrics: Record<string, { count: number; lastEventAt: number }> = {};
+
+  subscribeToTable<T extends RowData = RowData>(
     tableName: string,
     callback: (payload: { eventType: 'INSERT' | 'UPDATE' | 'DELETE'; new?: T; old?: T }) => void
   ) {
     const key = `table:${tableName}`;
     const channelName = `table-${tableName}-changes`;
-    (this as any).metrics = (this as any).metrics || {};
 
     const subscription = this.supabase
       .channel(channelName)
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: tableName
-        },
+        { event: '*', schema: 'public', table: tableName },
         (payload: RealtimePostgresChangesPayload<T>) => {
           const changePayload = {
             eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
             new: payload.new as T | undefined,
             old: payload.old as T | undefined
           };
-          const m = (this as any).metrics;
-          const prev = m[tableName] || { count: 0, lastEventAt: 0 };
-          m[tableName] = { count: prev.count + 1, lastEventAt: Date.now() };
+          const prev = this.metrics[tableName] ?? { count: 0, lastEventAt: 0 };
+          this.metrics[tableName] = { count: prev.count + 1, lastEventAt: Date.now() };
           callback(changePayload);
         }
       )
@@ -234,7 +232,7 @@ export class SupabaseRealtimeService {
   }
 
   getMetrics(): Record<string, { count: number; lastEventAt: number }> {
-    return { ...(this as any).metrics };
+    return { ...this.metrics };
   }
 
   /**
@@ -572,13 +570,13 @@ export class SupabaseRealtimeService {
   ) {
     const { filters = {}, project = {}, redact = {} } = options || {};
 
-    const makeProjection = (entity: EntityName, row: any) => {
+    const makeProjection = (entity: EntityName, row: RowData): RowData => {
       if (!row) return row;
       const allow = project[entity];
       const hide = redact[entity];
-      let out = row;
+      let out: RowData = row;
       if (Array.isArray(allow) && allow.length > 0) {
-        out = allow.reduce((acc: any, key: string) => {
+        out = allow.reduce<RowData>((acc, key) => {
           if (key in row) acc[key] = row[key];
           return acc;
         }, {});
@@ -591,9 +589,9 @@ export class SupabaseRealtimeService {
       return out;
     };
 
-    const subs: any[] = [];
+    const subs: ReturnType<typeof this.supabase.channel>[] = [];
 
-    const addSub = <T extends { [key: string]: any }>(entity: EntityName, table: string, isValid: (r: any) => boolean) => {
+    const addSub = <T extends object>(entity: EntityName, table: string, isValid: (r: unknown) => boolean) => {
       const sub = this.supabase
         .channel(`selective-${entity}`)
         .on(
@@ -609,10 +607,10 @@ export class SupabaseRealtimeService {
               entity,
               eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
               new: isValid(payload.new)
-                ? makeProjection(entity, payload.new)
+                ? makeProjection(entity, payload.new as unknown as RowData)
                 : undefined,
               old: isValid(payload.old)
-                ? makeProjection(entity, payload.old)
+                ? makeProjection(entity, payload.old as unknown as RowData)
                 : undefined,
             };
             callback(change);
@@ -684,56 +682,56 @@ export class SupabaseRealtimeService {
     return subscription;
   }
 
-  subscribeToPromotions(callback: (payload: { eventType: 'INSERT' | 'UPDATE' | 'DELETE'; new?: any; old?: any }) => void) {
-    const subscription = this.subscribeToTable<any>('promotions', callback)
+  subscribeToPromotions(callback: (payload: { eventType: 'INSERT' | 'UPDATE' | 'DELETE'; new?: RowData; old?: RowData }) => void) {
+    const subscription = this.subscribeToTable<RowData>('promotions', callback)
     this.subscriptions.set('promotions', subscription)
     return subscription
   }
 
-  subscribeToPromotionsProducts(callback: (payload: { eventType: 'INSERT' | 'UPDATE' | 'DELETE'; new?: any; old?: any }) => void) {
-    const subscription = this.subscribeToTable<any>('promotions_products', callback)
+  subscribeToPromotionsProducts(callback: (payload: { eventType: 'INSERT' | 'UPDATE' | 'DELETE'; new?: RowData; old?: RowData }) => void) {
+    const subscription = this.subscribeToTable<RowData>('promotions_products', callback)
     this.subscriptions.set('promotions_products', subscription)
     return subscription
   }
 
-  subscribeToPromotionsCarousel(callback: (payload: { eventType: 'INSERT' | 'UPDATE' | 'DELETE'; new?: any; old?: any }) => void) {
-    const subscription = this.subscribeToTable<any>('promotions_carousel', callback)
+  subscribeToPromotionsCarousel(callback: (payload: { eventType: 'INSERT' | 'UPDATE' | 'DELETE'; new?: RowData; old?: RowData }) => void) {
+    const subscription = this.subscribeToTable<RowData>('promotions_carousel', callback)
     this.subscriptions.set('promotions_carousel', subscription)
     return subscription
   }
 
-  subscribeToLoyaltyPrograms(callback: (payload: { eventType: 'INSERT' | 'UPDATE' | 'DELETE'; new?: any; old?: any }) => void) {
-    const subscription = this.subscribeToTable<any>('loyalty_programs', callback)
+  subscribeToLoyaltyPrograms(callback: (payload: { eventType: 'INSERT' | 'UPDATE' | 'DELETE'; new?: RowData; old?: RowData }) => void) {
+    const subscription = this.subscribeToTable<RowData>('loyalty_programs', callback)
     this.subscriptions.set('loyalty_programs', subscription)
     return subscription
   }
 
-  subscribeToLoyaltyTiers(callback: (payload: { eventType: 'INSERT' | 'UPDATE' | 'DELETE'; new?: any; old?: any }) => void) {
-    const subscription = this.subscribeToTable<any>('loyalty_tiers', callback)
+  subscribeToLoyaltyTiers(callback: (payload: { eventType: 'INSERT' | 'UPDATE' | 'DELETE'; new?: RowData; old?: RowData }) => void) {
+    const subscription = this.subscribeToTable<RowData>('loyalty_tiers', callback)
     this.subscriptions.set('loyalty_tiers', subscription)
     return subscription
   }
 
-  subscribeToCustomerLoyalty(callback: (payload: { eventType: 'INSERT' | 'UPDATE' | 'DELETE'; new?: any; old?: any }) => void) {
-    const subscription = this.subscribeToTable<any>('customer_loyalty', callback)
+  subscribeToCustomerLoyalty(callback: (payload: { eventType: 'INSERT' | 'UPDATE' | 'DELETE'; new?: RowData; old?: RowData }) => void) {
+    const subscription = this.subscribeToTable<RowData>('customer_loyalty', callback)
     this.subscriptions.set('customer_loyalty', subscription)
     return subscription
   }
 
-  subscribeToPointsTransactions(callback: (payload: { eventType: 'INSERT' | 'UPDATE' | 'DELETE'; new?: any; old?: any }) => void) {
-    const subscription = this.subscribeToTable<any>('points_transactions', callback)
+  subscribeToPointsTransactions(callback: (payload: { eventType: 'INSERT' | 'UPDATE' | 'DELETE'; new?: RowData; old?: RowData }) => void) {
+    const subscription = this.subscribeToTable<RowData>('points_transactions', callback)
     this.subscriptions.set('points_transactions', subscription)
     return subscription
   }
 
-  subscribeToLoyaltyRewards(callback: (payload: { eventType: 'INSERT' | 'UPDATE' | 'DELETE'; new?: any; old?: any }) => void) {
-    const subscription = this.subscribeToTable<any>('loyalty_rewards', callback)
+  subscribeToLoyaltyRewards(callback: (payload: { eventType: 'INSERT' | 'UPDATE' | 'DELETE'; new?: RowData; old?: RowData }) => void) {
+    const subscription = this.subscribeToTable<RowData>('loyalty_rewards', callback)
     this.subscriptions.set('loyalty_rewards', subscription)
     return subscription
   }
 
-  subscribeToCustomerRewards(callback: (payload: { eventType: 'INSERT' | 'UPDATE' | 'DELETE'; new?: any; old?: any }) => void) {
-    const subscription = this.subscribeToTable<any>('customer_rewards', callback)
+  subscribeToCustomerRewards(callback: (payload: { eventType: 'INSERT' | 'UPDATE' | 'DELETE'; new?: RowData; old?: RowData }) => void) {
+    const subscription = this.subscribeToTable<RowData>('customer_rewards', callback)
     this.subscriptions.set('customer_rewards', subscription)
     return subscription
   }
@@ -1204,12 +1202,14 @@ export class SupabaseRealtimeService {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'settings' },
-        (payload: RealtimePostgresChangesPayload<any>) => {
+        (payload: RealtimePostgresChangesPayload<RowData>) => {
+          const raw = payload.new as RowData | undefined;
+          const rawOld = payload.old as RowData | undefined;
           const change: SettingsChangePayload = {
             eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
-            new: payload.new,
-            old: payload.old,
-            version: (payload.new as any)?.version ?? (payload.old as any)?.version ?? (++this.settingsVersionCounter)
+            new: raw,
+            old: rawOld,
+            version: (raw?.['version'] as number | undefined) ?? (rawOld?.['version'] as number | undefined) ?? (++this.settingsVersionCounter)
           };
 
           // Throttling: agrupar y emitir con retraso corto
@@ -1281,12 +1281,12 @@ export class SupabaseRealtimeService {
           }
         }
       }
-      const ses = (this.supabase as any).auth?.getSession?.();
+      const ses = this.supabase.auth.getSession();
       if (!orgId && ses && typeof ses.then === 'function') {
         ses
-          .then((res: any) => {
-            const session = res?.data || res;
-            const uid = session?.session?.user?.id || session?.user?.id || null;
+          .then((res: unknown) => {
+            const r = res as { data?: { session?: { user?: { id?: string } }; user?: { id?: string } } } | null;
+            const uid = r?.data?.session?.user?.id ?? r?.data?.user?.id ?? null;
             if (uid) {
               return this.supabase
                 .from('organization_members')
@@ -1295,9 +1295,10 @@ export class SupabaseRealtimeService {
             }
             return null;
           })
-          .then((r: any) => {
-            if (r && r.data) {
-              orgIds = (r.data || []).map((m: any) => String(m.organization_id)).filter(Boolean);
+          .then((r: unknown) => {
+            const resp = r as { data?: Array<{ organization_id: string }> } | null;
+            if (resp?.data) {
+              orgIds = (resp.data).map((m) => String(m.organization_id)).filter(Boolean);
               if (!orgId && orgIds.length === 1) orgId = orgIds[0];
             }
           })
@@ -1313,23 +1314,25 @@ export class SupabaseRealtimeService {
         orgFilter
           ? { event: '*', schema: 'public', table: 'settings', filter: `${orgFilter},key=eq.business_config` }
           : { event: '*', schema: 'public', table: 'settings', filter: 'key=eq.business_config' },
-        (payload: RealtimePostgresChangesPayload<any>) => {
-          const keyNew = (payload.new as any)?.key;
-          const keyOld = (payload.old as any)?.key;
+        (payload: RealtimePostgresChangesPayload<RowData>) => {
+          const rawNew = payload.new as RowData | undefined;
+          const rawOld = payload.old as RowData | undefined;
+          const keyNew = rawNew?.['key'];
+          const keyOld = rawOld?.['key'];
           if (keyNew !== 'business_config' && keyOld !== 'business_config') return;
 
           if (orgIds.length > 0) {
-            const oid = (payload.new as any)?.organization_id || (payload.old as any)?.organization_id;
+            const oid = rawNew?.['organization_id'] ?? rawOld?.['organization_id'];
             if (oid && !orgIds.includes(String(oid))) return;
           }
 
-          const value = ((payload.new as any)?.value ?? (payload.old as any)?.value) || {};
+          const value = (rawNew?.['value'] ?? rawOld?.['value']) ?? {};
           const change: BusinessConfigChangePayload = {
             eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
             config: value as BusinessConfig,
-            rawNew: payload.new,
-            rawOld: payload.old,
-            version: (payload.new as any)?.version ?? (payload.old as any)?.version ?? (++this.settingsVersionCounter)
+            rawNew,
+            rawOld,
+            version: (rawNew?.['version'] as number | undefined) ?? (rawOld?.['version'] as number | undefined) ?? (++this.settingsVersionCounter)
           };
 
           this.businessConfigPendingPayload = change;
@@ -1397,12 +1400,12 @@ export class SupabaseRealtimeService {
         }
       }
       // Resolve orgIds asynchronously without blocking subscription creation
-      const ses = (this.supabase as any).auth?.getSession?.();
+      const ses = this.supabase.auth.getSession();
       if (!orgId && ses && typeof ses.then === 'function') {
         ses
-          .then((res: any) => {
-            const session = res?.data || res;
-            const uid = session?.session?.user?.id || session?.user?.id || null;
+          .then((res: unknown) => {
+            const r = res as { data?: { session?: { user?: { id?: string } }; user?: { id?: string } } } | null;
+            const uid = r?.data?.session?.user?.id ?? r?.data?.user?.id ?? null;
             if (uid) {
               return this.supabase
                 .from('organization_members')
@@ -1411,9 +1414,10 @@ export class SupabaseRealtimeService {
             }
             return null;
           })
-          .then((r: any) => {
-            if (r && r.data) {
-              orgIds = (r.data || []).map((m: any) => String(m.organization_id)).filter(Boolean);
+          .then((r: unknown) => {
+            const resp = r as { data?: Array<{ organization_id: string }> } | null;
+            if (resp?.data) {
+              orgIds = (resp.data).map((m) => String(m.organization_id)).filter(Boolean);
               if (!orgId && orgIds.length === 1) orgId = orgIds[0];
             }
           })
@@ -1429,14 +1433,14 @@ export class SupabaseRealtimeService {
         orgFilter ? { event: '*', schema: 'public', table: 'products', filter: orgFilter } : { event: '*', schema: 'public', table: 'products' },
         (payload: RealtimePostgresChangesPayload<Product>) => {
           if (orgIds.length > 0) {
-            const oid = (payload.new as any)?.organization_id || (payload.old as any)?.organization_id;
+            const oid = (payload.new as Record<string, unknown>)?.['organization_id'] || (payload.old as Record<string, unknown>)?.['organization_id'];
             if (oid && !orgIds.includes(String(oid))) return;
           }
           const change: EntityChangePayload = {
             entity: 'products',
             eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
-            new: isProductRow(payload.new) ? payload.new : undefined,
-            old: isProductRow(payload.old) ? payload.old : undefined,
+            new: isProductRow(payload.new) ? (payload.new as unknown as RowData) : undefined,
+            old: isProductRow(payload.old) ? (payload.old as unknown as RowData) : undefined,
           };
           callback(change);
         }
@@ -1454,8 +1458,8 @@ export class SupabaseRealtimeService {
           const change: EntityChangePayload = {
             entity: 'categories',
             eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
-            new: isCategoryRow(payload.new) ? payload.new : undefined,
-            old: isCategoryRow(payload.old) ? payload.old : undefined,
+            new: isCategoryRow(payload.new) ? (payload.new as unknown as RowData) : undefined,
+            old: isCategoryRow(payload.old) ? (payload.old as unknown as RowData) : undefined,
           };
           callback(change);
         }
@@ -1473,8 +1477,8 @@ export class SupabaseRealtimeService {
           const change: EntityChangePayload = {
             entity: 'customers',
             eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
-            new: isCustomerRow(payload.new) ? payload.new : undefined,
-            old: isCustomerRow(payload.old) ? payload.old : undefined,
+            new: isCustomerRow(payload.new) ? (payload.new as unknown as RowData) : undefined,
+            old: isCustomerRow(payload.old) ? (payload.old as unknown as RowData) : undefined,
           };
           callback(change);
         }
@@ -1492,8 +1496,8 @@ export class SupabaseRealtimeService {
           const change: EntityChangePayload = {
             entity: 'sales',
             eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
-            new: isSaleRow(payload.new) ? payload.new : undefined,
-            old: isSaleRow(payload.old) ? payload.old : undefined,
+            new: isSaleRow(payload.new) ? (payload.new as unknown as RowData) : undefined,
+            old: isSaleRow(payload.old) ? (payload.old as unknown as RowData) : undefined,
           };
           callback(change);
         }
@@ -1511,8 +1515,8 @@ export class SupabaseRealtimeService {
           const change: EntityChangePayload = {
             entity: 'sale_items',
             eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
-            new: isSaleItemRow(payload.new) ? payload.new : undefined,
-            old: isSaleItemRow(payload.old) ? payload.old : undefined,
+            new: isSaleItemRow(payload.new) ? (payload.new as unknown as RowData) : undefined,
+            old: isSaleItemRow(payload.old) ? (payload.old as unknown as RowData) : undefined,
           };
           callback(change);
         }
@@ -1530,8 +1534,8 @@ export class SupabaseRealtimeService {
           const change: EntityChangePayload = {
             entity: 'inventory',
             eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
-            new: isInventoryMovementRow(payload.new) ? payload.new : undefined,
-            old: isInventoryMovementRow(payload.old) ? payload.old : undefined,
+            new: isInventoryMovementRow(payload.new) ? (payload.new as unknown as RowData) : undefined,
+            old: isInventoryMovementRow(payload.old) ? (payload.old as unknown as RowData) : undefined,
           };
           callback(change);
         }
@@ -1549,8 +1553,8 @@ export class SupabaseRealtimeService {
           const change: EntityChangePayload = {
             entity: 'roles',
             eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
-            new: isRoleRow(payload.new) ? payload.new : undefined,
-            old: isRoleRow(payload.old) ? payload.old : undefined,
+            new: isRoleRow(payload.new) ? (payload.new as unknown as RowData) : undefined,
+            old: isRoleRow(payload.old) ? (payload.old as unknown as RowData) : undefined,
           };
           callback(change);
         }
@@ -1568,8 +1572,8 @@ export class SupabaseRealtimeService {
           const change: EntityChangePayload = {
             entity: 'permissions',
             eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
-            new: isPermissionRow(payload.new) ? payload.new : undefined,
-            old: isPermissionRow(payload.old) ? payload.old : undefined,
+            new: isPermissionRow(payload.new) ? (payload.new as unknown as RowData) : undefined,
+            old: isPermissionRow(payload.old) ? (payload.old as unknown as RowData) : undefined,
           };
           callback(change);
         }
@@ -1587,8 +1591,8 @@ export class SupabaseRealtimeService {
           const change: EntityChangePayload = {
             entity: 'cash_sessions',
             eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
-            new: isCashSessionRow(payload.new) ? payload.new : undefined,
-            old: isCashSessionRow(payload.old) ? payload.old : undefined,
+            new: isCashSessionRow(payload.new) ? (payload.new as unknown as RowData) : undefined,
+            old: isCashSessionRow(payload.old) ? (payload.old as unknown as RowData) : undefined,
           };
           callback(change);
         }
@@ -1606,8 +1610,8 @@ export class SupabaseRealtimeService {
           const change: EntityChangePayload = {
             entity: 'cash_movements',
             eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
-            new: isCashMovementRow(payload.new) ? payload.new : undefined,
-            old: isCashMovementRow(payload.old) ? payload.old : undefined,
+            new: isCashMovementRow(payload.new) ? (payload.new as unknown as RowData) : undefined,
+            old: isCashMovementRow(payload.old) ? (payload.old as unknown as RowData) : undefined,
           };
           callback(change);
         }
@@ -1633,7 +1637,7 @@ export class SupabaseRealtimeService {
    * Desuscribirse de todos los canales
    */
   unsubscribeAll() {
-    this.subscriptions.forEach((subscription, channelName) => {
+    this.subscriptions.forEach((subscription) => {
       this.supabase.removeChannel(subscription);
     });
     this.subscriptions.clear();
@@ -1686,7 +1690,7 @@ export class SupabaseRealtimeService {
   /**
    * Registrar callback para errores de Realtime
    */
-  onError(listener: (error: any) => void): () => void {
+  onError(listener: (error: unknown) => void): () => void {
     this.errorListeners.add(listener);
     return () => {
       this.errorListeners.delete(listener);
@@ -1740,7 +1744,7 @@ export class SupabaseRealtimeService {
     });
   }
 
-  private emitError(error: any): void {
+  private emitError(error: unknown): void {
     this.errorListeners.forEach((l) => {
       try { l(error); } catch {}
     });
@@ -1751,8 +1755,8 @@ export class SupabaseRealtimeService {
    */
   async createProduct(product: ProductInsert): Promise<Product | null> {
     try {
-      const safeProduct: any = { ...product };
-      delete safeProduct.offer_price;
+      const safeProduct: Omit<ProductInsert, 'offer_price'> & Record<string, unknown> = { ...product };
+      delete (safeProduct as Record<string, unknown>)['offer_price'];
 
       // Ensure organization_id for multitenancy (read from localStorage if available)
       try {
@@ -1782,20 +1786,21 @@ export class SupabaseRealtimeService {
       if (error) {
         try {
           const fallback = await api.post('/products', safeProduct);
-          const raw = (fallback.data?.product ?? fallback.data) as any;
-          return raw as Product;
+          return (fallback.data?.product ?? fallback.data) as Product;
         } catch (apiErr) {
-          const message = (error as any)?.message || 'Error al crear producto';
+          const dbErr = error as DbError;
+          const message = dbErr.message ?? 'Error al crear producto';
           console.error('Error creating product:', {
-            message: (error as any)?.message,
-            code: (error as any)?.code,
-            details: (error as any)?.details,
-            hint: (error as any)?.hint
+            message: dbErr.message,
+            code: dbErr.code,
+            details: dbErr.details,
+            hint: dbErr.hint
           });
-          const normalized: any = new Error(message);
-          normalized.code = (error as any)?.code;
-          normalized.details = (error as any)?.details;
-          normalized.hint = (error as any)?.hint;
+          const normalized = Object.assign(new Error(message), {
+            code: dbErr.code,
+            details: dbErr.details,
+            hint: dbErr.hint
+          });
           throw normalized;
         }
       }
@@ -1809,7 +1814,7 @@ export class SupabaseRealtimeService {
 
   async updateProduct(id: string, updates: ProductUpdate): Promise<Product | null> {
     try {
-      const safeUpdates: any = __makeSafeUpdates(updates as any);
+      const safeUpdates = __makeSafeUpdates(updates);
       let orgId: string | null = null;
       try {
         if (typeof window !== 'undefined') {
@@ -1829,28 +1834,28 @@ export class SupabaseRealtimeService {
         .from('products')
         .update(safeUpdates)
         .eq('id', id)
-        .eq('organization_id', orgId as any)
+        .eq('organization_id', orgId ?? '')
         .select()
         .single();
 
       if (error) {
         try {
           const fallback = await api.put(`/products/${id}`, safeUpdates);
-          const raw = (fallback.data?.product ?? fallback.data) as any;
-          return raw as Product;
+          return (fallback.data?.product ?? fallback.data) as Product;
         } catch (apiErr) {
-          const message = (error as any)?.message || 'Error al actualizar producto';
+          const dbErr = error as DbError;
+          const message = dbErr.message ?? 'Error al actualizar producto';
           console.error('Error updating product:', {
-            message: (error as any)?.message,
-            code: (error as any)?.code,
-            details: (error as any)?.details,
-            hint: (error as any)?.hint
+            message: dbErr.message,
+            code: dbErr.code,
+            details: dbErr.details,
+            hint: dbErr.hint
           });
-          const normalized: any = new Error(message);
-          normalized.code = (error as any)?.code;
-          normalized.details = (error as any)?.details;
-          normalized.hint = (error as any)?.hint;
-          throw normalized;
+          throw Object.assign(new Error(message), {
+            code: dbErr.code,
+            details: dbErr.details,
+            hint: dbErr.hint
+          });
         }
       }
 
@@ -1882,21 +1887,22 @@ export class SupabaseRealtimeService {
         .from('products')
         .delete()
         .eq('id', id)
-        .eq('organization_id', orgId as any);
+        .eq('organization_id', orgId ?? '');
 
       if (error) {
-        const message = (error as any)?.message || 'Error al eliminar producto en Supabase';
+        const dbErr = error as DbError;
+        const message = dbErr.message ?? 'Error al eliminar producto en Supabase';
         console.error('Error deleting product:', {
-          message: (error as any)?.message,
-          code: (error as any)?.code,
-          details: (error as any)?.details,
-          hint: (error as any)?.hint
+          message: dbErr.message,
+          code: dbErr.code,
+          details: dbErr.details,
+          hint: dbErr.hint
         });
-        const normalized: any = new Error(message);
-        normalized.code = (error as any)?.code;
-        normalized.details = (error as any)?.details;
-        normalized.hint = (error as any)?.hint;
-        throw normalized;
+        throw Object.assign(new Error(message), {
+          code: dbErr.code,
+          details: dbErr.details,
+          hint: dbErr.hint
+        });
       }
 
       return true;
@@ -1954,25 +1960,25 @@ export class SupabaseRealtimeService {
         }
       }
       const t0 = performance.now ? performance.now() : Date.now();
-      const countMode: any = filters?.cursorUpdatedAt ? 'planned' : 'exact';
+      const countMode = filters?.cursorUpdatedAt ? 'planned' : ('exact' as const);
 
-      const canQuery = typeof (this.supabase as any)?.from === 'function';
+      const canQuery = typeof this.supabase.from === 'function';
       if (!canQuery) {
-        const params: any = {};
-        if (filters?.page) params.page = filters.page;
-        if (filters?.limit) params.limit = filters.limit;
-        if (filters?.search) params.search = filters.search;
-        if (filters?.categoryId) params.categoryId = filters.categoryId;
-        if (filters?.sortBy) params.sort = filters.sortBy;
-        if (filters?.sortOrder) params.order = filters.sortOrder;
-        if (filters?.minPrice !== undefined) params.min_price = filters.minPrice;
-        if (filters?.maxPrice !== undefined) params.max_price = filters.maxPrice;
-        if (filters?.minStock !== undefined) params.min_stock = filters.minStock;
-        if (filters?.maxStock !== undefined) params.max_stock = filters.maxStock;
+        const params: Record<string, string | number | boolean> = {};
+        if (filters?.page) params['page'] = filters.page;
+        if (filters?.limit) params['limit'] = filters.limit;
+        if (filters?.search) params['search'] = filters.search;
+        if (filters?.categoryId) params['categoryId'] = filters.categoryId;
+        if (filters?.sortBy) params['sort'] = filters.sortBy;
+        if (filters?.sortOrder) params['order'] = filters.sortOrder;
+        if (filters?.minPrice !== undefined) params['min_price'] = filters.minPrice;
+        if (filters?.maxPrice !== undefined) params['max_price'] = filters.maxPrice;
+        if (filters?.minStock !== undefined) params['min_stock'] = filters.minStock;
+        if (filters?.maxStock !== undefined) params['max_stock'] = filters.maxStock;
         const { data } = await api.get('/products', { params });
-        const items = (data?.products || data?.data || []) as any[];
+        const items: Product[] = (data?.products || data?.data || []) as Product[];
         const total = data?.count ?? data?.pagination?.total ?? items.length;
-        return { products: items as any, total: total || 0, hasMore: (items.length || 0) >= (filters?.limit || 10), nextCursor: undefined };
+        return { products: items, total: total || 0, hasMore: (items.length || 0) >= (filters?.limit || 10), nextCursor: undefined };
       }
 
       let query = this.supabase
@@ -1994,11 +2000,11 @@ export class SupabaseRealtimeService {
           }
         }
         if (!orgId) {
-          const { data: session } = await (this.supabase as any).auth.getSession?.();
-          const uid = session?.session?.user?.id || session?.user?.id || null;
+          const { data: sessionData } = await this.supabase.auth.getSession();
+          const uid = sessionData?.session?.user?.id ?? null;
           if (uid) {
             const { data: mem } = await this.supabase.from('organization_members').select('organization_id').eq('user_id', uid);
-            orgIds = (mem || []).map((m: any) => String(m.organization_id)).filter(Boolean);
+            orgIds = (mem || []).map((m: Record<string, unknown>) => String(m['organization_id'])).filter(Boolean);
             if (orgIds.length === 1) orgId = orgIds[0];
           }
         }
@@ -2100,7 +2106,7 @@ export class SupabaseRealtimeService {
       let { data, error, count } = await query;
 
       if (error) {
-        const fbCountMode: any = filters?.cursorUpdatedAt ? 'planned' : 'exact';
+        const fbCountMode = filters?.cursorUpdatedAt ? 'planned' : ('exact' as const);
         let fb = this.supabase
           .from('products')
           .select('*', { count: fbCountMode })
@@ -2254,17 +2260,19 @@ export class SupabaseRealtimeService {
         }
       }
 
-      const errMsg = typeof (error as any)?.message === 'string' ? ((error as any).message || '').trim() : '';
-      const errCode = typeof (error as any)?.code === 'string' ? (error as any).code : '';
-      const errDetails = typeof (error as any)?.details === 'string' ? (error as any).details : '';
-      const errHint = typeof (error as any)?.hint === 'string' ? (error as any).hint : '';
+      const dbErr = error as DbError | undefined;
+      const errMsg = typeof dbErr?.message === 'string' ? dbErr.message.trim() : '';
+      const errCode = typeof dbErr?.code === 'string' ? dbErr.code : '';
+      const errDetails = typeof dbErr?.details === 'string' ? dbErr.details : '';
+      const errHint = typeof dbErr?.hint === 'string' ? dbErr.hint : '';
       const meaningfulError = !!error && (errMsg || errCode || errDetails || errHint);
       if (meaningfulError) {
         const message = errMsg || 'Error al obtener productos de Supabase';
-        const normalized: any = new Error(message);
-        normalized.code = errCode;
-        normalized.details = errDetails;
-        normalized.hint = errHint;
+        const normalized = Object.assign(new Error(message), {
+          code: errCode,
+          details: errDetails,
+          hint: errHint
+        });
         const offlineLikely = (typeof navigator !== 'undefined' && !navigator.onLine) || (String(errMsg).toLowerCase().includes('offline'));
         if (offlineLikely) {
           const cached = this.productCache.get(key);
@@ -2281,20 +2289,20 @@ export class SupabaseRealtimeService {
       const ensureFields = new Set<string>([...(filters?.fields || [])]);
       ensureFields.add('updated_at');
       if (filters?.fields && filters.fields.length > 0) {
-        products = (products as any[]).map((row: any) => {
-          const next: any = {};
+        products = (products as Record<string, unknown>[]).map((row: Record<string, unknown>) => {
+          const next: Record<string, unknown> = {};
           ensureFields.forEach(f => { next[f] = row?.[f]; });
           return next;
         });
       }
       try {
-        const ids = Array.from(new Set((products as any[]).map(r => r?.category_id).filter(Boolean)));
+        const ids = Array.from(new Set((products as Record<string, unknown>[]).map(r => r?.['category_id']).filter(Boolean)));
         if (ids.length) {
           const { data: cats } = await this.supabase.from('categories').select('id,name').in('id', ids);
           const map = new Map<string, string>();
-          (cats || []).forEach((c: any) => { if (c?.id) map.set(String(c.id), String(c.name || '')); });
-          products = (products as any[]).map(r => {
-            const cid = r?.category_id ? String(r.category_id) : '';
+          (cats || []).forEach((c: Record<string, unknown>) => { if (c?.['id']) map.set(String(c['id']), String(c['name'] || '')); });
+          products = (products as Record<string, unknown>[]).map(r => {
+            const cid = r?.['category_id'] ? String(r['category_id']) : '';
             const cname = cid ? map.get(cid) : undefined;
             return cname ? { ...r, category: { id: cid, name: cname } } : r;
           });
@@ -2309,12 +2317,165 @@ export class SupabaseRealtimeService {
         hasMore: (products.length || 0) >= limit,
         nextCursor: nextCursor ? String(nextCursor) : undefined
       };
-      if (cacheable) this.productCache.set(key, { data: products as any[], total: result.total, nextCursor: result.nextCursor, ts: now });
+      if (cacheable) this.productCache.set(key, { data: products as Product[], total: result.total, nextCursor: result.nextCursor, ts: now });
       return result;
     } catch (error) {
       console.error('Failed to fetch products:', error);
       throw error;
     }
+  }
+
+  /**
+   * Canal POS multiplexado — consolida hasta 10 suscripciones en UN solo canal WebSocket.
+   *
+   * Anteriormente `usePOSRealtimeSync` abría 10 canales simultáneos agotando el límite
+   * de conexiones de Supabase. Este método crea un único canal con múltiples listeners
+   * de postgres_changes, lo que consume exactamente 1 conexión WebSocket en lugar de 10.
+   *
+   * Retorna un objeto con método `unsubscribe()` para cleanup limpio.
+   */
+  createPOSMultiplexedChannel(handlers: {
+    onSaleChange?: (payload: SaleChangePayload) => void;
+    onSaleItemChange?: (payload: SaleItemChangePayload) => void;
+    onInventoryChange?: (payload: InventoryMovementChangePayload) => void;
+    onProductChange?: (payload: ProductChangePayload) => void;
+    onPromotionChange?: (payload: { eventType: 'INSERT' | 'UPDATE' | 'DELETE'; new?: RowData; old?: RowData }) => void;
+    onCouponChange?: (payload: { eventType: 'INSERT' | 'UPDATE' | 'DELETE'; new?: RowData; old?: RowData }) => void;
+    onRoleOrPermissionChange?: (payload: { eventType: 'INSERT' | 'UPDATE' | 'DELETE'; new?: RowData; old?: RowData }) => void;
+  }): { unsubscribe: () => void } {
+    const channelName = 'pos-multiplexed';
+
+    // Limpiar canal anterior si existía
+    const existing = this.subscriptions.get(channelName);
+    if (existing) {
+      try { this.supabase.removeChannel(existing); } catch { }
+      this.subscriptions.delete(channelName);
+    }
+
+    let channel = this.supabase.channel(channelName);
+
+    // Ventas
+    if (handlers.onSaleChange) {
+      channel = channel.on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'sales' },
+        (payload: RealtimePostgresChangesPayload<Sale>) => {
+          handlers.onSaleChange!({
+            eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
+            new: isSaleRow(payload.new) ? payload.new : undefined,
+            old: isSaleRow(payload.old) ? payload.old : undefined,
+          });
+        }
+      );
+    }
+
+    // Ítems de venta
+    if (handlers.onSaleItemChange) {
+      channel = channel.on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'sale_items' },
+        (payload: RealtimePostgresChangesPayload<SaleItem>) => {
+          handlers.onSaleItemChange!({
+            eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
+            new: isSaleItemRow(payload.new) ? payload.new : undefined,
+            old: isSaleItemRow(payload.old) ? payload.old : undefined,
+          });
+        }
+      );
+    }
+
+    // Movimientos de inventario
+    if (handlers.onInventoryChange) {
+      channel = channel.on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'inventory_movements' },
+        (payload: RealtimePostgresChangesPayload<InventoryMovement>) => {
+          handlers.onInventoryChange!({
+            eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
+            new: isInventoryMovementRow(payload.new) ? payload.new : undefined,
+            old: isInventoryMovementRow(payload.old) ? payload.old : undefined,
+          });
+        }
+      );
+    }
+
+    // Productos
+    if (handlers.onProductChange) {
+      channel = channel.on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'products' },
+        (payload: RealtimePostgresChangesPayload<Product>) => {
+          this.productCache.clear(); // Invalida caché local
+          handlers.onProductChange!({
+            eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
+            new: isProductRow(payload.new) ? payload.new : undefined,
+            old: isProductRow(payload.old) ? payload.old : undefined,
+          });
+        }
+      );
+    }
+
+    // Promociones + promotions_products (mismo handler)
+    if (handlers.onPromotionChange) {
+      const promoHandler = (payload: RealtimePostgresChangesPayload<RowData>) => {
+        handlers.onPromotionChange!({
+          eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
+          new: payload.new || undefined,
+          old: payload.old || undefined,
+        });
+      };
+      channel = channel
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'promotions' }, promoHandler)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'promotions_products' }, promoHandler);
+    }
+
+    // Cupones + coupon_usages (mismo handler)
+    if (handlers.onCouponChange) {
+      const couponHandler = (payload: RealtimePostgresChangesPayload<RowData>) => {
+        handlers.onCouponChange!({
+          eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
+          new: payload.new || undefined,
+          old: payload.old || undefined,
+        });
+      };
+      channel = channel
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'coupons' }, couponHandler)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'coupon_usages' }, couponHandler);
+    }
+
+    // Roles + permisos (mismo handler)
+    if (handlers.onRoleOrPermissionChange) {
+      const authHandler = (payload: RealtimePostgresChangesPayload<RowData>) => {
+        handlers.onRoleOrPermissionChange!({
+          eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
+          new: payload.new || undefined,
+          old: payload.old || undefined,
+        });
+      };
+      channel = channel
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'roles' }, authHandler)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'permissions' }, authHandler);
+    }
+
+    channel.subscribe((status: string) => {
+      this.emitConnectionStatus(status);
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        this.log.warn('POS multiplexed channel error', { status });
+      }
+    });
+
+    this.subscriptions.set(channelName, channel);
+
+    return {
+      unsubscribe: () => {
+        try {
+          this.supabase.removeChannel(channel);
+          this.subscriptions.delete(channelName);
+        } catch (err) {
+          this.log.warn('Error removing POS multiplexed channel', { err });
+        }
+      },
+    };
   }
 
   async getProductSalesSummary(params: { dateFrom?: string; dateTo?: string; categoryId?: string; limit?: number }): Promise<{ top: Array<{ id: string; name: string; sales_count: number; revenue: number }>; low: Array<{ id: string; name: string; sales_count: number; revenue: number }> }> {
@@ -2324,13 +2485,14 @@ export class SupabaseRealtimeService {
       .select('product_id, quantity, total_price, created_at, product:products(id,name,category_id)');
     if (params.dateFrom) q = q.gte('created_at', params.dateFrom);
     if (params.dateTo) q = q.lte('created_at', params.dateTo);
-    if (params.categoryId) q = q.eq('product.category_id', params.categoryId as any);
+    if (params.categoryId) q = q.eq('product.category_id', params.categoryId);
     const { data, error } = await q;
     if (error) throw new Error(error.message);
     const map = new Map<string, { id: string; name: string; sales_count: number; revenue: number }>();
-    (data || []).forEach((row: any) => {
+    (data || []).forEach((row: { product_id?: string; product?: { name?: string }; quantity?: number | string; total_price?: number | string }) => {
       const id = row.product_id;
-      const name = row.product?.name || row.product_id;
+      if (!id) return;
+      const name = row.product?.name || id;
       const prev = map.get(id) || { id, name, sales_count: 0, revenue: 0 };
       const qty = Number(row.quantity) || 1;
       const total = Number(row.total_price) || 0;
@@ -2345,9 +2507,9 @@ export class SupabaseRealtimeService {
   }
 }
 
-export function __makeSafeUpdates(updates: any) {
-  const out: any = { ...updates };
-  delete out.offer_price;
+export function __makeSafeUpdates(updates: Record<string, unknown>) {
+  const out: Record<string, unknown> = { ...updates };
+  delete out['offer_price'];
   return out;
 }
 

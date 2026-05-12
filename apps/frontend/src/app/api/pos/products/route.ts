@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Optimized query for POS - only essential fields
+    // Optimized query for POS - join categories directly to avoid N+1
     let query = supabase
       .from('products')
       .select(`
@@ -63,7 +63,11 @@ export async function GET(request: NextRequest) {
         is_active,
         image_url,
         barcode,
-        brand
+        brand,
+        categories!left (
+          id,
+          name
+        )
       `)
       .order('name');
 
@@ -103,10 +107,7 @@ export async function GET(request: NextRequest) {
       image_url: string | null;
       barcode: string | null;
       brand: string | null;
-    };
-    type CategoryRow = {
-      id: string;
-      name: string | null;
+      categories: { id: string; name: string | null } | null;
     };
     type PosProduct = {
       id: string;
@@ -129,32 +130,6 @@ export async function GET(request: NextRequest) {
       has_wholesale: boolean;
     };
     const baseProducts = (products ?? []) as ProductRow[];
-    const categoryIds = Array.from(new Set(
-      baseProducts
-        .map((product) => product.category_id)
-        .filter((categoryId): categoryId is string => Boolean(categoryId))
-    ));
-
-    const categoryMap = new Map<string, { id: string; name: string }>();
-    if (categoryIds.length > 0) {
-      const { data: categories, error: categoriesError } = await supabase
-        .from('categories')
-        .select('id, name')
-        .eq('organization_id', organizationId)
-        .in('id', categoryIds);
-
-      if (categoriesError) {
-        console.warn('POS products categories lookup warning:', categoriesError);
-      } else {
-        ((categories ?? []) as CategoryRow[]).forEach((category) => {
-          if (!category?.id) return;
-          categoryMap.set(category.id, {
-            id: category.id,
-            name: category.name || 'Sin categoría'
-          });
-        });
-      }
-    }
 
     const transformedProducts: PosProduct[] = baseProducts.map((product) => ({
       id: product.id,
@@ -171,7 +146,9 @@ export async function GET(request: NextRequest) {
       image_url: product.image_url,
       barcode: product.barcode,
       brand: product.brand,
-      category: product.category_id ? (categoryMap.get(product.category_id) || null) : null,
+      category: product.categories
+        ? { id: product.categories.id, name: product.categories.name || 'Sin categoría' }
+        : null,
       in_stock: (product.stock_quantity || 0) > 0,
       low_stock: (product.stock_quantity || 0) <= (product.min_stock || 5),
       has_wholesale: (product.wholesale_price || 0) > 0
@@ -196,6 +173,10 @@ export async function GET(request: NextRequest) {
         lowStock: transformedProducts.filter((p) => p.low_stock).length,
         withWholesale: transformedProducts.filter((p) => p.has_wholesale).length,
         lastUpdated: new Date().toISOString()
+      }
+    }, {
+      headers: {
+        'Cache-Control': 'private, max-age=30, stale-while-revalidate=60',
       }
     });
 

@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
     const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
     // Optimized parallel queries for POS stats
+    // Use count for transaction counts and fetch only amounts for sums
     const [
       todaySalesResult,
       weekSalesResult,
@@ -28,10 +29,10 @@ export async function GET(request: NextRequest) {
       topProductsResult,
       lowStockResult
     ] = await Promise.all([
-      // Today's sales
+      // Today's sales - only fetch total_amount column
       supabase
         .from('sales')
-        .select('total_amount')
+        .select('total_amount', { count: 'exact' })
         .gte('created_at', today.toISOString())
         .eq('status', 'completed')
         .eq('organization_id', organizationId || ''),
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest) {
       // This week's sales
       supabase
         .from('sales')
-        .select('total_amount')
+        .select('total_amount', { count: 'exact' })
         .gte('created_at', thisWeek.toISOString())
         .eq('status', 'completed')
         .eq('organization_id', organizationId || ''),
@@ -47,12 +48,12 @@ export async function GET(request: NextRequest) {
       // This month's sales
       supabase
         .from('sales')
-        .select('total_amount')
+        .select('total_amount', { count: 'exact' })
         .gte('created_at', thisMonth.toISOString())
         .eq('status', 'completed')
         .eq('organization_id', organizationId || ''),
 
-      // Top selling products (last 30 days)
+      // Top selling products (last 30 days) - limit to 50 for performance
       supabase
         .from('sale_items')
         .select(`
@@ -71,31 +72,31 @@ export async function GET(request: NextRequest) {
         .eq('sales.status', 'completed')
         .eq('sales.organization_id', organizationId || '')
         .eq('products.organization_id', organizationId || '')
-        .limit(100), // Limit for performance
+        .limit(50),
 
-      // Low stock products
+      // Low stock products - use min_stock column for smarter filtering
       supabase
         .from('products')
         .select('id, name, stock_quantity, min_stock')
         .eq('is_active', true)
-        .lte('stock_quantity', 10) // Products with 10 or fewer items
         .eq('organization_id', organizationId || '')
+        .or('stock_quantity.lte.min_stock,stock_quantity.lte.10')
         .order('stock_quantity')
-        .limit(20)
+        .limit(15)
     ]);
 
     type SaleRow = { total_amount: number | null };
     const todaySalesData = (todaySalesResult.data ?? []) as SaleRow[];
     const todaySales = todaySalesData.reduce((sum: number, sale) => sum + (sale.total_amount || 0), 0);
-    const todayTransactions = todaySalesData.length;
+    const todayTransactions = todaySalesResult.count ?? todaySalesData.length;
 
     const weekSalesData = (weekSalesResult.data ?? []) as SaleRow[];
     const weekSales = weekSalesData.reduce((sum: number, sale) => sum + (sale.total_amount || 0), 0);
-    const weekTransactions = weekSalesData.length;
+    const weekTransactions = weekSalesResult.count ?? weekSalesData.length;
 
     const monthSalesData = (monthSalesResult.data ?? []) as SaleRow[];
     const monthSales = monthSalesData.reduce((sum: number, sale) => sum + (sale.total_amount || 0), 0);
-    const monthTransactions = monthSalesData.length;
+    const monthTransactions = monthSalesResult.count ?? monthSalesData.length;
 
     // Calculate average ticket
     const averageTicket = todayTransactions > 0 ? todaySales / todayTransactions : 0;
@@ -170,7 +171,11 @@ export async function GET(request: NextRequest) {
       }
     };
 
-    return NextResponse.json(stats);
+    return NextResponse.json(stats, {
+      headers: {
+        'Cache-Control': 'private, max-age=15, stale-while-revalidate=30',
+      }
+    });
 
   } catch (error) {
     console.error('POS stats error:', error);

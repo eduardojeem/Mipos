@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { createClient } from '@/lib/supabase';
+import { getSupabaseClient } from '@/lib/supabase-singleton';
 import type { User, AuthChangeEvent, Session, PostgrestError } from '@supabase/supabase-js';
 import type { 
   Product, 
@@ -23,7 +23,8 @@ interface ProductFilters {
 export function useSupabase() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const supabase = createClient();
+  // ⭐ Singleton: no crear nueva instancia en cada render
+  const supabase = getSupabaseClient();
 
   useEffect(() => {
     // Obtener sesión inicial

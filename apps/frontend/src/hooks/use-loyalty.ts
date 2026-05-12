@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { api as axiosApi } from '@/lib/api';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/lib/toast';
@@ -123,8 +123,8 @@ const api = {
   // Programs
   getPrograms: async (): Promise<LoyaltyProgram[]> => {
     const response = await axiosApi.get('/loyalty/programs');
-    const raw: any = response.data || {};
-    const programs = Array.isArray(raw?.data) ? raw.data : Array.isArray(raw) ? raw : [];
+    const raw: Record<string, unknown> = (response.data as Record<string, unknown>) || {};
+    const programs = Array.isArray(raw?.['data']) ? (raw['data'] as LoyaltyProgram[]) : Array.isArray(raw) ? (raw as unknown as LoyaltyProgram[]) : [];
     return programs;
   },
 
@@ -327,11 +327,11 @@ const api = {
     const response = await fetch(url);
     if (!response.ok) throw new Error('Failed to fetch points transactions');
     const data = await response.json();
-    const items: any[] = data?.data?.items ?? [];
+    const items: PointsTransaction[] = (data?.data?.items ?? []) as PointsTransaction[];
     // Normaliza tipos devueltos por el backend para coincidir con la UI
     return items.map((t) => ({
       ...t,
-      type: t.type === 'ADJUSTED' ? 'ADJUSTMENT' : t.type,
+      type: (t.type as string) === 'ADJUSTED' ? 'ADJUSTMENT' : t.type,
     }));
   },
 
@@ -359,9 +359,9 @@ export const useLoyaltyPrograms = () => {
   return useQuery({
     queryKey: ['loyalty', 'programs'],
     queryFn: api.getPrograms,
-    staleTime: 120_000,
-    gcTime: 300_000,
-    refetchOnWindowFocus: true,
+    staleTime: 5 * 60_000,       // 5 minutos — los programas cambian poco
+    gcTime: 30 * 60_000,
+    refetchOnWindowFocus: false,  // no refetch en cada cambio de pestaña
     refetchOnReconnect: true,
   });
 };
@@ -371,9 +371,9 @@ export const useLoyaltyTiers = (programId: string) => {
     queryKey: ['loyalty', 'tiers', programId],
     queryFn: () => api.getTiers(programId),
     enabled: !!programId,
-    staleTime: 120_000,
-    gcTime: 300_000,
-    refetchOnWindowFocus: true,
+    staleTime: 5 * 60_000,       // 5 minutos — los tiers cambian poco
+    gcTime: 30 * 60_000,
+    refetchOnWindowFocus: false,
     refetchOnReconnect: true,
   });
 };
@@ -383,9 +383,9 @@ export const useCustomerLoyalty = (customerId: string, programId?: string) => {
     queryKey: ['loyalty', 'customer', customerId, programId],
     queryFn: () => api.getCustomerLoyalty(customerId, programId),
     enabled: !!customerId,
-    staleTime: 120_000,
-    gcTime: 300_000,
-    refetchOnWindowFocus: true,
+    staleTime: 2 * 60_000,       // 2 minutos
+    gcTime: 15 * 60_000,
+    refetchOnWindowFocus: false,
     refetchOnReconnect: true,
   });
 };
@@ -417,9 +417,9 @@ export const useLoyaltyAnalytics = (programId: string, startDate?: Date, endDate
     queryKey: ['loyalty', 'analytics', programId, startDate?.toISOString(), endDate?.toISOString()],
     queryFn: () => api.getAnalytics(programId, startDate, endDate),
     enabled: !!programId,
-    staleTime: 120_000,
-    gcTime: 300_000,
-    refetchOnWindowFocus: true,
+    staleTime: 5 * 60_000,       // analytics: 5 minutos
+    gcTime: 30 * 60_000,
+    refetchOnWindowFocus: false,
     refetchOnReconnect: true,
   });
 };
@@ -595,7 +595,7 @@ export const usePointsTransactions = (customerId?: string, opts?: { page?: numbe
       if (!customerId) return [];
       return api.getPointsTransactions({
         customerId,
-        type: opts?.type as any,
+        type: (opts?.type === 'ADJUSTMENT' ? 'ADJUSTED' : opts?.type) as 'EARNED' | 'REDEEMED' | 'EXPIRED' | 'ADJUSTED' | 'BONUS' | undefined,
         startDate: opts?.startDate,
         endDate: opts?.endDate,
         page: opts?.page,
@@ -603,9 +603,9 @@ export const usePointsTransactions = (customerId?: string, opts?: { page?: numbe
       });
     },
     enabled: !!customerId,
-    staleTime: 60_000,
-    gcTime: 300_000,
-    refetchOnWindowFocus: true,
+    staleTime: 2 * 60_000,
+    gcTime: 15 * 60_000,
+    refetchOnWindowFocus: false,
     refetchOnReconnect: true,
   });
 };
@@ -615,7 +615,7 @@ export const useAdjustPoints = () => {
   return useMutation({
     mutationFn: ({ customerLoyaltyId, points, description, referenceType, expiresAt }: { customerLoyaltyId: string; points: number; description: string; referenceType?: string; expiresAt?: string }) =>
       api.adjustPoints({ customerLoyaltyId, points, description, referenceType, expiresAt }),
-    onSuccess: (_data, variables) => {
+    onSuccess: (_data, _variables) => {
       // Invalidate related queries: customer loyalty and transactions
       queryClient.invalidateQueries({ queryKey: ['loyalty', 'customer'] });
       queryClient.invalidateQueries({ queryKey: ['loyalty', 'points-transactions'] });
