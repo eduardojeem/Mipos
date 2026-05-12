@@ -37,7 +37,7 @@ export function useCashSessionValidation(): UseCashSessionValidationReturn {
         error,
         refetch,
     } = useQuery({
-        queryKey: ['cashSession', 'validation', organizationId ?? 'no-org'],
+        queryKey: ['cashSession', organizationId ?? 'no-org'],
         enabled: Boolean(organizationId),
         queryFn: async () => {
             try {

@@ -1,37 +1,42 @@
-'use client'
+"use client";
 
-import { useState, useEffect, useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { 
-  AlertTriangle, 
-  Shield, 
-  Activity, 
+import { useState, useEffect, useMemo } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  AlertTriangle,
+  Shield,
+  Activity,
   Clock,
   X,
   Settings,
   Bell,
-  BellOff
-} from 'lucide-react';
-import { format, subMinutes } from 'date-fns';
-import { es } from 'date-fns/locale';
-import type { AuditLogEntry } from '../hooks/useAuditData';
+  BellOff,
+} from "lucide-react";
+import { format } from "date-fns";
+import { subMinutes } from "date-fns/subMinutes";
+import { es } from "date-fns/locale";
+import type { AuditLogEntry } from "../hooks/useAuditData";
 
 interface AuditAlertsProps {
   logs: AuditLogEntry[];
-  _theme?: 'light' | 'dark';
+  _theme?: "light" | "dark";
 }
 
 interface AlertRule {
   id: string;
   name: string;
-  type: 'failure_rate' | 'suspicious_activity' | 'high_volume' | 'unauthorized_access';
+  type:
+    | "failure_rate"
+    | "suspicious_activity"
+    | "high_volume"
+    | "unauthorized_access";
   threshold: number;
   timeWindow: number; // minutos
   enabled: boolean;
-  severity: 'low' | 'medium' | 'high' | 'critical';
+  severity: "low" | "medium" | "high" | "critical";
 }
 
 interface GeneratedAlert {
@@ -46,45 +51,46 @@ interface GeneratedAlert {
 
 const DEFAULT_ALERT_RULES: AlertRule[] = [
   {
-    id: 'high_failure_rate',
-    name: 'Alta tasa de fallos',
-    type: 'failure_rate',
+    id: "high_failure_rate",
+    name: "Alta tasa de fallos",
+    type: "failure_rate",
     threshold: 10, // % de fallos
     timeWindow: 15,
     enabled: true,
-    severity: 'high'
+    severity: "high",
   },
   {
-    id: 'suspicious_login_attempts',
-    name: 'Intentos de acceso sospechosos',
-    type: 'suspicious_activity',
+    id: "suspicious_login_attempts",
+    name: "Intentos de acceso sospechosos",
+    type: "suspicious_activity",
     threshold: 5, // intentos fallidos por IP
     timeWindow: 10,
     enabled: true,
-    severity: 'critical'
+    severity: "critical",
   },
   {
-    id: 'high_volume_activity',
-    name: 'Volumen alto de actividad',
-    type: 'high_volume',
+    id: "high_volume_activity",
+    name: "Volumen alto de actividad",
+    type: "high_volume",
     threshold: 100, // eventos por minuto
     timeWindow: 5,
     enabled: true,
-    severity: 'medium'
+    severity: "medium",
   },
   {
-    id: 'unauthorized_admin_access',
-    name: 'Acceso administrativo no autorizado',
-    type: 'unauthorized_access',
+    id: "unauthorized_admin_access",
+    name: "Acceso administrativo no autorizado",
+    type: "unauthorized_access",
     threshold: 1, // cualquier acceso fuera de horario
     timeWindow: 60,
     enabled: true,
-    severity: 'critical'
-  }
+    severity: "critical",
+  },
 ];
 
 export function AuditAlerts({ logs, _theme }: AuditAlertsProps) {
-  const [alertRules, setAlertRules] = useState<AlertRule[]>(DEFAULT_ALERT_RULES);
+  const [alertRules, setAlertRules] =
+    useState<AlertRule[]>(DEFAULT_ALERT_RULES);
   const [alerts, setAlerts] = useState<GeneratedAlert[]>([]);
   const [showSettings, setShowSettings] = useState(false);
 
@@ -93,19 +99,22 @@ export function AuditAlerts({ logs, _theme }: AuditAlertsProps) {
     const now = new Date();
     const newAlerts: GeneratedAlert[] = [];
 
-    alertRules.forEach(rule => {
+    alertRules.forEach((rule) => {
       if (!rule.enabled) return;
 
       const windowStart = subMinutes(now, rule.timeWindow);
-      const recentLogs = logs.filter(log => 
-        new Date(log.createdAt) >= windowStart
+      const recentLogs = logs.filter(
+        (log) => new Date(log.createdAt) >= windowStart,
       );
 
       switch (rule.type) {
-        case 'failure_rate':
+        case "failure_rate":
           const totalEvents = recentLogs.length;
-          const failedEvents = recentLogs.filter(log => log.status === 'FAILURE').length;
-          const failureRate = totalEvents > 0 ? (failedEvents / totalEvents) * 100 : 0;
+          const failedEvents = recentLogs.filter(
+            (log) => log.status === "FAILURE",
+          ).length;
+          const failureRate =
+            totalEvents > 0 ? (failedEvents / totalEvents) * 100 : 0;
 
           if (failureRate >= rule.threshold && totalEvents >= 10) {
             newAlerts.push({
@@ -115,16 +124,18 @@ export function AuditAlerts({ logs, _theme }: AuditAlertsProps) {
               count: failedEvents,
               timestamp: now,
               acknowledged: false,
-              details: { failureRate, totalEvents, failedEvents }
+              details: { failureRate, totalEvents, failedEvents },
             });
           }
           break;
 
-        case 'suspicious_activity':
+        case "suspicious_activity":
           const ipFailures: { [ip: string]: number } = {};
           recentLogs
-            .filter(log => log.status === 'FAILURE' && log.action.includes('LOGIN'))
-            .forEach(log => {
+            .filter(
+              (log) => log.status === "FAILURE" && log.action.includes("LOGIN"),
+            )
+            .forEach((log) => {
               ipFailures[log.ipAddress] = (ipFailures[log.ipAddress] || 0) + 1;
             });
 
@@ -137,13 +148,13 @@ export function AuditAlerts({ logs, _theme }: AuditAlertsProps) {
                 count,
                 timestamp: now,
                 acknowledged: false,
-                details: { ip, attempts: count }
+                details: { ip, attempts: count },
               });
             }
           });
           break;
 
-        case 'high_volume':
+        case "high_volume":
           const eventsPerMinute = recentLogs.length / rule.timeWindow;
           if (eventsPerMinute >= rule.threshold) {
             newAlerts.push({
@@ -153,20 +164,24 @@ export function AuditAlerts({ logs, _theme }: AuditAlertsProps) {
               count: recentLogs.length,
               timestamp: now,
               acknowledged: false,
-              details: { eventsPerMinute: Math.round(eventsPerMinute), totalEvents: recentLogs.length }
+              details: {
+                eventsPerMinute: Math.round(eventsPerMinute),
+                totalEvents: recentLogs.length,
+              },
             });
           }
           break;
 
-        case 'unauthorized_access':
-          const adminActions = recentLogs.filter(log => 
-            log.action.includes('ADMIN') || 
-            log.resource.includes('admin') ||
-            log.userRole === 'admin'
+        case "unauthorized_access":
+          const adminActions = recentLogs.filter(
+            (log) =>
+              log.action.includes("ADMIN") ||
+              log.resource.includes("admin") ||
+              log.userRole === "admin",
           );
 
           // Detectar acceso fuera de horario laboral (ejemplo: 22:00 - 06:00)
-          const suspiciousAccess = adminActions.filter(log => {
+          const suspiciousAccess = adminActions.filter((log) => {
             const hour = new Date(log.createdAt).getHours();
             return hour >= 22 || hour <= 6;
           });
@@ -179,13 +194,13 @@ export function AuditAlerts({ logs, _theme }: AuditAlertsProps) {
               count: suspiciousAccess.length,
               timestamp: now,
               acknowledged: false,
-              details: { 
-                suspiciousAccess: suspiciousAccess.map(log => ({
+              details: {
+                suspiciousAccess: suspiciousAccess.map((log) => ({
                   user: log.userEmail,
                   time: log.createdAt,
-                  action: log.action
-                }))
-              }
+                  action: log.action,
+                })),
+              },
             });
           }
           break;
@@ -197,49 +212,63 @@ export function AuditAlerts({ logs, _theme }: AuditAlertsProps) {
 
   // Actualizar alertas cuando se generen nuevas
   useEffect(() => {
-    setAlerts(prev => {
-      const existingIds = new Set(prev.map(a => a.id));
-      const newAlerts = generatedAlerts.filter(a => !existingIds.has(a.id));
+    setAlerts((prev) => {
+      const existingIds = new Set(prev.map((a) => a.id));
+      const newAlerts = generatedAlerts.filter((a) => !existingIds.has(a.id));
       return [...prev, ...newAlerts];
     });
   }, [generatedAlerts]);
 
   const acknowledgeAlert = (alertId: string) => {
-    setAlerts(prev => prev.map(alert => 
-      alert.id === alertId ? { ...alert, acknowledged: true } : alert
-    ));
+    setAlerts((prev) =>
+      prev.map((alert) =>
+        alert.id === alertId ? { ...alert, acknowledged: true } : alert,
+      ),
+    );
   };
 
   const dismissAlert = (alertId: string) => {
-    setAlerts(prev => prev.filter(alert => alert.id !== alertId));
+    setAlerts((prev) => prev.filter((alert) => alert.id !== alertId));
   };
 
   const toggleRule = (ruleId: string) => {
-    setAlertRules(prev => prev.map(rule => 
-      rule.id === ruleId ? { ...rule, enabled: !rule.enabled } : rule
-    ));
+    setAlertRules((prev) =>
+      prev.map((rule) =>
+        rule.id === ruleId ? { ...rule, enabled: !rule.enabled } : rule,
+      ),
+    );
   };
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
-      case 'critical': return 'bg-destructive/10 text-destructive border-destructive/20';
-      case 'high': return 'bg-orange-500/10 text-orange-600 border-orange-200/50 dark:text-orange-400';
-      case 'medium': return 'bg-yellow-500/10 text-yellow-600 border-yellow-200/50 dark:text-yellow-400';
-      default: return 'bg-primary/10 text-primary border-primary/20';
+      case "critical":
+        return "bg-destructive/10 text-destructive border-destructive/20";
+      case "high":
+        return "bg-orange-500/10 text-orange-600 border-orange-200/50 dark:text-orange-400";
+      case "medium":
+        return "bg-yellow-500/10 text-yellow-600 border-yellow-200/50 dark:text-yellow-400";
+      default:
+        return "bg-primary/10 text-primary border-primary/20";
     }
   };
 
   const getSeverityIcon = (severity: string) => {
     switch (severity) {
-      case 'critical': return <AlertTriangle className="h-4 w-4" />;
-      case 'high': return <Shield className="h-4 w-4" />;
-      case 'medium': return <Activity className="h-4 w-4" />;
-      default: return <Clock className="h-4 w-4" />;
+      case "critical":
+        return <AlertTriangle className="h-4 w-4" />;
+      case "high":
+        return <Shield className="h-4 w-4" />;
+      case "medium":
+        return <Activity className="h-4 w-4" />;
+      default:
+        return <Clock className="h-4 w-4" />;
     }
   };
 
-  const activeAlerts = alerts.filter(alert => !alert.acknowledged);
-  const criticalAlerts = activeAlerts.filter(alert => alert.rule.severity === 'critical');
+  const activeAlerts = alerts.filter((alert) => !alert.acknowledged);
+  const criticalAlerts = activeAlerts.filter(
+    (alert) => alert.rule.severity === "critical",
+  );
 
   if (activeAlerts.length === 0) {
     return (
@@ -250,9 +279,7 @@ export function AuditAlerts({ logs, _theme }: AuditAlertsProps) {
               <Shield className="h-5 w-5 text-green-600 dark:text-green-400" />
             </div>
             <div className="flex-1">
-              <p className="font-semibold text-foreground">
-                Sistema Seguro
-              </p>
+              <p className="font-semibold text-foreground">Sistema Seguro</p>
               <p className="text-sm text-muted-foreground">
                 No se han detectado alertas de seguridad activas
               </p>
@@ -278,7 +305,9 @@ export function AuditAlerts({ logs, _theme }: AuditAlertsProps) {
         <Alert className="rounded-2xl border-destructive/50 bg-destructive/5">
           <AlertTriangle className="h-4 w-4 text-destructive" />
           <AlertDescription className="text-destructive font-medium">
-            <strong>¡Atención!</strong> Se han detectado {criticalAlerts.length} alerta{criticalAlerts.length > 1 ? 's' : ''} crítica{criticalAlerts.length > 1 ? 's' : ''} de seguridad.
+            <strong>¡Atención!</strong> Se han detectado {criticalAlerts.length}{" "}
+            alerta{criticalAlerts.length > 1 ? "s" : ""} crítica
+            {criticalAlerts.length > 1 ? "s" : ""} de seguridad.
           </AlertDescription>
         </Alert>
       )}
@@ -291,7 +320,10 @@ export function AuditAlerts({ logs, _theme }: AuditAlertsProps) {
               <Bell className="h-5 w-5 text-orange-500" />
               Alertas de Seguridad
               {activeAlerts.length > 0 && (
-                <Badge variant="destructive" className="ml-1 h-5 min-w-[20px] rounded-full p-0 flex items-center justify-center text-[10px]">
+                <Badge
+                  variant="destructive"
+                  className="ml-1 h-5 min-w-[20px] rounded-full p-0 flex items-center justify-center text-[10px]"
+                >
                   {activeAlerts.length}
                 </Badge>
               )}
@@ -307,7 +339,7 @@ export function AuditAlerts({ logs, _theme }: AuditAlertsProps) {
             </Button>
           </div>
         </CardHeader>
-        
+
         <CardContent className="space-y-4">
           {/* Lista de alertas activas */}
           {activeAlerts.map((alert) => (
@@ -317,20 +349,30 @@ export function AuditAlerts({ logs, _theme }: AuditAlertsProps) {
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-3 flex-1">
-                  <div className="mt-0.5">{getSeverityIcon(alert.rule.severity)}</div>
+                  <div className="mt-0.5">
+                    {getSeverityIcon(alert.rule.severity)}
+                  </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <h4 className="font-semibold text-sm">{alert.rule.name}</h4>
-                      <Badge variant="outline" className="text-[10px] h-4 py-0 uppercase">
+                      <h4 className="font-semibold text-sm">
+                        {alert.rule.name}
+                      </h4>
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] h-4 py-0 uppercase"
+                      >
                         {alert.rule.severity}
                       </Badge>
                     </div>
                     <p className="text-sm opacity-90">{alert.message}</p>
                     <p className="text-[10px] mt-2 opacity-60 flex items-center gap-1">
                       <Clock className="h-3 w-3" />
-                      Detectado: {format(alert.timestamp, 'dd/MM/yyyy HH:mm:ss', { locale: es })}
+                      Detectado:{" "}
+                      {format(alert.timestamp, "dd/MM/yyyy HH:mm:ss", {
+                        locale: es,
+                      })}
                     </p>
-                    
+
                     {/* Detalles adicionales */}
                     {alert.details && (
                       <details className="mt-3">
@@ -344,7 +386,7 @@ export function AuditAlerts({ logs, _theme }: AuditAlertsProps) {
                     )}
                   </div>
                 </div>
-                
+
                 <div className="flex items-center gap-1 ml-4">
                   <Button
                     variant="ghost"
@@ -376,7 +418,7 @@ export function AuditAlerts({ logs, _theme }: AuditAlertsProps) {
                 <Settings className="h-4 w-4 text-muted-foreground" />
                 Configuración de Alertas
               </h4>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {alertRules.map((rule) => (
                   <div
@@ -384,7 +426,9 @@ export function AuditAlerts({ logs, _theme }: AuditAlertsProps) {
                     className="p-4 rounded-2xl border border-border bg-muted/20"
                   >
                     <div className="flex items-center justify-between mb-3">
-                      <span className="font-semibold text-sm text-foreground">{rule.name}</span>
+                      <span className="font-semibold text-sm text-foreground">
+                        {rule.name}
+                      </span>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -401,13 +445,21 @@ export function AuditAlerts({ logs, _theme }: AuditAlertsProps) {
                     <div className="text-xs text-muted-foreground space-y-2">
                       <div className="flex justify-between">
                         <span>Umbral:</span>
-                        <span className="font-medium text-foreground">{rule.threshold}{rule.type === 'failure_rate' ? '%' : ''}</span>
+                        <span className="font-medium text-foreground">
+                          {rule.threshold}
+                          {rule.type === "failure_rate" ? "%" : ""}
+                        </span>
                       </div>
                       <div className="flex justify-between">
                         <span>Ventana:</span>
-                        <span className="font-medium text-foreground">{rule.timeWindow} min</span>
+                        <span className="font-medium text-foreground">
+                          {rule.timeWindow} min
+                        </span>
                       </div>
-                      <Badge variant="secondary" className="text-[10px] h-4 p-0 px-2 uppercase font-semibold">
+                      <Badge
+                        variant="secondary"
+                        className="text-[10px] h-4 p-0 px-2 uppercase font-semibold"
+                      >
                         {rule.severity}
                       </Badge>
                     </div>

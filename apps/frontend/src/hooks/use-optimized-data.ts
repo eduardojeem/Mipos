@@ -436,7 +436,8 @@ export function usePOSData() {
     refetchOnWindowFocus: false,
   });
 
-  const loading = productsQuery.isLoading || categoriesQuery.isLoading || customersQuery.isLoading || salesStatsQuery.isLoading;
+  const loading = productsQuery.isLoading || categoriesQuery.isLoading;
+  const secondaryLoading = customersQuery.isLoading || salesStatsQuery.isLoading;
   const error = productsQuery.error || categoriesQuery.error || customersQuery.error || salesStatsQuery.error;
   const categories = Array.isArray(categoriesQuery.data) ? categoriesQuery.data : [];
   const categoryMap = new Map<string, (typeof categories)[number]>(
@@ -485,6 +486,7 @@ export function usePOSData() {
       ? salesStatsQuery.data
       : { total_sales: 0, transaction_count: 0, average_ticket: 0, top_selling_product: '' },
     loading,
+    secondaryLoading,
     error,
     refetchAll,
     clearAllCache,

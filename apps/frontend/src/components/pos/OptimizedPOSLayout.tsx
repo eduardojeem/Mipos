@@ -197,7 +197,7 @@ export default function OptimizedPOSLayout() {
 
   // Filter products based on search and category
   const filteredProducts = useMemo(() => {
-    let filtered = products.filter((p) => p.is_active !== false);
+    let filtered = products;
 
     // Filter by category
     if (selectedCategory) {
@@ -523,10 +523,29 @@ export default function OptimizedPOSLayout() {
     [requestCloseSession],
   );
 
-  // Held sales state
+  // Held sales state - persisted in localStorage
   const [heldSales, setHeldSales] = useState<
     { id: string; items: CartItem[]; total: number; date: Date }[]
-  >([]);
+  >(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem('pos_held_sales');
+      if (!stored) return [];
+      const parsed = JSON.parse(stored);
+      return Array.isArray(parsed)
+        ? parsed.map((s: any) => ({ ...s, date: new Date(s.date) }))
+        : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Persist held sales to localStorage on change
+  useEffect(() => {
+    try {
+      localStorage.setItem('pos_held_sales', JSON.stringify(heldSales));
+    } catch {}
+  }, [heldSales]);
 
   // Keyboard Shortcuts
   useEffect(() => {
