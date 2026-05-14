@@ -115,23 +115,20 @@ export default function OptimizedPOSLayout() {
   const discount = usePOSStore((s) => s.discount);
   const setDiscount = usePOSStore((s) => s.setDiscount);
   const discountType = usePOSStore((s) => s.discountType);
-  const _setDiscountType = usePOSStore((s) => s.setDiscountType);
-  const _notes = usePOSStore((s) => s.notes);
+  const notes = usePOSStore((s) => s.notes);
   const setNotes = usePOSStore((s) => s.setNotes);
 
   // Data hooks
   const {
     products = [],
     categories = [],
-    customers: _customers = [],
+    customers,
     loading,
-    refetchAll: _refetchAll,
   } = usePOSData();
 
   // Cash session management
   const {
     session: cashSession,
-    isLoading: _cashSessionLoading,
     refetch: refetchCashSession,
   } = useCashSession();
   const cashSessionSummary = useMemo(
@@ -325,9 +322,9 @@ export default function OptimizedPOSLayout() {
           discount_reason: 'Manual discount', 
           payment_method: effectivePaymentMethod,
           total_amount: totals.total,
-          notes: _notes,
+          notes,
           document_type: requestedDocumentType,
-          currency: config?.storeSettings?.currency || 'USD',
+          currency: config?.storeSettings?.currency || 'PYG',
         };
 
         // Add payment details if provided
@@ -415,13 +412,13 @@ export default function OptimizedPOSLayout() {
             discount_reason: 'Manual discount',
             payment_method: effectivePaymentMethod,
             document_type: requestedDocumentType,
-            currency: config?.storeSettings?.currency || 'USD',
+            currency: config?.storeSettings?.currency || 'PYG',
             payment_details: paymentDetails?.mixedPayments ? {
               primaryMethod: effectivePaymentMethod,
               payments: paymentDetails.mixedPayments,
             } : undefined,
             status: 'COMPLETED',
-            notes: _notes,
+            notes,
             transfer_reference: paymentDetails?.transferReference,
             cash_received: paymentDetails?.cashReceived,
             change: paymentDetails?.change,
@@ -461,7 +458,7 @@ export default function OptimizedPOSLayout() {
               total: totals.total,
             },
             paymentMethod: (paymentDetails?.paymentMethod || paymentMethod) as string,
-            notes: _notes,
+            notes,
             customer: selectedCustomer ? {
               name: selectedCustomer.name,
               phone: selectedCustomer.phone ?? undefined,
@@ -487,7 +484,7 @@ export default function OptimizedPOSLayout() {
       paymentMethod,
       handleClearCart,
       validateCashPayment,
-      _notes,
+      notes,
       selectedCustomer,
       user?.id,
       config,
@@ -592,7 +589,9 @@ export default function OptimizedPOSLayout() {
   const handleHoldSale = useCallback(() => {
     if (cart.length === 0) return;
     const newHeldSale = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `held-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
       items: [...cart],
       total: cartCalculations.total,
       date: new Date(),
@@ -626,8 +625,8 @@ export default function OptimizedPOSLayout() {
             <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center text-white shadow-lg shadow-green-500/20">
               <span className="font-black text-xs">POS</span>
             </div>
-            <h1 className="text-lg font-black tracking-tighter uppercase italic">
-              Premium
+            <h1 className="text-lg font-black tracking-tighter uppercase italic truncate max-w-[200px]">
+              {config?.businessName || 'MiPOS'}
             </h1>
           </div>
 
@@ -698,12 +697,12 @@ export default function OptimizedPOSLayout() {
           <button
             onClick={handleHoldSale}
             disabled={cart.length === 0}
-            className="flex items-center space-x-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl shadow-lg shadow-orange-500/20 active:scale-95 transition-all disabled:opacity-50 disabled:grayscale disabled:scale-100"
+            className="flex items-center space-x-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl shadow-lg shadow-orange-500/20 active:scale-95 transition-all disabled:opacity-50 disabled:scale-100"
             title="Poner venta en espera"
           >
             <Clock className="w-4 h-4" />
             <span className="text-xs font-bold uppercase hidden sm:inline">
-              Hold
+              En espera
             </span>
           </button>
 
@@ -805,7 +804,7 @@ export default function OptimizedPOSLayout() {
           initialDiscount={discount}
           initialDiscountType={discountType}
           customer={selectedCustomer}
-          customers={_customers}
+          customers={customers || []}
           onSelectCustomer={setSelectedCustomer}
           paymentMethod={paymentMethod as any}
           onPaymentMethodChange={(method) => setPaymentMethod(method as any)}
