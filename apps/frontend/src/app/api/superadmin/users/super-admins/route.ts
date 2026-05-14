@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createAdminClient } from '@/lib/supabase-admin'
 import { assertSuperAdmin } from '@/app/api/_utils/auth'
 
 export async function GET(request: NextRequest) {
@@ -32,33 +31,14 @@ export async function GET(request: NextRequest) {
     }
 
     const { data, error, count } = await query.range(start, end)
-    if (!error && Array.isArray(data)) {
-      return NextResponse.json({ success: true, users: data, total: count || data.length, page, limit, source: 'db' })
+    if (error || !Array.isArray(data)) {
+      // SECURITY: do NOT fall back to listing auth users filtered by
+      // user_metadata.role — that field is user-modifiable, so the fallback
+      // would surface impostors as "super admins". Fail closed instead.
+      return NextResponse.json({ error: 'Error listando super admins', details: error?.message || 'consulta no disponible' }, { status: 500 })
     }
 
-    let admin
-    try {
-      admin = createAdminClient() as any
-    } catch {
-      return NextResponse.json({ success: true, users: [], total: 0, page, limit, warning: 'Sin cliente admin' })
-    }
-
-    const { data: listData, error: listError } = await admin.auth.admin.listUsers({ page, perPage: limit })
-    if (listError) {
-      return NextResponse.json({ error: 'Error listando usuarios', details: listError.message }, { status: 500 })
-    }
-    const users = ((listData as any)?.users || [])
-      .filter((u: any) => String(u.user_metadata?.role || '').toUpperCase() === 'SUPER_ADMIN')
-      .map((u: any) => ({
-        id: u.id,
-        email: u.email,
-        full_name: u.user_metadata?.full_name || u.user_metadata?.name || (u.email || '').split('@')[0],
-        role: 'SUPER_ADMIN',
-        status: 'ACTIVE',
-        created_at: u.created_at,
-        last_login: u.last_sign_in_at,
-      }))
-    return NextResponse.json({ success: true, users, total: users.length, page, limit, source: 'auth' })
+    return NextResponse.json({ success: true, users: data, total: count || data.length, page, limit, source: 'db' })
   } catch {
     return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
   }

@@ -88,7 +88,11 @@ export function useUnifiedPermissions(): PermissionContextType {
         // ignore and fallback
       }
 
-      // Fallback to auth-based user
+      // Fallback to auth-based user (when /api/auth/profile is unreachable).
+      // SECURITY: never read role from user_metadata — users can self-assign
+      // it via supabase.auth.updateUser. Trust only app_metadata (server-only)
+      // and default to USER otherwise. This fallback is for UI rendering;
+      // real authorization must happen server-side.
       if (!profileUser) {
         profileUser = {
           id: authUser.id,
@@ -96,9 +100,7 @@ export function useUnifiedPermissions(): PermissionContextType {
           name: authUser.email?.split('@')[0] || 'Usuario',
           role: normalizeRole(
             String(
-              (authUser as SupabaseUser & { role?: string })?.role ??
               (authUser as SupabaseUser & { app_metadata?: { role?: string } })?.app_metadata?.role ??
-              (authUser as SupabaseUser).user_metadata?.role ??
               'USER'
             )
           ),

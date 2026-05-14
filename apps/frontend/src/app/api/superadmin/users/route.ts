@@ -88,33 +88,14 @@ export async function GET(request: NextRequest) {
     }
 
     const { data, error, count } = await query.range(start, end)
-    if (!error && Array.isArray(data)) {
-      return NextResponse.json({ success: true, users: data, total: count || data.length, page, limit })
+    if (error || !Array.isArray(data)) {
+      // SECURITY: do NOT fall back to listing auth users with role read from
+      // user_metadata — that field is user-modifiable and would let impostors
+      // appear with elevated roles in the admin UI. Fail closed instead.
+      return NextResponse.json({ error: 'Error listando usuarios', details: error?.message || 'consulta no disponible' }, { status: 500 })
     }
 
-    let admin
-    try {
-      admin = createAdminClient() as any
-    } catch {
-      return NextResponse.json({ success: true, users: [], total: 0, page, limit, warning: 'Sin cliente admin' })
-    }
-
-    const { data: listData, error: listError } = await admin.auth.admin.listUsers({ page, perPage: limit })
-    if (listError) {
-      return NextResponse.json({ error: 'Error listando usuarios', details: listError.message }, { status: 500 })
-    }
-
-    const users = ((listData as any)?.users || []).map((u: any) => ({
-      id: u.id,
-      email: u.email,
-      full_name: u.user_metadata?.full_name || u.user_metadata?.name || (u.email || '').split('@')[0],
-      role: String((u.user_metadata?.role || 'CASHIER')).toUpperCase(),
-      status: 'ACTIVE',
-      created_at: u.created_at,
-      last_login: u.last_sign_in_at,
-    }))
-
-    return NextResponse.json({ success: true, users, total: users.length, page, limit, source: 'auth' })
+    return NextResponse.json({ success: true, users: data, total: count || data.length, page, limit })
   } catch {
     return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
   }
