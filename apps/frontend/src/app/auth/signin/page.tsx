@@ -257,7 +257,16 @@ export default function SignInPage() {
 
     try {
       await signIn(data.email, data.password);
-      await waitForServerSessionReady();
+      const sessionReady = await waitForServerSessionReady();
+
+      if (!sessionReady) {
+        toast({
+          title: 'No pudimos sincronizar tu sesion',
+          description: 'Intenta nuevamente en unos segundos.',
+          variant: 'destructive',
+        });
+        return;
+      }
 
       if (data.remember) {
         localStorage.setItem('saved_login_email', data.email);
@@ -274,10 +283,23 @@ export default function SignInPage() {
       const returnUrl = getReturnUrl();
 
       if (currentUser) {
-        const rawRole = currentUser.user_metadata?.role;
-        const role = typeof rawRole === 'string' ? rawRole.toUpperCase() : '';
+        let canonicalRole = '';
+        try {
+          const profileResponse = await fetch('/api/auth/profile', {
+            method: 'GET',
+            cache: 'no-store',
+            credentials: 'include',
+          });
+          if (profileResponse.ok) {
+            const profileResult = await profileResponse.json().catch(() => null);
+            const rawRole = profileResult?.data?.role;
+            canonicalRole = typeof rawRole === 'string' ? rawRole.toUpperCase() : '';
+          }
+        } catch {
+          // If profile fetch fails, fall through without SUPER_ADMIN privileges.
+        }
 
-        if (role === 'SUPER_ADMIN') {
+        if (canonicalRole === 'SUPER_ADMIN') {
           toast({
             title: 'Bienvenido Super Admin',
             description: 'Redirigiendo al panel de administracion global...',
