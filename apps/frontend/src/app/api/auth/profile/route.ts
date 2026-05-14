@@ -89,8 +89,10 @@ async function buildProfileResponse(
   const membershipRole =
     Array.isArray(membership?.role) ? membership?.role[0] : membership?.role;
 
+  // SECURITY: do NOT trust user_metadata.role — users can modify their own
+  // user_metadata via Supabase Auth and elevate to SUPER_ADMIN. Only trust
+  // app_metadata (server-managed) and authoritative DB tables.
   const roleCandidates: Array<string | null | undefined> = [
-    toStringValue(metadata.role),
     toStringValue(appMetadata.role),
     userRecord ? toStringValue(userRecord.role) : '',
     ...(userRoles || []).map((row) => {

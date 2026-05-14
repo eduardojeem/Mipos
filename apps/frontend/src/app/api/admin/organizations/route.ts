@@ -19,7 +19,9 @@ export async function GET(request: NextRequest) {
       .eq('id', user.id)
       .single();
 
-    const userRole = userData?.role || user.user_metadata?.role || 'USER';
+    // SECURITY: never fall back to user_metadata.role — users can modify it
+    // themselves via Supabase Auth and elevate to SUPER_ADMIN/ADMIN.
+    const userRole = userData?.role || 'USER';
     const isAdmin = userRole === 'ADMIN' || userRole === 'SUPER_ADMIN';
 
     // Si es admin, obtener todas las organizaciones
