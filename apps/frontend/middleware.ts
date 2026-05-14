@@ -140,9 +140,12 @@ function applyRequestContextHeaders(
 }
 
 function applyResponseContextCookies(response: NextResponse, tenantContext: TenantContext) {
-  clearOrganizationCookies(response);
-
+  // Only touch the org cookies when the URL resolves to a specific tenant.
+  // On root-domain requests there is no URL-derived tenant, but the user may
+  // have selected an org client-side (multi-org users on /dashboard). Wiping
+  // those cookies on every root request kills that selection on the next nav.
   if (tenantContext.kind === 'tenant') {
+    clearOrganizationCookies(response);
     setOrganizationCookies(response, tenantContext.organization);
   }
 }

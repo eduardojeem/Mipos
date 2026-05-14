@@ -50,6 +50,13 @@ export async function GET() {
     );
 
     if (!organizationIds.length) {
+      // Legacy fallback: some users predate the organization_members table and
+      // only have users.organization_id set. Surface that org so they can sign
+      // in, but DO NOT auto-create a membership row — silently restoring a
+      // membership that an admin removed would defeat any deliberate revoke.
+      // If this codepath fires, the data inconsistency should be fixed in the
+      // DB (either by creating the membership with a proper role, or by
+      // clearing users.organization_id).
       const { data: userRow } = await admin
         .from("users")
         .select("organization_id")
@@ -58,21 +65,9 @@ export async function GET() {
 
       if (userRow?.organization_id) {
         organizationIds = [userRow.organization_id];
-
-        // Auto-repair: create missing organization_members entry
-        try {
-          await admin
-            .from("organization_members")
-            .upsert(
-              { user_id: user.id, organization_id: userRow.organization_id },
-              { onConflict: "user_id,organization_id", ignoreDuplicates: true },
-            );
-          console.log(
-            `Auto-repair: created organization_members for user ${user.id} -> org ${userRow.organization_id}`,
-          );
-        } catch (err: unknown) {
-          console.warn("Auto-repair organization_members failed:", err);
-        }
+        console.warn(
+          `[auth/organizations] User ${user.id} has users.organization_id=${userRow.organization_id} but no organization_members row. Surfacing as legacy fallback; admin should reconcile.`,
+        );
       }
     }
 
