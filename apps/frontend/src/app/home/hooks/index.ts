@@ -7,5 +7,4 @@
 
 export * from './useSpecialOffers';
 export * from './usePublicOffers';
-export * from './useTopProducts';
 export * from './useScrollSpy';

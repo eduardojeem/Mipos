@@ -13,9 +13,16 @@ interface PlansComparisonProps {
 }
 
 export function PlansComparison({ plans, billingCycle }: PlansComparisonProps) {
+  const [activeTab, setActiveTab] = useState<'capacity' | 'features'>('capacity');
   const [featureQuery, setFeatureQuery] = useState('');
 
   const rows = useMemo(() => buildComparisonRows(plans), [plans]);
+
+  const limitRows = useMemo(
+    () => rows.filter((row) => row.kind === 'limit'),
+    [rows]
+  );
+
   const filteredFeatureRows = useMemo(() => {
     const query = featureQuery.trim().toLowerCase();
     return rows.filter((row) => {
@@ -24,8 +31,6 @@ export function PlansComparison({ plans, billingCycle }: PlansComparisonProps) {
       return row.label.toLowerCase().includes(query);
     });
   }, [featureQuery, rows]);
-
-  const limitRows = rows.filter((row) => row.kind === 'limit');
 
   return (
     <section className="border-t border-white/10 py-20">
@@ -38,24 +43,31 @@ export function PlansComparison({ plans, billingCycle }: PlansComparisonProps) {
               Revisa capacidad operativa y funciones habilitadas por plan antes de iniciar el registro.
             </p>
           </div>
-          <div className="w-full max-w-sm">
-            <label htmlFor="plan-feature-search" className="mb-2 block text-xs font-medium uppercase tracking-[0.16em] text-slate-400">
-              Buscar funcionalidad
-            </label>
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
-              <Input
-                id="plan-feature-search"
-                value={featureQuery}
-                onChange={(event) => setFeatureQuery(event.target.value)}
-                placeholder="API, multi sucursal, reportes..."
-                className="border-white/10 bg-slate-900 pl-9 text-slate-100 placeholder:text-slate-500"
-              />
+
+          {activeTab === 'features' && (
+            <div className="w-full max-w-sm">
+              <label htmlFor="plan-feature-search" className="mb-2 block text-xs font-medium uppercase tracking-[0.16em] text-slate-400">
+                Buscar funcionalidad
+              </label>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                <Input
+                  id="plan-feature-search"
+                  value={featureQuery}
+                  onChange={(e) => setFeatureQuery(e.target.value)}
+                  placeholder="API, multi sucursal, reportes..."
+                  className="border-white/10 bg-slate-900 pl-9 text-slate-100 placeholder:text-slate-500"
+                />
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
-        <Tabs defaultValue="capacity" className="mt-10">
+        <Tabs
+          defaultValue="capacity"
+          className="mt-10"
+          onValueChange={(v) => setActiveTab(v as 'capacity' | 'features')}
+        >
           <TabsList className="landing-panel grid h-auto w-full max-w-md grid-cols-2 rounded-lg p-1 text-slate-400">
             <TabsTrigger value="capacity" className="rounded-md data-[state=active]:bg-slate-800 data-[state=active]:text-white">
               Capacidad
@@ -101,6 +113,7 @@ function ComparisonTable({ plans, billingCycle, rows, emptyMessage = 'No hay dat
 
   return (
     <>
+      {/* Desktop table */}
       <div className="landing-panel hidden overflow-x-auto rounded-lg md:block">
         <table className="min-w-full border-collapse">
           <thead>
@@ -113,7 +126,7 @@ function ComparisonTable({ plans, billingCycle, rows, emptyMessage = 'No hay dat
                   <p className="text-sm font-semibold text-white">{plan.name}</p>
                   <p className="mt-1 text-sm text-slate-400">
                     {billingCycle === 'yearly'
-                      ? `${formatCurrency(plan.priceYearly, plan.currency)} / ano`
+                      ? `${formatCurrency(plan.priceYearly, plan.currency)} / año`
                       : `${formatCurrency(plan.priceMonthly, plan.currency)} / mes`}
                   </p>
                 </th>
@@ -147,6 +160,7 @@ function ComparisonTable({ plans, billingCycle, rows, emptyMessage = 'No hay dat
         </table>
       </div>
 
+      {/* Mobile cards */}
       <div className="space-y-4 md:hidden">
         {rows.map((row) => (
           <div key={row.key} className="landing-panel rounded-lg p-4">
@@ -158,7 +172,7 @@ function ComparisonTable({ plans, billingCycle, rows, emptyMessage = 'No hay dat
                     <p className="text-sm font-medium text-slate-100">{plan.name}</p>
                     <p className="text-xs text-slate-500">
                       {billingCycle === 'yearly'
-                        ? `${formatCurrency(plan.priceYearly, plan.currency)} / ano`
+                        ? `${formatCurrency(plan.priceYearly, plan.currency)} / año`
                         : `${formatCurrency(plan.priceMonthly, plan.currency)} / mes`}
                     </p>
                   </div>
@@ -168,7 +182,7 @@ function ComparisonTable({ plans, billingCycle, rows, emptyMessage = 'No hay dat
                     ) : plan.features.includes(row.feature) ? (
                       <span className="inline-flex items-center gap-1 text-emerald-300">
                         <Check className="h-4 w-4" />
-                        Si
+                        Sí
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 text-slate-500">

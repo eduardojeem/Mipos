@@ -278,12 +278,12 @@ export default function HomeClient({ initialData }: HomeClientProps) {
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {offers.map((offer) => (
                 <Card
-                  key={`${offer.id}-${offer.promotionName}`}
+                  key={offer.id}
                   className="overflow-hidden rounded-2xl border-slate-200 bg-white shadow-none dark:border-slate-800 dark:bg-slate-900"
                 >
                   <div className="relative aspect-[4/3] overflow-hidden bg-slate-100 dark:bg-slate-800">
                     <Image
-                      src={offer.image}
+                      src={offer.image || '/placeholder-product.png'}
                       alt={offer.name}
                       fill
                       className="object-cover transition-transform duration-300 hover:scale-105"
@@ -401,7 +401,7 @@ export default function HomeClient({ initialData }: HomeClientProps) {
                     <Link href={tenantHref(`/catalog/${product.id}`)} className="block">
                       <div className="relative aspect-[4/3] overflow-hidden bg-slate-100 dark:bg-slate-800">
                         <Image
-                          src={product.image}
+                          src={product.image || '/placeholder-product.png'}
                           alt={product.name}
                           fill
                           className="object-cover transition-transform duration-300 hover:scale-105"
