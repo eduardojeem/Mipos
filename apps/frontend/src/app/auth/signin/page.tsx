@@ -419,17 +419,17 @@ function LoginSection({
         <div className="mx-auto max-w-md">
           <div className="mb-6 text-center md:mb-8">
 
-            <h2 className="mb-3 text-3xl font-bold text-white md:mb-4 md:text-4xl lg:text-5xl">
+            <h2 className="mb-3 text-2xl font-bold text-white md:mb-4 md:text-3xl">
               Iniciar <span className="gradient-text">Sesion</span>
             </h2>
             <p className="text-sm text-gray-400 md:text-base">Accede a tu panel de control</p>
           </div>
 
-          <div className="glass-card rounded-2xl p-6 md:p-8">
+          <div className="landing-panel rounded-2xl p-6 md:p-8">
             <form onSubmit={onSubmit} className="space-y-5 md:space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="email" className="flex items-center gap-2 text-white">
-                  <Mail className="h-4 w-4 text-purple-400" />
+                  <Mail className="h-4 w-4 text-emerald-400" />
                   Correo electronico
                 </Label>
                 <Input
@@ -439,7 +439,7 @@ function LoginSection({
                   placeholder="tu@empresa.com"
                   className={cn(
                     'border-white/10 bg-white/5 text-white placeholder:text-gray-500',
-                    'focus:border-purple-500 focus:ring-purple-500/20',
+                    'focus:border-emerald-500 focus:ring-emerald-500/20',
                     errors.email && 'border-red-500'
                   )}
                   {...register('email')}
@@ -454,7 +454,7 @@ function LoginSection({
 
               <div className="space-y-2">
                 <Label htmlFor="password" className="flex items-center gap-2 text-white">
-                  <Lock className="h-4 w-4 text-purple-400" />
+                  <Lock className="h-4 w-4 text-emerald-400" />
                   Contrasena
                 </Label>
                 <div className="relative">
@@ -465,7 +465,7 @@ function LoginSection({
                     placeholder="********"
                     className={cn(
                       'border-white/10 bg-white/5 pr-10 text-white placeholder:text-gray-500',
-                      'focus:border-purple-500 focus:ring-purple-500/20',
+                      'focus:border-emerald-500 focus:ring-emerald-500/20',
                       errors.password && 'border-red-500'
                     )}
                     {...register('password')}
@@ -492,14 +492,14 @@ function LoginSection({
                     id="remember"
                     type="checkbox"
                     {...register('remember')}
-                    className="cursor-pointer rounded border-white/10 bg-white/5 text-purple-600 focus:ring-purple-500"
+                    className="cursor-pointer rounded border-white/10 bg-white/5 text-emerald-600 focus:ring-emerald-500"
                   />
                   <span className="transition-colors group-hover:text-white">Recordar sesion</span>
                 </label>
                 <button
                   type="button"
                   onClick={onForgotPassword}
-                  className="text-sm text-purple-400 transition-colors hover:text-purple-300"
+                  className="text-sm text-emerald-400 transition-colors hover:text-emerald-300"
                 >
                   Olvidaste tu contrasena?
                 </button>
@@ -541,7 +541,7 @@ function LoginSection({
                 <Button
                   type="button"
                   variant="outline"
-                  className="glass-card w-full border-white/10 text-white hover:border-purple-500/50 hover:bg-white/5"
+                  className="glass-card w-full border-white/10 text-white hover:border-emerald-500/50 hover:bg-white/5"
                 >
                   Ver planes y crear cuenta
                 </Button>
@@ -600,7 +600,7 @@ function OrganizationSelector({ organizations, onSelect, loading }: Organization
                   </div>
 
                   <div className="flex-1 text-left">
-                    <h3 className="text-lg font-semibold text-white transition-colors group-hover:text-purple-300 md:text-xl">
+                    <h3 className="text-lg font-semibold text-white transition-colors group-hover:text-emerald-300 md:text-xl">
                       {org.name}
                     </h3>
                     <div className="mt-1 flex items-center gap-2">
@@ -622,7 +622,7 @@ function OrganizationSelector({ organizations, onSelect, loading }: Organization
                     </div>
                   </div>
 
-                  <ArrowRight className="h-5 w-5 text-gray-400 transition-all group-hover:translate-x-1 group-hover:text-purple-400" />
+                  <ArrowRight className="h-5 w-5 text-gray-400 transition-all group-hover:translate-x-1 group-hover:text-emerald-400" />
                 </div>
               </button>
             ))}
@@ -663,7 +663,7 @@ function ForgotPasswordSection({ onBack, onSubmit }: ForgotPasswordSectionProps)
 
       <div className="container relative z-10 mx-auto px-4">
         <div className="mx-auto max-w-md">
-          <div className="glass-card rounded-2xl p-6 md:p-8">
+          <div className="landing-panel rounded-2xl p-6 md:p-8">
             <div className="mb-6 text-center">
               <div className="gradient-primary mb-4 inline-flex h-14 w-14 items-center justify-center rounded-2xl md:h-16 md:w-16">
                 <Lock className="h-7 w-7 text-white md:h-8 md:w-8" />
@@ -677,7 +677,7 @@ function ForgotPasswordSection({ onBack, onSubmit }: ForgotPasswordSectionProps)
             <form onSubmit={handleSubmit} className="space-y-5 md:space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="recovery-email" className="flex items-center gap-2 text-white">
-                  <Mail className="h-4 w-4 text-purple-400" />
+                  <Mail className="h-4 w-4 text-emerald-400" />
                   Correo electronico
                 </Label>
                 <Input
@@ -687,7 +687,7 @@ function ForgotPasswordSection({ onBack, onSubmit }: ForgotPasswordSectionProps)
                   placeholder="tu@empresa.com"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  className="border-white/10 bg-white/5 text-white placeholder:text-gray-500 focus:border-purple-500 focus:ring-purple-500/20"
+                  className="border-white/10 bg-white/5 text-white placeholder:text-gray-500 focus:border-emerald-500 focus:ring-emerald-500/20"
                   required
                 />
               </div>
@@ -715,7 +715,7 @@ function ForgotPasswordSection({ onBack, onSubmit }: ForgotPasswordSectionProps)
                   type="button"
                   variant="outline"
                   onClick={onBack}
-                  className="glass-card w-full border-white/10 text-white hover:border-purple-500/50 hover:bg-white/5"
+                  className="glass-card w-full border-white/10 text-white hover:border-emerald-500/50 hover:bg-white/5"
                 >
                   Volver al login
                 </Button>
