@@ -144,10 +144,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         ? 'Sin cajas abiertas'
         : `Cajas abiertas: ${openSessions.length} (más antigua: ${oldestOpenDays ?? 0} día(s))`
 
-    const limitUsers = normalizeLimitValue(snapshot.plan.limits.maxUsers)
-    const limitProducts = normalizeLimitValue(snapshot.plan.limits.maxProducts)
-    const limitLocations = normalizeLimitValue(snapshot.plan.limits.maxLocations)
-    const limitTransactions = normalizeLimitValue(snapshot.plan.limits.maxTransactionsPerMonth)
+    const planLimits = snapshot.plan.limits ?? {}
+    const limitUsers = normalizeLimitValue(planLimits.maxUsers)
+    const limitProducts = normalizeLimitValue(planLimits.maxProducts)
+    const limitLocations = normalizeLimitValue(planLimits.maxLocations)
+    const limitTransactions = normalizeLimitValue(planLimits.maxTransactionsPerMonth)
 
     const usageMetrics = [
       { key: 'users', label: 'Usuarios', used: Number(usage.users || 0), limit: limitUsers },

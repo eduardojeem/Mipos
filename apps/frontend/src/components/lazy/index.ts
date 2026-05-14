@@ -29,7 +29,10 @@ export const LazyProductForm = withLazyLoading(
 );
 
 export const LazyProductTable = withLazyLoading(
-  () => import('@/components/products/ProductTable'),
+  () =>
+    import('@/components/products/ProductsTableView').then((module) => ({
+      default: module.ProductsTableView,
+    })) as any,
   TableSkeleton
 );
 
@@ -66,6 +69,6 @@ export const LazyProductCardComponent = withLazyLoading(
 
 // POS components - only include existing ones
 export const LazyProductCatalog = withLazyLoading(
-  () => import('@/components/pos/OptimizedProductCatalog'),
+  () => import('@/components/pos/ProductGrid') as any,
   ProductSkeleton
 );

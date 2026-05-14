@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useErrorRecovery } from '@/hooks/use-error-recovery';
-import { customerService, type CustomerFilters, type CustomerStats } from '@/lib/customer-service';
+import { customerService, type CustomerFilters, type CustomerStats, type UICustomer as CustomerServiceCustomer } from '@/lib/customer-service';
 import { useCustomerOptimizations } from '@/hooks/useCustomerOptimizations';
 import { PERFORMANCE_CONFIG } from '@/config/performance';
 import { createLogger } from '@/lib/logger';
@@ -40,6 +40,13 @@ export interface UseCustomersDataReturn {
  * ```
  */
 const logger = createLogger('CustomersData');
+
+function normalizeCustomerForPage(customer: CustomerServiceCustomer): UICustomer {
+    return {
+        ...customer,
+        ruc: customer.ruc ?? undefined,
+    };
+}
 
 export function useCustomersData(config: UseCustomersDataConfig): UseCustomersDataReturn {
     const { filters, page, limit, enabled = true } = config;
@@ -123,7 +130,7 @@ export function useCustomersData(config: UseCustomersDataConfig): UseCustomersDa
             }
 
             // result.customers is already UICustomer[], no need to map again
-            const uiCustomers = result.customers;
+            const uiCustomers = result.customers.map(normalizeCustomerForPage);
 
             setState(prev => ({
                 ...prev,

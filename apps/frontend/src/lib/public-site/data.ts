@@ -325,7 +325,7 @@ export async function getGlobalMarketplaceHomeData(
   }
 
   const { data: organizations, count: organizationsCount } = organizationsResult;
-  const organizationRows = (organizations || []) as PublicOrganization[];
+  const organizationRows = (organizations || []) as unknown as PublicOrganization[];
   const organizationIds = organizationRows.map((organization) => organization.id);
 
   if (organizationIds.length === 0) {
@@ -404,7 +404,7 @@ export async function getGlobalMarketplaceHomeData(
       throw result.error;
     }
 
-    productRows = (result.data || []) as ProductRow[];
+    productRows = (result.data || []) as unknown as ProductRow[];
     break;
   }
 
@@ -428,7 +428,7 @@ export async function getGlobalMarketplaceHomeData(
       throw categoryResult.error;
     }
 
-    categoryRows = (categoryResult.data || []) as CategoryRow[];
+    categoryRows = (categoryResult.data || []) as unknown as CategoryRow[];
   }
 
   const configMap = buildConfigMap((settingsResult.data || []) as SettingsRow[]);
@@ -580,7 +580,7 @@ async function _getGlobalMarketplaceHomeDataLegacy(
 
   const { data: organizations, count: organizationsCount } = organizationsResult;
 
-  const organizationRows = (organizations || []) as PublicOrganization[];
+  const organizationRows = (organizations || []) as unknown as PublicOrganization[];
   const organizationIds = organizationRows.map((organization) => organization.id);
 
   if (organizationIds.length === 0) {
@@ -628,7 +628,7 @@ async function _getGlobalMarketplaceHomeDataLegacy(
   }
 
   const { data: products } = await productsQuery;
-  const productRows = (products || []) as ProductRow[];
+  const productRows = (products || []) as unknown as ProductRow[];
 
   const categoryIds = Array.from(
     new Set(
@@ -645,7 +645,7 @@ async function _getGlobalMarketplaceHomeDataLegacy(
         .in('id', categoryIds)
     : { data: [] };
 
-  const categoryRows = (categories || []) as CategoryRow[];
+  const categoryRows = (categories || []) as unknown as CategoryRow[];
   const configMap = buildConfigMap((settingsResult.data || []) as SettingsRow[]);
   const organizationMap = new Map(organizationRows.map((organization) => [organization.id, organization]));
   const categoryMap = new Map(categoryRows.map((category) => [category.id, category]));

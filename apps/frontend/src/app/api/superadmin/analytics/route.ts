@@ -73,10 +73,10 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
       .limit(5);
 
-    const topOrganizations = topOrgs?.map(org => ({
+    const topOrganizations = (topOrgs || []).map((org: { name: string | null }) => ({
       name: org.name,
       user_count: 0 // Por ahora no tenemos forma de contar usuarios por org
-    })) || [];
+    }));
 
     return NextResponse.json({
       growthData,

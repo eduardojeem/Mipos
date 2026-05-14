@@ -119,7 +119,7 @@ export async function GET(request: NextRequest) {
       structuredLogger.warn('Error fetching organizations', {
         component: 'SuperAdminStatsAPI',
         action: 'fetchOrganizations',
-        metadata: orgsRes.error,
+        metadata: { error: orgsRes.error.message },
       });
     } else {
       totalOrgs = orgsRes.count || 0;
@@ -131,7 +131,7 @@ export async function GET(request: NextRequest) {
       structuredLogger.warn('Error fetching active organizations', {
         component: 'SuperAdminStatsAPI',
         action: 'fetchActiveOrganizations',
-        metadata: activeOrgsRes.error,
+        metadata: { error: activeOrgsRes.error.message },
       });
     } else {
       activeOrgs = activeOrgsRes.count || 0;
@@ -143,7 +143,7 @@ export async function GET(request: NextRequest) {
       structuredLogger.warn('Error fetching users', {
         component: 'SuperAdminStatsAPI',
         action: 'fetchUsers',
-        metadata: usersRes.error,
+        metadata: { error: usersRes.error.message },
       });
     } else {
       totalUsers = usersRes.count || 0;
@@ -155,10 +155,15 @@ export async function GET(request: NextRequest) {
       structuredLogger.warn('Error fetching subscriptions', {
         component: 'SuperAdminStatsAPI',
         action: 'fetchRevenue',
-        metadata: subsRes.error,
+        metadata: { error: subsRes.error.message },
       });
     } else if (subsRes.data) {
-      subsRes.data.forEach((sub: { billing_cycle: string | null; saas_plans: { price_monthly: number; price_yearly: number } | null }) => {
+      const subscriptions = subsRes.data as unknown as Array<{
+        billing_cycle: string | null
+        saas_plans: { price_monthly: number; price_yearly: number } | null
+      }>
+
+      subscriptions.forEach((sub) => {
         if (sub.saas_plans) {
           if (sub.billing_cycle === 'yearly') {
             monthlyRevenue += (sub.saas_plans.price_yearly || 0) / 12;
@@ -189,6 +194,7 @@ export async function GET(request: NextRequest) {
       activeOrganizations: activeOrgs,
       totalUsers: totalUsers,
       activeUsers: activeUsers,
+      activeSubscriptions: activeOrgs,
       totalRevenue: monthlyRevenue * 12, // ARR estimado
       monthlyRevenue: monthlyRevenue,
       systemHealth: 'healthy',

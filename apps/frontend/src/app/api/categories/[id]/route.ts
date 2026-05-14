@@ -118,7 +118,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
           if (cursor === id) {
             return NextResponse.json({ error: 'Movimiento inválido: genera un ciclo en el árbol' }, { status: 400 })
           }
-          const { data: row, error: rowError } = await (supabase as any)
+          const { data: rowData, error: rowError } = await (supabase as any)
             .from('categories')
             .select('parent_id')
             .eq('id', cursor)
@@ -128,6 +128,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
           if (rowError) {
             return NextResponse.json({ error: 'No se pudo validar la jerarquía', details: rowError.message }, { status: 500 })
           }
+          const row = rowData as { parent_id?: string | null } | null
           cursor = row?.parent_id ? String(row.parent_id) : null
         }
 

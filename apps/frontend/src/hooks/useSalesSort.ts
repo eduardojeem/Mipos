@@ -17,6 +17,17 @@ export function useSalesSort({
 }: UseSalesSortOptions) {
     const [sortBy, setSortBy] = useState<SortField>(initialSortBy);
     const [sortOrder, setSortOrder] = useState<SortOrder>(initialSortOrder);
+    const statusOrder: Record<NonNullable<Sale['status']>, number> = {
+        COMPLETED: 0,
+        PENDING: 1,
+        CONFIRMED: 2,
+        PREPARING: 3,
+        READY: 4,
+        SHIPPED: 5,
+        DELIVERED: 6,
+        CANCELLED: 7,
+        REFUNDED: 8,
+    };
 
     // Sort sales
     const sortedSales = useMemo(() => {
@@ -45,8 +56,6 @@ export function useSalesSort({
                     break;
 
                 case 'status':
-                    // Order: COMPLETED > PENDING > CANCELLED > REFUNDED
-                    const statusOrder = { COMPLETED: 0, PENDING: 1, CANCELLED: 2, REFUNDED: 3 };
                     aValue = statusOrder[a.status] ?? 999;
                     bValue = statusOrder[b.status] ?? 999;
                     break;

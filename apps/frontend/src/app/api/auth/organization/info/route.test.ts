@@ -39,12 +39,12 @@ describe('Organization Info API', () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: userId } }, error: null });
     
     // Mock database responses
-    mockFrom.mockImplementation((table) => {
+    mockFrom.mockImplementation((table: string) => {
       if (table === 'organization_members') {
         return {
           select: () => ({
-            eq: (field1, val1) => ({
-              eq: (field2, val2) => ({
+            eq: (_field1: string, val1: unknown) => ({
+              eq: (_field2: string, val2: unknown) => ({
                 single: () => {
                   // Check if we are querying for the specific org and user
                   if (val1 === userId && val2 === orgId) {
@@ -62,7 +62,7 @@ describe('Organization Info API', () => {
       if (table === 'organizations') {
         return {
             select: () => ({
-              eq: (field, val) => ({
+              eq: (_field: string, val: unknown) => ({
                 single: () => {
                     if (val === orgId) {
                         return Promise.resolve({ 
@@ -105,7 +105,7 @@ describe('Organization Info API', () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: userId } }, error: null });
 
     // Mock database responses
-    mockFrom.mockImplementation((table) => {
+    mockFrom.mockImplementation((table: string) => {
         if (table === 'users') {
             return {
                 select: () => ({
@@ -120,7 +120,7 @@ describe('Organization Info API', () => {
         if (table === 'organizations') {
             return {
                 select: () => ({
-                    eq: (field, val) => ({
+                    eq: (_field: string, val: unknown) => ({
                         single: () => {
                             if (val === defaultOrgId) {
                                 return Promise.resolve({ 
@@ -164,7 +164,7 @@ describe('Organization Info API', () => {
     mockGetUser.mockResolvedValue({ data: { user: { id: userId } }, error: null });
 
     // Mock database responses
-    mockFrom.mockImplementation((table) => {
+    mockFrom.mockImplementation((table: string) => {
         if (table === 'users') {
             return {
                 select: () => ({
@@ -199,7 +199,7 @@ describe('Organization Info API', () => {
         if (table === 'organizations') {
             return {
                 select: () => ({
-                    eq: (field, val) => ({
+                    eq: (_field: string, val: unknown) => ({
                         single: () => {
                             if (val === firstOrgId) {
                                 return Promise.resolve({ 

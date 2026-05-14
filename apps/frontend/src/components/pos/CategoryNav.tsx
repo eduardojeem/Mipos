@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 interface Category {
   id: string;
   name: string;
-  icon: string;
+  icon?: string | null;
 }
 
 interface CategoryNavProps {
@@ -102,7 +102,7 @@ export default function CategoryNav({ categories, selectedCategory, onSelectCate
                 : "bg-white dark:bg-slate-800 text-gray-500 dark:text-slate-400 border-gray-100 dark:border-slate-700 hover:border-green-500/50 hover:bg-green-50 dark:hover:bg-green-900/10 active:scale-95"
             )}
           >
-            <span className="text-base leading-none translate-y-[1px]">{category.icon}</span>
+            <span className="text-base leading-none translate-y-[1px]">{category.icon || '#'}</span>
             <span>{category.name}</span>
           </button>
         ))}

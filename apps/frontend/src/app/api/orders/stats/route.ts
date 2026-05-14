@@ -85,17 +85,19 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const todayOrders = (todayRevenueRows.data || []).length;
-    const todayRevenue = (todayRevenueRows.data || []).reduce(
-      (sum: number, order: { total: number | null }) => sum + Number(order.total || 0),
+    const todayRevenueData = (todayRevenueRows.data || []) as unknown as Array<{ total: number | null }>;
+    const averageRevenueData = (averageRows.data || []) as unknown as Array<{ total: number | null }>;
+
+    const todayOrders = todayRevenueData.length;
+    const todayRevenue = todayRevenueData.reduce(
+      (sum: number, order) => sum + Number(order.total || 0),
       0
     );
-    const allOrderTotals = averageRows.data || [];
-    const avgOrderValue = allOrderTotals.length
-      ? allOrderTotals.reduce(
-          (sum: number, order: { total: number | null }) => sum + Number(order.total || 0),
+    const avgOrderValue = averageRevenueData.length
+      ? averageRevenueData.reduce(
+          (sum: number, order) => sum + Number(order.total || 0),
           0
-        ) / allOrderTotals.length
+        ) / averageRevenueData.length
       : 0;
 
     return NextResponse.json({

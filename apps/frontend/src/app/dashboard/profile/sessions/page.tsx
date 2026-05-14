@@ -3,8 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { formatDistanceToNow } from 'date-fns'
-import { es } from 'date-fns/locale'
+import { formatDistanceToNow } from 'date-fns/formatDistanceToNow'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -86,7 +85,7 @@ function getDeviceLabel(deviceType: ProfileSession['deviceType']) {
 function formatRelativeDate(value?: string) {
   if (!value) return 'Sin actividad'
   try {
-    return formatDistanceToNow(new Date(value), { addSuffix: true, locale: es })
+    return formatDistanceToNow(new Date(value), { addSuffix: true })
   } catch {
     return 'Fecha invalida'
   }

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
+const COMPLETED_SALE_STATUS = 'COMPLETED' as const;
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient();
@@ -24,38 +26,38 @@ export async function GET(request: NextRequest) {
       // Today's sales
       supabase
         .from('sales')
-        .select('total_amount')
+        .select('total_amount:total')
         .gte('created_at', today)
-        .eq('status', 'completed'),
+        .eq('status', COMPLETED_SALE_STATUS),
 
       // This week's sales
       supabase
         .from('sales')
-        .select('total_amount')
+        .select('total_amount:total')
         .gte('created_at', startOfWeek)
-        .eq('status', 'completed'),
+        .eq('status', COMPLETED_SALE_STATUS),
 
       // This month's sales
       supabase
         .from('sales')
-        .select('total_amount')
+        .select('total_amount:total')
         .gte('created_at', startOfMonth)
-        .eq('status', 'completed'),
+        .eq('status', COMPLETED_SALE_STATUS),
 
       // Last month's sales for comparison
       supabase
         .from('sales')
-        .select('total_amount')
+        .select('total_amount:total')
         .gte('created_at', lastMonthStart)
         .lte('created_at', lastMonthEnd)
-        .eq('status', 'completed'),
+        .eq('status', COMPLETED_SALE_STATUS),
 
       // Payment methods analysis
       supabase
         .from('sales')
         .select('payment_method')
         .gte('created_at', startOfMonth)
-        .eq('status', 'completed')
+        .eq('status', COMPLETED_SALE_STATUS)
     ]);
 
     // Calculate metrics

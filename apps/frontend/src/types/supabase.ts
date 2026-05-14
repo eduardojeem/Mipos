@@ -135,10 +135,10 @@ export interface Supplier {
   id: string;
   name: string;
   contact_name?: string;
-  email?: string;
-  phone?: string;
-  address?: string;
-  tax_id?: string;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  tax_id?: string | null;
   is_active: boolean;
   organization_id?: string;
   created_at: string;
@@ -148,21 +148,22 @@ export interface Supplier {
 export interface Customer {
   id: string;
   name: string;
-  email?: string;
-  phone?: string;
-  address?: string;
-  tax_id?: string;
-  ruc?: string;
-  customer_code?: string;
-  customer_type: 'RETAIL' | 'WHOLESALE';
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  tax_id?: string | null;
+  ruc?: string | null;
+  customer_code?: string | null;
+  customer_type: "RETAIL" | "WHOLESALE";
   status: string;
   is_active: boolean;
-  birth_date?: string;
-  notes?: string;
+  birth_date?: string | null;
+  notes?: string | null;
   total_purchases?: number;
   total_orders?: number;
-  last_purchase?: string;
+  last_purchase?: string | null;
   wholesale_discount?: number; // Descuento mayorista por defecto
+  organization_id?: string | null;
   min_wholesale_quantity?: number; // Cantidad mínima para precio mayorista
   created_at: string;
   updated_at: string;
@@ -174,14 +175,32 @@ export interface Customer {
 
 export interface Sale {
   id: string;
-  customer_id?: string;
-  user_id: string;
+  order_number?: string | null;
+  customer_id?: string | null;
+  user_id?: string | null;
+  customer_name?: string | null;
+  customer_email?: string | null;
+  customer_phone?: string | null;
+  customer_address?: string | null;
+  organization_id?: string | null;
+  subtotal?: number;
   total_amount: number;
+  total?: number;
   tax_amount: number;
+  tax?: number;
   discount_amount: number;
-  discount_type?: 'PERCENTAGE' | 'FIXED_AMOUNT';
+  discount?: number;
+  discount_type?: "PERCENTAGE" | "FIXED_AMOUNT";
   coupon_code?: string;
-  payment_method: 'CASH' | 'CARD' | 'TRANSFER' | 'QR' | 'OTHER' | 'MIXED';
+  payment_method:
+    | "CASH"
+    | "CARD"
+    | "TRANSFER"
+    | "QR"
+    | "OTHER"
+    | "MIXED"
+    | "DIGITAL_WALLET";
+  payment_status?: string | null;
   payment_details?: {
     version?: number;
     primaryMethod?: string;
@@ -196,11 +215,28 @@ export interface Sale {
     change?: number | null;
     transferReference?: string | null;
   };
+  shipping_cost?: number;
+  shipping_region?: string | null;
   branch_id?: string | null;
   pos_id?: string | null;
-  status: 'PENDING' | 'COMPLETED' | 'CANCELLED' | 'REFUNDED';
-  sale_type: 'RETAIL' | 'WHOLESALE'; // Tipo de venta
-  notes?: string;
+  status:
+    | "PENDING"
+    | "CONFIRMED"
+    | "PREPARING"
+    | "READY"
+    | "SHIPPED"
+    | "DELIVERED"
+    | "COMPLETED"
+    | "CANCELLED"
+    | "REFUNDED";
+  order_source?: string | null;
+  sale_type: "RETAIL" | "WHOLESALE"; // Tipo de venta
+  notes?: string | null;
+  date?: string | null;
+  estimated_delivery_date?: string | null;
+  shipped_at?: string | null;
+  delivered_at?: string | null;
+  deleted_at?: string | null;
   created_at: string;
   updated_at: string;
   customer?: Customer;
@@ -228,9 +264,11 @@ export interface SaleItem {
 export interface InventoryMovement {
   id: string;
   product_id: string;
-  movement_type: 'IN' | 'OUT' | 'ADJUSTMENT' | 'TRANSFER';
+  organization_id?: string | null;
+  branch_id?: string | null;
+  movement_type: "IN" | "OUT" | "ADJUSTMENT" | "TRANSFER";
   quantity: number;
-  reference_type?: 'SALE' | 'PURCHASE' | 'ADJUSTMENT' | 'RETURN';
+  reference_type?: "SALE" | "PURCHASE" | "ADJUSTMENT" | "RETURN";
   reference_id?: string;
   notes?: string;
   user_id: string;
@@ -252,7 +290,7 @@ export interface CashSession {
   closing_amount?: number | null;
   expected_amount?: number | null;
   discrepancy_amount?: number | null;
-  status: 'OPEN' | 'CLOSED' | 'CANCELLED';
+  status: "OPEN" | "CLOSED" | "CANCELLED";
   notes?: string | null;
   branch_id?: string | null;
   pos_id?: string | null;
@@ -265,7 +303,7 @@ export interface CashSession {
 export interface CashMovement {
   id: string;
   session_id: string;
-  type: 'IN' | 'OUT' | 'SALE' | 'RETURN' | 'ADJUSTMENT';
+  type: "IN" | "OUT" | "SALE" | "RETURN" | "ADJUSTMENT";
   amount: number;
   reason?: string | null;
   reference_type?: string | null; // e.g., SALE, RETURN, CREDIT_PAYMENT
@@ -288,7 +326,7 @@ export interface CashCount {
 export interface CashDiscrepancy {
   id: string;
   session_id: string;
-  type: 'SHORTAGE' | 'OVERAGE';
+  type: "SHORTAGE" | "OVERAGE";
   amount: number;
   explained: boolean;
   explanation?: string | null;
@@ -307,7 +345,7 @@ export interface BankAccount {
   currency: string;
   current_balance: number;
   available_balance?: number;
-  status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
+  status: "ACTIVE" | "INACTIVE" | "SUSPENDED";
   last_sync_at?: string;
   created_at: string;
   updated_at: string;
@@ -318,11 +356,11 @@ export interface BankTransaction {
   bank_account_id: string;
   txn_date: string; // ISO date
   amount: number;
-  type: 'CREDIT' | 'DEBIT';
+  type: "CREDIT" | "DEBIT";
   description?: string | null;
   reference_id?: string | null;
-  source: 'BANK' | 'ERP' | 'MANUAL';
-  status: 'POSTED' | 'PENDING' | 'DISPUTED';
+  source: "BANK" | "ERP" | "MANUAL";
+  status: "POSTED" | "PENDING" | "DISPUTED";
   created_at: string;
 }
 
@@ -336,7 +374,7 @@ export interface CashReconciliation {
   bank_statement_total: number;
   system_total: number;
   difference: number;
-  status: 'PENDING' | 'MATCHED' | 'DISPUTED';
+  status: "PENDING" | "MATCHED" | "DISPUTED";
   created_by: string;
   created_at: string;
   resolved_at?: string | null;
@@ -350,19 +388,19 @@ export interface CashForecastDaily {
   expected_inflows: number;
   expected_outflows: number;
   expected_closing_balance: number;
-  method?: 'RULE_BASED' | 'SEASONAL' | 'ML';
+  method?: "RULE_BASED" | "SEASONAL" | "ML";
   created_at: string;
 }
 
 export interface CashAlert {
   id: string;
-  alert_type: 'LOW_BALANCE' | 'HIGH_OUTFLOW' | 'UNUSUAL_ACTIVITY' | 'THRESHOLD';
-  entity_type?: 'BANK_ACCOUNT' | 'CASH_SESSION' | 'GLOBAL';
+  alert_type: "LOW_BALANCE" | "HIGH_OUTFLOW" | "UNUSUAL_ACTIVITY" | "THRESHOLD";
+  entity_type?: "BANK_ACCOUNT" | "CASH_SESSION" | "GLOBAL";
   entity_id?: string | null;
   threshold_value?: number | null;
   current_value?: number | null;
-  status: 'ACTIVE' | 'RESOLVED' | 'SNOOZED';
-  severity: 'INFO' | 'WARN' | 'CRITICAL';
+  status: "ACTIVE" | "RESOLVED" | "SNOOZED";
+  severity: "INFO" | "WARN" | "CRITICAL";
   message?: string | null;
   created_at: string;
   resolved_at?: string | null;
@@ -378,7 +416,7 @@ export interface CartItem {
   quantity: number;
 }
 
-export type Theme = 'light' | 'dark' | 'system';
+export type Theme = "light" | "dark" | "system";
 
 export interface CreateCategoryData {
   name: string;
@@ -523,7 +561,7 @@ export interface ProductFilters {
   page?: number;
   limit?: number;
   sort?: string;
-  order?: 'asc' | 'desc';
+  order?: "asc" | "desc";
   // Cosmetic-specific filters
   brand?: string;
   shade?: string;
@@ -553,41 +591,41 @@ export interface SaleFilters {
 // ============================================================================
 
 export enum UserRoleEnum {
-  SUPER_ADMIN = 'SUPER_ADMIN',
-  ADMIN = 'ADMIN',
-  MANAGER = 'MANAGER',
-  CASHIER = 'CASHIER',
-  VIEWER = 'VIEWER'
+  SUPER_ADMIN = "SUPER_ADMIN",
+  ADMIN = "ADMIN",
+  MANAGER = "MANAGER",
+  CASHIER = "CASHIER",
+  VIEWER = "VIEWER",
 }
 
 export enum PaymentMethod {
-  CASH = 'CASH',
-  CARD = 'CARD',
-  TRANSFER = 'TRANSFER',
-  QR = 'QR',
-  OTHER = 'OTHER',
-  MIXED = 'MIXED'
+  CASH = "CASH",
+  CARD = "CARD",
+  TRANSFER = "TRANSFER",
+  QR = "QR",
+  OTHER = "OTHER",
+  MIXED = "MIXED",
 }
 
 export enum SaleStatus {
-  PENDING = 'PENDING',
-  COMPLETED = 'COMPLETED',
-  CANCELLED = 'CANCELLED',
-  REFUNDED = 'REFUNDED'
+  PENDING = "PENDING",
+  COMPLETED = "COMPLETED",
+  CANCELLED = "CANCELLED",
+  REFUNDED = "REFUNDED",
 }
 
 export enum MovementType {
-  IN = 'IN',
-  OUT = 'OUT',
-  ADJUSTMENT = 'ADJUSTMENT',
-  TRANSFER = 'TRANSFER'
+  IN = "IN",
+  OUT = "OUT",
+  ADJUSTMENT = "ADJUSTMENT",
+  TRANSFER = "TRANSFER",
 }
 
 export enum ReferenceType {
-  SALE = 'SALE',
-  PURCHASE = 'PURCHASE',
-  ADJUSTMENT = 'ADJUSTMENT',
-  RETURN = 'RETURN'
+  SALE = "SALE",
+  PURCHASE = "PURCHASE",
+  ADJUSTMENT = "ADJUSTMENT",
+  RETURN = "RETURN",
 }
 
 // ============================================================================
@@ -622,6 +660,34 @@ export interface StoreSettings {
   updated_at?: string;
 }
 
+type SupabaseRow<T extends object = Record<string, any>> = T & {
+  [key: string]: any;
+};
+
+type SupabaseWrite<T extends object = Record<string, any>> = Partial<
+  SupabaseRow<T>
+>;
+
+type SupabaseTable<T extends object = Record<string, any>> = {
+  Row: SupabaseRow<T>;
+  Insert: SupabaseWrite<T>;
+  Update: SupabaseWrite<T>;
+  Relationships: [];
+};
+
+type SupabaseView<T extends object = Record<string, any>> = {
+  Row: SupabaseRow<T>;
+  Relationships: [];
+};
+
+type SupabaseFunction<
+  Args extends Record<string, any> = Record<string, any>,
+  Returns = any,
+> = {
+  Args: Args;
+  Returns: Returns;
+};
+
 // ============================================================================
 // TIPO DATABASE PARA SUPABASE
 // ============================================================================
@@ -629,144 +695,33 @@ export interface StoreSettings {
 export type Database = {
   public: {
     Tables: {
-      users: {
-        Row: User;
-        Insert: Omit<User, 'id' | 'created_at' | 'updated_at'>;
-        Update: Partial<Omit<User, 'id' | 'created_at' | 'updated_at'>>;
-      };
-      roles: {
-        Row: Role;
-        Insert: Omit<Role, 'id' | 'created_at' | 'updated_at'>;
-        Update: Partial<Omit<Role, 'id' | 'created_at' | 'updated_at'>>;
-      };
-      permissions: {
-        Row: Permission;
-        Insert: Omit<Permission, 'id' | 'created_at' | 'updated_at'>;
-        Update: Partial<Omit<Permission, 'id' | 'created_at' | 'updated_at'>>;
-      };
-      user_roles: {
-        Row: UserRole;
-        Insert: Omit<UserRole, 'id' | 'created_at' | 'updated_at'>;
-        Update: Partial<Omit<UserRole, 'id' | 'created_at' | 'updated_at'>>;
-      };
-      categories: {
-        Row: Category;
-        Insert: {
-          name: string;
-          description?: string;
-          is_active: boolean;
-          organization_id?: string;
-        };
-        Update: {
-          name?: string;
-          description?: string;
-          is_active?: boolean;
-          organization_id?: string;
-        };
-      };
-      cash_sessions: {
-        Row: CashSession;
-        Insert: Omit<CashSession, 'id' | 'created_at' | 'updated_at'>;
-        Update: Partial<Omit<CashSession, 'id' | 'created_at' | 'updated_at'>>;
-      };
-      cash_movements: {
-        Row: CashMovement;
-        Insert: Omit<CashMovement, 'id' | 'created_at'>;
-        Update: Partial<Omit<CashMovement, 'id' | 'created_at'>>;
-      };
-      cash_counts: {
-        Row: CashCount;
-        Insert: Omit<CashCount, 'id' | 'created_at'>;
-        Update: Partial<Omit<CashCount, 'id' | 'created_at'>>;
-      };
-      cash_discrepancies: {
-        Row: CashDiscrepancy;
-        Insert: Omit<CashDiscrepancy, 'id' | 'created_at'>;
-        Update: Partial<Omit<CashDiscrepancy, 'id' | 'created_at'>>;
-      };
-      products: {
-        Row: Product;
-        Insert: Omit<Product, 'id' | 'created_at' | 'updated_at'>;
-        Update: Partial<Omit<Product, 'id' | 'created_at' | 'updated_at'>>;
-      };
-      suppliers: {
-        Row: Supplier;
-        Insert: {
-          name: string;
-          contact_name?: string;
-          email?: string;
-          phone?: string;
-          address?: string;
-          tax_id?: string;
-          is_active: boolean;
-          organization_id?: string;
-        };
-        Update: {
-          name?: string;
-          contact_name?: string;
-          email?: string;
-          phone?: string;
-          address?: string;
-          tax_id?: string;
-          is_active?: boolean;
-          organization_id?: string;
-        };
-      };
-      customers: {
-        Row: Customer;
-        Insert: Omit<Customer, 'id' | 'created_at' | 'updated_at'>;
-        Update: Partial<Omit<Customer, 'id' | 'created_at' | 'updated_at'>>;
-      };
-      store_settings: {
-        Row: StoreSettings;
-        Insert: Omit<StoreSettings, 'id' | 'updated_at'>;
-        Update: Partial<Omit<StoreSettings, 'id'>>;
-      };
-      sales: {
-        Row: Sale;
-        Insert: Omit<Sale, 'id' | 'created_at' | 'updated_at'>;
-        Update: Partial<Omit<Sale, 'id' | 'created_at' | 'updated_at'>>;
-      };
-      sale_items: {
-        Row: SaleItem;
-        Insert: Omit<SaleItem, 'id' | 'created_at' | 'updated_at'>;
-        Update: Partial<Omit<SaleItem, 'id' | 'created_at' | 'updated_at'>>;
-      };
-      inventory_movements: {
-        Row: InventoryMovement;
-        Insert: Omit<InventoryMovement, 'id' | 'created_at' | 'updated_at'>;
-        Update: Partial<Omit<InventoryMovement, 'id' | 'created_at' | 'updated_at'>>;
-      };
-      bank_accounts: {
-        Row: BankAccount;
-        Insert: Omit<BankAccount, 'id' | 'created_at' | 'updated_at'>;
-        Update: Partial<Omit<BankAccount, 'id' | 'created_at' | 'updated_at'>>;
-      };
-      bank_transactions: {
-        Row: BankTransaction;
-        Insert: Omit<BankTransaction, 'id' | 'created_at'>;
-        Update: Partial<Omit<BankTransaction, 'id' | 'created_at'>>;
-      };
-      cash_reconciliations: {
-        Row: CashReconciliation;
-        Insert: Omit<CashReconciliation, 'id' | 'created_at' | 'resolved_at'>;
-        Update: Partial<Omit<CashReconciliation, 'id' | 'created_at'>>;
-      };
-      cash_forecast_daily: {
-        Row: CashForecastDaily;
-        Insert: Omit<CashForecastDaily, 'id' | 'created_at'>;
-        Update: Partial<Omit<CashForecastDaily, 'id' | 'created_at'>>;
-      };
-      cash_alerts: {
-        Row: CashAlert;
-        Insert: Omit<CashAlert, 'id' | 'created_at' | 'resolved_at'>;
-        Update: Partial<Omit<CashAlert, 'id' | 'created_at'>>;
-      };
+      [key: string]: SupabaseTable;
+      users: SupabaseTable<User>;
+      roles: SupabaseTable<Role>;
+      permissions: SupabaseTable<Permission>;
+      user_roles: SupabaseTable<UserRole>;
+      categories: SupabaseTable<Category>;
+      cash_sessions: SupabaseTable<CashSession>;
+      cash_movements: SupabaseTable<CashMovement>;
+      cash_counts: SupabaseTable<CashCount>;
+      cash_discrepancies: SupabaseTable<CashDiscrepancy>;
+      products: SupabaseTable<Product>;
+      suppliers: SupabaseTable<Supplier>;
+      customers: SupabaseTable<Customer>;
+      store_settings: SupabaseTable<StoreSettings>;
+      sales: SupabaseTable<Sale>;
+      sale_items: SupabaseTable<SaleItem>;
+      inventory_movements: SupabaseTable<InventoryMovement>;
+      bank_accounts: SupabaseTable<BankAccount>;
+      bank_transactions: SupabaseTable<BankTransaction>;
+      cash_reconciliations: SupabaseTable<CashReconciliation>;
+      cash_forecast_daily: SupabaseTable<CashForecastDaily>;
+      cash_alerts: SupabaseTable<CashAlert>;
     };
-    Views: { [key: string]: unknown };
-    Functions: { [key: string]: unknown };
-    Enums: { [key: string]: unknown };
-    CompositeTypes: { [key: string]: unknown };
+    Views: { [key: string]: SupabaseView };
+    Functions: { [key: string]: SupabaseFunction };
+    Enums: { [key: string]: string };
+    CompositeTypes: { [key: string]: Record<string, any> };
   };
 };
 
@@ -775,5 +730,5 @@ export const SupabaseEnums = {
   PaymentMethod,
   SaleStatus,
   MovementType,
-  ReferenceType
+  ReferenceType,
 };

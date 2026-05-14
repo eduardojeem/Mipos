@@ -414,6 +414,9 @@ export async function POST(request: NextRequest) {
 }
 
 // GET /api/pos/sales - Get recent sales for POS
+const POS_SALE_STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SHIPPED', 'DELIVERED', 'COMPLETED', 'CANCELLED', 'REFUNDED'] as const;
+type PosSaleStatus = typeof POS_SALE_STATUSES[number];
+
 export async function GET(request: NextRequest) {
   try {
     const auth = await requirePOSPermissions(request, ['pos.access']);
@@ -423,7 +426,10 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100);
-    const status = searchParams.get('status') || 'completed';
+    const statusParam = searchParams.get('status');
+    const status: PosSaleStatus = statusParam && POS_SALE_STATUSES.includes(statusParam as PosSaleStatus)
+      ? statusParam as PosSaleStatus
+      : 'COMPLETED';
 
     const supabase = await createClient();
     const headerOrgId = normalizeString(

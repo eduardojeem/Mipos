@@ -4,7 +4,7 @@
  */
 
 // Componente principal
-export { default as ProductForm } from './ProductFormRefactored';
+export { default as ProductForm } from './ProductForm';
 
 // Hooks
 export { useProductForm } from './hooks/useProductForm';

@@ -167,6 +167,55 @@ export class SupabaseRealtimeService {
   private cacheTTL = 30000;
   private log = createLogger('supabase-realtime');
 
+  private getSelectedOrganizationId(): string | null {
+    try {
+      if (typeof window === 'undefined') return null;
+      const raw = window.localStorage.getItem('selected_organization');
+      if (!raw) return null;
+
+      try {
+        const parsed = JSON.parse(raw);
+        const orgId = parsed?.id || parsed?.organization_id || null;
+        return orgId ? String(orgId).trim() : null;
+      } catch {
+        const orgId = String(raw).trim();
+        return orgId || null;
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  private buildRealtimeConfig(
+    table: string,
+    options?: {
+      organizationColumn?: string | null;
+      extraFilter?: string;
+    }
+  ) {
+    const config = {
+      event: '*' as const,
+      schema: 'public' as const,
+      table,
+    };
+
+    const filters: string[] = [];
+    const organizationColumn = options?.organizationColumn ?? 'organization_id';
+    const organizationId = organizationColumn ? this.getSelectedOrganizationId() : null;
+
+    if (organizationColumn && organizationId) {
+      filters.push(`${organizationColumn}=eq.${organizationId}`);
+    }
+
+    if (options?.extraFilter) {
+      filters.push(options.extraFilter);
+    }
+
+    return filters.length > 0
+      ? { ...config, filter: filters.join(',') }
+      : config;
+  }
+
   /**
    * Suscribirse a cambios en tiempo real de productos
    */
@@ -175,11 +224,7 @@ export class SupabaseRealtimeService {
       .channel('products-changes')
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'products'
-        },
+        this.buildRealtimeConfig('products'),
         (payload: RealtimePostgresChangesPayload<Product>) => {
           const changePayload: ProductChangePayload = {
             eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
@@ -243,11 +288,7 @@ export class SupabaseRealtimeService {
       .channel('categories-changes')
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'categories'
-        },
+        this.buildRealtimeConfig('categories'),
         (payload: RealtimePostgresChangesPayload<Category>) => {
           const changePayload: CategoryChangePayload = {
             eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
@@ -272,7 +313,7 @@ export class SupabaseRealtimeService {
       .channel(channelName)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'categories' },
+        this.buildRealtimeConfig('categories'),
         (payload: RealtimePostgresChangesPayload<Category>) => {
           try {
             const changePayload: CategoryChangePayload = {
@@ -321,7 +362,7 @@ export class SupabaseRealtimeService {
       .channel(channelName)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'products' },
+        this.buildRealtimeConfig('products'),
         (payload: RealtimePostgresChangesPayload<Product>) => {
           try {
             const changePayload: ProductChangePayload = {
@@ -370,7 +411,7 @@ export class SupabaseRealtimeService {
       .channel(channelName)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'sales' },
+        this.buildRealtimeConfig('sales'),
         (payload: RealtimePostgresChangesPayload<Sale>) => {
           try {
             const changePayload: SaleChangePayload = {
@@ -540,7 +581,7 @@ export class SupabaseRealtimeService {
       .channel(`inventory-movements-${productId}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'inventory_movements', filter: `product_id=eq.${productId}` },
+        this.buildRealtimeConfig('inventory_movements', { extraFilter: `product_id=eq.${productId}` }),
         (payload: RealtimePostgresChangesPayload<InventoryMovement>) => {
           const changePayload: InventoryMovementChangePayload = {
             eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
@@ -639,7 +680,7 @@ export class SupabaseRealtimeService {
       .channel('sales-changes')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'sales' },
+        this.buildRealtimeConfig('sales'),
         (payload: RealtimePostgresChangesPayload<Sale>) => {
           const change: SaleChangePayload = {
             eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
@@ -666,7 +707,7 @@ export class SupabaseRealtimeService {
       .channel('inventory-movements-changes')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'inventory_movements' },
+        this.buildRealtimeConfig('inventory_movements'),
         (payload: RealtimePostgresChangesPayload<InventoryMovement>) => {
           const change: InventoryMovementChangePayload = {
             eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
@@ -749,7 +790,7 @@ export class SupabaseRealtimeService {
       .channel(channelName)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'inventory_movements', filter: 'quantity=gt.0' },
+        this.buildRealtimeConfig('inventory_movements', { extraFilter: 'quantity=gt.0' }),
         (payload: RealtimePostgresChangesPayload<InventoryMovement>) => {
           try {
             const change: InventoryMovementChangePayload = {
@@ -972,11 +1013,7 @@ export class SupabaseRealtimeService {
       .channel('customers-changes')
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'customers'
-        },
+        this.buildRealtimeConfig('customers'),
         (payload: RealtimePostgresChangesPayload<Customer>) => {
           const changePayload: CustomerChangePayload = {
             eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
@@ -1001,7 +1038,7 @@ export class SupabaseRealtimeService {
       .channel(channelName)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'customers' },
+        this.buildRealtimeConfig('customers'),
         (payload: RealtimePostgresChangesPayload<Customer>) => {
           try {
             const changePayload: CustomerChangePayload = {
@@ -1381,245 +1418,132 @@ export class SupabaseRealtimeService {
   }
 
   /**
-   * Suscripciones en tiempo real para todas las entidades clave
-   * - products, categories, customers, sales, sale_items, inventory_movements, roles, permissions, cash_sessions, cash_movements
+   * Canal multiplexado para el coordinador de sync.
+   * Consolida las entidades principales en un unico canal WebSocket.
+   */
+  createSyncMultiplexedChannel(callback: (payload: EntityChangePayload) => void): { unsubscribe: () => void } {
+    const channelName = 'sync-multiplexed';
+    const existing = this.subscriptions.get(channelName);
+    if (existing) {
+      try {
+        this.supabase.removeChannel(existing);
+      } catch {}
+      this.subscriptions.delete(channelName);
+    }
+
+    let channel = this.supabase.channel(channelName);
+
+    channel = channel
+      .on('postgres_changes', this.buildRealtimeConfig('products'), (payload: RealtimePostgresChangesPayload<Product>) => {
+        this.productCache.clear();
+        callback({
+          entity: 'products',
+          eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
+          new: isProductRow(payload.new) ? (payload.new as unknown as RowData) : undefined,
+          old: isProductRow(payload.old) ? (payload.old as unknown as RowData) : undefined,
+        });
+      })
+      .on('postgres_changes', this.buildRealtimeConfig('categories'), (payload: RealtimePostgresChangesPayload<Category>) => {
+        callback({
+          entity: 'categories',
+          eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
+          new: isCategoryRow(payload.new) ? (payload.new as unknown as RowData) : undefined,
+          old: isCategoryRow(payload.old) ? (payload.old as unknown as RowData) : undefined,
+        });
+      })
+      .on('postgres_changes', this.buildRealtimeConfig('customers'), (payload: RealtimePostgresChangesPayload<Customer>) => {
+        callback({
+          entity: 'customers',
+          eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
+          new: isCustomerRow(payload.new) ? (payload.new as unknown as RowData) : undefined,
+          old: isCustomerRow(payload.old) ? (payload.old as unknown as RowData) : undefined,
+        });
+      })
+      .on('postgres_changes', this.buildRealtimeConfig('sales'), (payload: RealtimePostgresChangesPayload<Sale>) => {
+        callback({
+          entity: 'sales',
+          eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
+          new: isSaleRow(payload.new) ? (payload.new as unknown as RowData) : undefined,
+          old: isSaleRow(payload.old) ? (payload.old as unknown as RowData) : undefined,
+        });
+      })
+      .on('postgres_changes', this.buildRealtimeConfig('sale_items', { organizationColumn: null }), (payload: RealtimePostgresChangesPayload<SaleItem>) => {
+        callback({
+          entity: 'sale_items',
+          eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
+          new: isSaleItemRow(payload.new) ? (payload.new as unknown as RowData) : undefined,
+          old: isSaleItemRow(payload.old) ? (payload.old as unknown as RowData) : undefined,
+        });
+      })
+      .on('postgres_changes', this.buildRealtimeConfig('inventory_movements'), (payload: RealtimePostgresChangesPayload<InventoryMovement>) => {
+        callback({
+          entity: 'inventory',
+          eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
+          new: isInventoryMovementRow(payload.new) ? (payload.new as unknown as RowData) : undefined,
+          old: isInventoryMovementRow(payload.old) ? (payload.old as unknown as RowData) : undefined,
+        });
+      })
+      .on('postgres_changes', this.buildRealtimeConfig('roles', { organizationColumn: null, extraFilter: 'is_active=eq.true' }), (payload: RealtimePostgresChangesPayload<RoleRow>) => {
+        callback({
+          entity: 'roles',
+          eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
+          new: isRoleRow(payload.new) ? (payload.new as unknown as RowData) : undefined,
+          old: isRoleRow(payload.old) ? (payload.old as unknown as RowData) : undefined,
+        });
+      })
+      .on('postgres_changes', this.buildRealtimeConfig('permissions', { organizationColumn: null }), (payload: RealtimePostgresChangesPayload<PermissionRow>) => {
+        callback({
+          entity: 'permissions',
+          eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
+          new: isPermissionRow(payload.new) ? (payload.new as unknown as RowData) : undefined,
+          old: isPermissionRow(payload.old) ? (payload.old as unknown as RowData) : undefined,
+        });
+      })
+      .on('postgres_changes', this.buildRealtimeConfig('cash_sessions', { organizationColumn: null }), (payload: RealtimePostgresChangesPayload<CashSessionRow>) => {
+        callback({
+          entity: 'cash_sessions',
+          eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
+          new: isCashSessionRow(payload.new) ? (payload.new as unknown as RowData) : undefined,
+          old: isCashSessionRow(payload.old) ? (payload.old as unknown as RowData) : undefined,
+        });
+      })
+      .on('postgres_changes', this.buildRealtimeConfig('cash_movements', { organizationColumn: null }), (payload: RealtimePostgresChangesPayload<CashMovementRow>) => {
+        callback({
+          entity: 'cash_movements',
+          eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
+          new: isCashMovementRow(payload.new) ? (payload.new as unknown as RowData) : undefined,
+          old: isCashMovementRow(payload.old) ? (payload.old as unknown as RowData) : undefined,
+        });
+      });
+
+    channel.subscribe((status: string) => {
+      this.emitConnectionStatus(status);
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        this.log.warn('Sync multiplexed channel error', { status });
+      }
+    });
+
+    this.subscriptions.set(channelName, channel);
+
+    return {
+      unsubscribe: () => {
+        try {
+          this.supabase.removeChannel(channel);
+          this.subscriptions.delete(channelName);
+        } catch (err) {
+          this.log.warn('Error removing sync multiplexed channel', { err });
+        }
+      },
+    };
+  }
+
+  /**
+   * Compatibilidad: expone las entidades clave como una suscripcion consolidada.
    */
   subscribeToAllEntities(callback: (payload: EntityChangePayload) => void) {
-    let orgId: string | null = null;
-    let orgIds: string[] = [];
-    try {
-      if (typeof window !== 'undefined') {
-        const raw = window.localStorage.getItem('selected_organization');
-        if (raw) {
-          try {
-            const parsed = JSON.parse(raw);
-            orgId = parsed?.id || parsed?.organization_id || null;
-          } catch {
-            orgId = raw;
-          }
-        }
-      }
-      // Resolve orgIds asynchronously without blocking subscription creation
-      const ses = this.supabase.auth.getSession();
-      if (!orgId && ses && typeof ses.then === 'function') {
-        ses
-          .then((res: unknown) => {
-            const r = res as { data?: { session?: { user?: { id?: string } }; user?: { id?: string } } } | null;
-            const uid = r?.data?.session?.user?.id ?? r?.data?.user?.id ?? null;
-            if (uid) {
-              return this.supabase
-                .from('organization_members')
-                .select('organization_id')
-                .eq('user_id', uid);
-            }
-            return null;
-          })
-          .then((r: unknown) => {
-            const resp = r as { data?: Array<{ organization_id: string }> } | null;
-            if (resp?.data) {
-              orgIds = (resp.data).map((m) => String(m.organization_id)).filter(Boolean);
-              if (!orgId && orgIds.length === 1) orgId = orgIds[0];
-            }
-          })
-          .catch(() => { /* no-op */ });
-      }
-    } catch { /* no-op */ }
-    const orgFilter = orgId && String(orgId).trim() ? `organization_id=eq.${String(orgId).trim()}` : undefined;
-
-    const productsSub = this.supabase
-      .channel('all-products')
-      .on(
-        'postgres_changes',
-        orgFilter ? { event: '*', schema: 'public', table: 'products', filter: orgFilter } : { event: '*', schema: 'public', table: 'products' },
-        (payload: RealtimePostgresChangesPayload<Product>) => {
-          if (orgIds.length > 0) {
-            const oid = (payload.new as Record<string, unknown>)?.['organization_id'] || (payload.old as Record<string, unknown>)?.['organization_id'];
-            if (oid && !orgIds.includes(String(oid))) return;
-          }
-          const change: EntityChangePayload = {
-            entity: 'products',
-            eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
-            new: isProductRow(payload.new) ? (payload.new as unknown as RowData) : undefined,
-            old: isProductRow(payload.old) ? (payload.old as unknown as RowData) : undefined,
-          };
-          callback(change);
-        }
-      )
-      .subscribe();
-    this.subscriptions.set('all:products', productsSub);
-
-    // categories
-    const categoriesSub = this.supabase
-      .channel('all-categories')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'categories' },
-        (payload: RealtimePostgresChangesPayload<Category>) => {
-          const change: EntityChangePayload = {
-            entity: 'categories',
-            eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
-            new: isCategoryRow(payload.new) ? (payload.new as unknown as RowData) : undefined,
-            old: isCategoryRow(payload.old) ? (payload.old as unknown as RowData) : undefined,
-          };
-          callback(change);
-        }
-      )
-      .subscribe();
-    this.subscriptions.set('all:categories', categoriesSub);
-
-    // customers
-    const customersSub = this.supabase
-      .channel('all-customers')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'customers' },
-        (payload: RealtimePostgresChangesPayload<Customer>) => {
-          const change: EntityChangePayload = {
-            entity: 'customers',
-            eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
-            new: isCustomerRow(payload.new) ? (payload.new as unknown as RowData) : undefined,
-            old: isCustomerRow(payload.old) ? (payload.old as unknown as RowData) : undefined,
-          };
-          callback(change);
-        }
-      )
-      .subscribe();
-    this.subscriptions.set('all:customers', customersSub);
-
-    // sales
-    const salesSub = this.supabase
-      .channel('all-sales')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'sales' },
-        (payload: RealtimePostgresChangesPayload<Sale>) => {
-          const change: EntityChangePayload = {
-            entity: 'sales',
-            eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
-            new: isSaleRow(payload.new) ? (payload.new as unknown as RowData) : undefined,
-            old: isSaleRow(payload.old) ? (payload.old as unknown as RowData) : undefined,
-          };
-          callback(change);
-        }
-      )
-      .subscribe();
-    this.subscriptions.set('all:sales', salesSub);
-
-    // sale_items
-    const saleItemsSub = this.supabase
-      .channel('all-sale-items')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'sale_items' },
-        (payload: RealtimePostgresChangesPayload<SaleItem>) => {
-          const change: EntityChangePayload = {
-            entity: 'sale_items',
-            eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
-            new: isSaleItemRow(payload.new) ? (payload.new as unknown as RowData) : undefined,
-            old: isSaleItemRow(payload.old) ? (payload.old as unknown as RowData) : undefined,
-          };
-          callback(change);
-        }
-      )
-      .subscribe();
-    this.subscriptions.set('all:sale_items', saleItemsSub);
-
-    // inventory_movements
-    const inventorySub = this.supabase
-      .channel('all-inventory-movements')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'inventory_movements' },
-        (payload: RealtimePostgresChangesPayload<InventoryMovement>) => {
-          const change: EntityChangePayload = {
-            entity: 'inventory',
-            eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
-            new: isInventoryMovementRow(payload.new) ? (payload.new as unknown as RowData) : undefined,
-            old: isInventoryMovementRow(payload.old) ? (payload.old as unknown as RowData) : undefined,
-          };
-          callback(change);
-        }
-      )
-      .subscribe();
-    this.subscriptions.set('all:inventory_movements', inventorySub);
-
-    // roles
-    const rolesSub = this.supabase
-      .channel('all-roles')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'roles' },
-        (payload: RealtimePostgresChangesPayload<RoleRow>) => {
-          const change: EntityChangePayload = {
-            entity: 'roles',
-            eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
-            new: isRoleRow(payload.new) ? (payload.new as unknown as RowData) : undefined,
-            old: isRoleRow(payload.old) ? (payload.old as unknown as RowData) : undefined,
-          };
-          callback(change);
-        }
-      )
-      .subscribe();
-    this.subscriptions.set('all:roles', rolesSub);
-
-    // permissions
-    const permissionsSub = this.supabase
-      .channel('all-permissions')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'permissions' },
-        (payload: RealtimePostgresChangesPayload<PermissionRow>) => {
-          const change: EntityChangePayload = {
-            entity: 'permissions',
-            eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
-            new: isPermissionRow(payload.new) ? (payload.new as unknown as RowData) : undefined,
-            old: isPermissionRow(payload.old) ? (payload.old as unknown as RowData) : undefined,
-          };
-          callback(change);
-        }
-      )
-      .subscribe();
-    this.subscriptions.set('all:permissions', permissionsSub);
-
-    // cash_sessions
-    const cashSessionsSub = this.supabase
-      .channel('all-cash-sessions')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'cash_sessions' },
-        (payload: RealtimePostgresChangesPayload<CashSessionRow>) => {
-          const change: EntityChangePayload = {
-            entity: 'cash_sessions',
-            eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
-            new: isCashSessionRow(payload.new) ? (payload.new as unknown as RowData) : undefined,
-            old: isCashSessionRow(payload.old) ? (payload.old as unknown as RowData) : undefined,
-          };
-          callback(change);
-        }
-      )
-      .subscribe();
-    this.subscriptions.set('all:cash_sessions', cashSessionsSub);
-
-    // cash_movements
-    const cashMovementsSub = this.supabase
-      .channel('all-cash-movements')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'cash_movements' },
-        (payload: RealtimePostgresChangesPayload<CashMovementRow>) => {
-          const change: EntityChangePayload = {
-            entity: 'cash_movements',
-            eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
-            new: isCashMovementRow(payload.new) ? (payload.new as unknown as RowData) : undefined,
-            old: isCashMovementRow(payload.old) ? (payload.old as unknown as RowData) : undefined,
-          };
-          callback(change);
-        }
-      )
-      .subscribe();
-    this.subscriptions.set('all:cash_movements', cashMovementsSub);
-
-    return [productsSub, categoriesSub, customersSub, salesSub, saleItemsSub, inventorySub, rolesSub, permissionsSub, cashSessionsSub, cashMovementsSub];
+    this.createSyncMultiplexedChannel(callback);
+    const channel = this.subscriptions.get('sync-multiplexed');
+    return channel ? [channel] : [];
   }
 
   /**
@@ -2353,12 +2277,15 @@ export class SupabaseRealtimeService {
     }
 
     let channel = this.supabase.channel(channelName);
+    const salesConfig = this.buildRealtimeConfig('sales');
+    const productsConfig = this.buildRealtimeConfig('products');
+    const inventoryConfig = this.buildRealtimeConfig('inventory_movements');
 
     // Ventas
     if (handlers.onSaleChange) {
       channel = channel.on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'sales' },
+        salesConfig,
         (payload: RealtimePostgresChangesPayload<Sale>) => {
           handlers.onSaleChange!({
             eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
@@ -2388,7 +2315,7 @@ export class SupabaseRealtimeService {
     if (handlers.onInventoryChange) {
       channel = channel.on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'inventory_movements' },
+        inventoryConfig,
         (payload: RealtimePostgresChangesPayload<InventoryMovement>) => {
           handlers.onInventoryChange!({
             eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
@@ -2403,7 +2330,7 @@ export class SupabaseRealtimeService {
     if (handlers.onProductChange) {
       channel = channel.on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'products' },
+        productsConfig,
         (payload: RealtimePostgresChangesPayload<Product>) => {
           this.productCache.clear(); // Invalida caché local
           handlers.onProductChange!({

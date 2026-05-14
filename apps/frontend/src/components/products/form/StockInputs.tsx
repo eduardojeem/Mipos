@@ -2,7 +2,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { Package, AlertCircle, CheckCircle, XCircle } from 'lucide-react'
-import { ValidationIndicator } from '../ProductForm'
+import { ValidationIndicator } from './ValidationIndicator'
 import { cn } from '@/lib/utils'
 
 export default function StockInputs({ register, errors, touchedFields }: any) {

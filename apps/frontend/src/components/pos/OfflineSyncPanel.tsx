@@ -16,8 +16,7 @@ import {
   ChevronUp,
   Database
 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
-import { es } from 'date-fns/locale';
+import { formatDistanceToNow } from 'date-fns/formatDistanceToNow';
 import { cn } from '@/lib/utils';
 import {
   Collapsible,
@@ -140,7 +139,7 @@ export function OfflineSyncPanel({ className }: OfflineSyncPanelProps) {
                 </span>
                 <span className="font-medium truncate">
                   {lastSync
-                    ? formatDistanceToNow(new Date(lastSync), { addSuffix: true, locale: es })
+                    ? formatDistanceToNow(new Date(lastSync), { addSuffix: true })
                     : 'Nunca'
                   }
                 </span>

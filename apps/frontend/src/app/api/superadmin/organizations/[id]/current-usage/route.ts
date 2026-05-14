@@ -30,11 +30,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const snapshot = await getSubscriptionSnapshot(id)
     const usage = await getUsageSnapshot(id)
     const { start, end } = monthWindow()
+    const planLimits = snapshot.plan.limits ?? {}
 
-    const limitUsers = normalizeLimitValue(snapshot.plan.limits.maxUsers)
-    const limitProducts = normalizeLimitValue(snapshot.plan.limits.maxProducts)
-    const limitLocations = normalizeLimitValue(snapshot.plan.limits.maxLocations)
-    const limitTransactions = normalizeLimitValue(snapshot.plan.limits.maxTransactionsPerMonth)
+    const limitUsers = normalizeLimitValue(planLimits.maxUsers)
+    const limitProducts = normalizeLimitValue(planLimits.maxProducts)
+    const limitLocations = normalizeLimitValue(planLimits.maxLocations)
+    const limitTransactions = normalizeLimitValue(planLimits.maxTransactionsPerMonth)
 
     return NextResponse.json({
       success: true,

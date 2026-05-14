@@ -247,11 +247,15 @@ export default function CatalogClientOptimized({
       minPrice: advancedFilters.priceRange[0],
       maxPrice: normalizedMaxPrice,
       rating: advancedFilters.rating,
+      department: initialQueryState.department,
+      city: initialQueryState.city,
     };
   }, [
     advancedFilters.priceRange,
     advancedFilters.rating,
     debouncedSearch,
+    initialQueryState.city,
+    initialQueryState.department,
     itemsPerPage,
     maxPrice,
     page,

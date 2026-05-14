@@ -175,10 +175,18 @@ export async function PATCH(
     }
 
     if (normalizedStatus === 'APPROVED' && statusChanged) {
+      const currentReturnItems = (Array.isArray(currentReturn.items) ? currentReturn.items : []) as Array<{
+        original_sale_item_id?: unknown;
+        product_id?: unknown;
+        quantity?: unknown;
+        unit_price?: unknown;
+        reason?: unknown;
+      }>;
+
       const saleValidation = await validateReturnAgainstOriginalSale(supabase, {
         organizationId,
         originalSaleId: String(currentReturn.original_sale_id || ''),
-        items: (Array.isArray(currentReturn.items) ? currentReturn.items : []).map((item) => ({
+        items: currentReturnItems.map((item) => ({
           originalSaleItemId: String(item.original_sale_item_id || ''),
           productId: String(item.product_id || ''),
           quantity: Number(item.quantity || 0),

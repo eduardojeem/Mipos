@@ -355,7 +355,7 @@ async function fetchCatalogBaseProducts(
     throw result.error;
   }
 
-  return (result.data || []) as Product[];
+  return (result.data || []) as unknown as Product[];
 }
 
 function filterCatalogProducts(products: Product[], input: PublicCatalogPageInput): Product[] {
@@ -465,6 +465,6 @@ export async function fetchPublicCatalogProductById(
     return null;
   }
 
-  const [enrichedProduct] = await enrichPublicCatalogProductsWithOffers(organizationId, [result.data as Product]);
+  const [enrichedProduct] = await enrichPublicCatalogProductsWithOffers(organizationId, [result.data as unknown as Product]);
   return enrichedProduct || null;
 }

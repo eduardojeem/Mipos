@@ -32,6 +32,11 @@ type MembershipAccessRow = {
   organization?: OrganizationSummaryRow | OrganizationSummaryRow[] | null
 }
 
+type UserRoleRelationRow = {
+  organization_id?: string | null
+  role?: { name?: string | null } | Array<{ name?: string | null }> | null
+}
+
 function firstRelation<T>(value?: T | T[] | null): T | null {
   if (Array.isArray(value)) {
     return value[0] || null
@@ -160,8 +165,10 @@ async function getActiveRoleNames(
   }
 
   const { data } = await query
-  return (data || [])
-    .map((item: { role?: { name?: string | null } | Array<{ name?: string | null }> | null }) => {
+  const rows = (data || []) as unknown as UserRoleRelationRow[]
+
+  return rows
+    .map((item) => {
       const role = firstRelation(item.role)
       return String(role?.name || '').toUpperCase()
     })

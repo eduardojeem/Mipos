@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCurrentOrganizationId } from '@/hooks/use-current-organization';
+import type { Category, Customer, Product } from '@/types';
 
 interface CacheEntry<T> {
   data: T;
@@ -27,6 +28,121 @@ interface UseOptimizedDataReturn<T> {
   refetch: () => Promise<void>;
   clearCache: () => void;
   isStale: boolean;
+}
+
+type PosCategory = Category;
+
+export type POSProduct = Product & {
+  category?: PosCategory;
+  in_stock: boolean;
+  low_stock: boolean;
+  has_wholesale: boolean;
+  price: number;
+  stock: number;
+};
+
+type PosSalesStats = {
+  total_sales: number;
+  transaction_count: number;
+  average_ticket: number;
+  top_selling_product: string;
+};
+
+function normalizePosCategory(
+  category: unknown,
+  categoryId: string,
+  categoryMap?: Map<string, Category>
+): PosCategory | null {
+  if (category && typeof category === 'object') {
+    const rawCategory = category as Record<string, unknown>;
+    const id = String(rawCategory.id || categoryId || '');
+    const name = String(rawCategory.name || 'Sin categoria');
+    return id
+      ? {
+          id,
+          name,
+          is_active: true,
+          created_at: '',
+          updated_at: '',
+        }
+      : null;
+  }
+
+  if (categoryId) {
+    const fallback = categoryMap?.get(categoryId);
+    if (fallback?.id) {
+      return {
+        id: String(fallback.id),
+        name: String(fallback.name || 'Sin categoria'),
+        description: fallback.description,
+        is_active: fallback.is_active,
+        organization_id: fallback.organization_id,
+        parent_id: fallback.parent_id,
+        created_at: fallback.created_at,
+        updated_at: fallback.updated_at,
+        _count: fallback._count,
+      };
+    }
+  }
+
+  return null;
+}
+
+function normalizePosProduct(
+  rawProduct: Record<string, unknown>,
+  categoryMap?: Map<string, Category>
+): POSProduct {
+  const categoryId = String(rawProduct.category_id || '');
+  const salePrice = Number(rawProduct.sale_price || 0);
+  const stockQuantity = Number(rawProduct.stock_quantity || 0);
+  const minStock = Number(rawProduct.min_stock || 0);
+  const wholesalePrice =
+    rawProduct.wholesale_price === null || rawProduct.wholesale_price === undefined
+      ? undefined
+      : Number(rawProduct.wholesale_price);
+  const category = normalizePosCategory(rawProduct.category, categoryId, categoryMap);
+
+  return {
+    id: String(rawProduct.id || ''),
+    name: String(rawProduct.name || ''),
+    sku: String(rawProduct.sku || ''),
+    description: typeof rawProduct.description === 'string' ? rawProduct.description : undefined,
+    cost_price: Number(rawProduct.cost_price || 0),
+    sale_price: salePrice,
+    offer_price:
+      rawProduct.offer_price === null || rawProduct.offer_price === undefined
+        ? undefined
+        : Number(rawProduct.offer_price),
+    wholesale_price: wholesalePrice,
+    min_wholesale_quantity:
+      rawProduct.min_wholesale_quantity === null || rawProduct.min_wholesale_quantity === undefined
+        ? undefined
+        : Number(rawProduct.min_wholesale_quantity),
+    stock_quantity: stockQuantity,
+    min_stock: minStock,
+    max_stock:
+      rawProduct.max_stock === null || rawProduct.max_stock === undefined
+        ? undefined
+        : Number(rawProduct.max_stock),
+    category_id: categoryId,
+    supplier_id: typeof rawProduct.supplier_id === 'string' ? rawProduct.supplier_id : undefined,
+    barcode: typeof rawProduct.barcode === 'string' ? rawProduct.barcode : undefined,
+    image_url: typeof rawProduct.image_url === 'string' ? rawProduct.image_url : undefined,
+    is_active: Boolean(rawProduct.is_active),
+    regular_price:
+      rawProduct.regular_price === null || rawProduct.regular_price === undefined
+        ? undefined
+        : Number(rawProduct.regular_price),
+    brand: typeof rawProduct.brand === 'string' ? rawProduct.brand : undefined,
+    created_at: typeof rawProduct.created_at === 'string' ? rawProduct.created_at : '',
+    updated_at: typeof rawProduct.updated_at === 'string' ? rawProduct.updated_at : '',
+    category: category || undefined,
+    price: salePrice,
+    stock: stockQuantity,
+    in_stock: stockQuantity > 0,
+    low_stock: stockQuantity <= Math.max(minStock, 1),
+    has_wholesale: (wholesalePrice || 0) > 0,
+  };
 }
 
 // Cache global para compartir entre componentes
@@ -276,7 +392,7 @@ export function usePOSData() {
   const queryClient = useQueryClient();
   const organizationId = useCurrentOrganizationId();
 
-  const productsQuery = useQuery({
+  const productsQuery = useQuery<POSProduct[]>({
     queryKey: ['pos', 'products', organizationId ?? 'no-org'],
     enabled: Boolean(organizationId),
     queryFn: async () => {
@@ -294,10 +410,9 @@ export function usePOSData() {
           }
           const items = json?.products || json?.data || [];
           // Mapear nombre de categoría si viene del API
-          return (Array.isArray(items) ? items : []).map((p: Record<string, unknown>) => ({
-            ...p,
-            category: p?.['category_name'] ? { id: p?.['category_id'], name: p?.['category_name'] } : p?.['category'],
-          }));
+          return Array.isArray(items)
+            ? items.map((product) => normalizePosProduct(product as Record<string, unknown>))
+            : [];
         }
         let apiMessage = `POS products API responded with status ${res.status}`;
         try {
@@ -317,7 +432,7 @@ export function usePOSData() {
     refetchOnWindowFocus: false,  // los productos del POS se actualizan por realtime
   });
 
-  const categoriesQuery = useQuery({
+  const categoriesQuery = useQuery<Category[]>({
     queryKey: ['pos', 'categories', organizationId ?? 'no-org'],
     enabled: Boolean(organizationId),
     queryFn: async () => {
@@ -356,7 +471,7 @@ export function usePOSData() {
     refetchOnWindowFocus: false,  // las categorías se actualizan por realtime
   });
 
-  const customersQuery = useQuery({
+  const customersQuery = useQuery<Customer[]>({
     queryKey: ['pos', 'customers', organizationId ?? 'no-org'],
     enabled: Boolean(organizationId),
     queryFn: async () => {
@@ -395,11 +510,18 @@ export function usePOSData() {
     refetchOnWindowFocus: false,
   });
 
-  const salesStatsQuery = useQuery({
+  const salesStatsQuery = useQuery<PosSalesStats>({
     queryKey: ['pos', 'sales-stats', organizationId ?? 'no-org'],
     enabled: Boolean(organizationId),
     queryFn: async () => {
-      if (!organizationId) return {};
+      if (!organizationId) {
+        return {
+          total_sales: 0,
+          transaction_count: 0,
+          average_ticket: 0,
+          top_selling_product: '',
+        };
+      }
 
       try {
         const res = await fetch('/api/pos/stats', {
@@ -445,21 +567,10 @@ export function usePOSData() {
       .filter((category) => category?.id)
       .map((category) => [String(category.id), category])
   );
-  const products = Array.isArray(productsQuery.data)
-    ? productsQuery.data.map((product: Record<string, unknown>) => {
-      const category =
-        product?.category && typeof product.category === 'object'
-          ? product.category
-          : (product?.category_id ? categoryMap.get(String(product.category_id)) : null);
-
-      return {
-        ...product,
-        category: category
-          ? { id: String(category.id), name: String(category.name || 'Sin categoría') }
-          : null,
-      };
-    })
-    : [];
+  const products = Array.isArray(productsQuery.data) ? productsQuery.data : [];
+  const normalizedProducts: POSProduct[] = products.map((product) =>
+    normalizePosProduct(product as unknown as Record<string, unknown>, categoryMap)
+  );
 
   const { refetch: refetchProducts } = productsQuery;
   const { refetch: refetchCategories } = categoriesQuery;
@@ -479,7 +590,7 @@ export function usePOSData() {
   }, [queryClient]);
 
   return {
-    products,
+    products: normalizedProducts,
     categories,
     customers: Array.isArray(customersQuery.data) ? customersQuery.data : [],
     salesStats: (salesStatsQuery.data && typeof salesStatsQuery.data === 'object' && !Array.isArray(salesStatsQuery.data))
@@ -559,3 +670,4 @@ export function usePreloadCriticalData() {
 
   return { preloadData };
 }
+

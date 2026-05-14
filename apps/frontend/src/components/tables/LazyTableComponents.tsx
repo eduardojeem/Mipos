@@ -139,7 +139,10 @@ export const LazyVirtualizedTable = withLazyLoading(
 );
 
 export const LazyProductTable = withLazyLoading(
-  () => import('@/components/products/ProductTable') as any,
+  () =>
+    import('@/components/products/ProductsTableView').then((module) => ({
+      default: module.ProductsTableView,
+    })) as any,
   DataTableSkeleton
 );
 

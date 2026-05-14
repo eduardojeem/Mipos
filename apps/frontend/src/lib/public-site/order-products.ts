@@ -45,28 +45,33 @@ export async function fetchOrderProductsForOrganization(
     return [];
   }
 
-  let result = await client
-    .from('products')
-    .select(ORDER_PRODUCT_SELECT)
-    .eq('organization_id', organizationId)
-    .in('id', uniqueProductIds);
-
-  if (result.error && isSchemaMissingError(result.error)) {
-    result = await client
+  const executeQuery = async (selectClause: string) =>
+    client
       .from('products')
-      .select(ORDER_PRODUCT_SELECT_FALLBACK)
+      .select(selectClause)
       .eq('organization_id', organizationId)
       .in('id', uniqueProductIds);
+
+  let result = await executeQuery(ORDER_PRODUCT_SELECT);
+
+  if (result.error && isSchemaMissingError(result.error)) {
+    result = await executeQuery(ORDER_PRODUCT_SELECT_FALLBACK);
   }
 
   if (result.error) {
     throw result.error;
   }
 
-  return (result.data || []).map((product: {
-    id: unknown; name: unknown; sale_price: unknown;
-    offer_price?: unknown; stock_quantity: unknown; is_active: unknown;
-  }) => ({
+  const data = (result.data || []) as unknown as Array<{
+    id: unknown;
+    name: unknown;
+    sale_price: unknown;
+    offer_price?: unknown;
+    stock_quantity: unknown;
+    is_active: unknown;
+  }>;
+
+  return data.map((product) => ({
     id: String(product.id),
     name: String(product.name || 'Producto'),
     sale_price: Number(product.sale_price ?? 0),

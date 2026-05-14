@@ -267,7 +267,7 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
           merged.address = {
             ...current.address,
             city: profile.city || current.address.city,
-            state: profile.department || current.address.state,
+            department: profile.department || current.address.department,
           };
         }
         if (profile.primary_color) {

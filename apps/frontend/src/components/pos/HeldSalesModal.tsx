@@ -8,8 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Clock, User, ShoppingCart, Trash2, RotateCcw } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import type { HeldSale } from '@/store';
-import { formatDistanceToNow } from 'date-fns';
-import { es } from 'date-fns/locale';
+import { formatDistanceToNow } from 'date-fns/formatDistanceToNow';
 
 interface HeldSalesModalProps {
     isOpen: boolean;
@@ -51,7 +50,7 @@ export function HeldSalesModal({ isOpen, onClose, heldSales, onRestore, onDiscar
                                             <div>
                                                 <div className="flex items-center gap-2 mb-1">
                                                     <Badge variant="outline" className="text-xs border-border dark:border-border">
-                                                        {formatDistanceToNow(sale.timestamp, { addSuffix: true, locale: es })}
+                                                        {formatDistanceToNow(sale.timestamp, { addSuffix: true })}
                                                     </Badge>
                                                     {sale.customer ? (
                                                         <Badge variant="secondary" className="text-xs flex items-center gap-1 bg-secondary dark:bg-secondary text-secondary-foreground dark:text-secondary-foreground">

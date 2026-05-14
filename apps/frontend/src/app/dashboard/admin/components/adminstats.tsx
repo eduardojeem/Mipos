@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Building2, Users, CreditCard, DollarSign } from 'lucide-react';
-import type { AdminStats as AdminStatsType } from '../hooks/useAdminData';
+import type { AdminStats as AdminStatsType } from '../hooks/useadmindata';
 
 export function AdminStats({ stats }: { stats: AdminStatsType }) {
   return (

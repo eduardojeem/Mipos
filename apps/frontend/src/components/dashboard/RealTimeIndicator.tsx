@@ -13,8 +13,7 @@ import {
   Clock,
   AlertCircle
 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
-import { es } from 'date-fns/locale';
+import { formatDistanceToNow } from 'date-fns/formatDistanceToNow';
 
 interface RealTimeIndicatorProps {
   isConnected: boolean;
@@ -64,8 +63,7 @@ const RealTimeIndicator: React.FC<RealTimeIndicatorProps> = ({
     
     try {
       return formatDistanceToNow(lastUpdate, { 
-        addSuffix: true, 
-        locale: es 
+        addSuffix: true,
       });
     } catch (error) {
       return 'Hace un momento';

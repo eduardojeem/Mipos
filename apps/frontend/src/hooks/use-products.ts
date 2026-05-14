@@ -36,6 +36,135 @@ export type ProductFilters = UnifiedProductFilters;
 
 import { productService } from '@/services/productService';
 
+type ProductRecord = Record<string, unknown>;
+
+function toStringOrNull(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function toNumber(value: unknown, fallback = 0): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function normalizeImages(images: unknown, imageUrl?: unknown): string[] | null {
+  const normalized = Array.isArray(images)
+    ? images
+      .map((image) => {
+        if (typeof image === 'string') {
+          return image.trim();
+        }
+
+        if (image && typeof image === 'object' && 'url' in image) {
+          return toStringOrNull((image as { url?: unknown }).url) ?? '';
+        }
+
+        return '';
+      })
+      .filter(Boolean)
+    : [];
+
+  const fallbackImage = toStringOrNull(imageUrl);
+  if (normalized.length > 0) {
+    return normalized;
+  }
+
+  return fallbackImage ? [fallbackImage] : null;
+}
+
+function normalizeCategory(category: unknown): Product['category'] {
+  if (!category || typeof category !== 'object') {
+    return undefined;
+  }
+
+  const record = category as ProductRecord;
+  const id = toStringOrNull(record.id);
+  const name = toStringOrNull(record.name);
+
+  if (!id || !name) {
+    return undefined;
+  }
+
+  return {
+    id,
+    name,
+    description: toStringOrNull(record.description),
+  };
+}
+
+function normalizeSupplier(supplier: unknown): Product['supplier'] {
+  if (!supplier || typeof supplier !== 'object') {
+    return undefined;
+  }
+
+  const record = supplier as ProductRecord;
+  const id = toStringOrNull(record.id);
+  const name = toStringOrNull(record.name);
+
+  if (!id || !name) {
+    return undefined;
+  }
+
+  return {
+    id,
+    name,
+    email: toStringOrNull(record.email),
+    phone: toStringOrNull(record.phone),
+  };
+}
+
+function normalizeProduct(raw: unknown): Product {
+  const record = (raw && typeof raw === 'object' ? raw : {}) as ProductRecord;
+  const normalizedImages = normalizeImages(record.images, record.image_url ?? record.image);
+
+  return {
+    id: toStringOrNull(record.id) ?? '',
+    sku: toStringOrNull(record.sku ?? record.code) ?? '',
+    name: toStringOrNull(record.name) ?? '',
+    barcode: toStringOrNull(record.barcode),
+    description: toStringOrNull(record.description),
+    brand: toStringOrNull(record.brand),
+    cost_price: toNumber(record.cost_price ?? record.costPrice),
+    sale_price: toNumber(record.sale_price ?? record.salePrice ?? record.price),
+    wholesale_price: record.wholesale_price == null && record.wholesalePrice == null
+      ? null
+      : toNumber(record.wholesale_price ?? record.wholesalePrice),
+    stock_quantity: toNumber(record.stock_quantity ?? record.stockQuantity ?? record.stock),
+    min_stock: toNumber(record.min_stock ?? record.minStock),
+    max_stock: record.max_stock == null ? null : toNumber(record.max_stock),
+    reorder_point: record.reorder_point == null ? null : toNumber(record.reorder_point),
+    category_id: toStringOrNull(record.category_id ?? record.categoryId) ?? '',
+    supplier_id: toStringOrNull(record.supplier_id),
+    image_url: toStringOrNull(record.image_url ?? record.image) ?? normalizedImages?.[0] ?? null,
+    images: normalizedImages,
+    ingredients: toStringOrNull(record.ingredients),
+    usage_instructions: toStringOrNull(record.usage_instructions),
+    warnings: toStringOrNull(record.warnings),
+    expiration_date: toStringOrNull(record.expiration_date),
+    batch_number: toStringOrNull(record.batch_number),
+    manufacturing_date: toStringOrNull(record.manufacturing_date),
+    weight: record.weight == null ? null : toNumber(record.weight),
+    weight_unit: record.weight_unit == null ? null : String(record.weight_unit) as Product['weight_unit'],
+    dimensions: (record.dimensions && typeof record.dimensions === 'object')
+      ? record.dimensions as Product['dimensions']
+      : null,
+    is_active: record.is_active == null ? true : Boolean(record.is_active),
+    is_featured: record.is_featured == null ? null : Boolean(record.is_featured),
+    is_taxable: record.is_taxable == null ? null : Boolean(record.is_taxable),
+    tax_rate: record.tax_rate == null ? null : toNumber(record.tax_rate),
+    created_at: toStringOrNull(record.created_at) ?? new Date().toISOString(),
+    updated_at: toStringOrNull(record.updated_at) ?? new Date().toISOString(),
+    created_by: toStringOrNull(record.created_by),
+    updated_by: toStringOrNull(record.updated_by),
+    notes: toStringOrNull(record.notes),
+    tags: Array.isArray(record.tags) ? record.tags.map(String) : null,
+    category: normalizeCategory(record.category),
+    supplier: normalizeSupplier(record.supplier),
+  };
+}
+
 /**
  * Fetch products with offline support - tries online first, falls back to IndexedDB
  */
@@ -74,11 +203,13 @@ async function fetchProductsWithOffline(filters: ProductFilters = {}, signal?: A
        
        if (error) throw error;
 
+       const normalizedProducts = (data || []).map(normalizeProduct);
+
        // Store in IndexedDB for offline access
-       if (data && data.length > 0) {
+       if (normalizedProducts.length > 0) {
          try {
            await Promise.all(
-             data.map((product: any) =>
+             normalizedProducts.map((product) =>
                db.put('products', {
                  ...product,
                  updated_at: product.updated_at || new Date().toISOString()
@@ -89,7 +220,7 @@ async function fetchProductsWithOffline(filters: ProductFilters = {}, signal?: A
            console.warn('⚠️ Error al guardar productos en IndexedDB:', dbError);
          }
        }
-       return data;
+       return normalizedProducts;
     }
 
     const serviceFilters: any = {
@@ -109,11 +240,13 @@ async function fetchProductsWithOffline(filters: ProductFilters = {}, signal?: A
       limit: filters.limit || 50
     });
 
+    const normalizedProducts = (response.products || []).map(normalizeProduct);
+
     // Store in IndexedDB for offline access
-    if (response.products && response.products.length > 0) {
+    if (normalizedProducts.length > 0) {
       try {
         await Promise.all(
-          response.products.map(product =>
+          normalizedProducts.map(product =>
             db.put('products', {
               ...product,
               updated_at: product.updated_at || new Date().toISOString()
@@ -125,7 +258,7 @@ async function fetchProductsWithOffline(filters: ProductFilters = {}, signal?: A
       }
     }
 
-    return response.products;
+    return normalizedProducts;
   } catch (onlineError) {
     console.warn('⚠️ Error al obtener productos online, intentando IndexedDB:', onlineError);
 
@@ -173,7 +306,7 @@ async function fetchProductsWithOffline(filters: ProductFilters = {}, signal?: A
       const startIndex = (page - 1) * limit;
       const endIndex = startIndex + limit;
 
-      return products.slice(startIndex, endIndex);
+      return products.slice(startIndex, endIndex).map(normalizeProduct);
     } catch (dbError) {
       console.error('❌ Error al obtener productos de IndexedDB:', dbError);
       throw onlineError; // Throw original online error
@@ -200,7 +333,7 @@ async function fetchProductBySkuWithOffline(sku: string, signal?: AbortSignal): 
       limit: 10
     });
 
-    const list = response.products;
+    const list = (response.products || []).map(normalizeProduct);
     // Find exact match first, otherwise return first result
     const exact = list.find(p => String(p.sku || '').toLowerCase() === String(sku).toLowerCase());
     const product = exact || list[0] || null;
@@ -252,11 +385,13 @@ async function fetchProductsByCategoryWithOffline(categoryId: string, limit = 50
       limit
     });
 
+    const normalizedProducts = (response.products || []).map(normalizeProduct);
+
     // Store in IndexedDB
-    if (response.products && response.products.length > 0) {
+    if (normalizedProducts.length > 0) {
       try {
         await Promise.all(
-          response.products.map(product =>
+          normalizedProducts.map(product =>
             db.put('products', {
               ...product,
               updated_at: product.updated_at || new Date().toISOString()
@@ -268,14 +403,14 @@ async function fetchProductsByCategoryWithOffline(categoryId: string, limit = 50
       }
     }
 
-    return response.products;
+    return normalizedProducts;
   } catch (onlineError) {
     console.warn('⚠️ Error al obtener productos por categoría online, intentando IndexedDB:', onlineError);
 
     // Fallback to IndexedDB
     try {
       const products = await db.query<Product>('products', 'by-category', categoryId);
-      return products.slice(0, limit);
+      return products.slice(0, limit).map(normalizeProduct);
     } catch (dbError) {
       console.error('❌ Error al obtener productos de IndexedDB:', dbError);
       throw onlineError;
@@ -298,11 +433,13 @@ async function fetchLowStockProductsWithOffline(threshold = 10, signal?: AbortSi
       limit: 100
     });
 
+    const normalizedProducts = (response.products || []).map(normalizeProduct);
+
     // Store in IndexedDB
-    if (response.products && response.products.length > 0) {
+    if (normalizedProducts.length > 0) {
       try {
         await Promise.all(
-          response.products.map(product =>
+          normalizedProducts.map(product =>
             db.put('products', {
               ...product,
               updated_at: product.updated_at || new Date().toISOString()
@@ -314,7 +451,7 @@ async function fetchLowStockProductsWithOffline(threshold = 10, signal?: AbortSi
       }
     }
 
-    return response.products;
+    return normalizedProducts;
   } catch (onlineError) {
     console.warn('⚠️ Error al obtener productos con bajo stock online, intentando IndexedDB:', onlineError);
 

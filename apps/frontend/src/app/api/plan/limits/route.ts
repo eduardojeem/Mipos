@@ -104,7 +104,7 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    const coveredFeatures = new Set(coreLimits.map((limit) => limit.feature_type))
+    const coveredFeatures = new Set<string>(coreLimits.map((limit) => limit.feature_type))
     const extraLimits = storedUsageLimits
       .filter((limit) => !coveredFeatures.has(limit.feature_type))
       .map((limit) => ({

@@ -169,7 +169,7 @@ async function fetchActiveOrganizationIds(): Promise<{ organizationIds: string[]
       totalOrganizations = result.count;
     }
 
-    const rows = (result.data || []) as OrganizationRow[];
+    const rows = (result.data || []) as unknown as OrganizationRow[];
     organizationIds.push(...rows.map((row) => row.id));
 
     if (rows.length < ORGANIZATION_BATCH_SIZE) {
@@ -231,7 +231,7 @@ async function fetchCategoryProducts(organizationIds: string[]): Promise<Product
         throw result.error;
       }
 
-      const rows = (result.data || []) as ProductCategoryRow[];
+      const rows = (result.data || []) as unknown as ProductCategoryRow[];
       products.push(...rows);
 
       if (rows.length < PRODUCT_BATCH_SIZE) {
@@ -266,7 +266,7 @@ async function fetchCategoryMap(categoryIds: string[]): Promise<Map<string, stri
       throw error;
     }
 
-    ((data || []) as CategoryRow[]).forEach((category) => {
+    ((data || []) as unknown as CategoryRow[]).forEach((category) => {
       categoryMap.set(category.id, normalizeDisplayText(category.name, 'Sin categoria'));
     });
   }

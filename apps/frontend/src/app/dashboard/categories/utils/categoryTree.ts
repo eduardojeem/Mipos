@@ -141,9 +141,9 @@ export function getVisibleIdsForTreeSearch(
       if (guard.has(cur)) break
       guard.add(cur)
       visibleIds.add(cur)
-      const p = parentById.get(cur) || null
-      if (p) autoExpandedIds.add(p)
-      cur = p
+      const parentId: string | null = parentById.get(cur) || null
+      if (parentId) autoExpandedIds.add(parentId)
+      cur = parentId
     }
   }
 

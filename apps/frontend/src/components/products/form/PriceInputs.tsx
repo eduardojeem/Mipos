@@ -2,7 +2,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { DollarSign, AlertCircle, CheckCircle, XCircle } from 'lucide-react'
-import { ValidationIndicator } from '../ProductForm'
+import { ValidationIndicator } from './ValidationIndicator'
 import { cn } from '@/lib/utils'
 
 export default function PriceInputs({ register, errors, touchedFields }: any) {

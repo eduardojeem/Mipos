@@ -35,19 +35,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'Error al obtener datos', errors: errors.map(e => (e as any)?.message) }, { status: 500 })
     }
 
-    const orgById = new Map<string, Org>((orgs as Org[]).map(o => [o.id, o]))
-    const userById = new Map<string, User>((users as User[]).map(u => [u.id, u]))
-    const roleById = new Map<string, Role>((roles as Role[]).map(r => [r.id, r]))
-    const permById = new Map<string, Permission>((perms as Permission[]).map(p => [p.id, p]))
+    const orgRows = (orgs || []) as unknown as Org[]
+    const memberRows = (members || []) as unknown as OrgMember[]
+    const userRows = (users || []) as unknown as User[]
+    const roleRows = (roles || []) as unknown as Role[]
+    const permissionRows = (perms || []) as unknown as Permission[]
+    const rolePermissionRows = (rolePerms || []) as unknown as RolePermission[]
+
+    const orgById = new Map<string, Org>(orgRows.map((o) => [o.id, o]))
+    const userById = new Map<string, User>(userRows.map((u) => [u.id, u]))
+    const roleById = new Map<string, Role>(roleRows.map((r) => [r.id, r]))
+    const permById = new Map<string, Permission>(permissionRows.map((p) => [p.id, p]))
     const rolePermMap = new Map<string, Permission[]>()
-    (rolePerms as RolePermission[]).forEach(rp => {
+    rolePermissionRows.forEach((rp) => {
       const list = rolePermMap.get(rp.role_id) || []
       const perm = permById.get(rp.permission_id)
       if (perm) list.push(perm)
       rolePermMap.set(rp.role_id, list)
     })
 
-    const result = (members as OrgMember[]).map(m => {
+    const result = memberRows.map((m) => {
       const org = orgById.get(m.organization_id)
       const user = userById.get(m.user_id)
       const role = m.role_id ? roleById.get(m.role_id) : undefined
@@ -57,7 +64,7 @@ export async function GET(request: NextRequest) {
         user: user ? { id: user.id, email: user.email } : { id: m.user_id },
         is_owner: !!m.is_owner,
         role: role ? { id: role.id, name: role.name } : null,
-        permissions: permissions.map(p => ({ id: p.id, name: p.name, resource: p.resource, action: p.action }))
+        permissions: permissions.map((p) => ({ id: p.id, name: p.name, resource: p.resource, action: p.action }))
       }
     })
 

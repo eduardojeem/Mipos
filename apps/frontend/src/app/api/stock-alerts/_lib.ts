@@ -208,7 +208,7 @@ async function fetchProducts(adminClient: AdminClient, organizationId: string) {
     .order('stock_quantity', { ascending: true });
 
   if (!error) {
-    return (data || []) as ProductRow[];
+    return (data || []) as unknown as ProductRow[];
   }
 
   const fallback = await adminClient

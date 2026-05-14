@@ -11,6 +11,10 @@ import { useCashMutations } from "./useCashMutations";
 import { useCashRealtime } from "./useCashRealtime";
 import { useMovementFilters } from "../movements/hooks/useMovementFilters";
 
+type QueryResultStatus = {
+    status?: string;
+};
+
 /**
  * Main cash dashboard hook - now composed of smaller focused hooks
  * This hook orchestrates all cash-related functionality
@@ -78,12 +82,12 @@ export function useCashDashboard() {
     }, [session?.id, filters, createdByMe]);
 
     const fetchSession = async () => {
-        const r = await refetchSession();
+        const r = await refetchSession() as QueryResultStatus;
         if (r.status === "success") setLastSyncAt(new Date());
     };
 
     const fetchMovements = async () => {
-        const r = await refetchMovements();
+        const r = await refetchMovements() as QueryResultStatus;
         if (r.status === "success") setLastSyncAt(new Date());
     };
 

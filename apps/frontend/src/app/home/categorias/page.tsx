@@ -67,65 +67,12 @@ export default async function CategoriesPage({
 
   return (
     <MarketplaceLayout searchQuery={queryState.search}>
-      <header className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-        <Badge
-          variant="outline"
-          className="mb-4 rounded-full border-emerald-200 bg-emerald-50/60 px-4 py-1 text-[10px] font-bold uppercase tracking-widest text-emerald-700"
-        >
-          Explorar por rubro
-        </Badge>
-
-        <div className="grid gap-10 lg:grid-cols-[minmax(0,1.25fr)_minmax(280px,360px)] lg:items-end">
-          <div>
-            <h1 className="text-4xl font-semibold tracking-tight text-slate-950 sm:text-6xl">
-              Categorias activas del marketplace
-            </h1>
-            <p className="mt-4 max-w-3xl text-lg leading-8 text-slate-600">
-              Recorre el mapa real de categorias publicadas por empresas activas y entra al
-              catalogo ya filtrado desde cada rubro.
-            </p>
-            {queryState.search ? (
-              <p className="mt-4 text-sm font-medium text-emerald-700 dark:text-emerald-300">
-                Mostrando resultados para &quot;{queryState.search}&quot;.
-              </p>
-            ) : null}
-          </div>
-
-          <div className="rounded-lg border border-slate-200 bg-white/70 p-5 shadow-sm backdrop-blur-sm dark:border-slate-800 dark:bg-slate-950/70">
-            <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
-              Cobertura del directorio
-            </p>
-            <div className="mt-5 grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
-              <div className="rounded-lg border border-slate-200/80 bg-white/80 p-4 dark:border-slate-800 dark:bg-slate-900/80">
-                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  <Layers3 className="h-4 w-4" />
-                  Categorias
-                </div>
-                <p className="mt-3 text-2xl font-semibold text-slate-950 dark:text-white">
-                  {snapshot.totalCategories}
-                </p>
-              </div>
-              <div className="rounded-lg border border-slate-200/80 bg-white/80 p-4 dark:border-slate-800 dark:bg-slate-900/80">
-                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  <Building2 className="h-4 w-4" />
-                  Empresas
-                </div>
-                <p className="mt-3 text-2xl font-semibold text-slate-950 dark:text-white">
-                  {snapshot.matchingOrganizations || snapshot.totalOrganizations}
-                </p>
-              </div>
-              <div className="rounded-lg border border-slate-200/80 bg-white/80 p-4 dark:border-slate-800 dark:bg-slate-900/80">
-                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  <PackageSearch className="h-4 w-4" />
-                  Productos
-                </div>
-                <p className="mt-3 text-2xl font-semibold text-slate-950 dark:text-white">
-                  {snapshot.categorizedProducts}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+      <header className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        {queryState.search ? (
+          <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+            Mostrando resultados para &quot;{queryState.search}&quot;.
+          </p>
+        ) : null}
       </header>
 
       <div className="mx-auto max-w-7xl px-4 pb-20 sm:px-6 lg:px-8">

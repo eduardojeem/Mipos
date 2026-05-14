@@ -1,15 +1,12 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Image from 'next/image';
 import {
   Plus,
   Edit,
   Trash2,
   Search,
-  Filter,
-  Download,
-  Upload,
   AlertTriangle,
   Package,
   Eye,
@@ -22,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Pagination } from '@/components/catalog/Pagination';
@@ -31,25 +28,8 @@ import { formatCurrency } from '@/lib/utils';
 import { useRealtimeProducts } from '@/hooks/useRealtimeProducts';
 import { useDebounce } from '@/hooks/useDebounce';
 import ProductForm from './ProductForm';
-import type { Category } from '@/types/supabase';
-
-interface Product {
-  id: string;
-  name: string;
-  code: string;
-  description?: string;
-  categoryId: string;
-  price: number;
-  costPrice: number;
-  stock: number;
-  minStock: number;
-  discount_percentage?: number;
-  image?: string;
-  images?: string[];
-  category?: Category;
-  createdAt: Date;
-  updatedAt: Date;
-}
+import type { Category, Product as SupabaseProduct } from '@/types/supabase';
+import type { ProductFormData } from './types/productForm.types';
 
 interface ProductManagerProps {
   categories: Category[];
@@ -72,8 +52,8 @@ export default function ProductManager({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<any>(null);
-  const [selectedProduct, setSelectedProduct] = useState<any>(null);
+  const [editingProduct, setEditingProduct] = useState<SupabaseProduct | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<SupabaseProduct | null>(null);
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(filters.page || 1);
   const [itemsPerPage, setItemsPerPage] = useState(filters.limit || 100);
@@ -108,7 +88,7 @@ export default function ProductManager({
   // Use products directly from the hook as they are already filtered by the server
   const filteredProducts = products;
 
-  const handleCreateProduct = async (data: any) => {
+  const handleCreateProduct = async (data: ProductFormData) => {
     try {
       await createProduct({
         name: data.name,
@@ -136,7 +116,7 @@ export default function ProductManager({
     }
   };
 
-  const handleUpdateProduct = async (data: any) => {
+  const handleUpdateProduct = async (data: ProductFormData) => {
     if (!editingProduct) return;
 
     try {
@@ -180,7 +160,7 @@ export default function ProductManager({
     }
   };
 
-  const openEditForm = (product: any) => {
+  const openEditForm = (product: SupabaseProduct) => {
     setEditingProduct(product);
     setIsFormOpen(true);
   };
@@ -195,18 +175,18 @@ export default function ProductManager({
     setEditingProduct(null);
   };
 
-  const viewProduct = (product: any) => {
+  const viewProduct = (product: SupabaseProduct) => {
     setSelectedProduct(product);
     setIsViewDialogOpen(true);
   };
 
-  const handleDeleteConfirm = async (product: any) => {
+  const handleDeleteConfirm = async (product: SupabaseProduct) => {
     if (window.confirm(`¿Estás seguro de que deseas eliminar "${product.name}"?`)) {
       await handleDeleteProduct(product.id);
     }
   };
 
-  const getStockStatus = (product: any) => {
+  const getStockStatus = (product: Pick<SupabaseProduct, 'stock_quantity' | 'min_stock'>) => {
     if (product.stock_quantity === 0) {
       return { label: 'Sin stock', variant: 'destructive' as const };
     } else if (product.stock_quantity <= product.min_stock) {
@@ -216,11 +196,20 @@ export default function ProductManager({
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('es-ES', {
-      style: 'currency',
-      currency: 'EUR'
-    }).format(amount);
+  const getProductImageUrl = (product: Pick<SupabaseProduct, 'images' | 'image_url'>) => {
+    if (Array.isArray(product.images)) {
+      const firstImage = product.images[0];
+
+      if (typeof firstImage === 'string') {
+        return firstImage;
+      }
+
+      if (firstImage && typeof firstImage === 'object' && 'url' in firstImage && typeof firstImage.url === 'string') {
+        return firstImage.url;
+      }
+    }
+
+    return typeof product.image_url === 'string' ? product.image_url : null;
   };
 
   const lowStockProducts = filteredProducts.filter(p => p.stock_quantity <= p.min_stock && p.stock_quantity > 0);
@@ -347,6 +336,7 @@ export default function ProductManager({
           {filteredProducts.map((product) => {
             const stockStatus = getStockStatus(product);
             const categoryName = categories.find(c => c.id === product.category_id)?.name || 'Sin categoría';
+            const imageUrl = getProductImageUrl(product);
             return (
               <Card key={product.id} className="hover:shadow-md transition-shadow">
                 <CardContent className="p-4">
@@ -358,10 +348,10 @@ export default function ProductManager({
                         {categoryName}
                       </Badge>
                     </div>
-                    {product.images && product.images.length > 0 && (
+                    {imageUrl && (
                       <div className="relative w-16 h-16 rounded-lg overflow-hidden ml-3">
                         <Image
-                          src={product.images[0]}
+                          src={imageUrl}
                           alt={product.name}
                           fill
                           sizes="64px"
@@ -473,7 +463,15 @@ export default function ProductManager({
       )}
 
       {/* Dialog para formulario */}
-      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+      <Dialog
+        open={isFormOpen}
+        onOpenChange={(open) => {
+          setIsFormOpen(open);
+          if (!open) {
+            setEditingProduct(null);
+          }
+        }}
+      >
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
@@ -524,12 +522,12 @@ export default function ProductManager({
                 </div>
 
                 <div className="space-y-4">
-                  {selectedProduct.images && selectedProduct.images.length > 0 && (
+                  {getProductImageUrl(selectedProduct) && (
                     <div>
                       <label className="text-sm font-medium text-gray-500">Imagen</label>
                       <div className="relative w-full h-48 rounded-lg overflow-hidden mt-2">
                         <Image
-                          src={selectedProduct.images[0]}
+                          src={getProductImageUrl(selectedProduct)!}
                           alt={selectedProduct.name}
                           fill
                           sizes="100vw"

@@ -111,6 +111,10 @@ async function buildOrganizationDetailResponse(
     throw new Error(error?.message || 'Organizacion no encontrada');
   }
 
+  const organizationWithMembers = organization as typeof organization & {
+    members?: Array<{ count?: number | null }>
+  }
+
   let subscription = null;
   let usage = null;
 
@@ -144,7 +148,7 @@ async function buildOrganizationDetailResponse(
   return {
     ...organization,
     subscription_plan: normalizePlan(organization.subscription_plan),
-    member_count: organization.members?.[0]?.count || 0,
+    member_count: organizationWithMembers.members?.[0]?.count || 0,
     subscription,
     usage,
   };

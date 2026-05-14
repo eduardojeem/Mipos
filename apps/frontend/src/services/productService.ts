@@ -32,6 +32,55 @@ export interface ProductsServiceOptions {
   filters?: ProductFilters;
 }
 
+function toStringOrUndefined(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function toNumberOrUndefined(value: unknown): number | undefined {
+  if (value === null || value === undefined || value === '') return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function toBooleanOrUndefined(value: unknown): boolean | undefined {
+  return typeof value === 'boolean' ? value : undefined;
+}
+
+function toIsoString(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (typeof value === 'number' || value instanceof Date) {
+    return new Date(value).toISOString();
+  }
+
+  return undefined;
+}
+
+function normalizeImages(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    const single = toStringOrUndefined(value);
+    return single ? [single] : undefined;
+  }
+
+  const normalized = value
+    .map((image) => {
+      if (typeof image === 'string') {
+        return image;
+      }
+
+      if (image && typeof image === 'object' && 'url' in image) {
+        return toStringOrUndefined((image as { url?: unknown }).url);
+      }
+
+      return undefined;
+    })
+    .filter((image): image is string => typeof image === 'string' && image.length > 0);
+
+  return normalized.length > 0 ? normalized : undefined;
+}
+
 class ProductService {
   private supabase = createClient();
   // Cache removido - ahora lo maneja useCache de forma centralizada
@@ -42,45 +91,62 @@ class ProductService {
   private batchLoadPromises = new Map<string, Promise<Product | null>>();
 
   private normalizeProduct(raw: Record<string, unknown>): Product {
+    const categoryRecord = raw.category && typeof raw.category === 'object'
+      ? raw.category as Record<string, unknown>
+      : null;
+    const supplierRecord = raw.supplier && typeof raw.supplier === 'object'
+      ? raw.supplier as Record<string, unknown>
+      : null;
+
     return {
       id: String(raw.id),
       name: String(raw.name || ''),
       sku: String(raw.sku || raw.code || ''),
-      description: raw.description ?? undefined,
+      description: toStringOrUndefined(raw.description),
       cost_price: Number(raw.cost_price ?? raw.costPrice ?? 0),
       sale_price: Number(raw.sale_price ?? raw.salePrice ?? raw.price ?? 0),
-      wholesale_price: raw.wholesale_price ?? raw.wholesalePrice ?? undefined,
-      min_wholesale_quantity: raw.min_wholesale_quantity ?? undefined,
+      wholesale_price: toNumberOrUndefined(raw.wholesale_price ?? raw.wholesalePrice),
+      min_wholesale_quantity: toNumberOrUndefined(raw.min_wholesale_quantity),
       stock_quantity: Number(raw.stock_quantity ?? raw.stockQuantity ?? raw.stock ?? 0),
       min_stock: Number(raw.min_stock ?? raw.minStock ?? 0),
-      max_stock: raw.max_stock ?? undefined,
+      max_stock: toNumberOrUndefined(raw.max_stock),
       category_id: String(raw.category_id ?? raw.categoryId ?? ''),
-      supplier_id: raw.supplier_id ?? undefined,
-      barcode: raw.barcode ?? undefined,
-      image_url: raw.image_url ?? raw.image ?? undefined,
+      supplier_id: toStringOrUndefined(raw.supplier_id),
+      barcode: toStringOrUndefined(raw.barcode),
+      image_url: toStringOrUndefined(raw.image_url ?? raw.image),
       is_active: Boolean(raw.is_active ?? raw.isActive ?? true),
-      regular_price: raw.regular_price ?? undefined,
-      discount_percentage: raw.discount_percentage ?? undefined,
-      rating: raw.rating ?? undefined,
-      images: Array.isArray(raw.images) ? raw.images : (raw.images ? [raw.images] : undefined),
-      iva_rate: raw.iva_rate ?? undefined,
-      iva_included: raw.iva_included ?? undefined,
-      brand: raw.brand ?? undefined,
-      shade: raw.shade ?? undefined,
-      skin_type: raw.skin_type ?? undefined,
-      ingredients: raw.ingredients ?? undefined,
-      volume: raw.volume ?? undefined,
-      spf: raw.spf ?? undefined,
-      finish: raw.finish ?? undefined,
-      coverage: raw.coverage ?? undefined,
-      waterproof: raw.waterproof ?? undefined,
-      vegan: raw.vegan ?? undefined,
-      cruelty_free: raw.cruelty_free ?? undefined,
-      expiration_date: raw.expiration_date ?? undefined,
-      created_at: typeof raw.created_at === 'string' ? raw.created_at : (raw.createdAt ? new Date(raw.createdAt).toISOString() : new Date().toISOString()),
-      updated_at: typeof raw.updated_at === 'string' ? raw.updated_at : (raw.updatedAt ? new Date(raw.updatedAt).toISOString() : new Date().toISOString()),
-      category: raw.category ? { id: String((raw.category as Record<string,unknown>).id), name: String((raw.category as Record<string,unknown>).name || '') } as Category : undefined,
-      supplier: raw.supplier ? { id: String((raw.supplier as Record<string,unknown>).id), name: String((raw.supplier as Record<string,unknown>).name || '') } as Product['supplier'] : undefined,
+      regular_price: toNumberOrUndefined(raw.regular_price),
+      discount_percentage: toNumberOrUndefined(raw.discount_percentage),
+      rating: toNumberOrUndefined(raw.rating),
+      images: normalizeImages(raw.images),
+      iva_rate: toNumberOrUndefined(raw.iva_rate),
+      iva_included: toBooleanOrUndefined(raw.iva_included),
+      brand: toStringOrUndefined(raw.brand),
+      shade: toStringOrUndefined(raw.shade),
+      skin_type: toStringOrUndefined(raw.skin_type),
+      ingredients: toStringOrUndefined(raw.ingredients),
+      volume: toStringOrUndefined(raw.volume),
+      spf: toNumberOrUndefined(raw.spf),
+      finish: toStringOrUndefined(raw.finish),
+      coverage: toStringOrUndefined(raw.coverage),
+      waterproof: toBooleanOrUndefined(raw.waterproof),
+      vegan: toBooleanOrUndefined(raw.vegan),
+      cruelty_free: toBooleanOrUndefined(raw.cruelty_free),
+      expiration_date: toStringOrUndefined(raw.expiration_date),
+      created_at: toIsoString(raw.created_at) ?? toIsoString(raw.createdAt) ?? new Date().toISOString(),
+      updated_at: toIsoString(raw.updated_at) ?? toIsoString(raw.updatedAt) ?? new Date().toISOString(),
+      category: categoryRecord
+        ? {
+            id: String(categoryRecord.id),
+            name: String(categoryRecord.name || ''),
+          } as Category
+        : undefined,
+      supplier: supplierRecord
+        ? {
+            id: String(supplierRecord.id),
+            name: String(supplierRecord.name || ''),
+          } as Product['supplier']
+        : undefined,
     };
   }
 

@@ -41,8 +41,7 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useNotifications, useNotificationSettings } from '../hooks/useNotifications';
-import { formatDistanceToNow } from 'date-fns';
-import { es } from 'date-fns/locale';
+import { formatDistanceToNow } from 'date-fns/formatDistanceToNow';
 import type { ProductNotification } from '../services/NotificationService';
 
 interface NotificationCenterProps {
@@ -328,8 +327,7 @@ function NotificationItem({ notification, onMarkAsRead, onDelete }: Notification
             )}
             <p className="text-xs text-muted-foreground mt-2">
               {formatDistanceToNow(notification.timestamp, { 
-                addSuffix: true, 
-                locale: es 
+                addSuffix: true,
               })}
             </p>
           </div>

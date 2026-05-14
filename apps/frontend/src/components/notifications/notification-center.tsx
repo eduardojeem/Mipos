@@ -44,7 +44,7 @@ import {
   type NotificationType,
   type NotificationPriority
 } from '@/lib/notifications/push-notifications';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns/formatDistanceToNow';
 
 interface NotificationCenterProps {
   className?: string;

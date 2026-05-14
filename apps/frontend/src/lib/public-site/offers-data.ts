@@ -356,7 +356,7 @@ async function fetchOffersDataset(
     throw productsError;
   }
 
-  const productRows = (products || []) as ProductRow[];
+  const productRows = (products || []) as unknown as ProductRow[];
   const promotionsById = new Map(
     promotionRows.map(({ row, normalized }) => [row.id, normalized])
   );
@@ -390,7 +390,7 @@ async function fetchOffersDataset(
     }
 
     categoriesMap = new Map(
-      ((categories || []) as CategoryRow[]).map((category) => [String(category.id), String(category.name)])
+      ((categories || []) as unknown as CategoryRow[]).map((category) => [String(category.id), String(category.name)])
     );
   }
 

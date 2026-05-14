@@ -13,6 +13,25 @@ import {
  * Optimized for real-time search with minimal latency.
  */
 
+interface SearchCustomerRow {
+  id?: string;
+  name?: string;
+  email?: string;
+  phone?: string;
+  customer_code?: string;
+  is_active?: boolean;
+  total_purchases?: number;
+  total_orders?: number;
+  last_purchase?: string;
+  [key: string]: unknown;
+}
+
+interface ScoredItem {
+  customer: Record<string, unknown> & { valueLevel: string };
+  score: number;
+  matchedFields: string[];
+}
+
 export async function GET(request: NextRequest) {
   try {
     const auth = await validateRole(request, {
@@ -98,7 +117,7 @@ export async function GET(request: NextRequest) {
     }
 
     const scoredResults = (customers || [])
-      .map((customer: any) => {
+      .map((customer: SearchCustomerRow) => {
         const score = calculateRelevanceScore(customer, searchTerm);
         const transformedCustomer = transformCustomerRecord(customer);
 
@@ -111,11 +130,11 @@ export async function GET(request: NextRequest) {
           matchedFields: getMatchedFields(customer, searchTerm),
         };
       })
-      .filter((item: any) => item.score > 0)
-      .sort((a: any, b: any) => b.score - a.score)
+      .filter((item: ScoredItem) => item.score > 0)
+      .sort((a: ScoredItem, b: ScoredItem) => b.score - a.score)
       .slice(0, limit);
 
-    const results = scoredResults.map((item: any) => ({
+    const results = scoredResults.map((item: ScoredItem) => ({
       ...item.customer,
       _relevanceScore: item.score,
       _matchedFields: item.matchedFields,
@@ -185,7 +204,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-function calculateRelevanceScore(customer: any, searchTerm: string): number {
+function calculateRelevanceScore(customer: SearchCustomerRow, searchTerm: string): number {
   let score = 0;
   const term = searchTerm.toLowerCase();
 
@@ -205,11 +224,11 @@ function calculateRelevanceScore(customer: any, searchTerm: string): number {
 
   if (customer.is_active) score += 5;
 
-  if (customer.total_purchases > 10000) score += 10;
-  else if (customer.total_purchases > 5000) score += 5;
+  if ((customer.total_purchases || 0) > 10000) score += 10;
+  else if ((customer.total_purchases || 0) > 5000) score += 5;
 
-  if (customer.total_orders > 20) score += 8;
-  else if (customer.total_orders > 10) score += 4;
+  if ((customer.total_orders || 0) > 20) score += 8;
+  else if ((customer.total_orders || 0) > 10) score += 4;
 
   if (customer.last_purchase) {
     const daysSinceLastPurchase = Math.floor(
@@ -222,7 +241,7 @@ function calculateRelevanceScore(customer: any, searchTerm: string): number {
   return score;
 }
 
-function getMatchedFields(customer: any, searchTerm: string): string[] {
+function getMatchedFields(customer: SearchCustomerRow, searchTerm: string): string[] {
   const matchedFields: string[] = [];
   const term = searchTerm.toLowerCase();
 
@@ -236,7 +255,7 @@ function getMatchedFields(customer: any, searchTerm: string): string[] {
 }
 
 function generateSearchSuggestionsFromCustomers(
-  customers: any[],
+  customers: SearchCustomerRow[],
   searchTerm: string,
   limit: number,
 ): string[] {
@@ -269,7 +288,7 @@ function generateSearchSuggestionsFromCustomers(
 }
 
 function generateSearchStatsFromCustomers(
-  customers: any[],
+  customers: SearchCustomerRow[],
   searchTerm: string,
   resultCount: number,
   totalMatches: number,

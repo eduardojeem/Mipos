@@ -312,7 +312,7 @@ export default function OnboardingPage() {
     return () => { cancelled = true; };
   }, [authLoading, resolvedOrgId, resolvedOrgName, user]);
 
-  const checks = useMemo(() => ([
+  const checks = useMemo<Array<[string, boolean]>>(() => ([
     ['Nombre del negocio', !!form.name.trim()],
     ['Rubro principal', !!form.industry.trim()],
     ['Ciudad y departamento', !!(form.city.trim() && form.department.trim())],

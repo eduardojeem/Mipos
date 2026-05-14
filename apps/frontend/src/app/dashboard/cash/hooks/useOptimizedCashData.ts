@@ -16,6 +16,10 @@ interface OptimizedCashDataOptions {
   staleTime?: number;
 }
 
+type QueryResultStatus = {
+  status?: string;
+};
+
 export function useOptimizedCashData(options: OptimizedCashDataOptions = {}) {
   const enableRealtime = options.enableRealtime ?? true;
   const fmtCurrency = useCurrencyFormatter();
@@ -195,7 +199,7 @@ export function useOptimizedCashData(options: OptimizedCashDataOptions = {}) {
   }, [calculations.computationMs]);
 
   const fetchSession = useCallback(async () => {
-    const result = await refetchSession();
+    const result = await refetchSession() as QueryResultStatus;
     if (result.status === "success") {
       setLastSyncAt(new Date());
     }
@@ -203,7 +207,7 @@ export function useOptimizedCashData(options: OptimizedCashDataOptions = {}) {
   }, [refetchSession]);
 
   const fetchMovements = useCallback(async () => {
-    const result = await refetchMovements();
+    const result = await refetchMovements() as QueryResultStatus;
     if (result.status === "success") {
       setLastSyncAt(new Date());
     }

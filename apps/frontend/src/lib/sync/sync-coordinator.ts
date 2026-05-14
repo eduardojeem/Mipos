@@ -142,182 +142,20 @@ export class SyncCoordinator {
    * Devuelve una función de limpieza para cancelar todas las suscripciones.
    */
   subscribeToAllEntities(callback: (payload: EntityChangePayload) => void): () => Promise<void> {
-    const unsubscribePromises: Promise<() => Promise<void>>[] = [];
-
-    // Products
     try {
-      const productsUnsubP = supabaseRealtimeService.subscribeToProductsGlobal((payload) => {
-        callback({
-          entity: 'products',
-          eventType: payload.eventType,
-          new: payload.new,
-          old: payload.old,
-        });
-      });
-      unsubscribePromises.push(productsUnsubP);
-    } catch (error) {
-      this.status.errorCount += 1;
-      syncLogger.log('error', 'Failed to subscribe to products', { error });
-    }
-
-    // Categories
-    try {
-      const categoriesUnsubP = supabaseRealtimeService.subscribeToCategoriesGlobal((payload) => {
-        callback({
-          entity: 'categories',
-          eventType: payload.eventType,
-          new: payload.new,
-          old: payload.old,
-        });
-      });
-      unsubscribePromises.push(categoriesUnsubP);
-    } catch (error) {
-      this.status.errorCount += 1;
-      syncLogger.log('error', 'Failed to subscribe to categories', { error });
-    }
-
-    // Customers
-    try {
-      const customersUnsubP = supabaseRealtimeService.subscribeToCustomersGlobal((payload) => {
-        callback({
-          entity: 'customers',
-          eventType: payload.eventType,
-          new: payload.new,
-          old: payload.old,
-        });
-      });
-      unsubscribePromises.push(customersUnsubP);
-    } catch (error) {
-      this.status.errorCount += 1;
-      syncLogger.log('error', 'Failed to subscribe to customers', { error });
-    }
-
-    // Sales
-    try {
-      const salesUnsubP = supabaseRealtimeService.subscribeToSalesGlobal((payload) => {
-        callback({
-          entity: 'sales',
-          eventType: payload.eventType,
-          new: payload.new,
-          old: payload.old,
-        });
-      });
-      unsubscribePromises.push(salesUnsubP);
-    } catch (error) {
-      this.status.errorCount += 1;
-      syncLogger.log('error', 'Failed to subscribe to sales', { error });
-    }
-
-    // Sale Items
-    try {
-      const saleItemsUnsubP = supabaseRealtimeService.subscribeToSaleItemsGlobal((payload) => {
-        callback({
-          entity: 'sale_items',
-          eventType: payload.eventType,
-          new: payload.new,
-          old: payload.old,
-        });
-      });
-      unsubscribePromises.push(saleItemsUnsubP);
-    } catch (error) {
-      this.status.errorCount += 1;
-      syncLogger.log('error', 'Failed to subscribe to sale_items', { error });
-    }
-
-    // Inventory Movements
-    try {
-      const inventoryUnsubP = supabaseRealtimeService.subscribeToInventoryMovementsGlobal((payload) => {
-        callback({
-          entity: 'inventory',
-          eventType: payload.eventType,
-          new: payload.new,
-          old: payload.old,
-        });
-      });
-      unsubscribePromises.push(inventoryUnsubP);
-    } catch (error) {
-      this.status.errorCount += 1;
-      syncLogger.log('error', 'Failed to subscribe to inventory_movements', { error });
-    }
-
-    // Roles
-    try {
-      const rolesUnsubP = supabaseRealtimeService.subscribeToRolesGlobal((payload) => {
-        callback({
-          entity: 'roles',
-          eventType: payload.eventType,
-          new: payload.new,
-          old: payload.old,
-        });
-      });
-      unsubscribePromises.push(rolesUnsubP);
-    } catch (error) {
-      this.status.errorCount += 1;
-      syncLogger.log('error', 'Failed to subscribe to roles', { error });
-    }
-
-    // Permissions
-    try {
-      const permissionsUnsubP = supabaseRealtimeService.subscribeToPermissionsGlobal((payload) => {
-        callback({
-          entity: 'permissions',
-          eventType: payload.eventType,
-          new: payload.new,
-          old: payload.old,
-        });
-      });
-      unsubscribePromises.push(permissionsUnsubP);
-    } catch (error) {
-      this.status.errorCount += 1;
-      syncLogger.log('error', 'Failed to subscribe to permissions', { error });
-    }
-
-    // Cash Sessions
-    try {
-      const cashSessionsUnsubP = supabaseRealtimeService.subscribeToCashSessionsGlobal((payload) => {
-        callback({
-          entity: 'cash_sessions',
-          eventType: payload.eventType,
-          new: payload.new,
-          old: payload.old,
-        });
-      });
-      unsubscribePromises.push(cashSessionsUnsubP);
-    } catch (error) {
-      this.status.errorCount += 1;
-      syncLogger.log('error', 'Failed to subscribe to cash_sessions', { error });
-    }
-
-    // Cash Movements
-    try {
-      const cashMovementsUnsubP = supabaseRealtimeService.subscribeToCashMovementsGlobal((payload) => {
-        callback({
-          entity: 'cash_movements',
-          eventType: payload.eventType,
-          new: payload.new,
-          old: payload.old,
-        });
-      });
-      unsubscribePromises.push(cashMovementsUnsubP);
-    } catch (error) {
-      this.status.errorCount += 1;
-      syncLogger.log('error', 'Failed to subscribe to cash_movements', { error });
-    }
-
-    return async () => {
-      const unsubscribeFunctions = await Promise.allSettled(unsubscribePromises);
-      for (const result of unsubscribeFunctions) {
-        if (result.status === 'fulfilled') {
-          try {
-            await result.value();
-          } catch (error) {
-            syncLogger.log('warn', 'Error during unsubscribe', { error });
-          }
-        } else {
-          syncLogger.log('warn', 'Failed to get unsubscribe function', { reason: result.reason });
+      const channel = supabaseRealtimeService.createSyncMultiplexedChannel(callback);
+      return async () => {
+        try {
+          channel.unsubscribe();
+        } catch (error) {
+          syncLogger.log('warn', 'Error during sync multiplexed unsubscribe', { error });
         }
-      }
-    };
+      };
+    } catch (error) {
+      this.status.errorCount += 1;
+      syncLogger.log('error', 'Failed to subscribe to multiplexed sync channel', { error });
+      return async () => {};
+    }
   }
 
   private scheduleTick() {

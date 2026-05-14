@@ -1,22 +1,16 @@
 import { useState } from 'react';
 import { Plus, ShoppingCart } from 'lucide-react';
 import { cn, formatCurrency } from '@/lib/utils';
+import type { Product } from '@/types';
 
-interface Product {
-  id: string;
-  name: string;
+type PosProductCardItem = Product & {
   price?: number;
-  sale_price?: number;
-  offer_price?: number;
-  regular_price?: number;
-  image_url?: string;
   stock?: number;
-  sku?: string;
-}
+};
 
 interface ProductCardProps {
-  product: Product;
-  onAddToCart: (product: Product) => void;
+  product: PosProductCardItem;
+  onAddToCart: (product: PosProductCardItem) => void;
 }
 
 export default function ProductCard({ product, onAddToCart }: ProductCardProps) {
@@ -27,8 +21,9 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps) 
     setImageError(true);
   };
 
-  const isLowStock = product.stock !== undefined && product.stock <= 5 && product.stock > 0;
-  const isOutOfStock = product.stock !== undefined && product.stock <= 0;
+  const stockLevel = product.stock ?? product.stock_quantity;
+  const isLowStock = stockLevel !== undefined && stockLevel <= 5 && stockLevel > 0;
+  const isOutOfStock = stockLevel !== undefined && stockLevel <= 0;
 
   return (
     <div
@@ -73,7 +68,7 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps) 
         </div>
 
         {/* Insignia de Stock */}
-        {product.stock !== undefined && (
+        {stockLevel !== undefined && (
           <div className={cn(
             "absolute top-3 left-3 px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider backdrop-blur-md transition-all duration-300",
             isOutOfStock
@@ -82,7 +77,7 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps) 
                 ? "bg-orange-500/10 text-orange-600 dark:text-orange-400 border border-orange-500/20"
                 : "bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20 opacity-0 group-hover:opacity-100"
           )}>
-            {isOutOfStock ? 'Agotado' : isLowStock ? `Stock: ${product.stock}` : 'En Stock'}
+            {isOutOfStock ? 'Agotado' : isLowStock ? `Stock: ${stockLevel}` : 'En Stock'}
           </div>
         )}
       </div>

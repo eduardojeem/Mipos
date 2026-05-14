@@ -1,28 +1,37 @@
-﻿import 'server-only';
+﻿import "server-only";
 
-import { CATALOG_DEFAULT_MAX_PRICE, type CatalogQueryState, type CatalogSortMode } from '@/app/catalog/catalog-query';
-import { buildTenantHomeUrl } from '@/lib/domain/host-context';
-import type { PublicOrganization } from '@/lib/domain/request-tenant';
-import { createAdminClient } from '@/lib/supabase/server';
-import type { GlobalProductCard } from '@/lib/public-site/data';
+import { unstable_cache } from "next/cache";
+import {
+  CATALOG_DEFAULT_MAX_PRICE,
+  type CatalogQueryState,
+  type CatalogSortMode,
+} from "@/app/catalog/catalog-query";
+import { buildTenantHomeUrl } from "@/lib/domain/host-context";
+import type { PublicOrganization } from "@/lib/domain/request-tenant";
+import { createAdminClient } from "@/lib/supabase/server";
+import type { GlobalProductCard } from "@/lib/public-site/data";
 
-const PUBLIC_ORGANIZATION_STATUSES = ['ACTIVE', 'TRIAL'];
-const ORGANIZATION_BASE_COLUMNS = ['id', 'name', 'slug'];
-const ORGANIZATION_OPTIONAL_COLUMNS = ['subdomain', 'custom_domain', 'settings'];
-const PRODUCT_BASE_COLUMNS = ['id', 'name', 'sale_price', 'organization_id'];
+const PUBLIC_ORGANIZATION_STATUSES = ["ACTIVE", "TRIAL"];
+const ORGANIZATION_BASE_COLUMNS = ["id", "name", "slug"];
+const ORGANIZATION_OPTIONAL_COLUMNS = [
+  "subdomain",
+  "custom_domain",
+  "settings",
+];
+const PRODUCT_BASE_COLUMNS = ["id", "name", "sale_price", "organization_id"];
 const PRODUCT_OPTIONAL_COLUMNS = [
-  'description',
-  'offer_price',
-  'discount_percentage',
-  'stock_quantity',
-  'image_url',
-  'images',
-  'category_id',
-  'brand',
-  'updated_at',
-  'created_at',
-  'rating',
-  'is_active',
+  "description",
+  "offer_price",
+  "discount_percentage",
+  "stock_quantity",
+  "image_url",
+  "images",
+  "category_id",
+  "brand",
+  "updated_at",
+  "created_at",
+  "rating",
+  "is_active",
 ];
 const ORGANIZATION_BATCH_SIZE = 250;
 const PRODUCT_BATCH_SIZE = 500;
@@ -78,19 +87,23 @@ export interface GlobalCatalogSnapshot {
 }
 
 function isMissingColumnError(error: unknown): boolean {
-  const message = String((error as { message?: string })?.message || '').toLowerCase();
-  return message.includes('column') && message.includes('does not exist');
+  const message = String(
+    (error as { message?: string })?.message || "",
+  ).toLowerCase();
+  return message.includes("column") && message.includes("does not exist");
 }
 
 function getMissingColumnName(error: unknown): string | null {
-  const code = String((error as { code?: string })?.code || '');
-  const message = String((error as { message?: string })?.message || '');
+  const code = String((error as { code?: string })?.code || "");
+  const message = String((error as { message?: string })?.message || "");
 
-  if (code !== '42703' && !isMissingColumnError(error)) {
+  if (code !== "42703" && !isMissingColumnError(error)) {
     return null;
   }
 
-  const qualifiedMatch = message.match(/column\s+[a-z0-9_]+\.(\w+)\s+does not exist/i);
+  const qualifiedMatch = message.match(
+    /column\s+[a-z0-9_]+\.(\w+)\s+does not exist/i,
+  );
   if (qualifiedMatch?.[1]) {
     return qualifiedMatch[1].toLowerCase();
   }
@@ -99,16 +112,20 @@ function getMissingColumnName(error: unknown): string | null {
   return unqualifiedMatch?.[1]?.toLowerCase() || null;
 }
 
-function buildSelectClause(baseColumns: string[], optionalColumns: string[], missingColumns: Set<string>): string {
+function buildSelectClause(
+  baseColumns: string[],
+  optionalColumns: string[],
+  missingColumns: Set<string>,
+): string {
   return [
     ...baseColumns,
     ...optionalColumns.filter((column) => !missingColumns.has(column)),
-  ].join(',');
+  ].join(",");
 }
 
 function sanitizeSearchTerm(search: string): string {
   // Escape SQL LIKE wildcards: % and _ are special characters
-  return search.replace(/[%_,]/g, ' ').trim();
+  return search.replace(/[%_,]/g, " ").trim();
 }
 
 function normalizePositiveNumber(value: unknown): number | null {
@@ -116,105 +133,127 @@ function normalizePositiveNumber(value: unknown): number | null {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
-function normalizeDisplayText(value: string | null | undefined, fallback = ''): string {
+function normalizeDisplayText(
+  value: string | null | undefined,
+  fallback = "",
+): string {
   const next = String(value || fallback).trim();
   if (!next) {
     return fallback;
   }
 
   try {
-    const decoded = new TextDecoder('utf-8').decode(
-      Uint8Array.from(next, (char) => char.charCodeAt(0))
+    const decoded = new TextDecoder("utf-8").decode(
+      Uint8Array.from(next, (char) => char.charCodeAt(0)),
     );
-    return Array.from(decoded).some((char) => char.charCodeAt(0) === 65533) ? next : decoded;
+    return Array.from(decoded).some((char) => char.charCodeAt(0) === 65533)
+      ? next
+      : decoded;
   } catch {
     return next;
   }
 }
 
-function extractPrimaryImage(images: ProductRow['images'], fallback?: string | null): string {
+function extractPrimaryImage(
+  images: ProductRow["images"],
+  fallback?: string | null,
+): string {
   if (Array.isArray(images) && images.length > 0) {
     const first = images[0];
-    if (typeof first === 'string' && first) {
+    if (typeof first === "string" && first) {
       return first;
     }
 
-    if (first && typeof first === 'object' && first.url) {
+    if (first && typeof first === "object" && first.url) {
       return first.url;
     }
   }
 
-  return fallback || '/api/placeholder/480/360';
+  return fallback || "/api/placeholder/480/360";
 }
 
 function toCategoryKey(value: string): string {
-  const normalized = normalizeDisplayText(value, 'sin-categoria')
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
+  const normalized = normalizeDisplayText(value, "sin-categoria")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 
-  return normalized || 'sin-categoria';
+  return normalized || "sin-categoria";
 }
 
-function getEffectivePrice(product: Pick<GlobalProductCard, 'basePrice' | 'offerPrice'>): number {
+function getEffectivePrice(
+  product: Pick<GlobalProductCard, "basePrice" | "offerPrice">,
+): number {
   const offerPrice = normalizePositiveNumber(product.offerPrice);
-  return offerPrice && offerPrice < product.basePrice ? offerPrice : product.basePrice;
+  return offerPrice && offerPrice < product.basePrice
+    ? offerPrice
+    : product.basePrice;
 }
 
-function hasOffer(product: Pick<GlobalProductCard, 'basePrice' | 'offerPrice' | 'discountPercentage'>): boolean {
+function hasOffer(
+  product: Pick<
+    GlobalProductCard,
+    "basePrice" | "offerPrice" | "discountPercentage"
+  >,
+): boolean {
   const offerPrice = normalizePositiveNumber(product.offerPrice);
   const discount = Number(product.discountPercentage || 0);
-  return Boolean((offerPrice && offerPrice < product.basePrice) || discount > 0);
+  return Boolean(
+    (offerPrice && offerPrice < product.basePrice) || discount > 0,
+  );
 }
 
-function sortProducts(products: GlobalProductCard[], sortBy: CatalogSortMode): GlobalProductCard[] {
+function sortProducts(
+  products: GlobalProductCard[],
+  sortBy: CatalogSortMode,
+): GlobalProductCard[] {
   const sorted = [...products];
 
   switch (sortBy) {
-    case 'price-low':
+    case "price-low":
       sorted.sort((left, right) => {
         const diff = getEffectivePrice(left) - getEffectivePrice(right);
         if (diff !== 0) return diff;
-        return left.name.localeCompare(right.name, 'es');
+        return left.name.localeCompare(right.name, "es");
       });
       break;
-    case 'price-high':
+    case "price-high":
       sorted.sort((left, right) => {
         const diff = getEffectivePrice(right) - getEffectivePrice(left);
         if (diff !== 0) return diff;
-        return left.name.localeCompare(right.name, 'es');
+        return left.name.localeCompare(right.name, "es");
       });
       break;
-    case 'rating':
+    case "rating":
       sorted.sort((left, right) => {
         const diff = Number(right.rating || 0) - Number(left.rating || 0);
         if (diff !== 0) return diff;
-        return left.name.localeCompare(right.name, 'es');
+        return left.name.localeCompare(right.name, "es");
       });
       break;
-    case 'newest':
+    case "newest":
       sorted.sort((left, right) => {
         const diff =
           new Date(String(right.createdAt || 0)).getTime() -
           new Date(String(left.createdAt || 0)).getTime();
         if (diff !== 0) return diff;
-        return left.name.localeCompare(right.name, 'es');
+        return left.name.localeCompare(right.name, "es");
       });
       break;
-    case 'name':
-      sorted.sort((left, right) => left.name.localeCompare(right.name, 'es'));
+    case "name":
+      sorted.sort((left, right) => left.name.localeCompare(right.name, "es"));
       break;
-    case 'popular':
+    case "popular":
     default:
       sorted.sort((left, right) => {
         const updatedDiff =
           new Date(String(right.updatedAt || 0)).getTime() -
           new Date(String(left.updatedAt || 0)).getTime();
         if (updatedDiff !== 0) return updatedDiff;
-        return left.name.localeCompare(right.name, 'es');
+        return left.name.localeCompare(right.name, "es");
       });
       break;
   }
@@ -233,17 +272,17 @@ async function fetchActiveOrganizations(): Promise<{
 
   const runQuery = async (selectClause: string, from: number, to: number) =>
     client
-      .from('organizations')
-      .select(selectClause, { count: 'exact' })
-      .in('subscription_status', PUBLIC_ORGANIZATION_STATUSES)
-      .order('created_at', { ascending: false })
+      .from("organizations")
+      .select(selectClause, { count: "exact" })
+      .in("subscription_status", PUBLIC_ORGANIZATION_STATUSES)
+      .order("created_at", { ascending: false })
       .range(from, to);
 
   for (;;) {
     const selectClause = buildSelectClause(
       ORGANIZATION_BASE_COLUMNS,
       ORGANIZATION_OPTIONAL_COLUMNS,
-      missingColumns
+      missingColumns,
     );
     let recovered = false;
 
@@ -251,7 +290,11 @@ async function fetchActiveOrganizations(): Promise<{
     totalOrganizations = 0;
 
     for (let from = 0; ; from += ORGANIZATION_BATCH_SIZE) {
-      const result = await runQuery(selectClause, from, from + ORGANIZATION_BATCH_SIZE - 1);
+      const result = await runQuery(
+        selectClause,
+        from,
+        from + ORGANIZATION_BATCH_SIZE - 1,
+      );
       const missingColumn = getMissingColumnName(result.error);
 
       if (
@@ -265,14 +308,14 @@ async function fetchActiveOrganizations(): Promise<{
       }
 
       if (result.error) {
-        throw result.error;
+        throw new Error(result.error.message || JSON.stringify(result.error));
       }
 
-      if (typeof result.count === 'number') {
+      if (typeof result.count === "number") {
         totalOrganizations = result.count;
       }
 
-      const rows = (result.data || []) as PublicOrganization[];
+      const rows = (result.data || []) as unknown as PublicOrganization[];
       organizations.push(...rows);
 
       if (rows.length < ORGANIZATION_BATCH_SIZE) {
@@ -293,7 +336,7 @@ async function fetchActiveOrganizations(): Promise<{
 
 async function fetchMatchingProducts(
   organizationIds: string[],
-  input: CatalogQueryState
+  input: CatalogQueryState,
 ): Promise<ProductRow[]> {
   const client = await createAdminClient();
   const products: ProductRow[] = [];
@@ -304,66 +347,70 @@ async function fetchMatchingProducts(
     selectValue: string,
     from: number,
     to: number,
-    unavailableColumns: Set<string>
+    unavailableColumns: Set<string>,
   ) => {
     let query = client
-      .from('products')
+      .from("products")
       .select(selectValue)
-      .in('organization_id', organizationIds);
+      .in("organization_id", organizationIds);
 
-    if (!unavailableColumns.has('is_active')) {
-      query = query.eq('is_active', true);
+    if (!unavailableColumns.has("is_active")) {
+      query = query.eq("is_active", true);
     }
 
     if (search) {
       const searchClauses = [`name.ilike.%${search}%`];
 
-      if (!unavailableColumns.has('description')) {
+      if (!unavailableColumns.has("description")) {
         searchClauses.push(`description.ilike.%${search}%`);
       }
 
-      if (!unavailableColumns.has('brand')) {
+      if (!unavailableColumns.has("brand")) {
         searchClauses.push(`brand.ilike.%${search}%`);
       }
 
-      query = query.or(searchClauses.join(','));
+      query = query.or(searchClauses.join(","));
     }
 
-    if (input.inStock && !unavailableColumns.has('stock_quantity')) {
-      query = query.gt('stock_quantity', 0);
+    if (input.inStock && !unavailableColumns.has("stock_quantity")) {
+      query = query.gt("stock_quantity", 0);
     }
 
-    if (input.rating && !unavailableColumns.has('rating')) {
-      query = query.gte('rating', input.rating);
+    if (input.rating && !unavailableColumns.has("rating")) {
+      query = query.gte("rating", input.rating);
     }
 
     // Apply price filters at DB level for performance
     if (input.minPrice > 0) {
-      query = query.gte('sale_price', input.minPrice);
+      query = query.gte("sale_price", input.minPrice);
     }
 
     if (input.maxPrice !== null && input.maxPrice > 0) {
-      query = query.lte('sale_price', input.maxPrice);
+      query = query.lte("sale_price", input.maxPrice);
     }
 
     // Filter products with active offers at DB level
-    if (input.onSale && !unavailableColumns.has('offer_price')) {
-      query = query.gt('offer_price', 0);
+    if (input.onSale && !unavailableColumns.has("offer_price")) {
+      query = query.gt("offer_price", 0);
     }
 
-    if (!unavailableColumns.has('updated_at')) {
-      query = query.order('updated_at', { ascending: false });
+    if (!unavailableColumns.has("updated_at")) {
+      query = query.order("updated_at", { ascending: false });
     }
 
-    if (!unavailableColumns.has('created_at')) {
-      query = query.order('created_at', { ascending: false });
+    if (!unavailableColumns.has("created_at")) {
+      query = query.order("created_at", { ascending: false });
     }
 
     return query.range(from, to);
   };
 
   for (;;) {
-    const selectClause = buildSelectClause(PRODUCT_BASE_COLUMNS, PRODUCT_OPTIONAL_COLUMNS, missingColumns);
+    const selectClause = buildSelectClause(
+      PRODUCT_BASE_COLUMNS,
+      PRODUCT_OPTIONAL_COLUMNS,
+      missingColumns,
+    );
     let recovered = false;
 
     products.length = 0;
@@ -373,13 +420,15 @@ async function fetchMatchingProducts(
         selectClause,
         from,
         from + PRODUCT_BATCH_SIZE - 1,
-        missingColumns
+        missingColumns,
       );
       const missingColumn = getMissingColumnName(result.error);
 
       if (
         missingColumn &&
-        [...PRODUCT_OPTIONAL_COLUMNS, 'created_at', 'updated_at'].includes(missingColumn) &&
+        [...PRODUCT_OPTIONAL_COLUMNS, "created_at", "updated_at"].includes(
+          missingColumn,
+        ) &&
         !missingColumns.has(missingColumn)
       ) {
         missingColumns.add(missingColumn);
@@ -388,10 +437,10 @@ async function fetchMatchingProducts(
       }
 
       if (result.error) {
-        throw result.error;
+        throw new Error(result.error.message || JSON.stringify(result.error));
       }
 
-      const rows = (result.data || []) as ProductRow[];
+      const rows = (result.data || []) as unknown as ProductRow[];
       products.push(...rows);
 
       if (rows.length < PRODUCT_BATCH_SIZE) {
@@ -407,7 +456,9 @@ async function fetchMatchingProducts(
   return products;
 }
 
-async function fetchCategoryMap(categoryIds: string[]): Promise<Map<string, string>> {
+async function fetchCategoryMap(
+  categoryIds: string[],
+): Promise<Map<string, string>> {
   if (categoryIds.length === 0) {
     return new Map();
   }
@@ -415,62 +466,77 @@ async function fetchCategoryMap(categoryIds: string[]): Promise<Map<string, stri
   const client = await createAdminClient();
   const categoryMap = new Map<string, string>();
 
-  for (let index = 0; index < categoryIds.length; index += CATEGORY_BATCH_SIZE) {
+  for (
+    let index = 0;
+    index < categoryIds.length;
+    index += CATEGORY_BATCH_SIZE
+  ) {
     const batch = categoryIds.slice(index, index + CATEGORY_BATCH_SIZE);
     const { data, error } = await client
-      .from('categories')
-      .select('id,name')
-      .in('id', batch);
+      .from("categories")
+      .select("id,name")
+      .in("id", batch);
 
     if (error) {
-      throw error;
+      throw new Error(error.message || JSON.stringify(error));
     }
 
     ((data || []) as CategoryRow[]).forEach((row) => {
-      categoryMap.set(row.id, normalizeDisplayText(row.name, 'Sin categoria'));
+      categoryMap.set(row.id, normalizeDisplayText(row.name, "Sin categoria"));
     });
   }
 
   return categoryMap;
 }
 
-function extractOrganizationLocation(organization: PublicOrganization, businessConfigMap: Map<string, Record<string, unknown>>): { department: string; city: string } {
-  let department = '';
-  let city = '';
+function extractOrganizationLocation(
+  organization: PublicOrganization,
+  businessConfigMap: Map<string, Record<string, unknown>>,
+): { department: string; city: string } {
+  let department = "";
+  let city = "";
 
   // 1. Try from business_config in settings table (most reliable source)
   const config = businessConfigMap.get(organization.id);
   if (config) {
     const address = config.address as Record<string, unknown> | undefined;
-    if (address && typeof address === 'object') {
-      department = String(address.state || address.department || '').trim();
-      city = String(address.city || address.ciudad || '').trim();
+    if (address && typeof address === "object") {
+      department = String(address.state || address.department || "").trim();
+      city = String(address.city || address.ciudad || "").trim();
     }
     const contact = config.contact as Record<string, unknown> | undefined;
-    if (!city && contact && typeof contact === 'object') {
-      city = String(contact.city || '').trim();
+    if (!city && contact && typeof contact === "object") {
+      city = String(contact.city || "").trim();
     }
   }
 
   // 2. Fallback to organizations.settings JSONB
   if (!department || !city) {
-    const settings = (organization as { settings?: Record<string, unknown> }).settings;
-    if (settings && typeof settings === 'object') {
+    const settings = (organization as { settings?: Record<string, unknown> })
+      .settings;
+    if (settings && typeof settings === "object") {
       const address = (settings as Record<string, unknown>).address;
-      if (address && typeof address === 'object') {
+      if (address && typeof address === "object") {
         const addr = address as Record<string, unknown>;
-        if (!department) department = String(addr.state || addr.department || '').trim();
-        if (!city) city = String(addr.city || addr.ciudad || '').trim();
+        if (!department)
+          department = String(addr.state || addr.department || "").trim();
+        if (!city) city = String(addr.city || addr.ciudad || "").trim();
       }
-      if (!department) department = String((settings as Record<string, unknown>).department || '').trim();
-      if (!city) city = String((settings as Record<string, unknown>).city || '').trim();
+      if (!department)
+        department = String(
+          (settings as Record<string, unknown>).department || "",
+        ).trim();
+      if (!city)
+        city = String((settings as Record<string, unknown>).city || "").trim();
     }
   }
 
   return { department, city };
 }
 
-async function fetchBusinessConfigLocations(organizationIds: string[]): Promise<Map<string, Record<string, unknown>>> {
+async function fetchBusinessConfigLocations(
+  organizationIds: string[],
+): Promise<Map<string, Record<string, unknown>>> {
   const map = new Map<string, Record<string, unknown>>();
   if (organizationIds.length === 0) return map;
 
@@ -478,14 +544,14 @@ async function fetchBusinessConfigLocations(organizationIds: string[]): Promise<
 
   // Try settings table first (new format)
   const { data: settingsRows, error: settingsError } = await client
-    .from('settings')
-    .select('organization_id, value')
-    .eq('key', 'business_config')
-    .in('organization_id', organizationIds);
+    .from("settings")
+    .select("organization_id, value")
+    .eq("key", "business_config")
+    .in("organization_id", organizationIds);
 
   if (!settingsError && settingsRows) {
     for (const row of settingsRows) {
-      if (row.value && typeof row.value === 'object' && row.organization_id) {
+      if (row.value && typeof row.value === "object" && row.organization_id) {
         map.set(row.organization_id, row.value as Record<string, unknown>);
       }
     }
@@ -495,18 +561,18 @@ async function fetchBusinessConfigLocations(organizationIds: string[]): Promise<
   const missingIds = organizationIds.filter((id) => !map.has(id));
   if (missingIds.length > 0) {
     const { data: legacyRows, error: legacyError } = await client
-      .from('business_config')
-      .select('organization_id, address, phone, city, state, department')
-      .in('organization_id', missingIds);
+      .from("business_config")
+      .select("organization_id, address, phone, city, state, department")
+      .in("organization_id", missingIds);
 
     if (!legacyError && legacyRows) {
       for (const row of legacyRows as Array<Record<string, unknown>>) {
-        const orgId = String(row.organization_id || '');
+        const orgId = String(row.organization_id || "");
         if (!orgId) continue;
         map.set(orgId, {
           address: {
-            city: row.city || '',
-            state: row.state || row.department || '',
+            city: row.city || "",
+            state: row.state || row.department || "",
           },
         });
       }
@@ -521,9 +587,11 @@ function mapProductsToCards(
   organizations: PublicOrganization[],
   categoryMap: Map<string, string>,
   businessConfigMap: Map<string, Record<string, unknown>>,
-  requestHost?: string | null
+  requestHost?: string | null,
 ): GlobalProductCard[] {
-  const organizationMap = new Map(organizations.map((organization) => [organization.id, organization]));
+  const organizationMap = new Map(
+    organizations.map((organization) => [organization.id, organization]),
+  );
 
   return products
     .map((product): GlobalProductCard | null => {
@@ -536,25 +604,32 @@ function mapProductsToCards(
       }
 
       const categoryName = product.category_id
-        ? categoryMap.get(product.category_id) || 'Sin categoria'
-        : 'Sin categoria';
+        ? categoryMap.get(product.category_id) || "Sin categoria"
+        : "Sin categoria";
 
-      const location = extractOrganizationLocation(organization, businessConfigMap);
+      const location = extractOrganizationLocation(
+        organization,
+        businessConfigMap,
+      );
 
       return {
         id: product.id,
-        name: normalizeDisplayText(product.name, 'Producto'),
-        description: normalizeDisplayText(product.description, 'Producto publico disponible en el marketplace.'),
+        name: normalizeDisplayText(product.name, "Producto"),
+        description: normalizeDisplayText(
+          product.description,
+          "Producto publico disponible en el marketplace.",
+        ),
         image: extractPrimaryImage(product.images, product.image_url),
         categoryName,
         categoryKey: toCategoryKey(categoryName),
         brand: product.brand ? normalizeDisplayText(product.brand) : undefined,
         basePrice: Number(product.sale_price || 0),
         offerPrice: normalizePositiveNumber(product.offer_price) || undefined,
-        discountPercentage: Number(product.discount_percentage || 0) || undefined,
+        discountPercentage:
+          Number(product.discount_percentage || 0) || undefined,
         stockQuantity: Number(product.stock_quantity || 0),
         rating: product.rating ?? null,
-        organizationName: normalizeDisplayText(organization.name, 'Empresa'),
+        organizationName: normalizeDisplayText(organization.name, "Empresa"),
         organizationHref: buildTenantHomeUrl(organization, requestHost),
         organizationId: organization.id,
         department: location.department || undefined,
@@ -566,10 +641,17 @@ function mapProductsToCards(
     .filter((product): product is GlobalProductCard => Boolean(product));
 }
 
-function buildCategoryOptions(products: GlobalProductCard[]): GlobalCatalogCategoryOption[] {
+function buildCategoryOptions(
+  products: GlobalProductCard[],
+): GlobalCatalogCategoryOption[] {
   const accumulator = new Map<
     string,
-    { key: string; label: string; productIds: Set<string>; organizationIds: Set<string> }
+    {
+      key: string;
+      label: string;
+      productIds: Set<string>;
+      organizationIds: Set<string>;
+    }
   >();
 
   products.forEach((product) => {
@@ -600,27 +682,34 @@ function buildCategoryOptions(products: GlobalProductCard[]): GlobalCatalogCateg
       if (right.productCount !== left.productCount) {
         return right.productCount - left.productCount;
       }
-      return left.label.localeCompare(right.label, 'es');
+      return left.label.localeCompare(right.label, "es");
     });
 }
 
 function toLocationKey(value: string): string {
-  return value
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '') || 'sin-ubicacion';
+  return (
+    value
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "sin-ubicacion"
+  );
 }
 
 function buildLocationOptions(
   products: GlobalProductCard[],
-  field: 'department' | 'city'
+  field: "department" | "city",
 ): GlobalCatalogLocationOption[] {
   const accumulator = new Map<
     string,
-    { key: string; label: string; organizationIds: Set<string>; productCount: number }
+    {
+      key: string;
+      label: string;
+      organizationIds: Set<string>;
+      productCount: number;
+    }
   >();
 
   products.forEach((product) => {
@@ -653,9 +742,15 @@ function buildLocationOptions(
     .sort((left, right) => right.productCount - left.productCount);
 }
 
-function filterProducts(products: GlobalProductCard[], input: CatalogQueryState): GlobalProductCard[] {
+function filterProducts(
+  products: GlobalProductCard[],
+  input: CatalogQueryState,
+): GlobalProductCard[] {
   return products.filter((product) => {
-    if (input.categories.length > 0 && (!product.categoryKey || !input.categories.includes(product.categoryKey))) {
+    if (
+      input.categories.length > 0 &&
+      (!product.categoryKey || !input.categories.includes(product.categoryKey))
+    ) {
       return false;
     }
 
@@ -668,15 +763,27 @@ function filterProducts(products: GlobalProductCard[], input: CatalogQueryState)
       return false;
     }
 
-    if (input.maxPrice !== null && input.maxPrice > 0 && effectivePrice > input.maxPrice) {
+    if (
+      input.maxPrice !== null &&
+      input.maxPrice > 0 &&
+      effectivePrice > input.maxPrice
+    ) {
       return false;
     }
 
-    if (input.department && (!product.department || toLocationKey(product.department) !== toLocationKey(input.department))) {
+    if (
+      input.department &&
+      (!product.department ||
+        toLocationKey(product.department) !== toLocationKey(input.department))
+    ) {
       return false;
     }
 
-    if (input.city && (!product.city || toLocationKey(product.city) !== toLocationKey(input.city))) {
+    if (
+      input.city &&
+      (!product.city ||
+        toLocationKey(product.city) !== toLocationKey(input.city))
+    ) {
       return false;
     }
 
@@ -689,14 +796,17 @@ function resolveMaxPrice(products: GlobalProductCard[]): number {
     return CATALOG_DEFAULT_MAX_PRICE;
   }
 
-  const highestPrice = Math.max(...products.map((product) => getEffectivePrice(product)), 0);
+  const highestPrice = Math.max(
+    ...products.map((product) => getEffectivePrice(product)),
+    0,
+  );
   return highestPrice > 0 ? highestPrice : CATALOG_DEFAULT_MAX_PRICE;
 }
 
 function resolveRecencyScore(product: GlobalProductCard): number {
   return Math.max(
     new Date(String(product.createdAt || 0)).getTime(),
-    new Date(String(product.updatedAt || 0)).getTime()
+    new Date(String(product.updatedAt || 0)).getTime(),
   );
 }
 
@@ -735,12 +845,15 @@ function buildHeroProducts(products: GlobalProductCard[]): GlobalProductCard[] {
       return resolveRecencyScore(right) - resolveRecencyScore(left);
     });
 
-  const newest = [...products].sort((left, right) => resolveRecencyScore(right) - resolveRecencyScore(left));
+  const newest = [...products].sort(
+    (left, right) => resolveRecencyScore(right) - resolveRecencyScore(left),
+  );
 
   const inStock = [...products]
     .filter((product) => Number(product.stockQuantity || 0) > 0)
     .sort((left, right) => {
-      const stockDiff = Number(right.stockQuantity || 0) - Number(left.stockQuantity || 0);
+      const stockDiff =
+        Number(right.stockQuantity || 0) - Number(left.stockQuantity || 0);
       if (stockDiff !== 0) {
         return stockDiff;
       }
@@ -768,65 +881,121 @@ function buildHeroProducts(products: GlobalProductCard[]): GlobalProductCard[] {
   return slides.slice(0, 4);
 }
 
-export async function fetchGlobalCatalogSnapshot(
-  requestHost: string | null | undefined,
-  input: CatalogQueryState
-): Promise<GlobalCatalogSnapshot> {
-  const { organizations, totalOrganizations } = await fetchActiveOrganizations();
-  if (organizations.length === 0) {
-    return {
-      products: [],
-      heroProducts: [],
-      totalProducts: 0,
-      totalOrganizations: 0,
-      matchingOrganizations: 0,
-      categories: [],
-      departments: [],
-      cities: [],
-      maxPrice: CATALOG_DEFAULT_MAX_PRICE,
-    };
-  }
+const CATALOG_CACHE_REVALIDATE_SECONDS = 45;
 
-  const organizationIds = organizations.map((organization) => organization.id);
-  const rawProducts = await fetchMatchingProducts(organizationIds, input);
-  const categoryIds = Array.from(
-    new Set(
-      rawProducts
-        .map((product) => product.category_id)
-        .filter((categoryId): categoryId is string => typeof categoryId === 'string' && categoryId.length > 0)
-    )
-  );
-  const categoryMap = await fetchCategoryMap(categoryIds);
-  const businessConfigMap = await fetchBusinessConfigLocations(organizationIds);
-  const mappedProducts = mapProductsToCards(rawProducts, organizations, categoryMap, businessConfigMap, requestHost);
-
-  // Build category options from ALL products (before category filter) so user can see all available categories
-  // but apply other filters (price, stock, sale) so counts reflect the current non-category filters
-  const productsForCategoryOptions = filterProducts(mappedProducts, {
-    ...input,
-    categories: [], // Don't filter by category when building category options
-  });
-  const categories = buildCategoryOptions(productsForCategoryOptions);
-  const departments = buildLocationOptions(mappedProducts, 'department');
-  const cities = buildLocationOptions(mappedProducts, 'city');
-  const filteredProducts = filterProducts(mappedProducts, input);
-  const sortedProducts = sortProducts(filteredProducts, input.sortBy);
-  const start = (input.page - 1) * input.itemsPerPage;
-  const matchingOrganizations = new Set(filteredProducts.map((product) => product.organizationId).filter(Boolean)).size;
-  const productsForMaxPrice = input.categories.length > 0 || input.onSale
-    ? productsForCategoryOptions
-    : mappedProducts;
-
-  return {
-    products: sortedProducts.slice(start, start + input.itemsPerPage),
-    heroProducts: buildHeroProducts(sortedProducts),
-    totalProducts: sortedProducts.length,
-    totalOrganizations,
-    matchingOrganizations,
-    categories,
-    departments,
-    cities,
-    maxPrice: resolveMaxPrice(productsForMaxPrice),
-  };
+interface CachedCatalogBaseData {
+  organizations: PublicOrganization[];
+  totalOrganizations: number;
+  businessConfigEntries: Array<[string, Record<string, unknown>]>;
 }
 
+const fetchCachedCatalogBaseData = unstable_cache(
+  async (): Promise<CachedCatalogBaseData> => {
+    const { organizations, totalOrganizations } = await fetchActiveOrganizations();
+    if (organizations.length === 0) {
+      return { organizations: [], totalOrganizations: 0, businessConfigEntries: [] };
+    }
+
+    const organizationIds = organizations.map((org) => org.id);
+    const businessConfigMap = await fetchBusinessConfigLocations(organizationIds);
+
+    return {
+      organizations,
+      totalOrganizations,
+      businessConfigEntries: Array.from(businessConfigMap.entries()),
+    };
+  },
+  ['global-catalog-base-data'],
+  { revalidate: CATALOG_CACHE_REVALIDATE_SECONDS, tags: ['catalog'] }
+);
+
+export async function fetchGlobalCatalogSnapshot(
+  requestHost: string | null | undefined,
+  input: CatalogQueryState,
+): Promise<GlobalCatalogSnapshot> {
+  const emptySnapshot: GlobalCatalogSnapshot = {
+    products: [],
+    heroProducts: [],
+    totalProducts: 0,
+    totalOrganizations: 0,
+    matchingOrganizations: 0,
+    categories: [],
+    departments: [],
+    cities: [],
+    maxPrice: CATALOG_DEFAULT_MAX_PRICE,
+  };
+
+  let baseData: CachedCatalogBaseData;
+
+  try {
+    baseData = await fetchCachedCatalogBaseData();
+  } catch (error) {
+    console.error('[GlobalCatalog] Failed to fetch base data:', error instanceof Error ? error.message : JSON.stringify(error));
+    return emptySnapshot;
+  }
+
+  const { organizations, totalOrganizations, businessConfigEntries } = baseData;
+
+  if (organizations.length === 0) {
+    return emptySnapshot;
+  }
+
+  try {
+    const organizationIds = organizations.map((organization) => organization.id);
+    const rawProducts = await fetchMatchingProducts(organizationIds, input);
+    const categoryIds = Array.from(
+      new Set(
+        rawProducts
+          .map((product) => product.category_id)
+          .filter(
+            (categoryId): categoryId is string =>
+              typeof categoryId === "string" && categoryId.length > 0,
+          ),
+      ),
+    );
+    const categoryMap = await fetchCategoryMap(categoryIds);
+    const businessConfigMap = new Map(businessConfigEntries);
+    const mappedProducts = mapProductsToCards(
+      rawProducts,
+      organizations,
+      categoryMap,
+      businessConfigMap,
+      requestHost,
+    );
+
+    // Build category options from ALL products (before category filter) so user can see all available categories
+    // but apply other filters (price, stock, sale) so counts reflect the current non-category filters
+    const productsForCategoryOptions = filterProducts(mappedProducts, {
+      ...input,
+      categories: [], // Don't filter by category when building category options
+    });
+    const categories = buildCategoryOptions(productsForCategoryOptions);
+    const departments = buildLocationOptions(mappedProducts, "department");
+    const cities = buildLocationOptions(mappedProducts, "city");
+    const filteredProducts = filterProducts(mappedProducts, input);
+    const sortedProducts = sortProducts(filteredProducts, input.sortBy);
+    const start = (input.page - 1) * input.itemsPerPage;
+    const matchingOrganizations = new Set(
+      filteredProducts.map((product) => product.organizationId).filter(Boolean),
+    ).size;
+    const productsForMaxPrice =
+      input.categories.length > 0 || input.onSale
+        ? productsForCategoryOptions
+        : mappedProducts;
+
+    return {
+      products: sortedProducts.slice(start, start + input.itemsPerPage),
+      heroProducts: buildHeroProducts(sortedProducts),
+      totalProducts: sortedProducts.length,
+      totalOrganizations,
+      matchingOrganizations,
+      categories,
+      departments,
+      cities,
+      maxPrice: resolveMaxPrice(productsForMaxPrice),
+    };
+  } catch (error) {
+    console.error('[GlobalCatalog] Failed to fetch catalog products:', error instanceof Error ? error.message : JSON.stringify(error));
+    return emptySnapshot;
+  }
+}

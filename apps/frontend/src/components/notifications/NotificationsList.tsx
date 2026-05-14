@@ -2,8 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { formatDistanceToNow } from 'date-fns';
-import { es } from 'date-fns/locale';
+import { formatDistanceToNow } from 'date-fns/formatDistanceToNow';
 import {
     Bell,
     ShoppingCart,
@@ -57,7 +56,6 @@ const NotificationItem = React.memo<NotificationItemProps>(({
 
     const timeAgo = formatDistanceToNow(notification.createdAt, {
         addSuffix: true,
-        locale: es
     });
 
     const handleClick = () => {

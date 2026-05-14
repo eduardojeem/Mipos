@@ -64,6 +64,7 @@ type ExtendedDatabase = {
           id: string;
           full_name: string | null;
           email: string | null;
+          organization_id?: string | null;
         };
         Insert: Record<string, unknown>;
         Update: Record<string, unknown>;

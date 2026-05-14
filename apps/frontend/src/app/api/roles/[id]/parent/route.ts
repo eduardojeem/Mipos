@@ -107,13 +107,17 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       })) || []
     }
 
+    const updatedRoleWithUsers = updatedRole as typeof updatedRole & {
+      user_roles?: Array<{ count?: number | null }>
+    }
+
     const role = {
       id: updatedRole.id,
       name: updatedRole.name,
       displayName: updatedRole.display_name,
       description: updatedRole.description,
       permissions: mappedPermissions,
-      userCount: updatedRole.user_roles?.[0]?.count || 0,
+      userCount: updatedRoleWithUsers.user_roles?.[0]?.count || 0,
       isActive: updatedRole.is_active,
       isSystem: updatedRole.name === 'ADMIN' || updatedRole.name === 'admin',
       priority: updatedRole.priority || 0,

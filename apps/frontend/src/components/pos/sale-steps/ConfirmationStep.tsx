@@ -38,10 +38,12 @@ export function ConfirmationStep({
 }: ConfirmationStepProps) {
   const fmtCurrency = useCurrencyFormatter();
 
-  const paymentMethodLabels = {
+  const paymentMethodLabels: Record<PaymentMethod, string> = {
     [PaymentMethod.CASH]: 'Efectivo',
     [PaymentMethod.CARD]: 'Tarjeta',
     [PaymentMethod.TRANSFER]: 'Transferencia',
+    [PaymentMethod.QR]: 'QR',
+    [PaymentMethod.MIXED]: 'Pago mixto',
     [PaymentMethod.OTHER]: 'Otro',
   };
 

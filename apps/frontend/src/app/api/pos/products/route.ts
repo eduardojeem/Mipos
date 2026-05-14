@@ -129,7 +129,7 @@ export async function GET(request: NextRequest) {
       low_stock: boolean;
       has_wholesale: boolean;
     };
-    const baseProducts = (products ?? []) as ProductRow[];
+    const baseProducts = (products ?? []) as unknown as ProductRow[];
 
     const transformedProducts: PosProduct[] = baseProducts.map((product) => ({
       id: product.id,

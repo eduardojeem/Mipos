@@ -1,6 +1,5 @@
 import type { CashMovement } from '@/types/cash';
-import { formatDistanceToNow } from 'date-fns';
-import { es } from 'date-fns/locale';
+import { formatDistanceToNow } from 'date-fns/formatDistanceToNow';
 import { MOVEMENT_TYPE_LABELS } from './movementTypes';
 
 /**
@@ -11,7 +10,7 @@ import { MOVEMENT_TYPE_LABELS } from './movementTypes';
 export function formatRelativeTime(date: string | Date): string {
     try {
         const dateObj = typeof date === 'string' ? new Date(date) : date;
-        return formatDistanceToNow(dateObj, { addSuffix: true, locale: es });
+        return formatDistanceToNow(dateObj, { addSuffix: true });
     } catch {
         return 'Fecha inválida';
     }

@@ -193,7 +193,7 @@ async function fetchActiveOrganizations(): Promise<{ organizations: Organization
         totalOrganizations = result.count;
       }
 
-      organizations.push(...((result.data || []) as OrganizationRow[]));
+      organizations.push(...((result.data || []) as unknown as OrganizationRow[]));
 
       if ((result.data || []).length < ORGANIZATION_BATCH_SIZE) {
         break;
@@ -226,7 +226,7 @@ async function fetchSettingsMap(organizationIds: string[]) {
     throw new Error(error.message || JSON.stringify(error));
   }
 
-  ((data || []) as SettingsRow[]).forEach((row) => {
+  ((data || []) as unknown as SettingsRow[]).forEach((row) => {
     if (row.organization_id) {
       map.set(row.organization_id, row.value || null);
     }
@@ -286,7 +286,7 @@ async function fetchProductStats(organizationIds: string[]): Promise<ProductStat
         throw new Error(result.error.message || JSON.stringify(result.error));
       }
 
-      rows.push(...((result.data || []) as ProductStatsRow[]));
+      rows.push(...((result.data || []) as unknown as ProductStatsRow[]));
 
       if ((result.data || []).length < PRODUCT_BATCH_SIZE) {
         break;

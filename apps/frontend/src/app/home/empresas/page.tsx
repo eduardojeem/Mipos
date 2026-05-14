@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowRight, Building2, Globe, Search, SlidersHorizontal, Store } from 'lucide-react';
+import { ArrowRight, Building2, Globe, Search, SlidersHorizontal } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { resolveRequestTenantContext } from '@/lib/domain/request-tenant';
@@ -87,72 +87,19 @@ export default async function OrganizationsPage({
 
   return (
     <MarketplaceLayout searchQuery={queryState.search}>
-      <header className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-        <Badge
-          variant="outline"
-          className="mb-4 rounded-full border-sky-200 bg-sky-50/60 px-4 py-1 text-[10px] font-bold uppercase tracking-widest text-sky-700"
-        >
-          Directorio de empresas
-        </Badge>
-
-        <div className="grid gap-10 lg:grid-cols-[minmax(0,1.25fr)_minmax(280px,360px)] lg:items-end">
-          <div>
-            <h1 className="text-4xl font-semibold tracking-tight text-slate-950 sm:text-6xl">
-              Empresas publicadas en MiPOS
-            </h1>
-            <p className="mt-4 max-w-3xl text-lg leading-8 text-slate-600">
-              Explora negocios activos, compara presencia publica y entra directo a la tienda de
-              cada empresa desde un directorio real.
-            </p>
-            {queryState.search ? (
-              <p className="mt-4 text-sm font-medium text-sky-700 dark:text-sky-300">
-                Mostrando resultados para &quot;{queryState.search}&quot;.
-              </p>
-            ) : null}
-            {queryState.department || queryState.city ? (
-              <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                {queryState.department ? `Departamento: ${queryState.department}` : null}
-                {queryState.department && queryState.city ? ' · ' : null}
-                {queryState.city ? `Ciudad: ${queryState.city}` : null}
-              </p>
-            ) : null}
-          </div>
-
-          <div className="rounded-lg border border-slate-200 bg-white/70 p-5 shadow-sm backdrop-blur-sm dark:border-slate-800 dark:bg-slate-950/70">
-            <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">
-              Cobertura del directorio
-            </p>
-            <div className="mt-5 grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
-              <div className="rounded-lg border border-slate-200/80 bg-white/80 p-4 dark:border-slate-800 dark:bg-slate-900/80">
-                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  <Building2 className="h-4 w-4" />
-                  Empresas
-                </div>
-                <p className="mt-3 text-2xl font-semibold text-slate-950 dark:text-white">
-                  {snapshot.totalOrganizations}
-                </p>
-              </div>
-              <div className="rounded-lg border border-slate-200/80 bg-white/80 p-4 dark:border-slate-800 dark:bg-slate-900/80">
-                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  <Store className="h-4 w-4" />
-                  Productos
-                </div>
-                <p className="mt-3 text-2xl font-semibold text-slate-950 dark:text-white">
-                  {snapshot.totalProducts}
-                </p>
-              </div>
-              <div className="rounded-lg border border-slate-200/80 bg-white/80 p-4 dark:border-slate-800 dark:bg-slate-900/80">
-                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  <Globe className="h-4 w-4" />
-                  Promedio
-                </div>
-                <p className="mt-3 text-2xl font-semibold text-slate-950 dark:text-white">
-                  {snapshot.averageProductsPerOrganization}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
+      <header className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        {queryState.search ? (
+          <p className="text-sm font-medium text-sky-700 dark:text-sky-300">
+            Mostrando resultados para &quot;{queryState.search}&quot;.
+          </p>
+        ) : null}
+        {queryState.department || queryState.city ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {queryState.department ? `Departamento: ${queryState.department}` : null}
+            {queryState.department && queryState.city ? ' · ' : null}
+            {queryState.city ? `Ciudad: ${queryState.city}` : null}
+          </p>
+        ) : null}
       </header>
 
       <div className="mx-auto max-w-7xl px-4 pb-20 sm:px-6 lg:px-8">

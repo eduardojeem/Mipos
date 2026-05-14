@@ -8,7 +8,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { CalendarIcon, Filter, X } from 'lucide-react';
-import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
+import { format } from 'date-fns';
+import { endOfDay } from 'date-fns/endOfDay';
+import { endOfMonth } from 'date-fns/endOfMonth';
+import { endOfWeek } from 'date-fns/endOfWeek';
+import { startOfDay } from 'date-fns/startOfDay';
+import { startOfMonth } from 'date-fns/startOfMonth';
+import { startOfWeek } from 'date-fns/startOfWeek';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';

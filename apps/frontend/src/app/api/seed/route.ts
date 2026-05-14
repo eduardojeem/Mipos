@@ -65,7 +65,7 @@ export async function GET() {
     await addItem('HEADSET-002', 1, 79)
 
     const ensureMovement = async (productSku: string, qty: number, type: 'IN' | 'OUT') => {
-      const { data: prod } = await admin.from('products').select('id').eq('sku', productSku).single()
+      const { data: prod } = await admin.from('products').select('id, organization_id').eq('sku', productSku).single()
       if (!prod?.id) throw new Error(`Producto con SKU ${productSku} no encontrado`)
       const { data: exists } = await admin
         .from('inventory_movements')
@@ -77,7 +77,14 @@ export async function GET() {
       if (exists?.id) return exists.id
       const { data, error } = await admin
         .from('inventory_movements')
-        .insert([{ product_id: prod.id, movement_type: type, quantity: qty, reference_type: 'PURCHASE', user_id: userId }])
+        .insert([{
+          product_id: prod.id,
+          organization_id: prod.organization_id,
+          movement_type: type,
+          quantity: qty,
+          reference_type: 'PURCHASE',
+          user_id: userId
+        }])
         .select('id')
         .single()
       if (error) throw new Error(error.message)

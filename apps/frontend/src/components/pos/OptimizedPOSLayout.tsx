@@ -464,8 +464,8 @@ export default function OptimizedPOSLayout() {
             notes: _notes,
             customer: selectedCustomer ? {
               name: selectedCustomer.name,
-              phone: selectedCustomer.phone,
-              email: selectedCustomer.email,
+              phone: selectedCustomer.phone ?? undefined,
+              email: selectedCustomer.email ?? undefined,
             } : null,
             customerId: selectedCustomer?.id,
             transferReference: paymentDetails?.transferReference,
@@ -737,8 +737,8 @@ export default function OptimizedPOSLayout() {
 
           <div className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar">
             <ProductGrid
-              products={filteredProducts as any[]} 
-              onAddToCart={(p: any) => addToCart(p)}
+              products={filteredProducts}
+              onAddToCart={addToCart}
               isLoading={loading}
               searchQuery={searchQuery}
               selectedCategory={selectedCategory}

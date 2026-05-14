@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
-import { assertAdminAllowWithoutOrg } from '@/app/api/_utils/auth'
+import { assertAdmin, assertAdminAllowWithoutOrg } from '@/app/api/_utils/auth'
 
 export async function GET(request: NextRequest) {
   const auth = await assertAdminAllowWithoutOrg(request)

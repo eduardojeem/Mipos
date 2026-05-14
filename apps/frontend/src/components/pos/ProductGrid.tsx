@@ -1,21 +1,16 @@
 import { useState, useEffect } from 'react';
 import { PackageSearch } from 'lucide-react';
 import ProductCard from './ProductCard';
-import { cn } from '@/lib/utils';
+import type { Product } from '@/types';
 
-interface Product {
-  id: string;
-  name: string;
-  price: number;
-  image_url?: string;
+type PosProductGridItem = Product & {
+  price?: number;
   stock?: number;
-  category_id?: string;
-  sku?: string;
-}
+};
 
 interface ProductGridProps {
-  products: Product[];
-  onAddToCart: (product: Product) => void;
+  products: PosProductGridItem[];
+  onAddToCart: (product: PosProductGridItem) => void;
   isLoading?: boolean;
   searchQuery?: string;
   selectedCategory?: string | null;
@@ -28,7 +23,7 @@ export default function ProductGrid({
   searchQuery,
   selectedCategory
 }: ProductGridProps) {
-  const [filteredProducts, setFilteredProducts] = useState<Product[]>(products);
+  const [filteredProducts, setFilteredProducts] = useState<PosProductGridItem[]>(products);
 
   // Filtrar productos según búsqueda y categoría
   useEffect(() => {

@@ -46,7 +46,7 @@ export function useAdminAnalytics() {
 
                 if (orgsError) throw orgsError;
 
-                setOrganizations(orgsData || []);
+                setOrganizations((orgsData || []) as unknown as Organization[]);
             } catch (err: unknown) {
                 console.error('Error fetching analytics data:', err);
                 const errorMessage = err instanceof Error ? err.message : 'Error al cargar datos de análisis';
