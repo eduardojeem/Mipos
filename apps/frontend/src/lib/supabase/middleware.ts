@@ -4,7 +4,6 @@ import type { Database } from '../../types/supabase';
 import { isSupabaseActive, isMockAuthEnabled } from '../env';
 import { ACCESS_SECTIONS, canPlanAccessSection } from '@/lib/access-policy';
 
-type UserMetadata = { role?: string };
 type ProfileRole = { role?: string | null };
 
 async function insertAuditLog(
@@ -24,21 +23,18 @@ async function insertAuditLog(
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getUserRoles(supabase: any, user: any): Promise<{ primaryRole: string; hasAdminRole: boolean }> {
-  const meta = (user?.user_metadata ?? {}) as UserMetadata;
-  const metaRole = String(meta.role || '').toUpperCase();
-
-  // Run both DB lookups in parallel instead of sequentially
+  // SECURITY: NEVER read role from user_metadata. Users can self-assign that
+  // field via supabase.auth.updateUser and bypass the admin gate. The only
+  // trusted sources are the users table and the user_roles RBAC join.
   const [profileResult, rolesResult] = await Promise.allSettled([
     supabase.from('users').select('role').eq('id', user.id).single(),
     supabase.from('user_roles').select('role:roles(name)').eq('user_id', user.id).eq('is_active', true),
   ]);
 
-  // Extract profile role
   const profileRole = profileResult.status === 'fulfilled'
     ? String(((profileResult.value as { data?: ProfileRole | null })?.data ?? {})?.role || '').toUpperCase()
     : '';
 
-  // Extract RBAC role names
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rbacNames: string[] = rolesResult.status === 'fulfilled'
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -48,11 +44,10 @@ async function getUserRoles(supabase: any, user: any): Promise<{ primaryRole: st
         .filter(Boolean)
     : [];
 
-  // Determine primary role: DB profile > RBAC > metadata
   const ADMIN_ROLES = ['ADMIN', 'SUPER_ADMIN', 'OWNER'];
   const KNOWN_ROLES = ['ADMIN', 'SUPER_ADMIN', 'OWNER', 'MANAGER', 'CASHIER'];
 
-  let primaryRole = profileRole || metaRole;
+  let primaryRole = profileRole;
   let hasAdminRole = ADMIN_ROLES.includes(primaryRole);
 
   if (!hasAdminRole && rbacNames.length > 0) {

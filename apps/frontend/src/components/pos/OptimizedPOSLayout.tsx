@@ -13,19 +13,11 @@ import { useBusinessConfig } from '@/contexts/BusinessConfigContext';
 import { useAuth } from "@/hooks/use-auth";
 import { useUserOrganizations } from "@/hooks/use-user-organizations";
 import { OrganizationSelector } from "@/components/organizations/OrganizationSelector";
-// Product is unused as a type here now, using CartItem and inferred types
-import { offlineStorage } from "@/lib/pos/offline-storage";
 import { useOfflineSync } from "@/hooks/useOfflineSync";
-import {
-  getClientOperationalContext,
-  getOperationalContextHeaders,
-} from "@/lib/operational-context";
 import { usePermissionsContext } from "@/hooks/use-unified-permissions";
-import {
-  createOfflineInternalTicket,
-  type PosInternalTicket,
-} from "@/lib/pos/internal-ticket";
+import { type PosInternalTicket } from "@/lib/pos/internal-ticket";
 import { type CartItem } from "@/hooks/useCart";
+import { useSaleProcessor, type SalePaymentDetails, type SaleOptions } from "@/hooks/useSaleProcessor";
 import type { Customer } from "@/types";
 
 // Importar componentes del nuevo diseño

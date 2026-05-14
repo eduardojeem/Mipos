@@ -84,29 +84,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [user?.id, syncCurrentSessionRecord]);
 
-  // Enhanced fallback user creation with better functionality
+  // Optimistic fallback user used while /api/auth/profile is in flight or
+  // unreachable. SECURITY: never trust user_metadata.role (user-modifiable),
+  // never derive role from email substrings, and never re-use a previously
+  // resolved role for the same user (sticky elevation). Default to USER and
+  // let the canonical profile API set the real role on success.
   const createFallbackUser = useCallback((authUser: SupabaseUser): User => {
     const metadata = authUser.user_metadata || {};
     const appMetadata = authUser.app_metadata || {};
 
-    // Try to determine role from various sources — prioritize metadata over heuristics
-    let role: string = USER_ROLES.USER; // Default to USER, will be upgraded by profile API
+    // app_metadata is server-managed in Supabase, so it's safe to read.
+    const role = appMetadata.role && Object.values(USER_ROLES).includes(appMetadata.role as keyof typeof USER_ROLES)
+      ? (appMetadata.role as string)
+      : USER_ROLES.USER;
 
-    if (metadata.role && Object.values(USER_ROLES).includes(metadata.role)) {
-      role = metadata.role;
-    } else if (appMetadata.role && Object.values(USER_ROLES).includes(appMetadata.role)) {
-      role = appMetadata.role;
-    } else if (authUser.email?.includes('admin')) {
-      role = USER_ROLES.ADMIN;
-    } else if (authUser.email?.includes('manager')) {
-      role = USER_ROLES.MANAGER;
-    }
-
-    if (userRef.current?.id === authUser.id) {
-      role = pickStrongerRole(userRef.current.role, role);
-    }
-
-    // Extract name from various sources
+    // Name is non-sensitive — falling back to metadata is fine.
     const name = metadata.full_name ||
       metadata.fullName ||
       metadata.name ||
@@ -116,13 +108,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return {
       id: authUser.id,
       email: authUser.email || '',
-      name: name,
-      role: role,
+      name,
+      role,
       status: USER_STATUS.ACTIVE,
       createdAt: authUser.created_at || new Date().toISOString(),
       updatedAt: authUser.updated_at || new Date().toISOString(),
       lastLogin: authUser.last_sign_in_at,
-      organizationId: metadata.organization_id || metadata.organizationId || appMetadata.organization_id || appMetadata.organizationId || userRef.current?.organizationId,
+      organizationId:
+        (typeof appMetadata.organization_id === 'string' && appMetadata.organization_id) ||
+        (typeof appMetadata.organizationId === 'string' && appMetadata.organizationId) ||
+        userRef.current?.organizationId,
     };
   }, [extractNameFromEmail]);
 

@@ -14,6 +14,12 @@ type NavItem =
 
 const NAV_ITEMS: NavItem[] = [
   {
+    kind: 'link',
+    label: 'Marketplace',
+    href: '/home',
+    active: (pathname) => pathname === '/home',
+  },
+  {
     kind: 'scroll',
     label: 'Caracteristicas',
     sectionId: 'como-funciona',
