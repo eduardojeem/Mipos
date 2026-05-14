@@ -24,6 +24,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/hooks/use-auth';
 import planService from '@/lib/services/plan-service';
+import { getCanonicalPlanDisplayName, normalizePlanSlug } from '@/lib/plan-catalog';
 import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
 import { LandingHeader } from '@/app/inicio/components/LandingHeader';
@@ -339,7 +340,7 @@ export default function SignInPage() {
 
   if (showOrgSelector && userOrganizations.length > 0) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a]">
+      <div className="landing-shell">
         <LandingHeader />
         <main>
           <OrganizationSelector
@@ -354,7 +355,7 @@ export default function SignInPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a]">
+    <div className="landing-shell">
       <LandingHeader />
       <main>
         {showForgotPassword ? (
@@ -408,7 +409,7 @@ function LoginSection({
   onForgotPassword,
 }: LoginSectionProps) {
   return (
-    <section className="relative overflow-hidden bg-[#0a0a0a] py-20 lg:py-32">
+    <section className="relative overflow-hidden py-20 lg:py-32">
       <div className="absolute inset-0">
         <div className="radial-gradient-purple absolute left-1/4 top-1/4 h-96 w-96 opacity-20" />
         <div className="radial-gradient-blue absolute bottom-1/4 right-1/4 h-96 w-96 opacity-20" />
@@ -507,8 +508,8 @@ function LoginSection({
               <Button
                 type="submit"
                 className={cn(
-                  'gradient-primary glow-purple shadow-dark-lg w-full rounded-xl py-5 text-base text-white transition-all duration-300 hover:scale-105 md:py-6',
-                  'disabled:cursor-not-allowed disabled:transform-none disabled:opacity-50'
+                  'gradient-primary w-full rounded-xl py-2.5 text-base text-white transition-opacity hover:opacity-95',
+                  'disabled:cursor-not-allowed disabled:opacity-50'
                 )}
                 disabled={isLoading || loginSuccess || loadingOrgs || !isValid}
               >
@@ -530,13 +531,10 @@ function LoginSection({
                 )}
               </Button>
 
-              <div className="relative my-6">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-white/10" />
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="bg-[#0a0a0a] px-2 text-gray-400">No tienes cuenta?</span>
-                </div>
+              <div className="my-6 flex items-center gap-3">
+                <div className="flex-1 border-t border-white/10" />
+                <span className="text-sm text-gray-400">No tienes cuenta?</span>
+                <div className="flex-1 border-t border-white/10" />
               </div>
 
               <Link href="/inicio">
@@ -565,7 +563,7 @@ interface OrganizationSelectorProps {
 
 function OrganizationSelector({ organizations, onSelect, loading }: OrganizationSelectorProps) {
   return (
-    <section className="relative overflow-hidden bg-[#0a0a0a] py-20 lg:py-32">
+    <section className="relative overflow-hidden py-20 lg:py-32">
       <div className="absolute inset-0">
         <div className="radial-gradient-purple absolute left-1/4 top-1/4 h-96 w-96 opacity-20" />
         <div className="radial-gradient-blue absolute bottom-1/4 right-1/4 h-96 w-96 opacity-20" />
@@ -592,9 +590,8 @@ function OrganizationSelector({ organizations, onSelect, loading }: Organization
                 onClick={() => onSelect(org)}
                 disabled={loading}
                 className={cn(
-                  'glass-card hover-glow group w-full rounded-xl p-4 transition-all duration-300 md:p-6',
-                  'hover:scale-105 active:scale-95',
-                  'disabled:cursor-not-allowed disabled:transform-none disabled:opacity-50'
+                  'glass-card group w-full rounded-xl p-4 transition-colors md:p-6',
+                  'disabled:cursor-not-allowed disabled:opacity-50'
                 )}
               >
                 <div className="flex items-center gap-3 md:gap-4">
@@ -610,14 +607,16 @@ function OrganizationSelector({ organizations, onSelect, loading }: Organization
                       <span
                         className={cn(
                           'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium',
-                          org.subscription_plan === 'ENTERPRISE'
+                          normalizePlanSlug(org.subscription_plan) === 'enterprise'
                             ? 'bg-purple-500/20 text-purple-300'
-                            : org.subscription_plan === 'PRO'
+                            : normalizePlanSlug(org.subscription_plan) === 'professional'
                               ? 'bg-blue-500/20 text-blue-300'
-                              : 'bg-gray-500/20 text-gray-300'
+                              : normalizePlanSlug(org.subscription_plan) === 'starter'
+                                ? 'bg-sky-500/20 text-sky-300'
+                                : 'bg-gray-500/20 text-gray-300'
                         )}
                       >
-                        {org.subscription_plan}
+                        {getCanonicalPlanDisplayName(org.subscription_plan)}
                       </span>
                       <span className="text-sm text-gray-500">{org.slug}</span>
                     </div>
@@ -656,7 +655,7 @@ function ForgotPasswordSection({ onBack, onSubmit }: ForgotPasswordSectionProps)
   };
 
   return (
-    <section className="relative overflow-hidden bg-[#0a0a0a] py-20 lg:py-32">
+    <section className="relative overflow-hidden py-20 lg:py-32">
       <div className="absolute inset-0">
         <div className="radial-gradient-purple absolute left-1/4 top-1/4 h-96 w-96 opacity-20" />
         <div className="radial-gradient-blue absolute bottom-1/4 right-1/4 h-96 w-96 opacity-20" />
@@ -696,7 +695,7 @@ function ForgotPasswordSection({ onBack, onSubmit }: ForgotPasswordSectionProps)
               <div className="space-y-3">
                 <Button
                   type="submit"
-                  className="gradient-primary glow-purple shadow-dark-lg w-full rounded-xl py-5 text-base text-white transition-all duration-300 hover:scale-105 md:py-6"
+                  className="gradient-primary w-full rounded-xl py-2.5 text-base text-white transition-opacity hover:opacity-95"
                   disabled={isLoading || !email}
                 >
                   {isLoading ? (
