@@ -21,10 +21,13 @@ interface PricingCardProps {
 }
 
 export function PricingCard({ plan, billingCycle, onSelect, isSelected, isPopular }: PricingCardProps) {
-    const isFree = plan.priceMonthly === 0;
-    const displayPrice = billingCycle === 'monthly'
-        ? formatCurrency(plan.priceMonthly, plan.currency)
-        : formatCurrency(plan.priceYearly, plan.currency);
+    const isEnterprise = plan.slug === 'enterprise';
+    const isFree = plan.priceMonthly === 0 && !isEnterprise;
+    const displayPrice = isEnterprise
+        ? 'A consultar'
+        : billingCycle === 'monthly'
+            ? formatCurrency(plan.priceMonthly, plan.currency)
+            : formatCurrency(plan.priceYearly, plan.currency);
     const annualSavings = Math.max(0, plan.priceMonthly * 12 - plan.priceYearly);
     const featureLabels = getPlanFeatureLabels(plan.features).slice(0, 6);
     const planNarrative = getPlanNarrative(plan.slug);
@@ -63,15 +66,17 @@ export function PricingCard({ plan, billingCycle, onSelect, isSelected, isPopula
 
             <div className="mt-8 border-y border-white/10 py-5">
                 <div className="flex flex-wrap items-end gap-2">
-                    <span className="text-4xl font-semibold text-white">{displayPrice}</span>
-                    {!isFree ? (
+                    <span className={cn('font-semibold text-white', isEnterprise ? 'text-2xl' : 'text-4xl')}>
+                        {displayPrice}
+                    </span>
+                    {!isFree && !isEnterprise ? (
                         <span className="pb-1 text-sm text-slate-400">
                             / {billingCycle === 'monthly' ? 'mes' : 'año'}
                         </span>
                     ) : null}
                 </div>
                 <p className="mt-2 text-sm text-slate-400">{planNarrative.audience}</p>
-                {billingCycle === 'yearly' && !isFree && plan.yearlyDiscount && plan.yearlyDiscount > 0 ? (
+                {billingCycle === 'yearly' && !isFree && !isEnterprise && plan.yearlyDiscount && plan.yearlyDiscount > 0 ? (
                     <p className="mt-2 text-sm font-medium text-emerald-300">
                         Ahorro anual: {formatCurrency(annualSavings, plan.currency)}
                     </p>
@@ -103,18 +108,31 @@ export function PricingCard({ plan, billingCycle, onSelect, isSelected, isPopula
                 </ul>
             </div>
 
-            <Button
-                onClick={onSelect}
-                className={cn(
-                    'mt-8 w-full rounded-lg px-4 text-sm font-medium transition-colors',
-                    isPopular || isSelected
-                        ? 'gradient-primary text-white shadow-[0_18px_40px_-20px_rgba(16,185,129,0.95)] hover:opacity-95'
-                        : 'border border-white/10 bg-white/5 text-white hover:bg-white/10'
-                )}
-            >
-                Elegir este plan
-                <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
+            {isEnterprise ? (
+                <a
+                    href="mailto:contacto@mipos.app?subject=Consulta%20Enterprise"
+                    className={cn(
+                        'mt-8 inline-flex w-full items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition-colors',
+                        'border border-white/10 bg-white/5 text-white hover:bg-white/10'
+                    )}
+                >
+                    Consultar precio
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                </a>
+            ) : (
+                <Button
+                    onClick={onSelect}
+                    className={cn(
+                        'mt-8 w-full rounded-lg px-4 text-sm font-medium transition-colors',
+                        isPopular || isSelected
+                            ? 'gradient-primary text-white shadow-[0_18px_40px_-20px_rgba(16,185,129,0.95)] hover:opacity-95'
+                            : 'border border-white/10 bg-white/5 text-white hover:bg-white/10'
+                    )}
+                >
+                    Elegir este plan
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+            )}
         </div>
     );
 }

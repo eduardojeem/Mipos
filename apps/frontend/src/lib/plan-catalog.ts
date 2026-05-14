@@ -1,4 +1,4 @@
-export const CANONICAL_PLAN_SLUGS = ['free', 'starter', 'professional'] as const
+export const CANONICAL_PLAN_SLUGS = ['free', 'starter', 'professional', 'enterprise'] as const
 
 export type CanonicalPlanSlug = (typeof CANONICAL_PLAN_SLUGS)[number]
 
@@ -9,25 +9,28 @@ const PLAN_ALIAS_MAP: Record<string, CanonicalPlanSlug> = {
   professional: 'professional',
   pro: 'professional',
   premium: 'professional',
-  enterprise: 'professional',
+  enterprise: 'enterprise',
 }
 
 const PLAN_DISPLAY_NAMES: Record<CanonicalPlanSlug, string> = {
   free: 'Free',
   starter: 'Starter',
   professional: 'Professional',
+  enterprise: 'Enterprise',
 }
 
 const PLAN_ALIASES: Record<CanonicalPlanSlug, string[]> = {
   free: ['free'],
   starter: ['starter', 'basic'],
-  professional: ['professional', 'pro', 'premium', 'enterprise'],
+  professional: ['professional', 'pro', 'premium'],
+  enterprise: ['enterprise'],
 }
 
 const PLAN_ORDER: Record<CanonicalPlanSlug, number> = {
   free: 0,
   starter: 1,
   professional: 2,
+  enterprise: 3,
 }
 
 const FEATURE_LABELS: Record<string, string> = {
@@ -54,8 +57,8 @@ export function normalizePlanSlug(raw: string | null | undefined): CanonicalPlan
   return PLAN_ALIAS_MAP[normalized] || 'free'
 }
 
-export function normalizePlanCode(raw: string | null | undefined): 'FREE' | 'STARTER' | 'PROFESSIONAL' {
-  return normalizePlanSlug(raw).toUpperCase() as 'FREE' | 'STARTER' | 'PROFESSIONAL'
+export function normalizePlanCode(raw: string | null | undefined): 'FREE' | 'STARTER' | 'PROFESSIONAL' | 'ENTERPRISE' {
+  return normalizePlanSlug(raw).toUpperCase() as 'FREE' | 'STARTER' | 'PROFESSIONAL' | 'ENTERPRISE'
 }
 
 export function isCanonicalPlanSlug(raw: string | null | undefined): raw is CanonicalPlanSlug {

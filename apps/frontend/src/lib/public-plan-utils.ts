@@ -44,6 +44,12 @@ const DEFAULT_LIMITS_BY_PLAN: Record<string, Required<PlanLimits>> = {
     maxTransactionsPerMonth: 50000,
     maxLocations: 10,
   },
+  enterprise: {
+    maxUsers: 999,
+    maxProducts: 999999,
+    maxTransactionsPerMonth: 999999,
+    maxLocations: 999,
+  },
 }
 
 // Tier order for feature inheritance: higher tier inherits lower tier features
@@ -51,6 +57,7 @@ const PLAN_TIER: Record<string, number> = {
   free: 0,
   starter: 1,
   professional: 2,
+  enterprise: 3,
 }
 
 const FEATURE_PRIORITY = [
@@ -128,6 +135,11 @@ const PLAN_NARRATIVES: Record<
     summary: 'Para equipos en expansion con multiples sucursales, catalogo amplio y control administrativo.',
     audience: 'Negocios con volumen alto que necesitan trazabilidad y capacidad operativa real.',
     badge: 'Escala y control',
+  },
+  enterprise: {
+    summary: 'Capacidad sin techo para operaciones de gran volumen, integraciones custom y soporte dedicado.',
+    audience: 'Cadenas, distribuidoras y empresas con multiples organizaciones bajo una misma cuenta.',
+    badge: 'A medida',
   },
 }
 
