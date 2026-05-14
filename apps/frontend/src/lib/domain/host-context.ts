@@ -135,6 +135,16 @@ export function detectTenantCandidate(
     };
   }
 
+  // Treat Vercel preview/production deployments as root (not tenant)
+  if (hostname.endsWith('.vercel.app')) {
+    return {
+      kind: 'root',
+      hostname,
+      port,
+      isLocalhost: false,
+    };
+  }
+
   const baseDomain = getConfiguredBaseDomain();
   if (baseDomain) {
     if (hostname === baseDomain || hostname === `www.${baseDomain}`) {
