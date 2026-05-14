@@ -15,7 +15,8 @@ type PlanLimitSource = {
 
 export type ComparisonRow =
   | { key: string; label: string; kind: 'limit'; value: (plan: Plan) => string }
-  | { key: string; label: string; kind: 'feature'; feature: string }
+  | { key: string; label: string; kind: 'feature'; feature: string; includedByPlanId: Set<string> }
+  | { key: string; label: string; kind: 'group' }
 
 const LIMIT_LABELS: Record<LimitKey, string> = {
   maxUsers: 'Usuarios',
@@ -33,16 +34,23 @@ const DEFAULT_LIMITS_BY_PLAN: Record<string, Required<PlanLimits>> = {
   },
   starter: {
     maxUsers: 5,
-    maxProducts: 1000,
-    maxTransactionsPerMonth: 2000,
+    maxProducts: 3000,
+    maxTransactionsPerMonth: 5000,
     maxLocations: 1,
   },
   professional: {
-    maxUsers: -1,
-    maxProducts: -1,
-    maxTransactionsPerMonth: -1,
-    maxLocations: -1,
+    maxUsers: 50,
+    maxProducts: 50000,
+    maxTransactionsPerMonth: 50000,
+    maxLocations: 10,
   },
+}
+
+// Tier order for feature inheritance: higher tier inherits lower tier features
+const PLAN_TIER: Record<string, number> = {
+  free: 0,
+  starter: 1,
+  professional: 2,
 }
 
 const FEATURE_PRIORITY = [
@@ -64,6 +72,40 @@ const FEATURE_PRIORITY = [
   'unlimited_products',
 ] as const
 
+// Feature groups for the comparison table
+const FEATURE_GROUPS: Array<{ key: string; label: string; features: string[] }> = [
+  {
+    key: 'ventas',
+    label: 'Ventas y caja',
+    features: ['basic_sales'],
+  },
+  {
+    key: 'inventario',
+    label: 'Inventario y compras',
+    features: ['basic_inventory', 'advanced_inventory', 'purchase_module'],
+  },
+  {
+    key: 'equipo',
+    label: 'Equipo y administracion',
+    features: ['team_management', 'admin_panel', 'audit_logs'],
+  },
+  {
+    key: 'reportes',
+    label: 'Reportes',
+    features: ['basic_reports', 'advanced_reports', 'export_reports'],
+  },
+  {
+    key: 'escala',
+    label: 'Escala operativa',
+    features: ['multi_branch', 'unlimited_users', 'unlimited_products'],
+  },
+  {
+    key: 'extras',
+    label: 'Integracion y extras',
+    features: ['api_access', 'loyalty_program', 'custom_branding'],
+  },
+]
+
 const PLAN_NARRATIVES: Record<
   string,
   {
@@ -78,13 +120,13 @@ const PLAN_NARRATIVES: Record<
     badge: 'Inicio rapido',
   },
   starter: {
-    summary: 'Cobertura estable para un equipo pequeno con compras, reportes y control operativo.',
-    audience: 'Tiendas que ya venden todos los dias y necesitan administracion centralizada.',
+    summary: 'Para tiendas con actividad diaria real: equipo, compras, reportes y catalogo ampliado.',
+    audience: 'Negocios con flujo constante de ventas que necesitan control operativo sin complicar la gestion.',
     badge: 'Mas elegido',
   },
   professional: {
-    summary: 'Nivel preparado para crecimiento, mas sucursales y supervision administrativa real.',
-    audience: 'Equipos en expansion, multi sucursal o con necesidades de trazabilidad.',
+    summary: 'Para equipos en expansion con multiples sucursales, catalogo amplio y control administrativo.',
+    audience: 'Negocios con volumen alto que necesitan trazabilidad y capacidad operativa real.',
     badge: 'Escala y control',
   },
 }
@@ -249,6 +291,26 @@ export function buildPublicRegistrationPath(planSlug?: string | null) {
   return `/inicio/registro?plan=${encodeURIComponent(planSlug)}`
 }
 
+// Returns the effective features for a plan, inheriting features from lower-tier plans.
+// This ensures higher plans always show ✓ for features that lower plans include,
+// even if Supabase only stores the delta per plan.
+function getEffectivePlanFeatures(plan: Plan, allPlans: Plan[]): Set<string> {
+  const slug = normalizePlanSlug(plan.slug)
+  const planTier = PLAN_TIER[slug] ?? 0
+
+  const effective = new Set<string>()
+  for (const p of allPlans) {
+    const tier = PLAN_TIER[normalizePlanSlug(p.slug)] ?? 0
+    if (tier <= planTier) {
+      for (const f of p.features || []) {
+        const trimmed = String(f).trim()
+        if (trimmed) effective.add(trimmed)
+      }
+    }
+  }
+  return effective
+}
+
 export function buildComparisonRows(plans: Plan[]): ComparisonRow[] {
   const limitRows: ComparisonRow[] = (Object.keys(LIMIT_LABELS) as LimitKey[]).map((key) => ({
     key,
@@ -264,23 +326,62 @@ export function buildComparisonRows(plans: Plan[]): ComparisonRow[] {
     },
   }))
 
-  const featureRows: ComparisonRow[] = Array.from(
-    new Set(plans.flatMap((plan) => (plan.features || []).map((feature) => String(feature).trim()).filter(Boolean)))
-  )
-    .sort((a, b) => {
-      const aIndex = FEATURE_PRIORITY.indexOf(a as (typeof FEATURE_PRIORITY)[number])
-      const bIndex = FEATURE_PRIORITY.indexOf(b as (typeof FEATURE_PRIORITY)[number])
-      const normalizedA = aIndex === -1 ? Number.MAX_SAFE_INTEGER : aIndex
-      const normalizedB = bIndex === -1 ? Number.MAX_SAFE_INTEGER : bIndex
-      if (normalizedA !== normalizedB) return normalizedA - normalizedB
-      return a.localeCompare(b)
-    })
-    .map((feature) => ({
-      key: `feature:${feature}`,
-      label: getCanonicalFeatureLabel(feature),
-      kind: 'feature' as const,
-      feature,
-    }))
+  // Build effective feature sets per plan (with tier inheritance)
+  const effectiveByPlanId = new Map<string, Set<string>>()
+  for (const plan of plans) {
+    effectiveByPlanId.set(plan.id, getEffectivePlanFeatures(plan, plans))
+  }
+
+  // Union of all features across all plans (for building the row list)
+  const allFeatures = new Set<string>()
+  for (const features of effectiveByPlanId.values()) {
+    for (const f of features) allFeatures.add(f)
+  }
+
+  // Build grouped feature rows
+  const featureRows: ComparisonRow[] = []
+  const covered = new Set<string>()
+
+  for (const group of FEATURE_GROUPS) {
+    const groupFeatures = group.features.filter((f) => allFeatures.has(f))
+    if (!groupFeatures.length) continue
+
+    featureRows.push({ key: `group:${group.key}`, label: group.label, kind: 'group' })
+
+    for (const feature of groupFeatures) {
+      const includedByPlanId = new Set<string>()
+      for (const [planId, features] of effectiveByPlanId) {
+        if (features.has(feature)) includedByPlanId.add(planId)
+      }
+      featureRows.push({
+        key: `feature:${feature}`,
+        label: getCanonicalFeatureLabel(feature),
+        kind: 'feature',
+        feature,
+        includedByPlanId,
+      })
+      covered.add(feature)
+    }
+  }
+
+  // Append any features not covered by a group
+  const uncovered = [...allFeatures].filter((f) => !covered.has(f))
+  if (uncovered.length) {
+    featureRows.push({ key: 'group:otros', label: 'Otros', kind: 'group' })
+    for (const feature of uncovered) {
+      const includedByPlanId = new Set<string>()
+      for (const [planId, features] of effectiveByPlanId) {
+        if (features.has(feature)) includedByPlanId.add(planId)
+      }
+      featureRows.push({
+        key: `feature:${feature}`,
+        label: getCanonicalFeatureLabel(feature),
+        kind: 'feature',
+        feature,
+        includedByPlanId,
+      })
+    }
+  }
 
   return [...limitRows, ...featureRows]
 }

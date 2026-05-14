@@ -103,12 +103,6 @@ export function PricingCard({ plan, billingCycle, onSelect, isSelected, isPopula
                 </ul>
             </div>
 
-            {limits.maxUsers === -1 || limits.maxProducts === -1 ? (
-                <p className="mt-5 text-xs font-medium uppercase tracking-[0.14em] text-amber-300">
-                    Preparado para equipos y catalogos sin tope operativo fijo
-                </p>
-            ) : null}
-
             <Button
                 onClick={onSelect}
                 className={cn(

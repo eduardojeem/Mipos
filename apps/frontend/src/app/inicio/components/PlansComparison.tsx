@@ -26,9 +26,9 @@ export function PlansComparison({ plans, billingCycle }: PlansComparisonProps) {
   const filteredFeatureRows = useMemo(() => {
     const query = featureQuery.trim().toLowerCase();
     return rows.filter((row) => {
-      if (row.kind !== 'feature') return false;
-      if (!query) return true;
-      return row.label.toLowerCase().includes(query);
+      if (row.kind === 'limit') return false;
+      if (row.kind === 'group') return !query; // hide group headers when searching
+      return !query || row.label.toLowerCase().includes(query);
     });
   }, [featureQuery, rows]);
 
@@ -68,25 +68,28 @@ export function PlansComparison({ plans, billingCycle }: PlansComparisonProps) {
           className="mt-10"
           onValueChange={(v) => setActiveTab(v as 'capacity' | 'features')}
         >
-          <TabsList className="landing-panel grid h-auto w-full max-w-md grid-cols-2 rounded-lg p-1 text-slate-400">
+          <TabsList className="landing-panel grid h-auto w-full max-w-lg grid-cols-2 rounded-lg p-1 text-slate-400">
             <TabsTrigger value="capacity" className="rounded-md data-[state=active]:bg-slate-800 data-[state=active]:text-white">
-              Capacidad
+              Limites operativos
             </TabsTrigger>
             <TabsTrigger value="features" className="rounded-md data-[state=active]:bg-slate-800 data-[state=active]:text-white">
-              Funciones
+              Que incluye
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="capacity" className="mt-6">
-            <ComparisonTable plans={plans} billingCycle={billingCycle} rows={limitRows} />
+            <p className="mb-4 text-sm text-slate-400">Usuarios, productos y sucursales maximos habilitados por plan.</p>
+            <ComparisonTable plans={plans} billingCycle={billingCycle} rows={limitRows} columnHeader="Limite" />
           </TabsContent>
 
           <TabsContent value="features" className="mt-6">
+            <p className="mb-4 text-sm text-slate-400">Funcionalidades activas segun el plan contratado.</p>
             <ComparisonTable
               plans={plans}
               billingCycle={billingCycle}
               rows={filteredFeatureRows}
               emptyMessage="No encontramos funciones con ese termino."
+              columnHeader="Funcionalidad"
             />
           </TabsContent>
         </Tabs>
@@ -100,10 +103,13 @@ type ComparisonTableProps = {
   billingCycle: 'monthly' | 'yearly';
   rows: ReturnType<typeof buildComparisonRows>;
   emptyMessage?: string;
+  columnHeader?: string;
 };
 
-function ComparisonTable({ plans, billingCycle, rows, emptyMessage = 'No hay datos para comparar.' }: ComparisonTableProps) {
-  if (!rows.length) {
+function ComparisonTable({ plans, billingCycle, rows, emptyMessage = 'No hay datos para comparar.', columnHeader = 'Criterio' }: ComparisonTableProps) {
+  const hasContent = rows.some((row) => row.kind !== 'group');
+
+  if (!hasContent) {
     return (
       <div className="rounded-lg border border-dashed border-white/10 px-6 py-12 text-center text-sm text-slate-400">
         {emptyMessage}
@@ -119,7 +125,7 @@ function ComparisonTable({ plans, billingCycle, rows, emptyMessage = 'No hay dat
           <thead>
             <tr className="border-b border-white/10">
               <th className="w-[280px] px-5 py-4 text-left text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                Criterio
+                {columnHeader}
               </th>
               {plans.map((plan) => (
                 <th key={plan.id} className="min-w-[180px] px-5 py-4 text-left">
@@ -134,68 +140,93 @@ function ComparisonTable({ plans, billingCycle, rows, emptyMessage = 'No hay dat
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={row.key} className="border-b border-white/5 last:border-b-0">
-                <td className="px-5 py-4 text-sm font-medium text-slate-200">{row.label}</td>
-                {plans.map((plan) => (
-                  <td key={`${row.key}-${plan.id}`} className="px-5 py-4 text-sm text-slate-300">
-                    {row.kind === 'limit' ? (
-                      row.value(plan)
-                    ) : plan.features.includes(row.feature) ? (
-                      <span className="inline-flex items-center gap-2 text-emerald-300">
-                        <Check className="h-4 w-4" />
-                        Incluido
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-2 text-slate-500">
-                        <Minus className="h-4 w-4" />
-                        No incluido
-                      </span>
-                    )}
-                  </td>
-                ))}
-              </tr>
-            ))}
+            {rows.map((row) => {
+              if (row.kind === 'group') {
+                return (
+                  <tr key={row.key} className="border-b border-white/5 bg-white/[0.02]">
+                    <td
+                      colSpan={plans.length + 1}
+                      className="px-5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500"
+                    >
+                      {row.label}
+                    </td>
+                  </tr>
+                );
+              }
+
+              return (
+                <tr key={row.key} className="border-b border-white/5 last:border-b-0">
+                  <td className="px-5 py-4 text-sm font-medium text-slate-200">{row.label}</td>
+                  {plans.map((plan) => (
+                    <td key={`${row.key}-${plan.id}`} className="px-5 py-4 text-sm text-slate-300">
+                      {row.kind === 'limit' ? (
+                        row.value(plan)
+                      ) : row.includedByPlanId.has(plan.id) ? (
+                        <span className="inline-flex items-center gap-2 text-emerald-300">
+                          <Check className="h-4 w-4" />
+                          Incluido
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-2 text-slate-500">
+                          <Minus className="h-4 w-4" />
+                          No incluido
+                        </span>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
 
       {/* Mobile cards */}
-      <div className="space-y-4 md:hidden">
-        {rows.map((row) => (
-          <div key={row.key} className="landing-panel rounded-lg p-4">
-            <p className="text-sm font-medium text-white">{row.label}</p>
-            <div className="mt-4 space-y-3">
-              {plans.map((plan) => (
-                <div key={`${row.key}-${plan.id}`} className="flex items-center justify-between gap-4 border-t border-white/5 pt-3 first:border-t-0 first:pt-0">
-                  <div>
-                    <p className="text-sm font-medium text-slate-100">{plan.name}</p>
-                    <p className="text-xs text-slate-500">
-                      {billingCycle === 'yearly'
-                        ? `${formatCurrency(plan.priceYearly, plan.currency)} / año`
-                        : `${formatCurrency(plan.priceMonthly, plan.currency)} / mes`}
-                    </p>
+      <div className="space-y-3 md:hidden">
+        {rows.map((row) => {
+          if (row.kind === 'group') {
+            return (
+              <p key={row.key} className="pt-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500 first:pt-0">
+                {row.label}
+              </p>
+            );
+          }
+
+          return (
+            <div key={row.key} className="landing-panel rounded-lg p-4">
+              <p className="text-sm font-medium text-white">{row.label}</p>
+              <div className="mt-4 space-y-3">
+                {plans.map((plan) => (
+                  <div key={`${row.key}-${plan.id}`} className="flex items-center justify-between gap-4 border-t border-white/5 pt-3 first:border-t-0 first:pt-0">
+                    <div>
+                      <p className="text-sm font-medium text-slate-100">{plan.name}</p>
+                      <p className="text-xs text-slate-500">
+                        {billingCycle === 'yearly'
+                          ? `${formatCurrency(plan.priceYearly, plan.currency)} / año`
+                          : `${formatCurrency(plan.priceMonthly, plan.currency)} / mes`}
+                      </p>
+                    </div>
+                    <div className="text-right text-sm text-slate-300">
+                      {row.kind === 'limit' ? (
+                        row.value(plan)
+                      ) : row.includedByPlanId.has(plan.id) ? (
+                        <span className="inline-flex items-center gap-1 text-emerald-300">
+                          <Check className="h-4 w-4" />
+                          Sí
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-slate-500">
+                          <Minus className="h-4 w-4" />
+                          No
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-right text-sm text-slate-300">
-                    {row.kind === 'limit' ? (
-                      row.value(plan)
-                    ) : plan.features.includes(row.feature) ? (
-                      <span className="inline-flex items-center gap-1 text-emerald-300">
-                        <Check className="h-4 w-4" />
-                        Sí
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-slate-500">
-                        <Minus className="h-4 w-4" />
-                        No
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </>
   );

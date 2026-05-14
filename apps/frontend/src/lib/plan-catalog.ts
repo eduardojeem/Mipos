@@ -31,22 +31,22 @@ const PLAN_ORDER: Record<CanonicalPlanSlug, number> = {
 }
 
 const FEATURE_LABELS: Record<string, string> = {
-  basic_inventory: 'Inventario basico',
-  basic_sales: 'Ventas basicas',
-  purchase_module: 'Compras',
-  basic_reports: 'Reportes basicos',
-  advanced_reports: 'Reportes avanzados',
-  team_management: 'Gestion de equipo',
-  admin_panel: 'Panel admin',
-  advanced_inventory: 'Inventario avanzado',
-  multi_branch: 'Multi sucursal',
-  audit_logs: 'Auditoria',
-  unlimited_users: 'Usuarios ilimitados',
-  export_reports: 'Exportacion',
-  loyalty_program: 'Fidelizacion',
+  basic_sales: 'Punto de venta y caja',
+  basic_inventory: 'Control de stock',
+  purchase_module: 'Modulo de compras',
+  advanced_inventory: 'Inventario avanzado con alertas',
+  team_management: 'Gestion de usuarios y roles',
+  admin_panel: 'Panel de administracion',
+  audit_logs: 'Historial de auditoria',
+  basic_reports: 'Reportes de ventas',
+  advanced_reports: 'Reportes avanzados y analisis',
+  export_reports: 'Exportacion de reportes',
+  multi_branch: 'Multiples sucursales',
+  unlimited_users: 'Usuarios sin limite',
+  unlimited_products: 'Productos sin limite',
+  api_access: 'Acceso a API',
+  loyalty_program: 'Programa de fidelizacion',
   custom_branding: 'Marca personalizada',
-  api_access: 'API',
-  unlimited_products: 'Productos ilimitados',
 }
 
 export function normalizePlanSlug(raw: string | null | undefined): CanonicalPlanSlug {

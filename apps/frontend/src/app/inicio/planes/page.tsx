@@ -291,6 +291,28 @@ export default function PlanesPage() {
                     </div>
                 </section>
 
+                {/* Enterprise banner */}
+                {!isLoading && plans.length > 0 ? (
+                    <section className="border-b border-white/10 py-10">
+                        <div className="landing-container">
+                            <div className="landing-panel flex flex-col gap-4 rounded-lg px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                    <p className="text-sm font-semibold text-white">¿Tu operacion supera los limites del plan Professional?</p>
+                                    <p className="mt-1 text-sm text-slate-400">
+                                        Para volumen muy alto, integraciones custom o multiples empresas bajo una misma cuenta, existe una opcion Enterprise con capacidad y precio a medida.
+                                    </p>
+                                </div>
+                                <a
+                                    href="mailto:contacto@mipos.app?subject=Consulta%20Enterprise"
+                                    className="shrink-0 rounded-lg border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/10"
+                                >
+                                    Consultar Enterprise
+                                </a>
+                            </div>
+                        </div>
+                    </section>
+                ) : null}
+
                 {/* Comparison table */}
                 {!isLoading && plans.length > 0 ? (
                     <div id="comparacion-planes">
