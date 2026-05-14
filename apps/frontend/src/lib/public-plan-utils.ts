@@ -264,17 +264,24 @@ export function formatLimitValue(key: LimitKey, value?: number | null) {
   }
 }
 
-export function getPlanLimitItems(plan: Plan) {
-  const resolved = resolvePlanLimits({
+// For public pages, use code-defined defaults as the source of truth.
+// Supabase limits are for runtime enforcement; the landing shows advertised capacity.
+function getPublicLimits(plan: Plan): Required<PlanLimits> {
+  const slug = normalizePlanSlug(plan.slug)
+  return DEFAULT_LIMITS_BY_PLAN[slug] ?? resolvePlanLimits({
     slug: plan.slug,
     limits: plan.limits,
     features: plan.features,
   })
+}
+
+export function getPlanLimitItems(plan: Plan) {
+  const limits = getPublicLimits(plan)
 
   return (Object.keys(LIMIT_LABELS) as LimitKey[]).map((key) => ({
     key,
     label: LIMIT_LABELS[key],
-    value: formatLimitValue(key, resolved[key]),
+    value: formatLimitValue(key, limits[key]),
   }))
 }
 
@@ -317,11 +324,7 @@ export function buildComparisonRows(plans: Plan[]): ComparisonRow[] {
     label: LIMIT_LABELS[key],
     kind: 'limit',
     value: (plan: Plan) => {
-      const limits = resolvePlanLimits({
-        slug: plan.slug,
-        limits: plan.limits,
-        features: plan.features,
-      })
+      const limits = getPublicLimits(plan)
       return formatLimitValue(key, limits[key])
     },
   }))
