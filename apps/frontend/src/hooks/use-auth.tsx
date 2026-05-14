@@ -13,6 +13,7 @@ import { useSessionInvalidation } from './use-session-invalidation';
 const AuthContext = createContext<AuthContextType | null>(null);
 let lastResolvedRole: string | null = null;
 let lastResolvedUserId: string | null = null;
+let mockAuthBannerLogged = false;
 const ROLE_PRIORITY = [USER_ROLES.SUPER_ADMIN, USER_ROLES.ADMIN, USER_ROLES.MANAGER, USER_ROLES.CASHIER, USER_ROLES.EMPLOYEE, USER_ROLES.USER] as const;
 
 // Enhanced auth provider with improved fallback functionality and faster loading
@@ -26,13 +27,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Start listening for session invalidation due to permission changes
   useSessionInvalidation();
 
-  // Detecta modo mock en desarrollo cuando Supabase no está configurado o se fuerza por variable
+  // Mock auth mode requires explicit opt-in via NEXT_PUBLIC_MOCK_AUTH=true
+  // (or MOCK_AUTH=true). Previously this auto-activated whenever Supabase
+  // env was missing in development, which silently masked misconfigured envs
+  // and made debugging real auth failures harder. Now missing env in dev
+  // surfaces as a real error unless the dev explicitly opts into mock auth.
   const isDevMockMode = useCallback(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (process.env.NODE_ENV !== 'development') return false;
     const forced = (process.env.NEXT_PUBLIC_MOCK_AUTH || process.env.MOCK_AUTH || '').toString().toLowerCase() === 'true';
-    const missing = !url || !anon || url.trim().length === 0 || anon.trim().length === 0;
-    return process.env.NODE_ENV === 'development' && (missing || forced);
+    if (forced && typeof window !== 'undefined' && !mockAuthBannerLogged) {
+      mockAuthBannerLogged = true;
+      console.warn('[useAuth] MOCK AUTH MODE ACTIVE — using fake admin user. Disable by unsetting NEXT_PUBLIC_MOCK_AUTH.');
+    }
+    return forced;
   }, []);
 
   // Helper function to extract name from email

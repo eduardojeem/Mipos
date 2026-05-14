@@ -223,6 +223,35 @@ async function findOrganizationByField(
   }
 }
 
+// Per-instance tenant cache. Edge Runtime keeps middleware module state alive
+// across requests on the same instance, so a Map here amortizes the Supabase
+// lookup across requests for the same hostname/path. Hits are cheap; misses
+// pay the original cost. We cache both 'tenant' and 'tenant-unresolved' so
+// repeated requests with a bad tenant key don't hammer the DB either.
+const TENANT_CACHE_TTL_MS = 60 * 1000;
+const TENANT_CACHE_MAX_ENTRIES = 256;
+const tenantCache = new Map<string, { context: TenantContext; expiresAt: number }>();
+
+function getCachedTenant(key: string): TenantContext | null {
+  const entry = tenantCache.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt < Date.now()) {
+    tenantCache.delete(key);
+    return null;
+  }
+  return entry.context;
+}
+
+function setCachedTenant(key: string, context: TenantContext) {
+  if (tenantCache.size >= TENANT_CACHE_MAX_ENTRIES) {
+    const oldestKey = tenantCache.keys().next().value;
+    if (oldestKey !== undefined) {
+      tenantCache.delete(oldestKey);
+    }
+  }
+  tenantCache.set(key, { context, expiresAt: Date.now() + TENANT_CACHE_TTL_MS });
+}
+
 async function resolveTenantContext(
   host: string,
   pathTenantSlug?: string
@@ -233,11 +262,18 @@ async function resolveTenantContext(
     return { kind: 'root' };
   }
 
+  const cacheKey = `${candidate.source}:${candidate.tenantKey}:${candidate.hostname}`;
+  const cached = getCachedTenant(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey =
     process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseKey) {
+    // Don't cache unconfigured-env results — the env may flip back.
     return {
       kind: 'tenant-unresolved',
       source: candidate.source,
@@ -268,22 +304,24 @@ async function resolveTenantContext(
       }
     }
 
-    if (!organization) {
-      return {
-        kind: 'tenant-unresolved',
-        source: candidate.source,
-        tenantKey: candidate.tenantKey,
-      };
-    }
+    const result: TenantContext = organization
+      ? {
+          kind: 'tenant',
+          source: candidate.source,
+          tenantKey: candidate.tenantKey,
+          organization,
+        }
+      : {
+          kind: 'tenant-unresolved',
+          source: candidate.source,
+          tenantKey: candidate.tenantKey,
+        };
 
-    return {
-      kind: 'tenant',
-      source: candidate.source,
-      tenantKey: candidate.tenantKey,
-      organization,
-    };
+    setCachedTenant(cacheKey, result);
+    return result;
   } catch (error) {
     console.error('[Middleware] resolveTenantContext failed:', error instanceof Error ? error.message : JSON.stringify(error));
+    // Don't cache transient failures.
     return {
       kind: 'tenant-unresolved',
       source: candidate.source,
