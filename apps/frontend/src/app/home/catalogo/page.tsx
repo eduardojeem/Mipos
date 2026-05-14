@@ -1,3 +1,4 @@
+import { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import {
   CATALOG_DEFAULT_PAGE_SIZE,
@@ -16,6 +17,27 @@ import {
 } from '../components/marketplace/GlobalCatalogControls';
 import { GlobalCatalogHeroCarousel } from '../components/marketplace/GlobalCatalogHeroCarousel';
 import { ShoppingBag } from 'lucide-react';
+
+export async function generateMetadata(): Promise<Metadata> {
+  return {
+    title: 'Catálogo global | MiPOS Marketplace',
+    description:
+      'Explora productos de todas las empresas activas en MiPOS. Filtra por categoría, precio, ubicación y más.',
+    alternates: { canonical: '/home/catalogo' },
+    robots: { index: true, follow: true },
+    openGraph: {
+      title: 'Catálogo global | MiPOS Marketplace',
+      description: 'Todos los productos disponibles en el marketplace de MiPOS.',
+      type: 'website',
+      siteName: 'MiPOS Marketplace',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: 'Catálogo global | MiPOS Marketplace',
+      description: 'Todos los productos disponibles en el marketplace de MiPOS.',
+    },
+  };
+}
 
 function normalizeRootCatalogSearchParams(searchParams: CatalogQueryRecord): CatalogQueryRecord {
   const normalized: CatalogQueryRecord = { ...searchParams };
@@ -72,13 +94,12 @@ export default async function CatalogPage({
 
   return (
     <MarketplaceLayout searchQuery={queryState.search}>
-      <header className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+      <header className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <GlobalCatalogHeroCarousel
           products={snapshot.heroProducts}
           totalProducts={snapshot.totalProducts}
           matchingOrganizations={snapshot.matchingOrganizations}
           searchQuery={queryState.search}
-          hasActiveFilters={hasActiveFilters}
         />
       </header>
 

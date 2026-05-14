@@ -1,5 +1,6 @@
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { unstable_cache } from 'next/cache';
 import HomeClient from './HomeClient';
 import PublicMarketplaceHome from './components/PublicMarketplaceHome';
 import { StaticBusinessConfigProvider } from '@/contexts/BusinessConfigContext';
@@ -46,57 +47,74 @@ function extractSchemaProductImage(product: SchemaProductRow): string {
   return product.image_url || '';
 }
 
-async function buildTenantSchemas(organizationId: string, businessName: string, config: Awaited<ReturnType<typeof getPublicBusinessConfig>>) {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001';
+async function fetchTopProductsForSchema(
+  organizationId: string,
+  currency: string,
+): Promise<Array<Record<string, unknown>>> {
   const adminClient = await createAdminClient();
   const since = new Date();
   since.setDate(since.getDate() - 30);
 
-  let itemListElements: Array<Record<string, unknown>> = [];
+  const { data: items } = await adminClient
+    .from('sale_items')
+    .select('product_id, quantity, created_at')
+    .eq('organization_id', organizationId)
+    .gte('created_at', since.toISOString())
+    .limit(500);
 
-  try {
-    const { data: items } = await adminClient
-      .from('sale_items')
-      .select('product_id, quantity, created_at')
-      .eq('organization_id', organizationId)
-      .gte('created_at', since.toISOString())
-      .limit(500);
-
-    const totals: Record<string, number> = {};
-    (Array.isArray(items) ? (items as SchemaSaleItemRow[]) : []).forEach((item) => {
-      const productId = String(item?.product_id || '');
-      const quantity = Number(item?.quantity || 0);
-      if (productId) {
-        totals[productId] = (totals[productId] || 0) + quantity;
-      }
-    });
-
-    const topIds = Object.entries(totals)
-      .sort((left, right) => right[1] - left[1])
-      .slice(0, 6)
-      .map(([productId]) => productId);
-
-    if (topIds.length > 0) {
-      const { data: products } = await adminClient
-        .from('products')
-        .select('id, name, sale_price, offer_price, image_url, images')
-        .eq('organization_id', organizationId)
-        .in('id', topIds);
-
-      itemListElements = (Array.isArray(products) ? (products as SchemaProductRow[]) : []).map((product, index: number) => ({
-        '@type': 'Product',
-        position: index + 1,
-        name: String(product?.name || 'Producto'),
-        image: extractSchemaProductImage(product),
-        offers: {
-          '@type': 'Offer',
-          priceCurrency: config.storeSettings.currency || 'PYG',
-          price: Number(product?.offer_price ?? product?.sale_price ?? 0),
-          availability: 'https://schema.org/InStock',
-        },
-      }));
+  const totals: Record<string, number> = {};
+  (Array.isArray(items) ? (items as SchemaSaleItemRow[]) : []).forEach((item) => {
+    const productId = String(item?.product_id || '');
+    const quantity = Number(item?.quantity || 0);
+    if (productId) {
+      totals[productId] = (totals[productId] || 0) + quantity;
     }
-  } catch {}
+  });
+
+  const topIds = Object.entries(totals)
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 6)
+    .map(([productId]) => productId);
+
+  if (topIds.length === 0) {
+    return [];
+  }
+
+  const { data: products } = await adminClient
+    .from('products')
+    .select('id, name, sale_price, offer_price, image_url, images')
+    .eq('organization_id', organizationId)
+    .in('id', topIds);
+
+  return (Array.isArray(products) ? (products as SchemaProductRow[]) : []).map((product, index: number) => ({
+    '@type': 'Product',
+    position: index + 1,
+    name: String(product?.name || 'Producto'),
+    image: extractSchemaProductImage(product),
+    offers: {
+      '@type': 'Offer',
+      priceCurrency: currency || 'PYG',
+      price: Number(product?.offer_price ?? product?.sale_price ?? 0),
+      availability: 'https://schema.org/InStock',
+    },
+  }));
+}
+
+async function buildTenantSchemas(organizationId: string, businessName: string, config: Awaited<ReturnType<typeof getPublicBusinessConfig>>) {
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001';
+
+  const cachedFetch = unstable_cache(
+    () => fetchTopProductsForSchema(organizationId, config.storeSettings.currency || 'PYG'),
+    [`home-schema-products-${organizationId}`],
+    { revalidate: 300 },
+  );
+
+  let itemListElements: Array<Record<string, unknown>> = [];
+  try {
+    itemListElements = await cachedFetch();
+  } catch (err) {
+    console.error('[home/schema] Error fetching top products for JSON-LD:', err);
+  }
 
   return {
     organizationSchema: {
@@ -241,19 +259,19 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(schemas.organizationSchema) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(schemas.organizationSchema).replace(/</g, '\\u003c') }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(schemas.websiteSchema) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(schemas.websiteSchema).replace(/</g, '\\u003c') }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(schemas.webPageSchema) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(schemas.webPageSchema).replace(/</g, '\\u003c') }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(schemas.itemListSchema) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(schemas.itemListSchema).replace(/</g, '\\u003c') }}
       />
 
       <StaticBusinessConfigProvider

@@ -41,22 +41,6 @@ export interface PublicOffer {
 }
 
 /**
- * Featured product interface
- */
-export interface FeaturedProduct {
-  id: number;
-  name: string;
-  price: number;
-  originalPrice: number;
-  image: string;
-  rating: number;
-  reviews: number;
-  discount: number;
-  category: string;
-  stock?: number;
-}
-
-/**
  * Transforms API offer response to SpecialOffer format
  * 
  * @param apiOffer - Raw API offer data
@@ -153,43 +137,6 @@ export function transformSupabaseRowToPublicOffer(row: any): PublicOffer {
     offerPrice: calculation.offerPrice,
     discountPercent: calculation.discountPercent,
     promotion,
-  };
-}
-
-/**
- * Transforms product data to FeaturedProduct format
- * 
- * @param product - Raw product data
- * @returns Transformed FeaturedProduct
- */
-export function transformProductToFeaturedProduct(product: any): FeaturedProduct {
-  const basePrice = validateNumber(product?.sale_price, 0);
-  const offerPrice = product?.offer_price != null ? validateNumber(product.offer_price, basePrice) : undefined;
-  
-  // Calculate discount percentage
-  let discountPercent = 0;
-  if (offerPrice !== undefined && offerPrice < basePrice && basePrice > 0) {
-    discountPercent = Math.round(((basePrice - offerPrice) / basePrice) * 100);
-  }
-  
-  // Get valid image URL
-  const image = getValidImageUrl(
-    product?.images,
-    product?.image_url,
-    '/api/placeholder/300/300'
-  );
-  
-  return {
-    id: validateNumber(product?.id, 0),
-    name: validateString(product?.name, 'Producto'),
-    price: offerPrice ?? basePrice,
-    originalPrice: basePrice,
-    image,
-    rating: validateNumber(product?.rating, 4.5),
-    reviews: validateNumber(product?.reviews, 0),
-    discount: Math.max(0, Math.min(100, discountPercent)),
-    category: validateString(product?.category, 'General'),
-    stock: product?.stock_quantity != null ? validateNumber(product.stock_quantity, 999) : undefined,
   };
 }
 

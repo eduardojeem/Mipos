@@ -1,11 +1,5 @@
 /* Shared landing system */
 
-.landing-page {
-  scroll-behavior: smooth;
-  background: #020617;
-  color: #ffffff;
-}
-
 .landing-shell {
   min-height: 100vh;
   background:
@@ -80,55 +74,16 @@
   border-color: rgba(148, 163, 184, 0.12);
 }
 
-/* Animaciones sutiles para elementos flotantes */
-@keyframes float {
-
-  0%,
-  100% {
-    transform: translateY(0px);
-  }
-
-  50% {
-    transform: translateY(-20px);
-  }
+/* Background radial gradients */
+.radial-gradient-purple {
+  background: radial-gradient(circle at center, rgba(16, 185, 129, 0.14) 0%, transparent 72%);
 }
 
-@keyframes glow {
-
-  0%,
-  100% {
-    opacity: 0.5;
-  }
-
-  50% {
-    opacity: 1;
-  }
+.radial-gradient-blue {
+  background: radial-gradient(circle at center, rgba(245, 158, 11, 0.12) 0%, transparent 70%);
 }
 
-.animate-float {
-  animation: float 6s ease-in-out infinite;
-}
-
-.animate-glow {
-  animation: glow 2s ease-in-out infinite;
-}
-
-/* Glassmorphism effects - Trae.ai style */
-.glass-card {
-  background: rgba(15, 23, 42, 0.68);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  transition: all 0.3s ease;
-}
-
-.glass-card:hover {
-  background: rgba(15, 23, 42, 0.78);
-  border-color: rgba(16, 185, 129, 0.32);
-  box-shadow: 0 22px 44px -28px rgba(16, 185, 129, 0.55);
-}
-
-/* Premium gradients - emerald/amber */
+/* Premium gradients */
 .gradient-primary {
   background: linear-gradient(135deg, #10b981 0%, #0f766e 100%);
 }
@@ -144,116 +99,35 @@
   background-clip: text;
 }
 
-.gradient-border {
-  position: relative;
-  border: 1px solid transparent;
-  background: linear-gradient(#020617, #020617) padding-box,
-    linear-gradient(135deg, #f59e0b, #10b981) border-box;
+/* Glass card */
+.glass-card {
+  background: rgba(15, 23, 42, 0.68);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
-/* Glow effects */
-.glow-purple {
-  box-shadow: 0 0 40px rgba(16, 185, 129, 0.24);
+.glass-card:hover {
+  background: rgba(15, 23, 42, 0.78);
+  border-color: rgba(16, 185, 129, 0.32);
+  box-shadow: 0 22px 44px -28px rgba(16, 185, 129, 0.55);
 }
 
-.glow-blue {
-  box-shadow: 0 0 40px rgba(245, 158, 11, 0.2);
-}
-
-/* Background radial gradients */
-.radial-gradient-purple {
-  background: radial-gradient(circle at center, rgba(16, 185, 129, 0.14) 0%, transparent 72%);
-}
-
-.radial-gradient-blue {
-  background: radial-gradient(circle at center, rgba(245, 158, 11, 0.12) 0%, transparent 70%);
-}
-
-/* Hover effects */
-.hover-lift {
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-}
-
-.hover-lift:hover {
-  transform: translateY(-4px);
-}
-
-.hover-glow {
-  transition: box-shadow 0.3s ease, border-color 0.3s ease;
-}
-
-.hover-glow:hover {
-  box-shadow: 0 24px 40px -30px rgba(16, 185, 129, 0.65);
-  border-color: rgba(16, 185, 129, 0.42);
-}
-
-/* Custom scrollbar - Dark theme */
-.landing-page ::-webkit-scrollbar {
+/* Custom scrollbar */
+.landing-shell ::-webkit-scrollbar {
   width: 8px;
 }
 
-.landing-page ::-webkit-scrollbar-track {
+.landing-shell ::-webkit-scrollbar-track {
   background: #020617;
 }
 
-.landing-page ::-webkit-scrollbar-thumb {
+.landing-shell ::-webkit-scrollbar-thumb {
   background: linear-gradient(135deg, #10b981 0%, #0f766e 100%);
   border-radius: 4px;
 }
 
-.landing-page ::-webkit-scrollbar-thumb:hover {
+.landing-shell ::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(135deg, #34d399 0%, #0f766e 100%);
-}
-
-/* Bento Box Grid */
-.bento-grid {
-  display: grid;
-  gap: 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-}
-
-/* Subtle borders */
-.border-subtle {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.border-subtle-hover:hover {
-  border-color: rgba(16, 185, 129, 0.4);
-}
-
-/* Text shadows for depth */
-.text-glow {
-  text-shadow: 0 0 30px rgba(16, 185, 129, 0.34);
-}
-
-/* Smooth transitions */
-* {
-  transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow;
-  transition-duration: 200ms;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-  .landing-page {
-    font-size: 14px;
-  }
-}
-
-/* Professional shadows for dark theme */
-.shadow-dark {
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
-}
-
-.shadow-dark-lg {
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
-}
-
-.shadow-dark-xl {
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.3);
-}
-
-/* Inner glow effect */
-.inner-glow {
-  box-shadow: inset 0 0 20px rgba(16, 185, 129, 0.1);
 }

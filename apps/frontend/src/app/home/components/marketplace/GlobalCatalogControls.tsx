@@ -41,6 +41,7 @@ import {
 import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
 import type { GlobalCatalogCategoryOption, GlobalCatalogLocationOption } from '@/lib/public-site/global-catalog-data';
+import { formatMarketplaceCurrency } from './marketplace-utils';
 
 const SORT_LABELS: Record<CatalogQueryState['sortBy'], string> = {
   popular: 'Mas recientes',
@@ -80,14 +81,6 @@ interface PaginationProps {
   state: CatalogQueryState;
   totalProducts: number;
   maxPrice: number;
-}
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat('es-PY', {
-    style: 'currency',
-    currency: 'PYG',
-    maximumFractionDigits: 0,
-  }).format(value || 0);
 }
 
 function resolveMaxPriceValue(rawMaxPrice: number) {
@@ -315,8 +308,8 @@ function CatalogFiltersForm({
           </div>
         </div>
         <div className="mt-2 flex items-center justify-between text-[10px] text-slate-500">
-          <span>{formatCurrency(draft.minPrice)}</span>
-          <span>{formatCurrency(draft.maxPrice)}</span>
+          <span>{formatMarketplaceCurrency(draft.minPrice)}</span>
+          <span>{formatMarketplaceCurrency(draft.maxPrice)}</span>
         </div>
       </div>
 
@@ -485,8 +478,8 @@ export function GlobalCatalogToolbar({
     state.city ? { key: 'city', label: `Ciudad: ${state.city}` } : null,
     state.onSale ? { key: 'sale', label: 'Solo ofertas' } : null,
     state.rating ? { key: 'rating', label: `${state.rating}+ estrellas` } : null,
-    state.minPrice > 0 ? { key: 'min', label: `Desde ${formatCurrency(state.minPrice)}` } : null,
-    state.maxPrice !== null ? { key: 'max', label: `Hasta ${formatCurrency(state.maxPrice)}` } : null,
+    state.minPrice > 0 ? { key: 'min', label: `Desde ${formatMarketplaceCurrency(state.minPrice)}` } : null,
+    state.maxPrice !== null ? { key: 'max', label: `Hasta ${formatMarketplaceCurrency(state.maxPrice)}` } : null,
     state.inStock === false ? { key: 'stock', label: 'Incluye sin stock' } : null,
   ].filter(Boolean) as Array<{ key: string; label: string }>;
 

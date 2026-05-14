@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import {
@@ -14,10 +14,12 @@ import {
   Sparkles,
   Truck,
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { hexToRgba } from '@/lib/color-utils';
 import { getTenantHeroImage, getTenantPublicContent } from '@/lib/public-site/tenant-public-config';
+import { useCurrencyFormatter } from '@/contexts/BusinessConfigContext';
 import type { BusinessConfig } from '@/types/business-config';
 import type {
   HomeOfferPreview,
@@ -67,13 +69,16 @@ export default function HomeSalesShowcase({
 }: HomeSalesShowcaseProps) {
   const content = getTenantPublicContent(config);
   const heroImage = getTenantHeroImage(config);
+  const formatCurrency = useCurrencyFormatter();
   const carouselImages = Array.isArray(config.carousel?.images) && config.carousel.images.length > 0
     ? config.carousel.images
     : [{ id: 'hero-fallback', url: heroImage, alt: config.businessName || 'Catalogo' }];
   const slides = carouselImages.slice(0, 5);
   const intervalMs = Math.max(3500, Number(config.carousel?.transitionSeconds || 5) * 1000);
   const [activeSlide, setActiveSlide] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
   const [selectedProductId, setSelectedProductId] = useState(products[0]?.id || '');
+  const touchStartX = useRef(0);
 
   useEffect(() => {
     if (products.length > 0 && !products.some((product) => product.id === selectedProductId)) {
@@ -81,17 +86,33 @@ export default function HomeSalesShowcase({
     }
   }, [products, selectedProductId]);
 
+  // setTimeout pattern so manual navigation resets the timer
   useEffect(() => {
-    if (slides.length <= 1) {
-      return;
-    }
-
-    const timer = window.setInterval(() => {
+    if (slides.length <= 1 || isPaused) return;
+    const timer = setTimeout(() => {
       setActiveSlide((previous) => (previous + 1) % slides.length);
     }, intervalMs);
+    return () => clearTimeout(timer);
+  }, [activeSlide, intervalMs, isPaused, slides.length]);
 
-    return () => window.clearInterval(timer);
-  }, [intervalMs, slides.length]);
+  const goPrev = useCallback(() => {
+    setActiveSlide((previous) => (previous - 1 + slides.length) % slides.length);
+  }, [slides.length]);
+
+  const goNext = useCallback(() => {
+    setActiveSlide((previous) => (previous + 1) % slides.length);
+  }, [slides.length]);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  }, []);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    const diff = touchStartX.current - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 50) {
+      diff > 0 ? goNext() : goPrev();
+    }
+  }, [goNext, goPrev]);
 
   const selectedProduct = useMemo(
     () => products.find((product) => product.id === selectedProductId) || products[0] || null,
@@ -254,7 +275,13 @@ export default function HomeSalesShowcase({
           </div>
         </div>
 
-        <div className="relative border-t border-slate-200 bg-slate-950 dark:border-slate-800 xl:border-l xl:border-t-0">
+        <div
+          className="relative border-t border-slate-200 bg-slate-950 dark:border-slate-800 xl:border-l xl:border-t-0"
+          onMouseEnter={() => setIsPaused(true)}
+          onMouseLeave={() => setIsPaused(false)}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
           <div className="absolute inset-0">
             {slides.map((slide, index) => (
               <div
@@ -292,7 +319,8 @@ export default function HomeSalesShowcase({
                     variant="secondary"
                     size="icon"
                     className="h-10 w-10 rounded-full border border-white/15 bg-white/10 text-white hover:bg-white/20"
-                    onClick={() => setActiveSlide((previous) => (previous - 1 + slides.length) % slides.length)}
+                    onClick={goPrev}
+                    aria-label="Slide anterior"
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
@@ -300,7 +328,8 @@ export default function HomeSalesShowcase({
                     variant="secondary"
                     size="icon"
                     className="h-10 w-10 rounded-full border border-white/15 bg-white/10 text-white hover:bg-white/20"
-                    onClick={() => setActiveSlide((previous) => (previous + 1) % slides.length)}
+                    onClick={goNext}
+                    aria-label="Slide siguiente"
                   >
                     <ChevronRight className="h-4 w-4" />
                   </Button>
@@ -339,39 +368,12 @@ export default function HomeSalesShowcase({
                   <div className="mt-5 flex flex-wrap items-end gap-3">
                     <p className="text-3xl font-bold text-white">
                       {selectedProduct.offerPrice && selectedProduct.offerPrice < selectedProduct.price
-                        ? new Intl.NumberFormat(config.regional.locale, {
-                            style: 'currency',
-                            currency: config.storeSettings.currency,
-                            minimumFractionDigits: config.storeSettings.currency === 'PYG' ? 0 : 2,
-                            maximumFractionDigits: config.storeSettings.currency === 'PYG' ? 0 : 2,
-                          }).format(
-                            config.storeSettings.currency === 'PYG'
-                              ? Math.round(selectedProduct.offerPrice)
-                              : selectedProduct.offerPrice
-                          )
-                        : new Intl.NumberFormat(config.regional.locale, {
-                            style: 'currency',
-                            currency: config.storeSettings.currency,
-                            minimumFractionDigits: config.storeSettings.currency === 'PYG' ? 0 : 2,
-                            maximumFractionDigits: config.storeSettings.currency === 'PYG' ? 0 : 2,
-                          }).format(
-                            config.storeSettings.currency === 'PYG'
-                              ? Math.round(selectedProduct.price)
-                              : selectedProduct.price
-                          )}
+                        ? formatCurrency(selectedProduct.offerPrice)
+                        : formatCurrency(selectedProduct.price)}
                     </p>
                     {selectedProduct.offerPrice && selectedProduct.offerPrice < selectedProduct.price ? (
                       <p className="text-sm font-medium text-white/55 line-through">
-                        {new Intl.NumberFormat(config.regional.locale, {
-                          style: 'currency',
-                          currency: config.storeSettings.currency,
-                          minimumFractionDigits: config.storeSettings.currency === 'PYG' ? 0 : 2,
-                          maximumFractionDigits: config.storeSettings.currency === 'PYG' ? 0 : 2,
-                        }).format(
-                          config.storeSettings.currency === 'PYG'
-                            ? Math.round(selectedProduct.price)
-                            : selectedProduct.price
-                        )}
+                        {formatCurrency(selectedProduct.price)}
                       </p>
                     ) : null}
                     <span className={`text-xs font-semibold uppercase tracking-[0.16em] ${
@@ -457,27 +459,40 @@ export default function HomeSalesShowcase({
               </div>
             )}
 
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex gap-2">
-                {slides.map((slide, index) => (
-                  <button
-                    key={slide.id}
-                    type="button"
-                    aria-label={`Ir al slide ${index + 1}`}
-                    onClick={() => setActiveSlide(index)}
-                    className={`h-2 rounded-full transition-all ${
-                      index === activeSlide ? 'w-10 bg-white' : 'w-2 bg-white/40 hover:bg-white/70'
-                    }`}
+            <div className="space-y-3">
+              {slides.length > 1 && (
+                <div className="h-[2px] overflow-hidden rounded-full bg-white/10">
+                  <motion.div
+                    key={`progress-${activeSlide}`}
+                    className="h-full origin-left bg-white/50"
+                    initial={{ scaleX: 0 }}
+                    animate={isPaused ? {} : { scaleX: 1 }}
+                    transition={{ duration: intervalMs / 1000, ease: 'linear' }}
                   />
-                ))}
-              </div>
-
-              {featuredOffer ? (
-                <div className="flex items-center gap-2 text-xs font-medium text-white/70">
-                  <Sparkles className="h-4 w-4 text-white/55" />
-                  {featuredOffer.promotionName}
                 </div>
-              ) : null}
+              )}
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex gap-2">
+                  {slides.map((slide, index) => (
+                    <button
+                      key={slide.id}
+                      type="button"
+                      aria-label={`Ir al slide ${index + 1}`}
+                      onClick={() => setActiveSlide(index)}
+                      className={`h-2 rounded-full transition-all ${
+                        index === activeSlide ? 'w-10 bg-white' : 'w-2 bg-white/40 hover:bg-white/70'
+                      }`}
+                    />
+                  ))}
+                </div>
+
+                {featuredOffer ? (
+                  <div className="flex items-center gap-2 text-xs font-medium text-white/70">
+                    <Sparkles className="h-4 w-4 text-white/55" />
+                    {featuredOffer.promotionName}
+                  </div>
+                ) : null}
+              </div>
             </div>
           </div>
         </div>

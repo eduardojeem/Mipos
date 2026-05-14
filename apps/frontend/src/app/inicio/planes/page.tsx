@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, Loader2, RefreshCw, ShieldCheck, Sparkles, Store, TrendingUp } from 'lucide-react';
+import { ArrowRight, Loader2, ShieldCheck, Sparkles, Store, TrendingUp } from 'lucide-react';
 import { LandingHeader } from '../components/LandingHeader';
 import { Footer } from '../components/Footer';
 import { PricingCard } from '../components/PricingCard';
@@ -33,16 +33,16 @@ function PlanGridSkeleton() {
                     <Skeleton className="mt-3 h-4 w-full bg-white/10" />
                     <Skeleton className="mt-2 h-4 w-5/6 bg-white/10" />
                     <div className="mt-8 grid grid-cols-2 gap-4">
-                        {Array.from({ length: 4 }).map((__, itemIndex) => (
-                            <div key={itemIndex}>
+                        {Array.from({ length: 4 }).map((__, i) => (
+                            <div key={i}>
                                 <Skeleton className="h-3 w-20 bg-white/10" />
                                 <Skeleton className="mt-2 h-4 w-24 bg-white/10" />
                             </div>
                         ))}
                     </div>
                     <div className="mt-8 space-y-3">
-                        {Array.from({ length: 5 }).map((__, itemIndex) => (
-                            <Skeleton key={itemIndex} className="h-4 w-full bg-white/10" />
+                        {Array.from({ length: 5 }).map((__, i) => (
+                            <Skeleton key={i} className="h-4 w-full bg-white/10" />
                         ))}
                     </div>
                     <Skeleton className="mt-8 h-12 w-full bg-white/10" />
@@ -59,26 +59,16 @@ export default function PlanesPage() {
     const router = useRouter();
 
     const recommendedPlan = useMemo(() => getRecommendedPlan(plans), [plans]);
-    const cheapestPaidPlan = useMemo(
-        () => [...plans].filter((plan) => plan.priceMonthly > 0).sort((a, b) => a.priceMonthly - b.priceMonthly)[0] || null,
-        [plans]
-    );
-    const highestTrialDays = useMemo(
-        () => plans.reduce((max, plan) => Math.max(max, plan.trialDays || 0), 0),
-        [plans]
-    );
-    const currencies = useMemo(
-        () => Array.from(new Set(plans.map((plan) => plan.currency || 'PYG'))),
-        [plans]
-    );
-    const hasUniformCurrency = currencies.length === 1;
+    const cheapestPaidPlan = [...plans].filter((p) => p.priceMonthly > 0).sort((a, b) => a.priceMonthly - b.priceMonthly)[0] ?? null;
+    const highestTrialDays = plans.reduce((max, p) => Math.max(max, p.trialDays || 0), 0);
+    const hasUniformCurrency = new Set(plans.map((p) => p.currency || 'PYG')).size === 1;
     const billingBadgeDiscount = useMemo(() => getBillingBadgeDiscount(plans), [plans]);
     const planFaqs = useMemo(() => buildPlanFaqs(highestTrialDays), [highestTrialDays]);
 
     const activePlan = selectedPlanId
-        ? plans.find((plan) => plan.id === selectedPlanId) || recommendedPlan
+        ? plans.find((p) => p.id === selectedPlanId) ?? recommendedPlan
         : recommendedPlan;
-    const registrationTargetPlan = activePlan || cheapestPaidPlan || plans[0] || null;
+    const registrationTargetPlan = activePlan ?? cheapestPaidPlan ?? plans[0] ?? null;
 
     const handlePlanSelect = (plan: Plan) => {
         setSelectedPlanId(plan.id);
@@ -101,8 +91,9 @@ export default function PlanesPage() {
             <LandingHeader />
 
             <main className="relative">
+                {/* Hero */}
                 <section className="relative overflow-hidden border-b border-white/10 py-16 lg:py-24">
-                    <div className="absolute inset-0 pointer-events-none">
+                    <div className="pointer-events-none absolute inset-0">
                         <div className="radial-gradient-purple absolute -left-12 top-0 h-72 w-72" />
                         <div className="radial-gradient-blue absolute right-0 top-12 h-72 w-72" />
                     </div>
@@ -114,11 +105,10 @@ export default function PlanesPage() {
                                     Catalogo publico de planes
                                 </div>
                                 <h1 className="mt-6 max-w-4xl text-4xl font-semibold tracking-tight text-white md:text-5xl lg:text-6xl">
-                                    Planes claros para elegir sin perder tiempo en comparaciones confusas
+                                    Elige el plan que se ajusta a tu negocio
                                 </h1>
                                 <p className="mt-5 max-w-3xl text-lg leading-8 text-slate-300">
                                     Compara precios, capacidad operativa y funciones reales del sistema antes de iniciar el alta.
-                                    La oferta visible se actualiza desde tu catalogo activo en Supabase.
                                 </p>
 
                                 <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -156,7 +146,7 @@ export default function PlanesPage() {
                                     {isRefreshing ? (
                                         <div className="inline-flex items-center gap-2 text-sm text-slate-400">
                                             <Loader2 className="h-4 w-4 animate-spin" />
-                                            Actualizando catalogo
+                                            Actualizando
                                         </div>
                                     ) : null}
                                 </div>
@@ -165,7 +155,7 @@ export default function PlanesPage() {
                                     <Button
                                         onClick={handlePrimaryCta}
                                         disabled={!registrationTargetPlan}
-                                        className="gradient-primary rounded-lg px-6 py-6 text-sm font-medium text-white shadow-[0_22px_50px_-22px_rgba(16,185,129,0.95)] hover:opacity-95"
+                                        className="gradient-primary rounded-lg px-6 text-sm font-medium text-white shadow-[0_22px_50px_-22px_rgba(16,185,129,0.95)] hover:opacity-95"
                                     >
                                         Empezar con {registrationTargetPlan?.name || 'un plan'}
                                         <ArrowRight className="ml-2 h-4 w-4" />
@@ -173,7 +163,7 @@ export default function PlanesPage() {
                                     <Button
                                         variant="outline"
                                         onClick={handleScrollToComparison}
-                                        className="rounded-lg border-white/10 bg-white/5 px-6 py-6 text-sm font-medium text-white hover:bg-white/10"
+                                        className="rounded-lg border-white/10 bg-white/5 px-6 text-sm font-medium text-white hover:bg-white/10"
                                     >
                                         Ver comparacion
                                     </Button>
@@ -207,22 +197,22 @@ export default function PlanesPage() {
 
                                 <div className="grid gap-4 sm:grid-cols-2">
                                     <div className="landing-panel rounded-lg p-5">
-                                        <div className="flex items-center gap-3">
-                                            <ShieldCheck className="h-5 w-5 text-emerald-300" />
+                                        <div className="flex items-start gap-3">
+                                            <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300" />
                                             <div>
                                                 <p className="text-sm font-medium text-white">Cambio sin rehacer cuenta</p>
-                                                <p className="text-sm text-slate-400">El plan acompana el crecimiento del negocio.</p>
+                                                <p className="mt-1 text-sm text-slate-400">El plan acompana el crecimiento del negocio.</p>
                                             </div>
                                         </div>
                                     </div>
                                     <div className="landing-panel rounded-lg p-5">
-                                        <div className="flex items-center gap-3">
-                                            <TrendingUp className="h-5 w-5 text-sky-300" />
+                                        <div className="flex items-start gap-3">
+                                            <TrendingUp className="mt-0.5 h-5 w-5 shrink-0 text-sky-300" />
                                             <div>
                                                 <p className="text-sm font-medium text-white">
                                                     {highestTrialDays > 0 ? `Hasta ${highestTrialDays} dias de prueba` : 'Alta inmediata'}
                                                 </p>
-                                                <p className="text-sm text-slate-400">Segun configuracion comercial activa.</p>
+                                                <p className="mt-1 text-sm text-slate-400">Segun condiciones comerciales del plan.</p>
                                             </div>
                                         </div>
                                     </div>
@@ -232,6 +222,7 @@ export default function PlanesPage() {
                     </div>
                 </section>
 
+                {/* Plan grid */}
                 <section id="planes" className="border-b border-white/10 py-20">
                     <div className="landing-container">
                         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -242,29 +233,19 @@ export default function PlanesPage() {
                                     Cada plan muestra capacidad operativa, funciones disponibles y el precio real para el ciclo elegido.
                                 </p>
                             </div>
-                            <div className="flex flex-wrap items-center gap-3">
-                                {recommendedPlan ? (
-                                    <div className="inline-flex items-center gap-2 rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1 text-sm text-amber-200">
-                                        <Store className="h-4 w-4" />
-                                        Recomendado: {recommendedPlan.name}
-                                    </div>
-                                ) : null}
-                                <Button
-                                    variant="outline"
-                                    onClick={() => void refetch()}
-                                    className="rounded-lg border-white/10 bg-white/5 text-white hover:bg-white/10"
-                                >
-                                    <RefreshCw className="mr-2 h-4 w-4" />
-                                    Recargar
-                                </Button>
-                            </div>
+                            {recommendedPlan ? (
+                                <div className="inline-flex items-center gap-2 rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1 text-sm text-amber-200">
+                                    <Store className="h-4 w-4" />
+                                    Recomendado: {recommendedPlan.name}
+                                </div>
+                            ) : null}
                         </div>
 
                         {error && plans.length > 0 ? (
                             <Alert className="mt-8 border-amber-500/30 bg-amber-500/10 text-amber-50">
                                 <AlertTitle className="text-amber-100">Mostrando el ultimo catalogo disponible</AlertTitle>
                                 <AlertDescription className="text-amber-50/90">
-                                    No pudimos actualizar en este momento: {error}
+                                    No pudimos actualizar en este momento.
                                 </AlertDescription>
                             </Alert>
                         ) : null}
@@ -277,7 +258,7 @@ export default function PlanesPage() {
                             <Alert className="mt-10 border-red-500/30 bg-red-500/10 text-red-50">
                                 <AlertTitle>No se pudieron cargar los planes</AlertTitle>
                                 <AlertDescription className="mt-2 flex flex-col gap-4 text-red-50/90">
-                                    <span>{error}</span>
+                                    <span>Ocurrio un error al obtener los planes disponibles.</span>
                                     <div>
                                         <Button
                                             onClick={() => void refetch()}
@@ -291,7 +272,7 @@ export default function PlanesPage() {
                         ) : plans.length === 0 ? (
                             <div className="mt-10 rounded-lg border border-dashed border-white/10 px-6 py-16 text-center">
                                 <p className="text-lg font-medium text-white">No hay planes publicados ahora mismo.</p>
-                                <p className="mt-2 text-sm text-slate-400">Publica al menos un plan activo para mostrar esta seccion.</p>
+                                <p className="mt-2 text-sm text-slate-400">Vuelve a intentarlo en unos minutos.</p>
                             </div>
                         ) : (
                             <div className="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
@@ -310,12 +291,14 @@ export default function PlanesPage() {
                     </div>
                 </section>
 
+                {/* Comparison table */}
                 {!isLoading && plans.length > 0 ? (
                     <div id="comparacion-planes">
                         <PlansComparison plans={plans} billingCycle={billingCycle} />
                     </div>
                 ) : null}
 
+                {/* FAQ */}
                 <section className="border-t border-white/10 py-20">
                     <div className="landing-container">
                         <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -352,17 +335,13 @@ export default function PlanesPage() {
                                         {heroPlanNarrative.audience}
                                     </p>
                                 </div>
-                                <div className="landing-panel rounded-lg p-5">
-                                    <p className="text-xs font-medium uppercase tracking-[0.16em] text-slate-500">Alta y seguimiento</p>
-                                    <p className="mt-3 text-sm leading-6 text-slate-300">
-                                        El alta publica usa este catalogo activo. Si cambias precios o disponibilidad en Supabase, esta pagina se actualiza sin tocar codigo.
-                                    </p>
-                                </div>
+
                             </div>
                         </div>
                     </div>
                 </section>
 
+                {/* Final CTA */}
                 <section className="border-t border-white/10 py-20">
                     <div className="landing-container">
                         <div className="landing-panel flex flex-col gap-6 rounded-2xl p-8 lg:flex-row lg:items-end lg:justify-between lg:p-10">
@@ -378,7 +357,7 @@ export default function PlanesPage() {
                             <Button
                                 onClick={handlePrimaryCta}
                                 disabled={!registrationTargetPlan}
-                                className="gradient-primary rounded-lg px-6 py-6 text-sm font-medium text-white shadow-[0_22px_50px_-22px_rgba(16,185,129,0.95)] hover:opacity-95"
+                                className="gradient-primary rounded-lg px-6 text-sm font-medium text-white shadow-[0_22px_50px_-22px_rgba(16,185,129,0.95)] hover:opacity-95"
                             >
                                 Continuar con {registrationTargetPlan?.name || 'el registro'}
                                 <ArrowRight className="ml-2 h-4 w-4" />
