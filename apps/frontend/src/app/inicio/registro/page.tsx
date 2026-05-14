@@ -1,9 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AlertTriangle, ArrowLeft, Check, ChevronRight, Loader2, Sparkles, Store } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, Check, ChevronRight, Loader2, Mail, Sparkles, Store } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -56,12 +56,19 @@ function PlanSummarySkeleton() {
 function resolveSelectedPlan(plans: Plan[], requestedSlug: string | null): { plan: Plan | null; mismatch: boolean } {
   if (!plans.length) return { plan: null, mismatch: false };
 
+  // Enterprise can't self-register — never auto-select it
+  const registrablePlans = plans.filter((p) => p.slug !== 'enterprise');
+
   if (requestedSlug) {
     const matched = plans.find((p) => p.slug === requestedSlug);
     if (matched) return { plan: matched, mismatch: false };
   }
 
-  const fallback = plans.find((p) => p.priceMonthly === 0) || getRecommendedPlan(plans) || plans[0] || null;
+  const fallback =
+    registrablePlans.find((p) => p.slug === 'free') ||
+    getRecommendedPlan(registrablePlans) ||
+    registrablePlans[0] ||
+    null;
   return { plan: fallback, mismatch: !!requestedSlug };
 }
 
@@ -73,85 +80,49 @@ export default function RegistroPage() {
   const { plans, isLoading, error, refetch } = usePlans();
   const [showAllFeatures, setShowAllFeatures] = useState(false);
 
-  const { plan: selectedPlan, mismatch: planMismatch } = useMemo(
-    () => resolveSelectedPlan(plans, requestedSlug),
-    [plans, requestedSlug]
-  );
+  const { plan: selectedPlan, mismatch: planMismatch } = resolveSelectedPlan(plans, requestedSlug);
 
-  const freePlan = useMemo(
-    () => plans.find((plan) => plan.priceMonthly === 0 || plan.slug === 'free') || null,
-    [plans]
-  );
+  // Use slug check — Enterprise also has priceMonthly 0 so can't rely on price
+  const freePlan = plans.find((plan) => plan.slug === 'free') || null;
+  const isEnterpriseSelected = selectedPlan?.slug === 'enterprise';
   const isFreeSelected = selectedPlan?.id === freePlan?.id;
-  const entryMode = useMemo<'free' | 'plans'>(() => {
-    if (requestedMode === 'plans') {
-      return 'plans';
-    }
 
-    if (requestedMode === 'free') {
-      return 'free';
-    }
-
-    if (requestedSlug && selectedPlan && !isFreeSelected) {
-      return 'plans';
-    }
-
+  const entryMode: 'free' | 'plans' = (() => {
+    if (requestedMode === 'plans') return 'plans';
+    if (requestedMode === 'free') return 'free';
+    if (requestedSlug && selectedPlan && !isFreeSelected) return 'plans';
     return 'free';
-  }, [isFreeSelected, requestedMode, requestedSlug, selectedPlan]);
+  })();
 
-  const planNarrative = useMemo(
-    () => getPlanNarrative(selectedPlan?.slug),
-    [selectedPlan?.slug]
-  );
-  const featureLabels = useMemo(
-    () => getPlanFeatureLabels(selectedPlan?.features || []),
-    [selectedPlan?.features]
-  );
-  const limitItems = useMemo(
-    () => (selectedPlan ? getPlanLimitItems(selectedPlan) : []),
-    [selectedPlan]
-  );
-
+  const planNarrative = getPlanNarrative(selectedPlan?.slug);
+  const featureLabels = getPlanFeatureLabels(selectedPlan?.features || []);
+  const limitItems = selectedPlan ? getPlanLimitItems(selectedPlan) : [];
   const visibleFeatures = showAllFeatures ? featureLabels : featureLabels.slice(0, 4);
-  const selectorPlans = useMemo(() => {
-    if (!plans.length) {
-      return [];
-    }
 
-    return [...plans].sort((left, right) => {
+  // Enterprise excluded from selector — requires contact
+  const selectorPlans = [...plans]
+    .filter((p) => p.slug !== 'enterprise')
+    .sort((left, right) => {
       const leftIsFree = left.id === freePlan?.id;
       const rightIsFree = right.id === freePlan?.id;
-
       if (leftIsFree && !rightIsFree) return -1;
       if (!leftIsFree && rightIsFree) return 1;
-
       return left.priceMonthly - right.priceMonthly;
     });
-  }, [plans, freePlan?.id]);
 
   const handleRegistrationSuccess = () => {
-    window.location.href = '/onboarding';
+    router.push('/onboarding');
   };
 
   const buildRegistrationUrl = (planSlug?: string | null, mode: 'free' | 'plans' = 'free') => {
     const params = new URLSearchParams();
-
-    if (planSlug) {
-      params.set('plan', planSlug);
-    }
-
+    if (planSlug) params.set('plan', planSlug);
     params.set('mode', mode);
-
     return `/inicio/registro?${params.toString()}`;
   };
 
   const handleQuickPlanChange = (plan: Plan) => {
-    router.push(
-      buildRegistrationUrl(
-        plan.slug,
-        plan.id === freePlan?.id ? 'free' : 'plans'
-      )
-    );
+    router.push(buildRegistrationUrl(plan.slug, plan.id === freePlan?.id ? 'free' : 'plans'));
   };
 
   const handleChoosePlanNow = () => {
@@ -160,17 +131,20 @@ export default function RegistroPage() {
 
   const handleStartFree = () => {
     if (!freePlan) return;
-
     if (!isFreeSelected || entryMode !== 'free') {
       router.push(buildRegistrationUrl(freePlan.slug, 'free'));
       return;
     }
-
-    document.getElementById('registration-form-panel')?.scrollIntoView({
-      behavior: 'smooth',
-      block: 'start',
-    });
+    document.getElementById('registration-form-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
+
+  const planDisplayPrice = selectedPlan
+    ? selectedPlan.slug === 'enterprise'
+      ? 'A consultar'
+      : selectedPlan.priceMonthly === 0
+        ? 'Gratis'
+        : `${formatCurrency(selectedPlan.priceMonthly, selectedPlan.currency)} / mes`
+    : null;
 
   return (
     <div className="landing-shell min-h-screen text-white">
@@ -211,7 +185,6 @@ export default function RegistroPage() {
                         depende de un cobro ni de completar datos de pago.
                       </p>
                     </div>
-
                     <div className="flex flex-col gap-2 md:items-end">
                       <Button
                         type="button"
@@ -234,9 +207,7 @@ export default function RegistroPage() {
                         type="button"
                         onClick={handleStartFree}
                         className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-                          entryMode === 'free'
-                            ? 'bg-white text-slate-950'
-                            : 'text-slate-300 hover:text-white'
+                          entryMode === 'free' ? 'bg-white text-slate-950' : 'text-slate-300 hover:text-white'
                         }`}
                         aria-pressed={entryMode === 'free'}
                       >
@@ -246,9 +217,7 @@ export default function RegistroPage() {
                         type="button"
                         onClick={handleChoosePlanNow}
                         className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-                          entryMode === 'plans'
-                            ? 'bg-white text-slate-950'
-                            : 'text-slate-300 hover:text-white'
+                          entryMode === 'plans' ? 'bg-white text-slate-950' : 'text-slate-300 hover:text-white'
                         }`}
                         aria-pressed={entryMode === 'plans'}
                       >
@@ -290,12 +259,11 @@ export default function RegistroPage() {
                             className={`
                               rounded-lg border text-left transition-all
                               ${isFree ? 'sm:col-span-2 p-5' : 'p-4'}
-                              ${
-                                isSelected
-                                  ? 'border-emerald-400/50 bg-emerald-400/10 text-emerald-200 ring-1 ring-emerald-400/30'
-                                  : isFree
-                                    ? 'border-emerald-400/25 bg-emerald-400/5 text-slate-100 hover:border-emerald-400/40 hover:bg-emerald-400/10'
-                                    : 'border-white/10 bg-white/5 text-slate-300 hover:border-white/20 hover:bg-white/10'
+                              ${isSelected
+                                ? 'border-emerald-400/50 bg-emerald-400/10 text-emerald-200 ring-1 ring-emerald-400/30'
+                                : isFree
+                                  ? 'border-emerald-400/25 bg-emerald-400/5 text-slate-100 hover:border-emerald-400/40 hover:bg-emerald-400/10'
+                                  : 'border-white/10 bg-white/5 text-slate-300 hover:border-white/20 hover:bg-white/10'
                               }
                             `}
                           >
@@ -310,7 +278,7 @@ export default function RegistroPage() {
                                   ) : null}
                                 </div>
                                 <span className="mt-1 block text-xs opacity-75">
-                                  {plan.priceMonthly === 0
+                                  {plan.slug === 'free'
                                     ? 'Gratis'
                                     : `${formatCurrency(plan.priceMonthly, plan.currency)}/mes`}
                                 </span>
@@ -325,7 +293,6 @@ export default function RegistroPage() {
                                   </p>
                                 )}
                               </div>
-
                               {isSelected ? (
                                 <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-200">
                                   Seleccionado
@@ -354,7 +321,6 @@ export default function RegistroPage() {
                           de un plan superior la haces despues, cuando ya necesites mas capacidad.
                         </p>
                       </div>
-
                       <Button
                         type="button"
                         variant="outline"
@@ -375,12 +341,9 @@ export default function RegistroPage() {
                       <AlertTriangle className="h-4 w-4" aria-hidden="true" />
                       <AlertTitle>No se pudieron cargar los planes</AlertTitle>
                       <AlertDescription className="mt-2 flex flex-col gap-4 text-red-50/90">
-                        <span>{error}</span>
+                        <span>Ocurrio un error al obtener los planes. Intenta de nuevo o revisa tu conexion.</span>
                         <div className="flex flex-wrap gap-3">
-                          <Button
-                            onClick={() => void refetch()}
-                            className="rounded-lg bg-white text-slate-950 hover:bg-slate-200"
-                          >
+                          <Button onClick={() => void refetch()} className="rounded-lg bg-white text-slate-950 hover:bg-slate-200">
                             Reintentar
                           </Button>
                           <Link href="/inicio/planes">
@@ -404,7 +367,7 @@ export default function RegistroPage() {
                             <p className="mt-2 max-w-md text-sm leading-6 text-slate-400">
                               {selectedPlan.description || planNarrative.summary}
                             </p>
-                            {selectedPlan.priceMonthly === 0 && (
+                            {isFreeSelected && (
                               <p className="mt-3 text-sm font-medium text-emerald-300">
                                 Arrancas sin tarjeta y mejoras el plan solo cuando haga falta.
                               </p>
@@ -412,63 +375,59 @@ export default function RegistroPage() {
                           </div>
                           <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-right">
                             <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-emerald-100/80">Precio</p>
-                            <p className="mt-1 text-2xl font-semibold text-white">
-                              {formatCurrency(selectedPlan.priceMonthly, selectedPlan.currency)}
-                              {selectedPlan.priceMonthly > 0 && (
-                                <span className="ml-1 text-sm font-medium text-slate-300">/ mes</span>
-                              )}
-                            </p>
-                            {selectedPlan.trialDays && selectedPlan.trialDays > 0 && (
+                            <p className="mt-1 text-2xl font-semibold text-white">{planDisplayPrice}</p>
+                            {selectedPlan.trialDays && selectedPlan.trialDays > 0 ? (
                               <p className="mt-1 text-xs text-emerald-100/80">
                                 {selectedPlan.trialDays} dias de prueba
                               </p>
-                            )}
+                            ) : null}
                           </div>
                         </div>
                       </div>
 
-                      <div className="landing-panel rounded-lg p-6">
-                        {limitItems.length > 0 && (
-                          <>
-                            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                              Capacidad incluida
-                            </p>
-                            <dl className="mt-3 grid grid-cols-2 gap-x-5 gap-y-3">
-                              {limitItems.map((item) => (
-                                <div key={item.key}>
-                                  <dt className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">{item.label}</dt>
-                                  <dd className="mt-0.5 text-sm font-medium text-slate-200">{item.value}</dd>
-                                </div>
-                              ))}
-                            </dl>
-                          </>
-                        )}
-
-                        {featureLabels.length > 0 && (
-                          <>
-                            <p className={`text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 ${limitItems.length > 0 ? 'mt-5' : ''}`}>
-                              Incluye
-                            </p>
-                            <ul className="mt-3 space-y-2">
-                              {visibleFeatures.map((feature) => (
-                                <li key={feature} className="flex items-start gap-2.5 text-sm text-slate-300">
-                                  <Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-emerald-400" aria-hidden="true" />
-                                  <span>{feature}</span>
-                                </li>
-                              ))}
-                            </ul>
-                            {featureLabels.length > 4 && (
-                              <button
-                                type="button"
-                                onClick={() => setShowAllFeatures((v) => !v)}
-                                className="mt-3 text-xs font-medium text-emerald-400 hover:text-emerald-300"
-                              >
-                                {showAllFeatures ? 'Ver menos' : `Ver las ${featureLabels.length} caracteristicas`}
-                              </button>
-                            )}
-                          </>
-                        )}
-                      </div>
+                      {!isEnterpriseSelected && (
+                        <div className="landing-panel rounded-lg p-6">
+                          {limitItems.length > 0 && (
+                            <>
+                              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                                Capacidad incluida
+                              </p>
+                              <dl className="mt-3 grid grid-cols-2 gap-x-5 gap-y-3">
+                                {limitItems.map((item) => (
+                                  <div key={item.key}>
+                                    <dt className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500">{item.label}</dt>
+                                    <dd className="mt-0.5 text-sm font-medium text-slate-200">{item.value}</dd>
+                                  </div>
+                                ))}
+                              </dl>
+                            </>
+                          )}
+                          {featureLabels.length > 0 && (
+                            <>
+                              <p className={`text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 ${limitItems.length > 0 ? 'mt-5' : ''}`}>
+                                Incluye
+                              </p>
+                              <ul className="mt-3 space-y-2">
+                                {visibleFeatures.map((feature) => (
+                                  <li key={feature} className="flex items-start gap-2.5 text-sm text-slate-300">
+                                    <Check className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-emerald-400" aria-hidden="true" />
+                                    <span>{feature}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                              {featureLabels.length > 4 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setShowAllFeatures((v) => !v)}
+                                  className="mt-3 text-xs font-medium text-emerald-400 hover:text-emerald-300"
+                                >
+                                  {showAllFeatures ? 'Ver menos' : `Ver las ${featureLabels.length} caracteristicas`}
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
 
                       <Link href="/inicio/planes" className="inline-block">
                         <Button
@@ -493,51 +452,75 @@ export default function RegistroPage() {
                 </div>
               </div>
 
+              {/* Right panel */}
               <div className="lg:sticky lg:top-24">
-                <div id="registration-form-panel" className="landing-panel rounded-lg p-6 md:p-8">
-                  <div className="border-b border-white/10 pb-5">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                      Datos de acceso
-                    </p>
-                    <h2 className="mt-2 text-xl font-semibold text-white">Crea tu cuenta</h2>
-                    <p className="mt-1.5 text-sm leading-6 text-slate-400">
-                      Este usuario sera el administrador principal del negocio.
-                    </p>
-                    {selectedPlan?.priceMonthly === 0 && (
-                      <div className="mt-4 rounded-lg border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-100">
-                        Empiezas con el plan gratuito. Sin tarjeta. El upgrade lo haces despues,
-                        cuando quieras mas capacidad.
-                      </div>
-                    )}
+                {isEnterpriseSelected ? (
+                  <div className="landing-panel rounded-lg p-6 md:p-8">
+                    <div className="border-b border-white/10 pb-5">
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Plan Enterprise</p>
+                      <h2 className="mt-2 text-xl font-semibold text-white">Precio a medida</h2>
+                      <p className="mt-1.5 text-sm leading-6 text-slate-400">
+                        El plan Enterprise se configura segun el volumen, las integraciones y la estructura de tu operacion. Contactanos para recibir una propuesta.
+                      </p>
+                    </div>
+                    <div className="pt-6 space-y-4">
+                      <a
+                        href="mailto:contacto@mipos.app?subject=Consulta%20Plan%20Enterprise"
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-white/10"
+                      >
+                        <Mail className="h-4 w-4" />
+                        Escribir a contacto@mipos.app
+                      </a>
+                      <Link href="/inicio/planes">
+                        <Button variant="outline" className="w-full rounded-lg border-white/10 bg-transparent text-white hover:bg-white/10">
+                          <ArrowLeft className="mr-2 h-4 w-4" />
+                          Ver otros planes
+                        </Button>
+                      </Link>
+                    </div>
                   </div>
-
-                  <div className="pt-5">
-                    {selectedPlan ? (
-                      <RegistrationForm
-                        selectedPlan={selectedPlan}
-                        onSuccess={handleRegistrationSuccess}
-                      />
-                    ) : isLoading ? (
-                      <div className="flex min-h-[280px] items-center justify-center">
-                        <div className="inline-flex items-center gap-3 text-sm text-slate-400">
-                          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                          Cargando planes...
+                ) : (
+                  <div id="registration-form-panel" className="landing-panel rounded-lg p-6 md:p-8">
+                    <div className="border-b border-white/10 pb-5">
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                        Datos de acceso
+                      </p>
+                      <h2 className="mt-2 text-xl font-semibold text-white">Crea tu cuenta</h2>
+                      <p className="mt-1.5 text-sm leading-6 text-slate-400">
+                        Este usuario sera el administrador principal del negocio.
+                      </p>
+                      {isFreeSelected && (
+                        <div className="mt-4 rounded-lg border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-100">
+                          Empiezas con el plan gratuito. Sin tarjeta. El upgrade lo haces despues,
+                          cuando quieras mas capacidad.
                         </div>
-                      </div>
-                    ) : (
-                      <div className="flex min-h-[280px] flex-col items-center justify-center gap-4 text-center">
-                        <p className="max-w-sm text-sm leading-6 text-slate-400">
-                          Necesitamos un plan activo para completar el registro.
-                        </p>
-                        <Link href="/inicio/planes">
-                          <Button className="gradient-primary rounded-lg text-white">
-                            Ver planes disponibles
-                          </Button>
-                        </Link>
-                      </div>
-                    )}
+                      )}
+                    </div>
+                    <div className="pt-5">
+                      {selectedPlan ? (
+                        <RegistrationForm selectedPlan={selectedPlan} onSuccess={handleRegistrationSuccess} />
+                      ) : isLoading ? (
+                        <div className="flex min-h-[280px] items-center justify-center">
+                          <div className="inline-flex items-center gap-3 text-sm text-slate-400">
+                            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                            Cargando planes...
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex min-h-[280px] flex-col items-center justify-center gap-4 text-center">
+                          <p className="max-w-sm text-sm leading-6 text-slate-400">
+                            Necesitamos un plan activo para completar el registro.
+                          </p>
+                          <Link href="/inicio/planes">
+                            <Button className="gradient-primary rounded-lg text-white">
+                              Ver planes disponibles
+                            </Button>
+                          </Link>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
           </div>
