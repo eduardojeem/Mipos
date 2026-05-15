@@ -7,8 +7,67 @@ import { createAdminClient } from '@/lib/supabase-admin';
 // creates the org and the user lands on the upgrade screen.
 const FREE_REGISTRATION_PLANS = new Set(['free']);
 
+// Per-instance rate limiting. Supabase Auth has its own per-IP rate limits
+// for signUp(), but the org+membership creation here was unthrottled. A bot
+// with 100 inboxes could create 100 organizations. This adds a soft guard:
+// 5 attempts per IP per 10 min window. For multi-instance deploys (Vercel
+// serverless), this is best-effort — a global rate limit needs a shared
+// store (Upstash/Redis). Most signup spam comes from the same IP burst,
+// which this catches even per-instance.
+const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
+const RATE_LIMIT_MAX_ATTEMPTS = 5;
+const RATE_LIMIT_MAX_ENTRIES = 1024;
+const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
+
+function getClientIp(request: NextRequest): string {
+    const forwarded = request.headers.get('x-forwarded-for');
+    if (forwarded) {
+        return forwarded.split(',')[0]?.trim() || 'unknown';
+    }
+    return request.headers.get('x-real-ip') || 'unknown';
+}
+
+function checkRateLimit(ip: string): { allowed: boolean; retryAfterSeconds?: number } {
+    const now = Date.now();
+    const entry = rateLimitStore.get(ip);
+
+    if (!entry || entry.resetAt < now) {
+        // Evict expired entries opportunistically; cap total store size.
+        if (rateLimitStore.size >= RATE_LIMIT_MAX_ENTRIES) {
+            const oldestKey = rateLimitStore.keys().next().value;
+            if (oldestKey !== undefined) rateLimitStore.delete(oldestKey);
+        }
+        rateLimitStore.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+        return { allowed: true };
+    }
+
+    if (entry.count >= RATE_LIMIT_MAX_ATTEMPTS) {
+        return { allowed: false, retryAfterSeconds: Math.ceil((entry.resetAt - now) / 1000) };
+    }
+
+    entry.count += 1;
+    return { allowed: true };
+}
+
 export async function POST(request: NextRequest) {
     try {
+        const ip = getClientIp(request);
+        const rate = checkRateLimit(ip);
+        if (!rate.allowed) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: 'Demasiados intentos de registro. Probá de nuevo en unos minutos.',
+                },
+                {
+                    status: 429,
+                    headers: rate.retryAfterSeconds
+                        ? { 'Retry-After': String(rate.retryAfterSeconds) }
+                        : undefined,
+                }
+            );
+        }
+
         const body = await request.json();
         const { email, password, name, organizationName, planSlug } = body;
 
