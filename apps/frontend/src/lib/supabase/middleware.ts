@@ -18,11 +18,44 @@ async function insertAuditLog(
 
 /**
  * Helper function to retrieve the user's highest role.
- * Checks metadata, then users table, then user_roles & roles tables.
- * Optimized: runs users table + user_roles in parallel when possible.
+ * Checks the users table and user_roles RBAC join.
+ *
+ * Per-instance cache to avoid hitting Supabase on every dashboard navigation
+ * — middleware runs on each request and these queries were the dominant
+ * latency source for /dashboard/* navs (400-600ms cold per page change).
+ *
+ * Cache is keyed by user id, lives 30s, and only stores the small role
+ * payload. Roles change rarely; if a SUPER_ADMIN demotes a user, worst-case
+ * the user retains ADMIN access for ≤30s on the same Edge instance. The
+ * trade-off is acceptable for the latency win.
  */
+type RoleCacheEntry = { value: { primaryRole: string; hasAdminRole: boolean }; expiresAt: number };
+const ROLE_CACHE_TTL_MS = 30 * 1000;
+const ROLE_CACHE_MAX_ENTRIES = 512;
+const userRoleCache = new Map<string, RoleCacheEntry>();
+
+function getCachedRoles(userId: string): RoleCacheEntry['value'] | null {
+  const entry = userRoleCache.get(userId);
+  if (!entry) return null;
+  if (entry.expiresAt < Date.now()) {
+    userRoleCache.delete(userId);
+    return null;
+  }
+  return entry.value;
+}
+
+function setCachedRoles(userId: string, value: RoleCacheEntry['value']) {
+  if (userRoleCache.size >= ROLE_CACHE_MAX_ENTRIES) {
+    const oldest = userRoleCache.keys().next().value;
+    if (oldest !== undefined) userRoleCache.delete(oldest);
+  }
+  userRoleCache.set(userId, { value, expiresAt: Date.now() + ROLE_CACHE_TTL_MS });
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getUserRoles(supabase: any, user: any): Promise<{ primaryRole: string; hasAdminRole: boolean }> {
+  const cached = getCachedRoles(user.id);
+  if (cached) return cached;
   // SECURITY: NEVER read role from user_metadata. Users can self-assign that
   // field via supabase.auth.updateUser and bypass the admin gate. The only
   // trusted sources are the users table and the user_roles RBAC join.
@@ -63,7 +96,9 @@ async function getUserRoles(supabase: any, user: any): Promise<{ primaryRole: st
     }
   }
 
-  return { primaryRole, hasAdminRole };
+  const result = { primaryRole, hasAdminRole };
+  setCachedRoles(user.id, result);
+  return result;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
