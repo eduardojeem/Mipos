@@ -8,6 +8,27 @@ import type {
   DashboardTimeRange,
 } from '@/lib/dashboard/types';
 
+// Track which "missing relation" errors we've already logged, so we warn
+// once per process instead of on every dashboard render. The dashboard makes
+// 6+ queries to potentially-missing tables (sales, sale_items, ...) and
+// before this we logged each one on every request.
+const loggedMissingRelations = new Set<string>();
+
+function isMissingRelationError(err: { message?: string } | null | undefined): boolean {
+  return Boolean(err?.message && /relation .* does not exist/i.test(err.message));
+}
+
+function warnQueryError(label: string, err: { message?: string } | null | undefined) {
+  if (!err) return;
+  if (isMissingRelationError(err)) {
+    if (loggedMissingRelations.has(label)) return;
+    loggedMissingRelations.add(label);
+    console.warn(`[dashboard] ${label}: table missing in DB schema — returning zeros. Apply database/migrations/fix_sales_table_schema.sql or the equivalent reset migration.`);
+    return;
+  }
+  console.warn(`[dashboard] ${label}:`, err.message);
+}
+
 const EMPTY_OVERVIEW: DashboardOverviewData = {
   todaySales: 0,
   monthSales: 0,
@@ -309,7 +330,7 @@ export async function fetchDashboardOverview(
       })
       .single()
       .then((r: { data: unknown; error: { message: string } | null }) => {
-        if (r.error) console.warn('[dashboard] get_today_sales_summary RPC error:', r.error.message);
+        warnQueryError('get_today_sales_summary RPC', r.error);
         return r;
       }),
     supabase
@@ -343,15 +364,14 @@ export async function fetchDashboardOverview(
       .in('status', ['PENDING', 'CONFIRMED', 'PREPARING', 'SHIPPED', 'DELIVERED']),
   ]);
 
-  // Log errors for debugging
-  if (customersResult.error) console.warn('[dashboard] customers count error:', customersResult.error.message);
-  if (productsResult.error) console.warn('[dashboard] products count error:', productsResult.error.message);
-  console.log('[dashboard] counts:', {
-    customers: customersResult.count,
-    products: productsResult.count,
-    customersError: !!customersResult.error,
-    productsError: !!productsResult.error,
-  });
+  // Log errors at most once per missing-relation per process; avoids spamming
+  // every dashboard render. Successful counts no longer logged at all.
+  warnQueryError('customers count', customersResult.error);
+  warnQueryError('products count', productsResult.error);
+  warnQueryError('month sales', monthSalesResult.error);
+  warnQueryError('low stock products', lowStockProductsResult.error);
+  warnQueryError('recent sales', recentSalesResult.error);
+  warnQueryError('order statuses', orderStatusesResult.error);
 
   const todayStats = (todayStatsResult.data || {}) as Record<string, unknown>;
   const monthSalesRows = (Array.isArray(monthSalesResult.data) ? monthSalesResult.data : []) as Array<{

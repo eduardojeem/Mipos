@@ -293,28 +293,36 @@ export function WebsiteConfigProvider({ children }: WebsiteConfigProviderProps) 
         console.warn('Error loading website config from localStorage:', localErr);
       }
 
-      // Load from API if Supabase is active
+      // Load from API if Supabase is active. Timeout was 5s but in dev under
+      // load (cold route handlers + remote DB) the round-trip can take 15-25s.
+      // We've already rendered the localStorage / default config above, so a
+      // longer timeout just means we eventually upgrade to fresh data without
+      // visibly degrading the UI.
       if (isSupabaseActive()) {
         try {
-          const response = await fetch('/api/website-config', { 
+          const response = await fetch('/api/website-config', {
             cache: 'no-store',
-            signal: AbortSignal.timeout(5000)
+            signal: AbortSignal.timeout(20000)
           });
-          
+
           if (response.ok) {
             const apiData = await response.json();
             const apiConfig = apiData?.config || apiData;
-            
+
             if (apiConfig && typeof apiConfig === 'object') {
               const normalized = { ...defaultWebsiteConfig, ...apiConfig };
               setConfig(normalized);
-              
+
               localStorage.setItem('websiteConfig', JSON.stringify(normalized));
               setPersisted(true);
             }
           }
         } catch (apiErr) {
-          console.warn('API website config load failed, using local config:', apiErr);
+          // Timeouts are expected under dev load; only log non-timeout errors.
+          // The UI already has localStorage / default config rendered.
+          if (apiErr instanceof Error && apiErr.name !== 'TimeoutError' && apiErr.name !== 'AbortError') {
+            console.warn('API website config load failed, using local config:', apiErr);
+          }
         }
       }
 
