@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { Loader2 } from 'lucide-react';
 import { useIsAuthenticated, useResolvedRole } from '@/hooks/use-auth';
@@ -24,8 +24,22 @@ export default function DashboardClientLayout({
   const { isAuthenticated, loading } = useIsAuthenticated();
   const resolvedRole = useResolvedRole();
 
+  // Refs persist across re-renders so we can avoid restarting the sync
+  // coordinator every time `isAuthenticated` flips. The coordinator already
+  // dedupes start() internally, but a stop+start cycle still tears down and
+  // re-creates Supabase Realtime channels — and isAuthenticated can flicker
+  // briefly during signin / token refresh, generating extra connections.
+  const coordinatorStartedRef = useRef(false);
+  const isAuthenticatedRef = useRef(isAuthenticated);
+  isAuthenticatedRef.current = isAuthenticated;
+
   useEffect(() => {
+    // Start exactly once for the lifetime of this layout instance, when the
+    // user is authenticated. Subsequent isAuthenticated flips are observed
+    // via the ref but don't trigger restarts. The coordinator stops only on
+    // true layout unmount (navigating away from /dashboard).
     if (!isAuthenticated) return;
+    if (coordinatorStartedRef.current) return;
 
     let syncStarted = false;
     let cleanupDone = false;
@@ -43,6 +57,7 @@ export default function DashboardClientLayout({
         if (!cleanupDone) {
           syncCoordinator.start();
           syncStarted = true;
+          coordinatorStartedRef.current = true;
         }
       } catch (error: unknown) {
         const err = error as Error;
@@ -92,6 +107,7 @@ export default function DashboardClientLayout({
       }
 
       if (syncStarted) {
+        coordinatorStartedRef.current = false;
         void import('@/lib/sync/sync-coordinator')
           .then(({ syncCoordinator }) => {
             syncCoordinator.stop();
@@ -99,6 +115,10 @@ export default function DashboardClientLayout({
           .catch(() => {});
       }
     };
+  // We intentionally only re-run when the user transitions from
+  // unauthenticated to authenticated for the first time. After that, the
+  // coordinatorStartedRef guard prevents restarts on subsequent flips.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated]);
 
   const navigationItems = useMemo(() => {
