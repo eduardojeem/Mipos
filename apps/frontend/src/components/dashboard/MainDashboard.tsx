@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useMemo, useEffect } from "react";
+import { useMemo, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
@@ -196,19 +196,37 @@ export default function MainDashboard({
 
   const stats = data ?? initialData;
 
-  // Realtime refresh: actualizar al cambiar ventas, items o movimientos de inventario
+  // Realtime refresh: actualizar al cambiar ventas o movimientos de inventario.
+  // Refetch solo si el tab está visible — en background no tiene sentido pegar
+  // /api/dashboard/* cada vez que llega un cambio (el usuario no lo ve y se
+  // refresca de todos modos al volver a foco).
+  const refetchOnVisibleRef = useRef(false);
   useEffect(() => {
     if (!organizationId) return;
     const supabase = createClient();
     let pending = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
+
     const debounceRefetch = () => {
+      if (typeof document !== "undefined" && document.hidden) {
+        // Marcamos para que al volver al tab refetcheemos lo perdido.
+        refetchOnVisibleRef.current = true;
+        return;
+      }
       if (pending) return;
       pending = true;
       timer = setTimeout(() => {
         pending = false;
         void refetch();
       }, 500);
+    };
+
+    const onVisible = () => {
+      if (typeof document === "undefined") return;
+      if (!document.hidden && refetchOnVisibleRef.current) {
+        refetchOnVisibleRef.current = false;
+        void refetch();
+      }
     };
 
     const channel = supabase
@@ -235,8 +253,15 @@ export default function MainDashboard({
       )
       .subscribe();
 
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisible);
+    }
+
     return () => {
       if (timer) clearTimeout(timer);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisible);
+      }
       try {
         supabase.removeChannel(channel);
       } catch {}
@@ -505,10 +530,53 @@ export default function MainDashboard({
         </div>
       </section>
 
-      {/* Charts */}
-      <section>
-        <RealtimeCharts showMetrics={false} />
-      </section>
+      {/* Charts — lazy-mounted via IntersectionObserver to avoid pulling
+          the recharts/d3 bundle (~150kb gz) on first paint when the user
+          may never scroll down. */}
+      <LazyChartsSection />
     </div>
+  );
+}
+
+function LazyChartsSection() {
+  const [shouldRender, setShouldRender] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (shouldRender) return;
+    if (typeof window === "undefined") return;
+
+    // No IntersectionObserver (very old browsers / SSR snapshot) → render now.
+    if (typeof IntersectionObserver === "undefined") {
+      setShouldRender(true);
+      return;
+    }
+
+    const node = sentinelRef.current;
+    if (!node) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            setShouldRender(true);
+            observer.disconnect();
+            break;
+          }
+        }
+      },
+      // Pre-cargar 200px antes de aparecer en pantalla para que el bundle
+      // empiece a bajar antes de que el usuario llegue al chart.
+      { rootMargin: "200px 0px" }
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [shouldRender]);
+
+  return (
+    <section ref={sentinelRef} className="min-h-[100px]">
+      {shouldRender ? <RealtimeCharts showMetrics={false} /> : null}
+    </section>
   );
 }
