@@ -149,6 +149,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } as unknown as SupabaseUser;
   }, [extractNameFromEmail]);
 
+  // Returns the previously-resolved user when the API is slow/unreachable so
+  // we don't downgrade an already-authenticated ADMIN to USER on a transient
+  // failure. Safe because we only return the cached User if the SAME auth uid
+  // was already resolved by a prior successful API call — the role came from
+  // the canonical /api/auth/profile, never from user_metadata.
+  const recoverFromTransientFailure = (authUser: SupabaseUser): User => {
+    if (userRef.current && userRef.current.id === authUser.id) {
+      return userRef.current;
+    }
+    return createFallbackUser(authUser);
+  };
+
   // Enhanced function to fetch user data with better fallback and TIMEOUT
   const fetchUserData = useCallback(async (authUser: SupabaseUser): Promise<User> => {
     // Evitar llamadas a la API en modo mock de desarrollo cuando Supabase no está configurado
@@ -167,11 +179,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Track timeout id for cleanup
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     try {
-      // ⚡ OPTIMIZACIÓN: Timeout de 8 segundos (las respuestas pueden tardar ~10s bajo carga)
+      // Timeout de 20s — bajo carga (Supabase + admin queries) la respuesta
+      // puede tardar 25-30s en dev. Antes era 8s, lo cual disparaba el
+      // fallback constantemente y causaba un flicker de roles cada vez.
       const controller = new AbortController();
       timeoutId = setTimeout(() => {
-        controller.abort('timeout'); // Proporcionar una razón para la cancelación
-      }, 8000);
+        controller.abort('timeout');
+      }, 20000);
 
       // Fetch user profile via backend API to avoid client-side Supabase probe issues
       const selectedOrganizationId = getSelectedOrganizationId();
@@ -186,22 +200,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (!response.ok) {
-        console.warn('Profile API returned non-OK, using fallback:', response.statusText);
-        return createFallbackUser(authUser);
+        console.warn('Profile API returned non-OK, keeping previous user:', response.statusText);
+        return recoverFromTransientFailure(authUser);
       }
 
       const json = await response.json();
       const { success, error: apiError, data } = json || {};
       if (apiError || success === false || !data) {
-        console.warn('Profile API error, using fallback:', apiError);
-        return createFallbackUser(authUser);
+        console.warn('Profile API error, keeping previous user:', apiError);
+        return recoverFromTransientFailure(authUser);
       }
-      const userData = data as { 
-        name?: string; 
-        role?: string; 
-        id?: string; 
-        email?: string; 
-        created_at?: string; 
+      const userData = data as {
+        name?: string;
+        role?: string;
+        id?: string;
+        email?: string;
+        created_at?: string;
         updated_at?: string;
         organizationId?: string;
         organization_id?: string;
@@ -221,13 +235,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         organizationId: userData.organizationId || userData.organization_id,
       };
     } catch (err) {
-      // Si es un AbortError por timeout, usar fallback silencioso sin ensuciar consola
-      if (err instanceof Error && err.name === 'AbortError') {
-        return createFallbackUser(authUser);
+      // Timeout o error de red: mantener el usuario previo si ya estaba
+      // resuelto (evita downgrade de rol). Solo logueamos errores que NO sean
+      // abort para no ensuciar la consola en cada lentitud transitoria.
+      if (!(err instanceof Error) || err.name !== 'AbortError') {
+        console.warn('Error de red en fetchUserData, manteniendo usuario previo si existe.');
       }
-      // Otros errores de red: log mínimo
-      console.warn('Error de red en fetchUserData, usando fallback.');
-      return createFallbackUser(authUser);
+      return recoverFromTransientFailure(authUser);
     } finally {
       // Asegurar limpieza del timeout en cualquier caso
       if (timeoutId) clearTimeout(timeoutId);
