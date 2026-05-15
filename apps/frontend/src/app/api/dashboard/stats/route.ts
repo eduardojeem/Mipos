@@ -20,7 +20,13 @@ export async function GET(request: NextRequest) {
       10000
     ) as any
 
-    return NextResponse.json(data)
+    // Cache: dashboard stats can tolerate ~1 min staleness; SWR keeps the
+    // last-good copy visible while a fresh one loads in the background.
+    return NextResponse.json(data, {
+      headers: {
+        'Cache-Control': 'private, max-age=60, stale-while-revalidate=120',
+      },
+    })
   } catch (error: any) {
     console.warn('Dashboard stats fallback:', error.message)
     // Return empty but valid data structure
@@ -33,6 +39,9 @@ export async function GET(request: NextRequest) {
         totalCustomers: 0
       }
     }
-    return NextResponse.json(fallback)
+    // Don't cache the fallback — we want the next request to retry.
+    return NextResponse.json(fallback, {
+      headers: { 'Cache-Control': 'no-store' },
+    })
   }
 }

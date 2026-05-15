@@ -15,33 +15,42 @@ export async function GET(request: NextRequest) {
     const [salesCount, customersCount, productsCount] = await Promise.allSettled([
       supabase
         .from('sales')
-        .select('id', { count: 'exact', head: true })
+        .select('id', { count: 'estimated', head: true })
         .eq('organization_id', orgId)
         .gte('created_at', new Date().toISOString().split('T')[0]),
       supabase
         .from('customers')
-        .select('id', { count: 'exact', head: true })
+        .select('id', { count: 'estimated', head: true })
         .eq('organization_id', orgId),
       supabase
         .from('products')
-        .select('id', { count: 'exact', head: true })
+        .select('id', { count: 'estimated', head: true })
         .eq('organization_id', orgId)
         .eq('is_active', true),
     ]);
 
-    return NextResponse.json({
-      todaySalesCount: salesCount.status === 'fulfilled' ? (salesCount.value as any)?.count || 0 : 0,
-      totalCustomers: customersCount.status === 'fulfilled' ? (customersCount.value as any)?.count || 0 : 0,
-      totalProducts: productsCount.status === 'fulfilled' ? (productsCount.value as any)?.count || 0 : 0,
-      todaySales: 0,
-      monthSales: 0,
-      averageTicket: 0,
-      lowStockCount: 0,
-      activeOrders: 0,
-      recentSales: [],
-      lastUpdated: new Date().toISOString(),
-      isQuickMode: true,
-    });
+    return NextResponse.json(
+      {
+        todaySalesCount: salesCount.status === 'fulfilled' ? (salesCount.value as any)?.count || 0 : 0,
+        totalCustomers: customersCount.status === 'fulfilled' ? (customersCount.value as any)?.count || 0 : 0,
+        totalProducts: productsCount.status === 'fulfilled' ? (productsCount.value as any)?.count || 0 : 0,
+        todaySales: 0,
+        monthSales: 0,
+        averageTicket: 0,
+        lowStockCount: 0,
+        activeOrders: 0,
+        recentSales: [],
+        lastUpdated: new Date().toISOString(),
+        isQuickMode: true,
+      },
+      {
+        headers: {
+          // Counts cambian raramente — 30s de cache + SWR de 60s coalesce los
+          // re-renders del dashboard sin perder freshness perceptible.
+          'Cache-Control': 'private, max-age=30, stale-while-revalidate=60',
+        },
+      }
+    );
   } catch (error) {
     console.error('Quick stats error:', error);
     if (error instanceof Error && error.message.includes('No valid organization')) {

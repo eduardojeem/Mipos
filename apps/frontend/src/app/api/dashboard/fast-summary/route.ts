@@ -101,7 +101,13 @@ export async function GET(request: NextRequest) {
       loadTime: Date.now()
     };
 
-    return NextResponse.json(summary);
+    return NextResponse.json(summary, {
+      headers: {
+        // Es el "fast" path del dashboard, llamado en cada nav. Cache de 30s
+        // + SWR para coalescer re-renders consecutivos sin perder freshness.
+        'Cache-Control': 'private, max-age=30, stale-while-revalidate=60',
+      },
+    });
 
   } catch (error) {
     console.error('Fast dashboard summary error:', error);
