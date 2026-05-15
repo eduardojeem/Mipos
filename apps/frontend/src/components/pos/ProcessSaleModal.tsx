@@ -79,6 +79,17 @@ function getQuickCashValues(currency: string): number[] {
   return QUICK_CASH_BY_CURRENCY[currency?.toUpperCase()] || QUICK_CASH_BY_CURRENCY.USD;
 }
 
+function formatQuickCash(value: number, currency: string): string {
+  const cur = currency?.toUpperCase() || 'PYG';
+  if (cur === 'PYG') {
+    return new Intl.NumberFormat('es-PY').format(value);
+  }
+  if (cur === 'ARS') {
+    return new Intl.NumberFormat('es-AR').format(value);
+  }
+  return String(value);
+}
+
 export default function ProcessSaleModal({
   isOpen,
   onClose,
@@ -579,7 +590,7 @@ export default function ProcessSaleModal({
                       {getQuickCashValues(config?.storeSettings?.currency || 'PYG').map((v) => (
                         <Button key={v} type="button" variant="outline" size="sm" className="h-7 text-xs"
                           onClick={() => { const n = totals.total + v; setCashInput(n.toFixed(0)); setCashReceived(n); }}>
-                          +{v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}
+                          +{formatQuickCash(v, config?.storeSettings?.currency || 'PYG')}
                         </Button>
                       ))}
                     </div>
