@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { unstable_cache } from 'next/cache';
 import { createAdminClient } from '@/lib/supabase/server';
 import { defaultBusinessConfig, type BusinessConfig } from '@/types/business-config';
 import { buildTenantHomeUrl } from '@/lib/domain/host-context';
@@ -287,15 +288,23 @@ function buildConfigMap(rows: SettingsRow[]): Map<string, BusinessConfig> {
 }
 
 export async function getPublicBusinessConfig(organization: PublicOrganization): Promise<BusinessConfig> {
-  const adminClient = await createAdminClient();
-  const { data } = await adminClient
-    .from('settings')
-    .select('organization_id,value')
-    .eq('key', 'business_config')
-    .eq('organization_id', organization.id)
-    .maybeSingle();
+  const fetchConfig = unstable_cache(
+    async (orgId: string, orgName: string) => {
+      const adminClient = await createAdminClient();
+      const { data } = await adminClient
+        .from('settings')
+        .select('organization_id,value')
+        .eq('key', 'business_config')
+        .eq('organization_id', orgId)
+        .maybeSingle();
 
-  return mergeBusinessConfig((data as SettingsRow | null)?.value, organization.name);
+      return mergeBusinessConfig((data as SettingsRow | null)?.value, orgName);
+    },
+    [`business-config-${organization.id}`],
+    { revalidate: 120, tags: ['business-config'] }
+  );
+
+  return fetchConfig(organization.id, organization.name);
 }
 
 export async function getGlobalMarketplaceHomeData(
