@@ -771,21 +771,28 @@ function getSelectedOrganizationId(): string | undefined {
   }
 }
 
-// Devuelve el rol resuelto/normalizado sin volver a consultar
+// Devuelve el rol resuelto/normalizado sin volver a consultar.
+//
+// Memoizado: el cómputo depende solo de (user.id, user.role). Antes corría
+// en cada render del Sidebar/Header, recomputando aunque user no cambiara
+// — lo que disparaba un re-render del shell completo en cada nav del
+// dashboard. Ahora solo recalcula cuando user.id o user.role cambian.
 export function useResolvedRole(): string {
   const { user } = useAuthContext();
-  const current = normalizeRole(user?.role);
-  if (!user?.id) {
-    lastResolvedRole = null;
-    lastResolvedUserId = null;
-    return current;
-  }
-  if (lastResolvedUserId && lastResolvedUserId !== user.id) {
-    lastResolvedRole = null;
-  }
-  lastResolvedUserId = user.id;
-  if (current && current !== USER_ROLES.USER) {
-    lastResolvedRole = pickStrongerRole(lastResolvedRole, current);
-  }
-  return lastResolvedRole || current;
+  return useMemo(() => {
+    const current = normalizeRole(user?.role);
+    if (!user?.id) {
+      lastResolvedRole = null;
+      lastResolvedUserId = null;
+      return current;
+    }
+    if (lastResolvedUserId && lastResolvedUserId !== user.id) {
+      lastResolvedRole = null;
+    }
+    lastResolvedUserId = user.id;
+    if (current && current !== USER_ROLES.USER) {
+      lastResolvedRole = pickStrongerRole(lastResolvedRole, current);
+    }
+    return lastResolvedRole || current;
+  }, [user?.id, user?.role]);
 }
