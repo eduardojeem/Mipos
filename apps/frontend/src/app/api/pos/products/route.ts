@@ -46,51 +46,78 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Optimized query for POS - join categories directly to avoid N+1
-    let query = supabase
-      .from('products')
-      .select(`
+    // Two-tier select: primero intentamos el query "rico" con TODAS las
+    // columnas POS-relevantes y el join a categories. Si Supabase responde
+    // con "column does not exist" o "could not find a relationship", caemos
+    // a un select mínimo con SOLO las columnas garantizadas. Así el POS
+    // sigue funcionando aunque la migración de un campo (min_wholesale_quantity,
+    // brand, wholesale_price, etc.) no se haya aplicado aún.
+    const RICH_SELECT = `
+      id,
+      name,
+      sku,
+      sale_price,
+      wholesale_price,
+      stock_quantity,
+      min_stock,
+      min_wholesale_quantity,
+      category_id,
+      supplier_id,
+      is_active,
+      image_url,
+      barcode,
+      brand,
+      categories!left (
         id,
-        name,
-        sku,
-        sale_price,
-        wholesale_price,
-        stock_quantity,
-        min_stock,
-        min_wholesale_quantity,
-        category_id,
-        supplier_id,
-        is_active,
-        image_url,
-        barcode,
-        brand,
-        categories!left (
-          id,
-          name
-        )
-      `)
-      .order('name');
+        name
+      )
+    `;
+    const MINIMAL_SELECT = `
+      id,
+      name,
+      sku,
+      sale_price,
+      stock_quantity,
+      category_id,
+      is_active
+    `;
 
-    // Apply filters
-    query = query.eq('organization_id', organizationId)
-    if (activeOnly) {
-      query = query.eq('is_active', true);
+    const buildQuery = (selectClause: string) => {
+      let q = supabase.from('products').select(selectClause).order('name');
+      q = q.eq('organization_id', organizationId);
+      if (activeOnly) q = q.eq('is_active', true);
+      if (search) q = q.or(`name.ilike.%${search}%,sku.ilike.%${search}%,barcode.ilike.%${search}%`);
+      if (categoryId && categoryId !== 'all') q = q.eq('category_id', categoryId);
+      return q.limit(limit);
+    };
+
+    let products: unknown[] | null = null;
+    let usedMinimalFallback = false;
+
+    const richResult = await buildQuery(RICH_SELECT);
+    if (richResult.error) {
+      const msg = String(richResult.error.message || '');
+      // Schema-mismatch errors → caer a select mínimo y loggear cuál falló.
+      if (
+        /does not exist/i.test(msg) ||
+        /could not find a relationship/i.test(msg) ||
+        /column .* of relation/i.test(msg)
+      ) {
+        console.warn(
+          '[POS products] rich select failed (schema mismatch), falling back to minimal:',
+          msg
+        );
+        const minimalResult = await buildQuery(MINIMAL_SELECT);
+        if (minimalResult.error) throw minimalResult.error;
+        products = minimalResult.data as unknown[] | null;
+        usedMinimalFallback = true;
+      } else {
+        // Otro tipo de error (RLS, timeout, etc.) → propagar.
+        throw richResult.error;
+      }
+    } else {
+      products = richResult.data as unknown[] | null;
     }
-
-    if (search) {
-      query = query.or(`name.ilike.%${search}%,sku.ilike.%${search}%,barcode.ilike.%${search}%`);
-    }
-
-    if (categoryId && categoryId !== 'all') {
-      query = query.eq('category_id', categoryId);
-    }
-
-    // Apply limit
-    query = query.limit(limit);
-
-    const { data: products, error } = await query;
-
-    if (error) throw error;
 
     type ProductRow = {
       id: string;
@@ -129,29 +156,31 @@ export async function GET(request: NextRequest) {
       low_stock: boolean;
       has_wholesale: boolean;
     };
-    const baseProducts = (products ?? []) as unknown as ProductRow[];
+    const baseProducts = (products ?? []) as unknown as Partial<ProductRow>[];
 
+    // Defensive mapping: cualquier columna puede estar ausente si caímos al
+    // minimal select o si el schema cambió. Cada acceso es undefined-safe.
     const transformedProducts: PosProduct[] = baseProducts.map((product) => ({
-      id: product.id,
-      name: product.name,
-      sku: product.sku,
-      sale_price: product.sale_price || 0,
-      wholesale_price: product.wholesale_price || 0,
-      stock_quantity: product.stock_quantity || 0,
-      min_stock: product.min_stock || 5,
-      min_wholesale_quantity: product.min_wholesale_quantity || 0,
-      category_id: product.category_id,
-      supplier_id: product.supplier_id,
-      is_active: product.is_active,
-      image_url: product.image_url,
-      barcode: product.barcode,
-      brand: product.brand,
+      id: String(product.id),
+      name: product.name ?? null,
+      sku: product.sku ?? null,
+      sale_price: Number(product.sale_price) || 0,
+      wholesale_price: Number(product.wholesale_price) || 0,
+      stock_quantity: Number(product.stock_quantity) || 0,
+      min_stock: Number(product.min_stock) || 5,
+      min_wholesale_quantity: Number(product.min_wholesale_quantity) || 0,
+      category_id: product.category_id ?? null,
+      supplier_id: product.supplier_id ?? null,
+      is_active: product.is_active !== false,
+      image_url: product.image_url ?? null,
+      barcode: product.barcode ?? null,
+      brand: product.brand ?? null,
       category: product.categories
         ? { id: product.categories.id, name: product.categories.name || 'Sin categoría' }
         : null,
-      in_stock: (product.stock_quantity || 0) > 0,
-      low_stock: (product.stock_quantity || 0) <= (product.min_stock || 5),
-      has_wholesale: (product.wholesale_price || 0) > 0
+      in_stock: (Number(product.stock_quantity) || 0) > 0,
+      low_stock: (Number(product.stock_quantity) || 0) <= (Number(product.min_stock) || 5),
+      has_wholesale: (Number(product.wholesale_price) || 0) > 0,
     }));
 
     const byCategory: Record<string, PosProduct[]> = transformedProducts.reduce(
@@ -172,7 +201,10 @@ export async function GET(request: NextRequest) {
         inStock: transformedProducts.filter((p) => p.in_stock).length,
         lowStock: transformedProducts.filter((p) => p.low_stock).length,
         withWholesale: transformedProducts.filter((p) => p.has_wholesale).length,
-        lastUpdated: new Date().toISOString()
+        lastUpdated: new Date().toISOString(),
+        // Visible en el response para debug; el cliente puede mostrar un
+        // banner si quiere advertir al user que faltan columnas en DB.
+        usedMinimalFallback,
       }
     }, {
       headers: {
