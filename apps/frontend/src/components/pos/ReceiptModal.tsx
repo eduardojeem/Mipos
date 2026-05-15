@@ -248,8 +248,8 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
           }
           body {
             font-family: 'Courier New', monospace;
-            font-size: 11px;
-            line-height: 1.3;
+            font-size: 12px;
+            line-height: 1.4;
             margin: 0;
             padding: 2mm;
             width: 58mm;
@@ -259,31 +259,31 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
           }
           * { box-sizing: border-box; margin: 0; padding: 0; }
           .header, .footer { text-align: center; }
-          .business-name { font-size: 13px; font-weight: 700; }
-          .business-meta { font-size: 9px; }
+          .business-name { font-size: 14px; font-weight: 700; }
+          .business-meta { font-size: 10px; }
           .divider { border-top: 1px dashed #000; margin: 3px 0; }
           .row {
             display: flex;
             justify-content: space-between;
-            font-size: 10px;
-            line-height: 1.4;
+            font-size: 11px;
+            line-height: 1.5;
           }
-          .meta { font-size: 8px; }
-          .item { margin-bottom: 2px; }
-          .item-name { font-weight: 700; font-size: 10px; }
+          .meta { font-size: 9px; }
+          .item { margin-bottom: 3px; }
+          .item-name { font-weight: 700; font-size: 11px; }
           .item-meta {
             display: flex;
             justify-content: space-between;
-            font-size: 9px;
+            font-size: 10px;
           }
           .totals .total {
-            font-size: 12px;
+            font-size: 14px;
             font-weight: 700;
             border-top: 1px dashed #000;
             padding-top: 2px;
             margin-top: 2px;
           }
-          .footer { margin-top: 4px; font-size: 8px; }
+          .footer { margin-top: 4px; font-size: 9px; }
         </style>
       </head>
       <body>
