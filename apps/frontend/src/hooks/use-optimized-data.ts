@@ -599,6 +599,11 @@ export function usePOSData() {
     loading,
     secondaryLoading,
     error,
+    // Per-query state so the UI can show targeted error / retry without
+    // assuming everything failed when only one query did.
+    productsError: productsQuery.error as Error | null,
+    productsLoading: productsQuery.isLoading,
+    refetchProducts,
     refetchAll,
     clearAllCache,
     isStale: productsQuery.isStale || categoriesQuery.isStale || customersQuery.isStale || salesStatsQuery.isStale,

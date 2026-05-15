@@ -200,6 +200,8 @@ export default function OptimizedPOSLayout() {
     categories = [],
     customers,
     loading,
+    productsError,
+    refetchProducts,
   } = usePOSData();
 
   // Cash session management
@@ -822,6 +824,8 @@ export default function OptimizedPOSLayout() {
               isLoading={loading}
               searchQuery={searchQuery}
               selectedCategory={selectedCategory}
+              loadError={productsError}
+              onRetry={() => void refetchProducts()}
             />
           </div>
         </div>

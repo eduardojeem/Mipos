@@ -181,19 +181,23 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('POS products error:', error);
-    
-    return NextResponse.json({
-      products: [],
-      byCategory: {},
-      total: 0,
-      metadata: {
-        inStock: 0,
-        lowStock: 0,
-        withWholesale: 0,
-        lastUpdated: new Date().toISOString()
+    // Devolver 500 con detalle real para que React Query lo capture como
+    // error y la UI pueda mostrar un estado de "fallo cargar — reintentar".
+    // Antes devolvíamos 200 con products:[] silenciando el problema → la
+    // UI mostraba "Sin productos en esta categoría" sin distinguir.
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[POS products] query failed:', message);
+
+    return NextResponse.json(
+      {
+        products: [],
+        byCategory: {},
+        total: 0,
+        metadata: { inStock: 0, lowStock: 0, withWholesale: 0, lastUpdated: new Date().toISOString() },
+        error: 'Could not fetch POS products',
+        details: message,
       },
-      error: 'Could not fetch POS products'
-    });
+      { status: 500 }
+    );
   }
 }
