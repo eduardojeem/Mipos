@@ -325,11 +325,22 @@ export async function POST(request: NextRequest) {
     const backendTotal = Number(backendSale?.sale?.total || backendSale?.total || 0);
     const frontendTotal = Number(body.total_amount || 0);
     
+    let pricingMismatch: {
+      frontendTotal: number;
+      backendTotal: number;
+      difference: number;
+    } | null = null;
+
     if (frontendTotal > 0) {
       const difference = Math.abs(backendTotal - frontendTotal);
       const tolerance = 0.02; // Tolerancia de 2 centavos para redondeo
       
       if (difference > tolerance) {
+        pricingMismatch = {
+          frontendTotal,
+          backendTotal,
+          difference,
+        };
         console.warn('⚠️ Total mismatch detected:', {
           frontend: frontendTotal,
           backend: backendTotal,
@@ -338,17 +349,15 @@ export async function POST(request: NextRequest) {
           items: items.length
         });
         
-        // Opcional: rechazar transacción si la diferencia es muy grande
+        // Nunca rechazar después de confirmar la venta en backend: solo dejar trazabilidad.
         if (difference > 1.00) {
-          return NextResponse.json({
-            error: 'Total calculation mismatch',
-            details: {
-              frontendTotal,
-              backendTotal,
-              difference,
-              message: 'Los totales calculados no coinciden. Por favor, intenta nuevamente.'
-            }
-          }, { status: 400 });
+          console.error('[pos/sales] Large total mismatch detected after backend commit', {
+            organizationId,
+            frontendTotal,
+            backendTotal,
+            difference,
+            itemCount: items.length,
+          });
         }
       }
     }
@@ -391,6 +400,7 @@ export async function POST(request: NextRequest) {
       sale: normalizedSale,
       invoice,
       invoiceError,
+      pricingMismatch,
       summary: backendSale?.summary || null,
       document: buildInternalTicketMetadata(normalizedSale.id),
       message: shouldCreateInvoice

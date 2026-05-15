@@ -1,10 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
-import { resolveOrganizationId } from '@/lib/organization';
+import { getValidatedOrganizationId } from '@/lib/organization';
+
+const PRODUCTS_SUMMARY_CACHE_TTL_MS = 60_000;
+
+type ProductsSummaryPayload = {
+  totalProducts: number;
+  lowStockProducts: number;
+  outOfStockProducts: number;
+  totalValue: number;
+  recentlyAdded: number;
+  topCategory: string;
+  lastUpdated: string;
+};
+
+const productsSummaryCache = new Map<
+  string,
+  { data: ProductsSummaryPayload; expiresAt: number }
+>();
 
 export async function GET(request: NextRequest) {
   try {
-    const orgId = await resolveOrganizationId(request);
+    const orgId = await getValidatedOrganizationId(request);
     if (!orgId) {
       return NextResponse.json(
         { error: 'Organization required', message: 'No organization selected' },
@@ -17,6 +34,12 @@ export async function GET(request: NextRequest) {
     const isActiveParam = searchParams.get('isActive');
     const normalizedIsActive =
       isActiveParam === 'true' ? true : isActiveParam === 'false' ? false : null;
+    const cacheKey = `${orgId}:${normalizedIsActive === null ? 'all' : normalizedIsActive ? 'active' : 'inactive'}`;
+    const cached = productsSummaryCache.get(cacheKey);
+
+    if (cached && cached.expiresAt > Date.now()) {
+      return NextResponse.json(cached.data);
+    }
 
     // Get current date for recent products calculation
     const now = new Date();
@@ -112,6 +135,11 @@ export async function GET(request: NextRequest) {
       topCategory,
       lastUpdated: new Date().toISOString()
     };
+
+    productsSummaryCache.set(cacheKey, {
+      data: summary,
+      expiresAt: Date.now() + PRODUCTS_SUMMARY_CACHE_TTL_MS,
+    });
 
     return NextResponse.json(summary);
 

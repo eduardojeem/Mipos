@@ -1,3 +1,4 @@
+import { cookies } from 'next/headers';
 import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase-admin';
@@ -108,18 +109,26 @@ export async function getValidatedOrganizationId(
 export async function resolveOrganizationId(
   request: NextRequest
 ): Promise<string | null> {
+  const supabase = await createClient();
+  const userId = await getAuthenticatedUserId(supabase);
   const headerOrgId = request.headers.get('x-organization-id')?.trim();
   if (headerOrgId) {
-    return headerOrgId;
+    if (!userId) {
+      return null;
+    }
+
+    const validatedOrgId = await validateRequestedOrganizationId(supabase, userId, headerOrgId);
+    if (validatedOrgId) {
+      return validatedOrgId;
+    }
+
+    return getFallbackOrganizationId(supabase, userId);
   }
 
   const cookieOrgId = request.cookies.get('x-organization-id')?.value?.trim();
   if (cookieOrgId) {
-    const supabase = await createClient();
-    const userId = await getAuthenticatedUserId(supabase);
-
     if (!userId) {
-      return cookieOrgId;
+      return null;
     }
 
     const validatedOrgId = await validateRequestedOrganizationId(supabase, userId, cookieOrgId);
@@ -130,7 +139,32 @@ export async function resolveOrganizationId(
     return getFallbackOrganizationId(supabase, userId);
   }
 
-  return getValidatedOrganizationId(request);
+  if (!userId) {
+    return null;
+  }
+
+  return getFallbackOrganizationId(supabase, userId);
+}
+
+export async function getValidatedOrganizationIdFromCookies(): Promise<string | null> {
+  const supabase = await createClient();
+  const userId = await getAuthenticatedUserId(supabase);
+
+  if (!userId) {
+    return null;
+  }
+
+  const cookieStore = await cookies();
+  const cookieOrgId = cookieStore.get('x-organization-id')?.value?.trim();
+
+  if (cookieOrgId) {
+    const validatedOrgId = await validateRequestedOrganizationId(supabase, userId, cookieOrgId);
+    if (validatedOrgId) {
+      return validatedOrgId;
+    }
+  }
+
+  return getFallbackOrganizationId(supabase, userId);
 }
 
 export async function requireOrganization(request: NextRequest): Promise<string> {

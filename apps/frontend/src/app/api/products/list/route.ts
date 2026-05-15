@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
-import { resolveOrganizationId } from '@/lib/organization';
+import { getValidatedOrganizationId } from '@/lib/organization';
 
 const RICH_PRODUCT_SELECT = `
   id,
@@ -188,7 +188,7 @@ function normalizeProduct(
 
 export async function GET(request: NextRequest) {
   try {
-    const orgId = await resolveOrganizationId(request);
+    const orgId = await getValidatedOrganizationId(request);
     if (!orgId) {
       return NextResponse.json(
         { error: 'Organization required', message: 'No organization selected' },
@@ -211,7 +211,7 @@ export async function GET(request: NextRequest) {
     const buildQuery = (select: string) => {
       let query = supabase
         .from('products')
-        .select(select, { count: 'exact' });
+        .select(select, { count: 'estimated' });
 
       query = applyProductFilters(query, searchParams, orgId);
       return query

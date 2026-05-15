@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getValidatedOrganizationId } from '@/lib/organization';
 
+const SALES_REPORT_CACHE_TTL_MS = 120_000;
+const salesReportCache = new Map<string, { data: unknown; expiresAt: number }>();
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -20,6 +23,12 @@ export async function GET(request: NextRequest) {
     const orgId = ((await getValidatedOrganizationId(request)) || '').trim();
     if (!orgId) {
       return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
+    }
+
+    const cacheKey = `${orgId}:${searchParams.toString()}`;
+    const cached = salesReportCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return NextResponse.json(cached.data);
     }
 
     const supabase = await createClient();
@@ -186,6 +195,11 @@ export async function GET(request: NextRequest) {
       },
       lastUpdated: new Date().toISOString()
     };
+
+    salesReportCache.set(cacheKey, {
+      data: result,
+      expiresAt: Date.now() + SALES_REPORT_CACHE_TTL_MS,
+    });
 
     return NextResponse.json(result);
 

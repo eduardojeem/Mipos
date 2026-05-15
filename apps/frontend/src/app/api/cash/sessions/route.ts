@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase-admin';
 import { isMockAuthEnabled } from '@/lib/env';
 import { enrichCashSessions } from '@/app/api/cash/_lib/session-summary';
 import { getUserOrganizationId } from '@/app/api/_utils/organization';
+import { getValidatedOrganizationId } from '@/lib/organization';
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,9 +20,13 @@ export async function GET(request: NextRequest) {
     }
 
     const headerOrgId = (request.headers.get('x-organization-id') || '').trim();
-    let organizationId = headerOrgId;
+    let organizationId = mockEnabled ? headerOrgId : '';
 
-    if (!organizationId && user?.id) {
+    if (!organizationId) {
+      organizationId = ((await getValidatedOrganizationId(request)) || '').trim();
+    }
+
+    if (!organizationId && mockEnabled && user?.id) {
       const resolvedOrgId = await getUserOrganizationId(user.id);
       if (resolvedOrgId) {
         organizationId = resolvedOrgId;
@@ -55,6 +60,7 @@ export async function GET(request: NextRequest) {
     const orderColumn =
       orderBy === 'closedAt' ? 'closed_at' : orderBy === 'status' ? 'status' : 'opened_at';
     const shouldFilterInMemory = Boolean(search);
+    const countMode = shouldFilterInMemory ? 'exact' : 'estimated';
 
     let query = client
       .from('cash_sessions')
@@ -64,7 +70,7 @@ export async function GET(request: NextRequest) {
           opened_by_user:opened_by(id, email, full_name),
           closed_by_user:closed_by(id, email, full_name)
         `,
-        { count: 'exact' },
+        { count: countMode },
       )
       .eq('organization_id', organizationId)
       .order(orderColumn, { ascending: orderDir === 'asc' });

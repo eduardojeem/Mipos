@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { requirePOSPermissions } from '@/app/api/_utils/role-validation';
-import { getUserOrganizationId } from '@/app/api/_utils/organization';
+import { getUserOrganizationId, validateOrganizationAccess } from '@/app/api/_utils/organization';
 
 const COMPLETED_SALE_STATUS = 'COMPLETED' as const;
 
@@ -422,6 +422,19 @@ export async function GET(request: NextRequest) {
         { error: 'Organization context is required' },
         { status: 400 },
       );
+    }
+
+    if (auth.userId && auth.userRole !== 'SUPER_ADMIN') {
+      const hasOrganizationAccess = await validateOrganizationAccess(
+        auth.userId,
+        organizationId,
+      );
+      if (!hasOrganizationAccess) {
+        return NextResponse.json(
+          { error: 'Access denied to selected organization' },
+          { status: 403 },
+        );
+      }
     }
 
     let stats: PosStatsResponse;

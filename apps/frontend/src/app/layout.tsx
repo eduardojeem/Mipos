@@ -9,10 +9,6 @@ import { Toaster } from '@/components/ui/toaster'
 
 import { defaultBusinessConfig } from '@/types/business-config'
 
-// Force dynamic rendering
-export const dynamic = 'force-dynamic'
-export const revalidate = 0
-
 const inter = Inter({ subsets: ['latin'] })
 
 export async function generateMetadata(): Promise<Metadata> {

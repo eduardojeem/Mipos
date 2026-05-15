@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchDashboardSummary } from '@/lib/dashboard/dashboard-data';
-import { cookies } from 'next/headers';
 import { getValidatedOrganizationId } from '@/lib/organization';
 
 type TimeRange = '24h' | '7d' | '30d' | '90d' | '1y';
@@ -12,23 +11,9 @@ function normalizeRange(value: string | null): TimeRange {
   return '30d';
 }
 
-async function resolveOrganizationId(request: NextRequest): Promise<string | null> {
-  const headerOrgId = request.headers.get('x-organization-id')?.trim();
-  if (headerOrgId) {
-    return headerOrgId;
-  }
-
-  const cookieStore = await cookies();
-  const cookieOrgId = cookieStore.get('x-organization-id')?.value?.trim();
-  return cookieOrgId || null;
-}
-
 export async function GET(request: NextRequest) {
   try {
-    let organizationId = await resolveOrganizationId(request);
-    if (!organizationId) {
-      organizationId = await getValidatedOrganizationId(request);
-    }
+    const organizationId = await getValidatedOrganizationId(request);
 
     if (!organizationId) {
       return NextResponse.json(

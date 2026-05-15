@@ -47,13 +47,22 @@ export function useOfflineSync(options: Partial<SyncOptions> = {}): UseOfflineSy
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const optionsRef = useRef({ ...DEFAULT_OPTIONS, ...options });
 
+  const getQueuedTransactions = useCallback((): OfflineTransaction[] => {
+    return offlineStorage.getAllTransactions().filter((transaction) => {
+      const isRetryableStatus =
+        transaction.syncStatus === 'pending' || transaction.syncStatus === 'failed';
+      return isRetryableStatus && transaction.retryCount < optionsRef.current.maxRetries;
+    });
+  }, []);
+
   const updateStatus = useCallback(() => {
     const status = getOfflineStorageStatus();
+    const queuedTransactions = getQueuedTransactions();
     setIsOnline(status.isOnline);
-    setPendingTransactions(status.pendingTransactions);
+    setPendingTransactions(queuedTransactions.length);
     setLastSync(status.lastSync);
     setStorageSize(formatOfflineStorageSize(status.storageSize));
-  }, []);
+  }, [getQueuedTransactions]);
 
   const syncSaleTransaction = useCallback(async (transaction: OfflineTransaction & { type: 'sale' }): Promise<boolean> => {
     const saleData = transaction.data as OfflineSale;
@@ -144,7 +153,7 @@ export function useOfflineSync(options: Partial<SyncOptions> = {}): UseOfflineSy
     };
 
     try {
-      const pending = offlineStorage.getPendingTransactions();
+      const pending = getQueuedTransactions();
       
       if (pending.length === 0) {
         toast.info('No hay transacciones pendientes para sincronizar');
@@ -201,7 +210,7 @@ export function useOfflineSync(options: Partial<SyncOptions> = {}): UseOfflineSy
       setSyncResult(result);
       updateStatus();
     }
-  }, [isSyncing, isOnline, updateStatus, syncTransaction]);
+  }, [getQueuedTransactions, isSyncing, isOnline, updateStatus, syncTransaction]);
 
   const clearSynced = () => {
     offlineStorage.clearSyncedTransactions();
@@ -228,7 +237,7 @@ export function useOfflineSync(options: Partial<SyncOptions> = {}): UseOfflineSy
   useEffect(() => {
     if (optionsRef.current.autoSync && isOnline && !isSyncing) {
       syncIntervalRef.current = setInterval(() => {
-        const pending = offlineStorage.getPendingTransactions();
+        const pending = getQueuedTransactions();
         if (pending.length > 0) {
           syncNow();
         }
@@ -240,7 +249,7 @@ export function useOfflineSync(options: Partial<SyncOptions> = {}): UseOfflineSy
         clearInterval(syncIntervalRef.current);
       }
     };
-  }, [isOnline, isSyncing, syncNow]);
+  }, [getQueuedTransactions, isOnline, isSyncing, syncNow]);
 
   // Update status on mount and when storage changes
   useEffect(() => {
