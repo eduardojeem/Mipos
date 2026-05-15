@@ -68,7 +68,16 @@ const PAYMENT_METHODS = [
   { value: PaymentMethod.OTHER, label: 'Otro', icon: Wallet, color: 'gray' },
 ] as const;
 
-const QUICK_CASH = [10, 20, 50, 100] as const;
+const QUICK_CASH_BY_CURRENCY: Record<string, number[]> = {
+  PYG: [5000, 10000, 20000, 50000, 100000],
+  USD: [5, 10, 20, 50, 100],
+  ARS: [500, 1000, 2000, 5000, 10000],
+  BRL: [10, 20, 50, 100, 200],
+};
+
+function getQuickCashValues(currency: string): number[] {
+  return QUICK_CASH_BY_CURRENCY[currency?.toUpperCase()] || QUICK_CASH_BY_CURRENCY.USD;
+}
 
 export default function ProcessSaleModal({
   isOpen,
@@ -567,10 +576,10 @@ export default function ProcessSaleModal({
                     </div>
                     <div className="flex gap-1.5 flex-wrap">
                       <Button type="button" variant="secondary" size="sm" className="h-7" onClick={setCashExact}>Exacto</Button>
-                      {QUICK_CASH.map((v) => (
+                      {getQuickCashValues(config?.storeSettings?.currency || 'PYG').map((v) => (
                         <Button key={v} type="button" variant="outline" size="sm" className="h-7 text-xs"
-                          onClick={() => { const n = totals.total + v; setCashInput(n.toFixed(2)); setCashReceived(n); }}>
-                          +{v}
+                          onClick={() => { const n = totals.total + v; setCashInput(n.toFixed(0)); setCashReceived(n); }}>
+                          +{v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}
                         </Button>
                       ))}
                     </div>
