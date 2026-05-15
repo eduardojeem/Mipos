@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/components/ui/use-toast';
 import api from '@/lib/api';
 import { useCurrentOrganizationId } from '@/hooks/use-current-organization';
@@ -30,6 +30,8 @@ interface UseCashSessionValidationReturn {
 export function useCashSessionValidation(): UseCashSessionValidationReturn {
     const { toast } = useToast();
     const organizationId = useCurrentOrganizationId();
+    const queryClient = useQueryClient();
+    const cacheKey = ['cashSession', organizationId ?? 'no-org'] as const;
 
     const {
         data: sessionData,
@@ -37,7 +39,7 @@ export function useCashSessionValidation(): UseCashSessionValidationReturn {
         error,
         refetch,
     } = useQuery({
-        queryKey: ['cashSession', organizationId ?? 'no-org'],
+        queryKey: cacheKey,
         enabled: Boolean(organizationId),
         queryFn: async () => {
             try {
@@ -74,9 +76,18 @@ export function useCashSessionValidation(): UseCashSessionValidationReturn {
             return false;
         }
 
-        // Refetch to get latest session state
-        const { data } = await refetch();
-        const currentSession = data?.session;
+        // Use the cached session if it's still fresh (staleTime=30s); otherwise
+        // refetch. Antes esto SIEMPRE refetcheaba, agregando un row read por
+        // cada venta cash aunque el cache estuviera bueno.
+        const cachedState = queryClient.getQueryState(cacheKey);
+        const cacheIsFresh = cachedState && Date.now() - (cachedState.dataUpdatedAt || 0) < 30_000;
+        let currentSession;
+        if (cacheIsFresh) {
+            currentSession = (cachedState?.data as { session?: CashSession } | undefined)?.session;
+        } else {
+            const { data } = await refetch();
+            currentSession = data?.session;
+        }
 
         if (!currentSession) {
             toast({

@@ -458,6 +458,10 @@ export default function OptimizedPOSLayout() {
         handleClearCart();
         setSelectedCustomer(null);
         setShowSaleModal(false);
+        // Cierra el cart drawer mobile post-venta para que el siguiente
+        // ítem agregado no aparezca encima de un drawer abierto con datos
+        // de la venta que ya cerró.
+        setIsMobileCartOpen(false);
         setShowReceiptModal(true);
         if (data.invoiceError) {
           toast.warning("Venta registrada, pero la factura requiere revisión", {
@@ -546,6 +550,7 @@ export default function OptimizedPOSLayout() {
             change: paymentDetails?.change,
             mixedPayments: paymentDetails?.mixedPayments as any[], // Use any[] for offline storage parts to avoid complex mapping here
           }));
+          setIsMobileCartOpen(false); // Cierra el drawer también en flow offline.
           setShowReceiptModal(true); // Open receipt directly even for offline
           return;
         }
