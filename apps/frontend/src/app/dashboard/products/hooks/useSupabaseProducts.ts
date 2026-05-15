@@ -52,6 +52,82 @@ interface DashboardStats {
 
 const logger = createLogger("SupabaseProducts");
 
+// -----------------------------------------------------------------------------
+// Shared realtime channel registry (per organization).
+//
+// Every component that calls useSupabaseProducts({ enableRealtime: true })
+// used to create its own .channel(`products-changes-${orgId}`) subscription.
+// Five components rendering the same products view = five active Realtime
+// connections to the same data. Supabase Realtime concurrent connections are
+// counted against the project quota.
+//
+// This registry coalesces all subscribers of the same orgId into ONE channel.
+// Each hook instance registers a callback; the channel is created on first
+// subscriber and removed on last unsubscribe.
+// -----------------------------------------------------------------------------
+
+type ProductChangeCallback = (payload: RealtimePostgresChangesPayload<Product>) => void;
+
+interface ChannelRegistryEntry {
+  channel: ReturnType<ReturnType<typeof useSupabase>["supabase"]["channel"]>;
+  listeners: Set<ProductChangeCallback>;
+}
+
+const productsChannelRegistry = new Map<string, ChannelRegistryEntry>();
+
+function subscribeToProductsChanges(
+  supabase: ReturnType<typeof useSupabase>["supabase"],
+  orgId: string | null,
+  callback: ProductChangeCallback,
+): () => void {
+  const key = orgId ? `products:${orgId}` : "products:global";
+  let entry = productsChannelRegistry.get(key);
+
+  if (!entry) {
+    const filter = orgId
+      ? {
+          event: "*" as const,
+          schema: "public",
+          table: "products",
+          filter: `organization_id=eq.${orgId}`,
+        }
+      : { event: "*" as const, schema: "public", table: "products" };
+
+    const listeners = new Set<ProductChangeCallback>();
+    const channel = supabase
+      .channel(orgId ? `products-changes-${orgId}` : "products-changes")
+      .on("postgres_changes", filter, (payload: RealtimePostgresChangesPayload<Product>) => {
+        listeners.forEach((cb) => {
+          try {
+            cb(payload);
+          } catch (err) {
+            logger.error("listener threw:", err);
+          }
+        });
+      })
+      .subscribe();
+
+    entry = { channel, listeners };
+    productsChannelRegistry.set(key, entry);
+  }
+
+  entry.listeners.add(callback);
+
+  return () => {
+    const current = productsChannelRegistry.get(key);
+    if (!current) return;
+    current.listeners.delete(callback);
+    if (current.listeners.size === 0) {
+      try {
+        supabase.removeChannel(current.channel);
+      } catch (err) {
+        logger.warn("removeChannel failed:", err);
+      }
+      productsChannelRegistry.delete(key);
+    }
+  };
+}
+
 function getSelectedOrganizationId(): string | null {
   try {
     if (typeof window === "undefined") return null;
@@ -411,13 +487,15 @@ export function useSupabaseProducts(options: UseSupabaseProductsOptions = {}) {
     toast.info("Cache limpiado");
   }, []);
 
-  // Real-time subscription
+  // Real-time subscription. Uses a shared per-org channel (see registry at
+  // module top) so N hook instances => 1 Supabase Realtime connection.
   useEffect(() => {
     if (!enableRealtime) return;
 
     const orgId = getSelectedOrganizationId();
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-    const scheduleReload = () => {
+    const scheduleReload = (payload: RealtimePostgresChangesPayload<Product>) => {
+      logger.log("Real-time update:", payload);
       if (debounceTimer) clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
         debounceTimer = null;
@@ -425,28 +503,11 @@ export function useSupabaseProducts(options: UseSupabaseProductsOptions = {}) {
       }, 400);
     };
 
-    const channel = supabase
-      .channel(orgId ? `products-changes-${orgId}` : "products-changes")
-      .on(
-        "postgres_changes",
-        orgId
-          ? {
-              event: "*",
-              schema: "public",
-              table: "products",
-              filter: `organization_id=eq.${orgId}`,
-            }
-          : { event: "*", schema: "public", table: "products" },
-        (payload: RealtimePostgresChangesPayload<Product>) => {
-          logger.log("Real-time update:", payload);
-          scheduleReload();
-        },
-      )
-      .subscribe();
+    const unsubscribe = subscribeToProductsChanges(supabase, orgId, scheduleReload);
 
     return () => {
       if (debounceTimer) clearTimeout(debounceTimer);
-      supabase.removeChannel(channel);
+      unsubscribe();
     };
   }, [enableRealtime, supabase, loadProducts]);
 
