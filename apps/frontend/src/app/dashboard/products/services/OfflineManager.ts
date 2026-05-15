@@ -26,6 +26,9 @@ class OfflineManager {
   private state: OfflineState;
   private listeners: ((state: OfflineState) => void)[] = [];
   private syncInProgress = false;
+  // Track the interval id so destroy() can clear it. Without this, the
+  // interval fires every 30s for the page lifetime even after destroy.
+  private syncIntervalId: ReturnType<typeof setInterval> | null = null;
   private handleOnline = () => {
     this.updateOnlineStatus(true);
     this.syncPendingActions();
@@ -59,8 +62,14 @@ class OfflineManager {
     window.addEventListener('online', this.handleOnline);
     window.addEventListener('offline', this.handleOffline);
 
-    // Periodic sync when online
-    setInterval(() => {
+    // Periodic sync when online. Skip ticks while the tab is hidden — the
+    // user can't trigger new actions and we don't need to drain the queue
+    // immediately. Saves background traffic / fetches.
+    if (this.syncIntervalId !== null) {
+      clearInterval(this.syncIntervalId);
+    }
+    this.syncIntervalId = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       if (this.state.isOnline && this.state.pendingActions.length > 0) {
         this.syncPendingActions();
       }
@@ -160,17 +169,23 @@ class OfflineManager {
     this.saveOfflineState();
   }
 
-  // Perform the actual action (would integrate with your API)
+  // Perform the actual action.
+  //
+  // ⚠️ KNOWN ISSUE — this is a MOCK implementation. It logs the action,
+  // waits 1s, and returns Math.random() > 0.1 as success. That means actions
+  // queued while offline are removed from the queue without ever being
+  // persisted to the backend (silent data loss). The dashboard products
+  // page uses this manager via useHybridProducts; product creates/updates
+  // made offline appear to succeed but never reach Supabase.
+  //
+  // TODO: replace with real dispatch to /api/products endpoints. The
+  // sync-coordinator at lib/sync/sync-coordinator.ts has a real dispatcher
+  // for offline ops via supabaseRealtimeService — likely the right place to
+  // consolidate this logic instead of maintaining two parallel offline
+  // systems. Until then, this code path is effectively a no-op fake-sync.
   private async performAction(action: Omit<OfflineAction, 'id' | 'timestamp' | 'retryCount'>): Promise<boolean> {
-    // This is a mock implementation
-    // In a real app, this would call your API endpoints
-
     logger.log('Performing action:', action);
-
-    // Simulate API call
     await new Promise(resolve => setTimeout(resolve, 1000));
-
-    // Simulate success/failure (90% success rate)
     return Math.random() > 0.1;
   }
 
@@ -266,6 +281,10 @@ class OfflineManager {
   // Cleanup
   destroy(): void {
     this.listeners = [];
+    if (this.syncIntervalId !== null) {
+      clearInterval(this.syncIntervalId);
+      this.syncIntervalId = null;
+    }
     if (typeof window !== 'undefined') {
       window.removeEventListener('online', this.handleOnline);
       window.removeEventListener('offline', this.handleOffline);
