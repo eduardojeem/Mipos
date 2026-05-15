@@ -62,8 +62,18 @@ interface FormState {
   primary_color: string;
 }
 
-// Rubros agrupados por categoría — refleja los negocios que más usan POS en
-// Paraguay. Las opciones se renderizan agrupadas con encabezados visuales.
+// Rubros — solo negocios que el sistema soporta bien hoy: comercios con
+// inventario y venta directa de productos.
+//
+// EXCLUIDOS (no encajan con la arquitectura actual):
+// - Restaurantes / cafeterías / bares: necesitan gestión de mesas y comanda
+//   de cocina, no implementadas.
+// - Peluquerías / estética / spa: necesitan agenda de citas, no implementada.
+// - Veterinarias / consultorios médicos: necesitan historial clínico,
+//   prescripciones y reservas.
+// - Servicios profesionales facturados por hora: no hay billing por tiempo.
+//
+// Si en el futuro se agregan esos módulos, se vuelven a habilitar acá.
 const INDUSTRY_GROUPS: Array<{ label: string; options: Array<readonly [string, string]> }> = [
   {
     label: 'Comercio',
@@ -75,27 +85,16 @@ const INDUSTRY_GROUPS: Array<{ label: string; options: Array<readonly [string, s
     ],
   },
   {
-    label: 'Gastronomía',
+    label: 'Alimentos (mostrador / take-away)',
     options: [
-      ['restaurant', 'Restaurante'],
-      ['cafe', 'Cafetería / Bar'],
       ['bakery', 'Panadería / Repostería'],
-      ['icecream', 'Heladería'],
       ['butcher', 'Carnicería'],
       ['greengrocer', 'Verdulería / Frutería'],
+      ['icecream', 'Heladería'],
     ],
   },
   {
-    label: 'Salud y belleza',
-    options: [
-      ['pharmacy', 'Farmacia'],
-      ['beauty', 'Belleza / Estética'],
-      ['hair_salon', 'Peluquería / Barbería'],
-      ['pet_shop', 'Pet shop / Veterinaria'],
-    ],
-  },
-  {
-    label: 'Indumentaria y hogar',
+    label: 'Moda y hogar',
     options: [
       ['fashion', 'Moda / Indumentaria'],
       ['shoes', 'Calzado'],
@@ -103,19 +102,21 @@ const INDUSTRY_GROUPS: Array<{ label: string; options: Array<readonly [string, s
     ],
   },
   {
-    label: 'Tecnología y vehículos',
+    label: 'Especializados',
     options: [
+      ['pharmacy', 'Farmacia'],
+      ['cosmetics', 'Cosmética / Perfumería'],
       ['electronics', 'Electrónica / Celulares'],
       ['auto_parts', 'Repuestos / Automotriz'],
-    ],
-  },
-  {
-    label: 'Otros rubros',
-    options: [
       ['hardware', 'Ferretería'],
       ['bookstore', 'Librería / Papelería'],
       ['construction', 'Materiales de construcción'],
-      ['services', 'Servicios profesionales'],
+      ['pet_shop', 'Pet shop'],
+    ],
+  },
+  {
+    label: 'Otros',
+    options: [
       ['other', 'Otro'],
     ],
   },
@@ -805,6 +806,9 @@ function BusinessStep({ form, errors, onField }: StepProps) {
               ))}
             </SelectContent>
           </Select>
+          <p className="text-[11px] text-slate-500">
+            MiPOS está optimizado para comercios con inventario. Aún no soportamos restaurantes con mesas, peluquerías con agenda ni servicios facturados por hora.
+          </p>
           {errors.industry ? <p className="text-xs text-red-400">{errors.industry}</p> : null}
         </div>
 
