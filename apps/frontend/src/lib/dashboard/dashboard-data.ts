@@ -13,6 +13,31 @@ import type {
 // 6+ queries to potentially-missing tables (sales, sale_items, ...) and
 // before this we logged each one on every request.
 const loggedMissingRelations = new Set<string>();
+const OVERVIEW_CACHE_TTL_MS = 15_000;
+const SUMMARY_CACHE_TTL_MS = 30_000;
+
+// Hard ceiling for fallback queries that compute aggregates client-side.
+// Without this, queries like SELECT total FROM sales WHERE org=X could pull
+// 50k+ rows on every dashboard load when the RPC functions aren't available
+// — the single biggest source of Supabase egress / row-read cost. When a
+// query hits this cap we warn so it's visible that the local aggregate is
+// likely incomplete and the dashboard RPC should be deployed.
+const MAX_FALLBACK_ROWS = 10000;
+const loggedRowCaps = new Set<string>();
+function warnIfCapHit(label: string, rows: unknown) {
+  if (!Array.isArray(rows) || rows.length < MAX_FALLBACK_ROWS) return;
+  if (loggedRowCaps.has(label)) return;
+  loggedRowCaps.add(label);
+  console.warn(`[dashboard] ${label} hit ${MAX_FALLBACK_ROWS}-row fallback cap — totals may be incomplete. Deploy get_dashboard_overview_v1 / get_dashboard_analytics_v1 RPCs for accurate aggregates.`);
+}
+
+type CacheEntry<T> = {
+  data: T;
+  expiresAt: number;
+};
+
+const overviewCache = new Map<string, CacheEntry<DashboardOverviewData>>();
+const summaryCache = new Map<string, CacheEntry<DashboardSummaryData>>();
 
 function isMissingRelationError(err: { message?: string } | null | undefined): boolean {
   return Boolean(err?.message && /relation .* does not exist/i.test(err.message));
@@ -27,6 +52,33 @@ function warnQueryError(label: string, err: { message?: string } | null | undefi
     return;
   }
   console.warn(`[dashboard] ${label}:`, err.message);
+}
+
+function getCachedValue<T>(cache: Map<string, CacheEntry<T>>, key: string): T | null {
+  const cached = cache.get(key);
+  if (!cached) {
+    return null;
+  }
+
+  if (cached.expiresAt <= Date.now()) {
+    cache.delete(key);
+    return null;
+  }
+
+  return cached.data;
+}
+
+function setCachedValue<T>(
+  cache: Map<string, CacheEntry<T>>,
+  key: string,
+  data: T,
+  ttlMs: number
+): T {
+  cache.set(key, {
+    data,
+    expiresAt: Date.now() + ttlMs,
+  });
+  return data;
 }
 
 const EMPTY_OVERVIEW: DashboardOverviewData = {
@@ -290,6 +342,11 @@ export async function fetchDashboardOverview(
     };
   }
 
+  const cachedOverview = getCachedValue(overviewCache, organizationId);
+  if (cachedOverview) {
+    return cachedOverview;
+  }
+
   const supabase = await createAdminClient();
   console.log('[dashboard] Using admin client for org:', organizationId);
   const now = new Date();
@@ -309,7 +366,7 @@ export async function fetchDashboardOverview(
   if (!overviewRpc.error) {
     const mapped = mapOverviewPayload(overviewRpc.data);
     if (mapped) {
-      return mapped;
+      return setCachedValue(overviewCache, organizationId, mapped, OVERVIEW_CACHE_TTL_MS);
     }
   }
 
@@ -337,31 +394,38 @@ export async function fetchDashboardOverview(
       .from('sales')
       .select('total')
       .eq('organization_id', organizationId)
-      .gte('created_at', startOfMonth.toISOString()),
+      .gte('created_at', startOfMonth.toISOString())
+      .limit(MAX_FALLBACK_ROWS),
     supabase
       .from('customers')
-      .select('id', { count: 'exact', head: true })
+      .select('id', { count: 'estimated', head: true })
       .eq('organization_id', organizationId),
     supabase
       .from('products')
-      .select('id', { count: 'exact', head: true })
+      .select('id', { count: 'estimated', head: true })
       .eq('organization_id', organizationId),
     supabase
       .from('products')
       .select('stock_quantity, min_stock')
       .eq('organization_id', organizationId)
-      .eq('is_active', true),
+      .eq('is_active', true)
+      .limit(MAX_FALLBACK_ROWS),
     supabase
       .from('sales')
       .select('id, total, created_at, payment_method, customer:customers(name)')
       .eq('organization_id', organizationId)
       .order('created_at', { ascending: false })
       .limit(6),
+    // Antes leía TODOS los pedidos en estados activos sin filtro de fecha
+    // (potencialmente miles). Lo restringimos a los últimos 30 días — para
+    // contar pedidos "activos" y hoy alcanza, y limita el row count.
     supabase
       .from('sales')
       .select('status, total, created_at')
       .eq('organization_id', organizationId)
-      .in('status', ['PENDING', 'CONFIRMED', 'PREPARING', 'SHIPPED', 'DELIVERED']),
+      .in('status', ['PENDING', 'CONFIRMED', 'PREPARING', 'SHIPPED', 'DELIVERED'])
+      .gte('created_at', new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString())
+      .limit(MAX_FALLBACK_ROWS),
   ]);
 
   // Log errors at most once per missing-relation per process; avoids spamming
@@ -370,6 +434,9 @@ export async function fetchDashboardOverview(
   warnQueryError('products count', productsResult.error);
   warnQueryError('month sales', monthSalesResult.error);
   warnQueryError('low stock products', lowStockProductsResult.error);
+  warnIfCapHit('month sales', monthSalesResult.data);
+  warnIfCapHit('low stock products', lowStockProductsResult.data);
+  warnIfCapHit('order statuses', orderStatusesResult.data);
   warnQueryError('recent sales', recentSalesResult.error);
   warnQueryError('order statuses', orderStatusesResult.error);
 
@@ -419,7 +486,7 @@ export async function fetchDashboardOverview(
     }
   }
 
-  return {
+  return setCachedValue(overviewCache, organizationId, {
     todaySales: toNumber(todayStats.total_sales),
     monthSales: monthSalesRows.reduce((sum, row) => sum + toNumber(row.total), 0),
     totalCustomers: toNumber(customersResult.count),
@@ -452,7 +519,7 @@ export async function fetchDashboardOverview(
     }),
     lastUpdated: nowIso,
     isQuickMode: true,
-  };
+  }, OVERVIEW_CACHE_TTL_MS);
 }
 
 export async function fetchDashboardSummary(
@@ -468,6 +535,12 @@ export async function fetchDashboardSummary(
     };
   }
 
+  const summaryCacheKey = `${organizationId}:${range}`;
+  const cachedSummary = getCachedValue(summaryCache, summaryCacheKey);
+  if (cachedSummary) {
+    return cachedSummary;
+  }
+
   const supabase = await createAdminClient();
   const summaryRpc = await supabase.rpc('get_dashboard_analytics_v1', {
     org_id: organizationId,
@@ -477,7 +550,7 @@ export async function fetchDashboardSummary(
   if (!summaryRpc.error) {
     const mapped = mapSummaryPayload(summaryRpc.data);
     if (mapped) {
-      return mapped;
+      return setCachedValue(summaryCache, summaryCacheKey, mapped, SUMMARY_CACHE_TTL_MS);
     }
   }
 
@@ -489,14 +562,18 @@ export async function fetchDashboardSummary(
       .select('created_at, total')
       .eq('organization_id', organizationId)
       .gte('created_at', currentStart.toISOString())
-      .order('created_at', { ascending: true }),
+      .order('created_at', { ascending: true })
+      .limit(MAX_FALLBACK_ROWS),
     supabase
       .from('sales')
       .select('created_at, total')
       .eq('organization_id', organizationId)
       .gte('created_at', previousStart.toISOString())
-      .lt('created_at', currentStart.toISOString()),
+      .lt('created_at', currentStart.toISOString())
+      .limit(MAX_FALLBACK_ROWS),
   ]);
+  warnIfCapHit('summary current sales', currentSalesResult.data);
+  warnIfCapHit('summary previous sales', previousSalesResult.data);
 
   const currentSales = (Array.isArray(currentSalesResult.data) ? currentSalesResult.data : []) as Array<{
     created_at?: string;
@@ -507,7 +584,7 @@ export async function fetchDashboardSummary(
     total?: number;
   }>;
 
-  return {
+  return setCachedValue(summaryCache, summaryCacheKey, {
     daily: buildDailySeries(
       currentSales.map((sale) => ({
         created_at: toStringValue(sale.created_at),
@@ -524,5 +601,5 @@ export async function fetchDashboardSummary(
       previousRevenue: previousSales.reduce((sum, sale) => sum + toNumber(sale.total), 0),
     },
     lastUpdated: nowIso,
-  };
+  }, SUMMARY_CACHE_TTL_MS);
 }
