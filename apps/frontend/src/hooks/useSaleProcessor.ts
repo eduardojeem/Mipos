@@ -180,6 +180,27 @@ export function useSaleProcessor(options: UseSaleProcessorOptions) {
             ? errorData.details
             : errorData?.details?.message || JSON.stringify(errorData?.details || {});
           const base = errorData.error || 'Error al procesar la venta';
+
+          // Specific UX for stock conflicts: el backend chequea stock con
+          // SELECT FOR UPDATE y devuelve "Insufficient stock for product X.
+          // Available: N, Required: M". Cuando lo detectamos, mostramos un
+          // toast accionable en vez del JSON pelado, y dejamos un Error
+          // tipado para que el caller pueda decidir limpiar el carrito.
+          const fullMessage = `${base}: ${detail || ''}`;
+          const stockMatch = fullMessage.match(/Insufficient stock for product ([^.]+)\. Available:\s*(-?\d+)/i);
+          if (stockMatch) {
+            const productName = stockMatch[1].trim();
+            const available = Number(stockMatch[2]);
+            const friendlyMsg = available <= 0
+              ? `Sin stock para "${productName}". Quitalo del carrito y reintentá.`
+              : `Stock insuficiente para "${productName}". Quedan ${available} disponible${available === 1 ? '' : 's'}.`;
+            const stockError = new Error(friendlyMsg) as Error & { code?: string; productName?: string; availableStock?: number };
+            stockError.code = 'INSUFFICIENT_STOCK';
+            stockError.productName = productName;
+            stockError.availableStock = available;
+            throw stockError;
+          }
+
           throw new Error(detail ? `${base}: ${detail}` : base);
         }
 
