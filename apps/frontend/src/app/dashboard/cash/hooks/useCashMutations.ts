@@ -162,9 +162,11 @@ export function useCashMutations(options: UseCashMutationsOptions): UseCashMutat
                                 await new Promise((r) => setTimeout(r, 300));
                                 // Now open the new session
                                 await openSessionMutation.mutateAsync({ amount, notes });
-                                // Force refetch ALL cashSession queries (including validation)
-                                await queryClient.refetchQueries({ queryKey: ['cashSession'], type: 'all' });
-                                await queryClient.refetchQueries({ queryKey: ['cashSessions'], type: 'all' });
+                                // Refetch en paralelo — antes era serial (2 round-trips).
+                                await Promise.all([
+                                    queryClient.refetchQueries({ queryKey: ['cashSession'], type: 'all' }),
+                                    queryClient.refetchQueries({ queryKey: ['cashSessions'], type: 'all' }),
+                                ]);
                                 toast({ description: 'Caja anterior cerrada y nueva sesión abierta exitosamente' });
                                 triggerCashSaasSync('open', { amount, notes, createdAt: new Date().toISOString() });
                                 onSuccess?.();

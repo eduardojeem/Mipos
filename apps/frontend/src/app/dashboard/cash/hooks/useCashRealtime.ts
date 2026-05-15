@@ -42,16 +42,21 @@ export function useCashRealtime(options: UseCashRealtimeOptions = {}) {
         realtimeService.subscribeToCashSession(sessionId, scheduleRefetch);
 
         return () => {
-            try {
-                realtimeService.unsubscribe(`cash_movements:${sessionId}`);
-            } catch (error) {
-                console.error('Error unsubscribing from movements:', error);
-            }
-            try {
-                realtimeService.unsubscribe(`cash_session:${sessionId}`);
-            } catch (error) {
-                console.error('Error unsubscribing from session:', error);
-            }
+            // Cleanup is best-effort — the realtime service may already have
+            // dropped the channel (e.g. on network teardown). We only log
+            // when the failure is something other than "channel not found",
+            // which is the common "already gone" case.
+            const safeUnsubscribe = (key: string) => {
+                try {
+                    realtimeService.unsubscribe(key);
+                } catch (error) {
+                    const msg = error instanceof Error ? error.message : String(error);
+                    if (/not found|no.*channel|undefined/i.test(msg)) return;
+                    console.warn(`[useCashRealtime] unsubscribe(${key}) failed:`, msg);
+                }
+            };
+            safeUnsubscribe(`cash_movements:${sessionId}`);
+            safeUnsubscribe(`cash_session:${sessionId}`);
             clearTimeout(debounceTimer);
         };
     }, [sessionId, enabled, handleRealtimeUpdate]);

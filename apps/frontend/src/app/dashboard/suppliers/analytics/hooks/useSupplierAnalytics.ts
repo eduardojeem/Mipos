@@ -300,13 +300,37 @@ export function useSupplierAnalytics(options: UseSupplierAnalyticsOptions = {}) 
     }
   }, [dateRange.startDate, dateRange.endDate, category]);
 
-  // Initial fetch and refresh interval
+  // Initial fetch + refresh interval. Skip the periodic refetch while the
+  // tab is hidden (browser visibilityState !== 'visible'); the supplier
+  // analytics view fetches the entire purchases table per refresh and is
+  // pure "wallpaper" data when the user isn't looking. Resumes on focus.
   useEffect(() => {
     fetchAnalytics();
 
-    const interval = setInterval(fetchAnalytics, refreshInterval);
-    return () => clearInterval(interval);
-  }, [timeRange, category, refreshInterval]);
+    const tick = () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      fetchAnalytics();
+    };
+    const interval = setInterval(tick, refreshInterval);
+
+    // When the user comes back to the tab, refetch immediately so the data
+    // doesn't look stale by `refreshInterval - elapsed` seconds.
+    const onVisible = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        fetchAnalytics();
+      }
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisible);
+    }
+
+    return () => {
+      clearInterval(interval);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisible);
+      }
+    };
+  }, [timeRange, category, refreshInterval, fetchAnalytics]);
 
   // Refresh function
   const refresh = () => {
