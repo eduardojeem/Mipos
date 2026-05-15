@@ -48,7 +48,19 @@ function warnQueryError(label: string, err: { message?: string } | null | undefi
   if (isMissingRelationError(err)) {
     if (loggedMissingRelations.has(label)) return;
     loggedMissingRelations.add(label);
-    console.warn(`[dashboard] ${label}: table missing in DB schema — returning zeros. Apply database/migrations/fix_sales_table_schema.sql or the equivalent reset migration.`);
+    // The most common cause is NOT a missing table — it's an RPC function
+    // defined with `SET search_path = ''` that references unqualified table
+    // names (e.g. `FROM sales` instead of `FROM public.sales`). Run:
+    //
+    //   SELECT proname, proconfig, LEFT(prosrc, 500)
+    //   FROM pg_proc WHERE proname = '<rpc_name>';
+    //
+    // If proconfig contains `search_path=` (empty) and prosrc references
+    // unqualified tables, fix with:
+    //   ALTER FUNCTION public.<name>(...) SET search_path = public, pg_catalog;
+    console.warn(
+      `[dashboard] ${label}: relation lookup failed — likely an RPC with empty search_path referencing unqualified tables. Falling back to direct queries (more expensive). See dashboard-data.ts warnQueryError for diagnostic SQL.`
+    );
     return;
   }
   console.warn(`[dashboard] ${label}:`, err.message);
