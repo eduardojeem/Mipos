@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase-admin';
 
+// Plans whose subscription is provisioned immediately on signup. Anything
+// else (paid plans) must go through the billing flow — registration only
+// creates the org and the user lands on the upgrade screen.
+const FREE_REGISTRATION_PLANS = new Set(['free']);
+
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
@@ -24,11 +29,20 @@ export async function POST(request: NextRequest) {
             }, { status: 400 });
         }
 
-        // Validar contraseña (mínimo 6 caracteres)
-        if (password.length < 6) {
+        // Validar contraseña (mínimo 8 caracteres + alguna complejidad).
+        // El form muestra un strength meter pero no lo enforzaba en backend.
+        if (password.length < 8) {
             return NextResponse.json({
                 success: false,
-                error: 'La contraseña debe tener al menos 6 caracteres'
+                error: 'La contraseña debe tener al menos 8 caracteres'
+            }, { status: 400 });
+        }
+        const hasLetter = /[A-Za-z]/.test(password);
+        const hasNumberOrSymbol = /[\d\W_]/.test(password);
+        if (!hasLetter || !hasNumberOrSymbol) {
+            return NextResponse.json({
+                success: false,
+                error: 'La contraseña debe combinar letras y al menos un número o símbolo'
             }, { status: 400 });
         }
 
@@ -40,21 +54,30 @@ export async function POST(request: NextRequest) {
             admin = null;
         }
 
-        // Verificar si el plan existe (optional — don't block registration if plan not found)
+        // Verificar si el plan existe (optional — don't block registration if plan not found).
+        // SECURITY: only honor free plans here. Paid plan provisioning must go
+        // through the billing/Stripe flow; otherwise a curl with planSlug=
+        // 'professional' would activate a paid subscription for free.
         let planId = null;
-        if (planSlug) {
+        const requestedPlanSlug = typeof planSlug === 'string' ? planSlug.toLowerCase() : '';
+        const isAllowedSignupPlan = !requestedPlanSlug || FREE_REGISTRATION_PLANS.has(requestedPlanSlug);
+        if (requestedPlanSlug && isAllowedSignupPlan) {
             const { data: plan } = await (admin || supabase)
                 .from('saas_plans')
-                .select('id')
-                .eq('slug', planSlug)
+                .select('id, price_monthly')
+                .eq('slug', requestedPlanSlug)
                 .eq('is_active', true)
                 .single();
 
-            if (plan) {
+            // Defense-in-depth: even if the slug allowlist is bypassed, refuse
+            // to provision plans whose price > 0 from this endpoint.
+            if (plan && Number(plan.price_monthly || 0) === 0) {
                 planId = plan.id;
             }
-            // If plan not found, continue registration without subscription
         }
+        // For paid plans (or unknown slugs) we silently fall back to no
+        // subscription — the org gets created and billing must be activated
+        // separately. The frontend should route paid plans to billing first.
 
         // Crear usuario en Supabase Auth
         const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -91,28 +114,42 @@ export async function POST(request: NextRequest) {
             .normalize('NFD')
             .replace(/[\u0300-\u036f]/g, '')
             .replace(/[^a-z0-9]+/g, '-')
-            .replace(/^-+|-+$/g, '');
+            .replace(/^-+|-+$/g, '') || 'org';
+        // (fallback 'org' previene slugs vacíos cuando el nombre es solo símbolos)
 
         // Crear organización
         const clientForWrites = admin || supabase;
+        const cleanupAuthUser = async () => {
+            if (!admin) return;
+            try {
+                await admin.auth.admin.deleteUser(authData.user.id);
+            } catch (cleanupErr) {
+                console.error('[register] failed to cleanup auth user after partial signup:', cleanupErr);
+            }
+        };
+        const cleanupOrg = async (orgId: string) => {
+            try {
+                await clientForWrites.from('organization_members').delete().eq('organization_id', orgId);
+                await clientForWrites.from('organizations').delete().eq('id', orgId);
+            } catch (cleanupErr) {
+                console.error('[register] failed to cleanup org after partial signup:', cleanupErr);
+            }
+        };
+
         const { data: orgData, error: orgError } = await clientForWrites
             .from('organizations')
             .insert({
                 name: organizationName,
-                slug: `${orgSlug}-${Date.now()}`, // Asegurar unicidad
-                subscription_plan: (planSlug || 'free').toLowerCase(),
+                slug: `${orgSlug}-${Date.now()}`,
+                subscription_plan: requestedPlanSlug || 'free',
                 subscription_status: 'ACTIVE'
             })
             .select()
             .single();
 
         if (orgError) {
-            console.error('Organization creation error:', orgError);
-            // Si falla la creación de la org, intentar eliminar el usuario creado
-            if (admin) {
-                await admin.auth.admin.deleteUser(authData.user.id).catch(console.error);
-            }
-
+            console.error('[register] Organization creation error:', orgError);
+            await cleanupAuthUser();
             return NextResponse.json({
                 success: false,
                 error: 'Error al crear la organización'
@@ -129,38 +166,55 @@ export async function POST(request: NextRequest) {
             });
 
         if (memberError) {
-            console.error('Member creation error:', memberError);
-            // Retry with upsert in case of conflict
-            await clientForWrites
+            // Reintento idempotente por si un trigger ya creó el row.
+            const { error: upsertError } = await clientForWrites
                 .from('organization_members')
                 .upsert({
                     organization_id: orgData.id,
                     user_id: authData.user.id,
-                    is_owner: true
-                }, { onConflict: 'organization_id,user_id' })
-                .then(() => console.log('Member upsert succeeded'))
-                .catch((err: unknown) => console.error('Member upsert also failed:', err));
+                    is_owner: true,
+                }, { onConflict: 'organization_id,user_id' });
+
+            if (upsertError) {
+                console.error('[register] Membership creation failed (insert + upsert):', upsertError);
+                // Rollback parcial: limpiar org y auth user para no dejar
+                // organizations huérfanas sin owner ni auth users sin org.
+                await cleanupOrg(orgData.id);
+                await cleanupAuthUser();
+                return NextResponse.json({
+                    success: false,
+                    error: 'No pudimos crear tu acceso a la organización. Intentá de nuevo.',
+                }, { status: 500 });
+            }
         }
 
-        // Update users.organization_id for fallback resolution
-        await clientForWrites
+        // SECURITY: do NOT set role='ADMIN'. Authority over the user's own
+        // org comes from organization_members.is_owner = true. Setting global
+        // users.role to ADMIN previously gave every signup access to /admin/*
+        // routes which list ALL orgs in the system — cross-tenant data leak.
+        // 'OWNER' still passes dashboard gates without unlocking SUPER_ADMIN.
+        const { error: userUpdateError } = await clientForWrites
             .from('users')
-            .update({ organization_id: orgData.id, role: 'ADMIN' })
-            .eq('id', authData.user.id)
-            .then(() => console.log('User organization_id updated'))
-            .catch((err: unknown) => {
-                console.warn('Could not update users.organization_id:', err);
-                // Try upsert if user row doesn't exist yet (trigger may not have fired)
-                return clientForWrites
-                    .from('users')
-                    .upsert({
-                        id: authData.user.id,
-                        email: email,
-                        full_name: name,
-                        role: 'ADMIN',
-                        organization_id: orgData.id,
-                    }, { onConflict: 'id' });
-            });
+            .update({ organization_id: orgData.id, role: 'OWNER' })
+            .eq('id', authData.user.id);
+
+        if (userUpdateError) {
+            // Posible: el trigger handle_new_user no insertó el row aún.
+            const { error: userInsertError } = await clientForWrites
+                .from('users')
+                .upsert({
+                    id: authData.user.id,
+                    email,
+                    full_name: name,
+                    role: 'OWNER',
+                    organization_id: orgData.id,
+                }, { onConflict: 'id' });
+            if (userInsertError) {
+                console.error('[register] users upsert failed:', userInsertError);
+                // No rollback: org y membership ya existen; signin tiene un
+                // fallback de legacy users.organization_id si esto falla.
+            }
+        }
 
         // Si hay un plan seleccionado, crear la suscripción
         if (planId) {

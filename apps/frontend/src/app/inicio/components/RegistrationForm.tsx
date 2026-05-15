@@ -150,6 +150,22 @@ export function RegistrationForm({ selectedPlan, onSuccess }: RegistrationFormPr
         throw new Error(serverError || 'Error al crear la cuenta');
       }
 
+      // Si Supabase requiere verificación de email, signUp no devuelve sesión
+      // y aterrizar en /onboarding falla porque el middleware redirige a
+      // signin sin sesión. Comprobamos antes de redirigir.
+      const supabaseClient = createSupabaseClient();
+      const { data: sessionData } = await supabaseClient.auth.getSession();
+      const hasActiveSession = Boolean(sessionData?.session);
+
+      if (!hasActiveSession) {
+        toast.success('Cuenta creada', {
+          description: 'Te enviamos un email para verificar tu cuenta. Revisá tu bandeja de entrada.',
+        });
+        // Sin sesión no podemos avanzar al onboarding; quedamos en el form
+        // con un estado "post-registro" para que el usuario revise el mail.
+        return;
+      }
+
       toast.success('Cuenta creada', {
         description: String(data.message || 'Bienvenido a MiPOS'),
       });
