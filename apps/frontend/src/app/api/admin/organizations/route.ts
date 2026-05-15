@@ -19,35 +19,33 @@ export async function GET(request: NextRequest) {
       .eq('id', user.id)
       .single();
 
-    // SECURITY: never fall back to user_metadata.role — users can modify it
-    // themselves via Supabase Auth and elevate to SUPER_ADMIN/ADMIN.
+    // SECURITY: only SUPER_ADMIN can list all organizations. ADMIN/OWNER
+    // are organization-scoped — they administer their OWN org but cannot
+    // see or list other tenants' data. The previous code returned the full
+    // organizations table for anyone with role IN ('ADMIN', 'SUPER_ADMIN'),
+    // which leaked cross-tenant data to every signup (registration was
+    // setting users.role='ADMIN' by default).
     const userRole = userData?.role || 'USER';
-    const isAdmin = userRole === 'ADMIN' || userRole === 'SUPER_ADMIN';
+    const isSuperAdmin = userRole === 'SUPER_ADMIN';
 
-    // Si es admin, obtener todas las organizaciones
-    // Si no, obtener solo las organizaciones del usuario
     let query = supabase
       .from('organizations')
       .select('id, name, slug, subscription_status, created_at')
       .order('name', { ascending: true });
 
-    if (!isAdmin) {
-      // Obtener solo las organizaciones donde el usuario es miembro
+    if (!isSuperAdmin) {
+      // Tenant-scoped: solo orgs donde el usuario es miembro.
       const { data: memberships } = await supabase
         .from('organization_members')
         .select('organization_id')
         .eq('user_id', user.id);
 
-      if (memberships && memberships.length > 0) {
-        const orgIds = memberships.map((m: { organization_id: string }) => m.organization_id);
-        query = query.in('id', orgIds);
-      } else {
-        // Usuario sin organizaciones
-        return NextResponse.json({
-          success: true,
-          organizations: []
-        });
+      if (!memberships || memberships.length === 0) {
+        return NextResponse.json({ success: true, organizations: [] });
       }
+
+      const orgIds = memberships.map((m: { organization_id: string }) => m.organization_id);
+      query = query.in('id', orgIds);
     }
 
     const { data: organizations, error } = await query;

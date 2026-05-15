@@ -1,42 +1,29 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { createAdminClient } from '@/lib/supabase-admin'
 
-async function promote() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+// SECURITY: this endpoint previously let ANY authenticated user GET/POST it
+// to set their own users.role and user_metadata.role to 'ADMIN'. That is a
+// blatant privilege escalation — the entire point of role administration is
+// that users do not assign roles to themselves. Disabled permanently.
+//
+// If a SUPER_ADMIN needs to grant ADMIN to a user, that should go through a
+// dedicated, gated endpoint (see /api/superadmin/users/...) so it leaves
+// audit trail and respects authorization.
 
-  const email = (user as any).email || 'user@example.com'
-  const fullName = ((user as any).user_metadata?.full_name || (user as any).user_metadata?.name || email.split('@')[0] || 'Usuario').toString()
-
-  const { data: existing } = await (supabase as any)
-    .from('users')
-    .select('id')
-    .eq('id', user.id)
-    .maybeSingle()
-
-  if (!existing) {
-    await (supabase as any)
-      .from('users')
-      .upsert({ id: user.id, email, full_name: fullName, role: 'ADMIN' }, { onConflict: 'id' })
-  } else {
-    await (supabase as any)
-      .from('users')
-      .update({ role: 'ADMIN' })
-      .eq('id', user.id)
-  }
-
-  const admin = createAdminClient()
-  await admin.auth.admin.updateUserById(user.id, { user_metadata: { role: 'ADMIN' } })
-
-  return NextResponse.json({ ok: true })
+function gone() {
+  return NextResponse.json(
+    {
+      error: 'Endpoint deshabilitado por seguridad',
+      details:
+        'La auto-promoción de roles no está permitida. Solicitá la elevación a un super admin.',
+    },
+    { status: 410 }
+  )
 }
 
 export async function POST() {
-  return promote()
+  return gone()
 }
 
 export async function GET() {
-  return promote()
+  return gone()
 }
