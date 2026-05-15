@@ -335,7 +335,24 @@ export default function OnboardingPage() {
     });
   };
 
+  // El flujo previo intentaba POST /api/organizations (endpoint inexistente),
+  // y caía a buscar orgs[0] del usuario o reusar la actual — terminaba
+  // "creando" sin crear. Hasta que exista una API formal de creación de org
+  // post-signup, la única vía limpia es re-registrarse vía /inicio/registro
+  // (signOut + nueva cuenta + nueva org). Lo dejamos explícito al usuario
+  // en vez de fingir que la creación funciona.
   const handleCreateOrg = async () => {
+    toast({
+      title: 'No podés crear organizaciones desde acá',
+      description: 'La creación de empresa nueva se hace desde /inicio/registro. Si perdiste el acceso, contactá soporte.',
+      variant: 'destructive',
+    });
+    router.push('/inicio/registro');
+  };
+  /* eslint-disable @typescript-eslint/no-unused-vars */
+  // Legacy create-org flow kept for reference; replaced by handleCreateOrg
+  // above. TODO: delete after a release cycle if no regressions appear.
+  const _handleCreateOrgLegacy = async () => {
     if (!user || newOrgName.trim().length < 2) return;
     setCreatingOrg(true);
     try {
@@ -405,6 +422,42 @@ export default function OnboardingPage() {
       toast({ title: 'Error', description: 'No se pudo crear la organización.', variant: 'destructive' });
     } finally {
       setCreatingOrg(false);
+    }
+  };
+  /* eslint-enable */
+
+  const [savingSubdomain, setSavingSubdomain] = useState(false);
+  const persistSubdomain = async (nextSlug: string) => {
+    if (!resolvedOrgId) return;
+    const trimmed = nextSlug.trim().toLowerCase();
+    if (!trimmed) {
+      toast({ title: 'Identificador vacío', description: 'Ingresá un identificador.', variant: 'destructive' });
+      return;
+    }
+    if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(trimmed)) {
+      toast({ title: 'Formato inválido', description: 'Usá minúsculas, números y guiones.', variant: 'destructive' });
+      return;
+    }
+    setSavingSubdomain(true);
+    try {
+      const response = await fetch(`/api/admin/organizations/${resolvedOrgId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-organization-id': resolvedOrgId },
+        credentials: 'include',
+        body: JSON.stringify({ subdomain: trimmed }),
+      });
+      if (!response.ok) {
+        const errJson = await response.json().catch(() => ({}));
+        throw new Error(errJson?.error || `Error ${response.status}`);
+      }
+      setResolvedOrgSlug(trimmed);
+      setEditingSubdomain(false);
+      toast({ title: 'Identificador actualizado', description: `Tu URL pública es ahora ${trimmed}.` });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'No se pudo guardar el identificador';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    } finally {
+      setSavingSubdomain(false);
     }
   };
 
@@ -581,12 +634,19 @@ export default function OnboardingPage() {
                             autoFocus
                             placeholder="4gcelulares"
                             onKeyDown={(e) => {
-                              if (e.key === 'Enter') { e.preventDefault(); setResolvedOrgSlug(subdomainDraft); setEditingSubdomain(false); }
+                              if (e.key === 'Enter') { e.preventDefault(); void persistSubdomain(subdomainDraft); }
                               if (e.key === 'Escape') setEditingSubdomain(false);
                             }}
+                            disabled={savingSubdomain}
                           />
-                          <Button type="button" size="sm" className="h-7 w-7 rounded bg-emerald-600 p-0 text-white hover:bg-emerald-700" onClick={() => { setResolvedOrgSlug(subdomainDraft); setEditingSubdomain(false); }}>
-                            <CheckCircle2 className="h-3 w-3" />
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="h-7 w-7 rounded bg-emerald-600 p-0 text-white hover:bg-emerald-700"
+                            onClick={() => void persistSubdomain(subdomainDraft)}
+                            disabled={savingSubdomain}
+                          >
+                            {savingSubdomain ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
                           </Button>
                         </div>
                       ) : (
