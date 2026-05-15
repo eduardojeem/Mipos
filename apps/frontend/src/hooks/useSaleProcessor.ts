@@ -209,8 +209,20 @@ export function useSaleProcessor(options: UseSaleProcessorOptions) {
         if (!isOnline || errorMessage.includes('Failed to fetch') || errorMessage.includes('network')) {
           const totals = calculateCartWithIva(cart, products, newDiscount, newType, config);
           const operationalContext = getClientOperationalContext();
+          // IDs único-por-venta usando crypto.randomUUID cuando esté disponible.
+          // Antes era `offline-${Date.now()}` que colisiona si dos ventas
+          // offline ocurren en el mismo ms (rapid-fire o auto-retry rápido).
+          const safeUuid = (): string => {
+            try {
+              if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+                return crypto.randomUUID();
+              }
+            } catch {}
+            return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+          };
+          const saleUuid = safeUuid();
           const offlineId = offlineStorage.addTransaction('sale', {
-            id: `offline-${Date.now()}`,
+            id: `offline-${saleUuid}`,
             user_id: userId || 'unknown',
             organization_id: selectedOrganizationId || 'unknown',
             customer_id: selectedCustomer?.id,
@@ -236,7 +248,7 @@ export function useSaleProcessor(options: UseSaleProcessorOptions) {
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
             items: cart.map((item) => ({
-              id: `item-${Date.now()}-${item.product_id}`,
+              id: `item-${saleUuid}-${item.product_id}`,
               sale_id: '',
               product_id: item.product_id,
               quantity: item.quantity,

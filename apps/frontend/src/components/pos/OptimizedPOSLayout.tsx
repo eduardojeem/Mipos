@@ -14,10 +14,17 @@ import { useAuth } from "@/hooks/use-auth";
 import { useUserOrganizations } from "@/hooks/use-user-organizations";
 import { OrganizationSelector } from "@/components/organizations/OrganizationSelector";
 import { useOfflineSync } from "@/hooks/useOfflineSync";
+import { offlineStorage } from "@/lib/pos/offline-storage";
+import {
+  getClientOperationalContext,
+  getOperationalContextHeaders,
+} from "@/lib/operational-context";
 import { usePermissionsContext } from "@/hooks/use-unified-permissions";
-import { type PosInternalTicket } from "@/lib/pos/internal-ticket";
+import {
+  createOfflineInternalTicket,
+  type PosInternalTicket,
+} from "@/lib/pos/internal-ticket";
 import { type CartItem } from "@/hooks/useCart";
-import { useSaleProcessor, type SalePaymentDetails, type SaleOptions } from "@/hooks/useSaleProcessor";
 import type { Customer } from "@/types";
 
 // Importar componentes del nuevo diseño
@@ -53,19 +60,53 @@ export default function OptimizedPOSLayout() {
   // Business Config
   const { config } = useBusinessConfig();
 
-  // Ensure a default POS/register id exists to avoid GLOBAL scope conflicts
+  // Ensure a default POS/register id exists to avoid GLOBAL scope conflicts.
+  // Critical: when the cashier opens a second tab, both tabs MUST converge
+  // on the same POS ID — otherwise the same physical drawer ends up split
+  // across two "registers" in cash session reconciliation.
+  //
+  // We use a BroadcastChannel (when available) to coordinate across tabs
+  // synchronously, plus a 'storage' event listener as a fallback. The first
+  // tab to mount creates the ID; later tabs adopt it instead of generating
+  // their own.
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    try {
-      const existing = window.localStorage.getItem('selected_pos_id') || window.localStorage.getItem('selected_register_id');
-      if (!existing || !existing.trim()) {
-        const id = (window.crypto?.randomUUID?.() || Date.now().toString(36));
+
+    const ensureSinglePosId = () => {
+      try {
+        const existing =
+          window.localStorage.getItem('selected_pos_id') ||
+          window.localStorage.getItem('selected_register_id');
+        if (existing && existing.trim()) {
+          // Mirror to both keys in case only one was set elsewhere.
+          if (!window.localStorage.getItem('selected_pos_id')) {
+            window.localStorage.setItem('selected_pos_id', existing);
+          }
+          if (!window.localStorage.getItem('selected_register_id')) {
+            window.localStorage.setItem('selected_register_id', existing);
+          }
+          return;
+        }
+        const id = window.crypto?.randomUUID?.() || Date.now().toString(36);
         const pos = `POS-${id}`;
         window.localStorage.setItem('selected_pos_id', pos);
         window.localStorage.setItem('selected_register_id', pos);
-        window.dispatchEvent(new Event('storage'));
-      }
-    } catch {}
+      } catch {}
+    };
+
+    ensureSinglePosId();
+
+    // Cross-tab sync: when another tab updates the POS ID, adopt it.
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== 'selected_pos_id' && event.key !== 'selected_register_id') return;
+      // Re-run ensure to mirror the new value to the other key if needed.
+      ensureSinglePosId();
+    };
+    window.addEventListener('storage', onStorage);
+
+    return () => {
+      window.removeEventListener('storage', onStorage);
+    };
   }, []);
 
   // Auth & Organization
@@ -79,19 +120,62 @@ export default function OptimizedPOSLayout() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [showSaleModal, setShowSaleModal] = useState(false);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
-  // Removed showPostSaleActions state
-  const [lastSale, setLastSale] = useState<PosInternalTicket | null>(null);
+  // lastSale / lastInvoice se persisten en localStorage para sobrevivir
+  // crash o cierre accidental del tab justo después de cobrar — el cajero
+  // todavía puede reabrir el ticket o reimprimir desde el dashboard.
+  const [lastSale, setLastSale] = useState<PosInternalTicket | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = window.localStorage.getItem('pos_last_sale');
+      return raw ? (JSON.parse(raw) as PosInternalTicket) : null;
+    } catch {
+      return null;
+    }
+  });
   const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
   const [showOpenCashModal, setShowOpenCashModal] = useState(false);
   const [showCloseCashModal, setShowCloseCashModal] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
-  const [lastInvoice, setLastInvoice] = useState<{
+  type LastInvoice = {
     id: string;
     invoiceNumber: string;
     status: string;
     saleId?: string;
     saleNumber?: string;
-  } | null>(null);
+  };
+  const [lastInvoice, setLastInvoice] = useState<LastInvoice | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = window.localStorage.getItem('pos_last_invoice');
+      return raw ? (JSON.parse(raw) as LastInvoice) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  // Persist last sale / invoice on every change so a crash post-sale
+  // doesn't lose the receipt the cashier just generated.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      if (lastSale) {
+        window.localStorage.setItem('pos_last_sale', JSON.stringify(lastSale));
+      } else {
+        window.localStorage.removeItem('pos_last_sale');
+      }
+    } catch {}
+  }, [lastSale]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      if (lastInvoice) {
+        window.localStorage.setItem('pos_last_invoice', JSON.stringify(lastInvoice));
+      } else {
+        window.localStorage.removeItem('pos_last_invoice');
+      }
+    } catch {}
+  }, [lastInvoice]);
 
   useEffect(() => {
     setSelectedCustomer(null);

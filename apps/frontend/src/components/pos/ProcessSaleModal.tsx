@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -183,13 +183,29 @@ export default function ProcessSaleModal({
     return errs.length === 0;
   }, [discount, discountType, totals, selectedMethod, splitEnabled, cashReceived, splitPayments, insufficientStock, fmtCurrency, selectedDocumentType, customer?.id]);
 
+  // Ref-guard against double-submit. Without this, a fast double-click on
+  // "Registrar venta" can open the confirmation dialog twice (or fire two
+  // POSTs if the dialog is also bypassed). The ref is set on click and
+  // released only when the async work resolves OR the user cancels.
+  const submittingRef = useRef(false);
+  const [isPendingConfirm, setIsPendingConfirm] = useState(false);
+
   const handleConfirm = useCallback(() => {
+    if (submittingRef.current || isLoading) return;
     if (!validate()) return;
+
+    submittingRef.current = true;
+    setIsPendingConfirm(true);
 
     const methodLabel = PAYMENT_METHODS.find((m) => m.value === selectedMethod)?.label ?? 'Otro';
     const desc = splitEnabled
       ? `Pago dividido: ${splitPayments.map((p) => `${p.method} ${fmtCurrency(p.amount)}`).join(', ')}`
       : `Pago con ${methodLabel}`;
+
+    const releaseGuard = () => {
+      submittingRef.current = false;
+      setIsPendingConfirm(false);
+    };
 
     showConfirmation({
       title: selectedDocumentType === 'invoice' ? 'Confirmar venta y factura' : 'Confirmar venta',
@@ -197,6 +213,7 @@ export default function ProcessSaleModal({
       confirmText: 'Confirmar',
       cancelText: 'Cancelar',
       variant: 'info',
+      onCancel: releaseGuard,
       onConfirm: async () => {
         if (onPaymentMethodChange && selectedMethod !== paymentMethod) {
           onPaymentMethodChange(selectedMethod);
@@ -224,13 +241,17 @@ export default function ProcessSaleModal({
           }));
         }
 
-        await onConfirm(discount, discountType, details, {
-          autoPrint,
-          documentType: selectedDocumentType,
-        });
+        try {
+          await onConfirm(discount, discountType, details, {
+            autoPrint,
+            documentType: selectedDocumentType,
+          });
+        } finally {
+          releaseGuard();
+        }
       },
     });
-  }, [validate, selectedMethod, splitEnabled, splitPayments, totals, changeDue, fmtCurrency, showConfirmation, onPaymentMethodChange, paymentMethod, setGlobalNotes, localNotes, transferRef, cashReceived, discount, discountType, onConfirm, autoPrint, selectedDocumentType]);
+  }, [validate, isLoading, selectedMethod, splitEnabled, splitPayments, totals, changeDue, fmtCurrency, showConfirmation, onPaymentMethodChange, paymentMethod, setGlobalNotes, localNotes, transferRef, cashReceived, discount, discountType, onConfirm, autoPrint, selectedDocumentType]);
 
   // --- Keyboard ---
   useEffect(() => {
@@ -644,10 +665,10 @@ export default function ProcessSaleModal({
               <Button variant="ghost" onClick={() => setStep(1)}>Volver</Button>
               <Button
                 onClick={handleConfirm}
-                disabled={isLoading || cart.length === 0 || insufficientStock.length > 0}
+                disabled={isLoading || isPendingConfirm || cart.length === 0 || insufficientStock.length > 0}
                 className="min-w-[120px]"
               >
-                {isLoading ? (
+                {isLoading || isPendingConfirm ? (
                   <span className="flex items-center gap-2">
                     <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
                     Procesando...
