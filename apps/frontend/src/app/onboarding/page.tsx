@@ -56,48 +56,165 @@ interface FormState {
   phone: string;
   email: string;
   website: string;
+  country: string;
   city: string;
   department: string;
   primary_color: string;
 }
 
-const INDUSTRY_OPTIONS = [
-  ['retail', 'Retail'],
-  ['wholesale', 'Mayorista'],
-  ['food_service', 'Gastronomía'],
-  ['beauty', 'Belleza'],
-  ['pharmacy', 'Farmacia'],
-  ['fashion', 'Moda'],
-  ['electronics', 'Electrónica'],
-  ['services', 'Servicios'],
-  ['other', 'Otro'],
-] as const;
-
+// Rubros agrupados por categoría — refleja los negocios que más usan POS en
+// Paraguay. Las opciones se renderizan agrupadas con encabezados visuales.
+const INDUSTRY_GROUPS: Array<{ label: string; options: Array<readonly [string, string]> }> = [
+  {
+    label: 'Comercio',
+    options: [
+      ['supermarket', 'Supermercado / Almacén'],
+      ['minimarket', 'Mini market / Despensa'],
+      ['retail', 'Tienda / Comercio general'],
+      ['wholesale', 'Mayorista / Distribuidora'],
+    ],
+  },
+  {
+    label: 'Gastronomía',
+    options: [
+      ['restaurant', 'Restaurante'],
+      ['cafe', 'Cafetería / Bar'],
+      ['bakery', 'Panadería / Repostería'],
+      ['icecream', 'Heladería'],
+      ['butcher', 'Carnicería'],
+      ['greengrocer', 'Verdulería / Frutería'],
+    ],
+  },
+  {
+    label: 'Salud y belleza',
+    options: [
+      ['pharmacy', 'Farmacia'],
+      ['beauty', 'Belleza / Estética'],
+      ['hair_salon', 'Peluquería / Barbería'],
+      ['pet_shop', 'Pet shop / Veterinaria'],
+    ],
+  },
+  {
+    label: 'Indumentaria y hogar',
+    options: [
+      ['fashion', 'Moda / Indumentaria'],
+      ['shoes', 'Calzado'],
+      ['home_decor', 'Decoración / Hogar'],
+    ],
+  },
+  {
+    label: 'Tecnología y vehículos',
+    options: [
+      ['electronics', 'Electrónica / Celulares'],
+      ['auto_parts', 'Repuestos / Automotriz'],
+    ],
+  },
+  {
+    label: 'Otros rubros',
+    options: [
+      ['hardware', 'Ferretería'],
+      ['bookstore', 'Librería / Papelería'],
+      ['construction', 'Materiales de construcción'],
+      ['services', 'Servicios profesionales'],
+      ['other', 'Otro'],
+    ],
+  },
+];
+// Escala con hint operativo (perfil del negocio, no rango de empleados puro).
+// Ayuda al usuario a ubicarse según su realidad y nos sirve para inferir el
+// plan recomendado más adelante.
 const SIZE_OPTIONS: Array<{ value: CompanySize; label: string; hint: string }> = [
-  { value: 'micro', label: 'Micro', hint: '1-3 personas' },
-  { value: 'small', label: 'Pequeña', hint: '4-10 personas' },
-  { value: 'medium', label: 'Mediana', hint: '11-50 personas' },
-  { value: 'large', label: 'Grande', hint: '51+ personas' },
+  { value: 'micro', label: 'Micro', hint: '1-3 personas · Inicia o emprende' },
+  { value: 'small', label: 'Pequeña', hint: '4-10 personas · Tienda activa' },
+  { value: 'medium', label: 'Mediana', hint: '11-50 personas · Multi-sucursal' },
+  { value: 'large', label: 'Grande', hint: '51+ personas · Cadena' },
 ];
 
+// Países disponibles. Hoy solo Paraguay; el campo queda preparado para
+// expandir a otros países sin cambiar el flujo.
+const COUNTRY_OPTIONS: Array<readonly [string, string]> = [
+  ['PY', 'Paraguay'],
+];
+
+// 17 departamentos de Paraguay + capital. Ciudades cubren los principales
+// centros urbanos y municipios cabecera (no exhaustivo a nivel distrital).
 const CITIES_BY_DEPARTMENT: Record<string, string[]> = {
   'Asunción': ['Asunción'],
-  'Central': ['San Lorenzo', 'Luque', 'Fernando de la Mora', 'Lambaré', 'Capiatá', 'Limpio', 'Ñemby', 'Mariano Roque Alonso', 'Villa Elisa', 'San Antonio', 'Itauguá', 'Areguá', 'Ypacaraí', 'Guarambaré'],
-  'Alto Paraná': ['Ciudad del Este', 'Presidente Franco', 'Hernandarias', 'Minga Guazú', 'Santa Rita', 'San Alberto'],
-  'Itapúa': ['Encarnación', 'Hohenau', 'Obligado', 'Bella Vista', 'Capitán Miranda', 'Trinidad', 'Jesús'],
-  'Caaguazú': ['Coronel Oviedo', 'Caaguazú', 'J. Eulogio Estigarribia'],
-  'Cordillera': ['Caacupé', 'Tobatí', 'Eusebio Ayala', 'Piribebuy', 'San Bernardino'],
-  'Canindeyú': ['Salto del Guairá', 'Curuguaty'],
-  'Paraguarí': ['Paraguarí', 'Yaguarón', 'Pirayú', 'Carapeguá'],
-  'San Pedro': ['San Pedro del Ycuamandiyú', 'Santa Rosa del Aguaray'],
-  'Guairá': ['Villarrica', 'Iturbe'],
-  'Concepción': ['Concepción', 'Horqueta'],
-  'Amambay': ['Pedro Juan Caballero', 'Capitán Bado'],
-  'Caazapá': ['Caazapá', 'Yuty'],
-  'Misiones': ['San Juan Bautista', 'Ayolas', 'San Ignacio'],
-  'Ñeembucú': ['Pilar'],
-  'Presidente Hayes': ['Villa Hayes', 'Benjamín Aceval'],
-  'Boquerón': ['Filadelfia', 'Loma Plata', 'Neuland'],
+  'Central': [
+    'San Lorenzo', 'Luque', 'Fernando de la Mora', 'Lambaré', 'Capiatá',
+    'Limpio', 'Ñemby', 'Mariano Roque Alonso', 'Villa Elisa', 'San Antonio',
+    'Itauguá', 'Areguá', 'Ypacaraí', 'Guarambaré', 'J. Augusto Saldívar',
+    'Nueva Italia', 'Itá', 'Villeta', 'Ypané',
+  ],
+  'Alto Paraná': [
+    'Ciudad del Este', 'Presidente Franco', 'Hernandarias', 'Minga Guazú',
+    'Santa Rita', 'San Alberto', 'Itakyry', 'Naranjal', 'Yguazú',
+    'Mbaracayú', 'Doctor Juan León Mallorquín', 'Los Cedrales',
+  ],
+  'Itapúa': [
+    'Encarnación', 'Hohenau', 'Obligado', 'Bella Vista', 'Capitán Miranda',
+    'Trinidad', 'Jesús', 'Cambyretá', 'Carmen del Paraná', 'Coronel Bogado',
+    'San Pedro del Paraná', 'Pirapó', 'María Auxiliadora', 'Edelira',
+  ],
+  'Caaguazú': [
+    'Coronel Oviedo', 'Caaguazú', 'Doctor J. Eulogio Estigarribia',
+    'Repatriación', 'Yhú', 'San Joaquín', 'Mariscal Francisco Solano López',
+    'Raúl Arsenio Oviedo', 'Vaquería', 'San José de los Arroyos',
+  ],
+  'Cordillera': [
+    'Caacupé', 'Tobatí', 'Eusebio Ayala', 'Piribebuy', 'San Bernardino',
+    'Atyrá', 'Altos', 'Arroyos y Esteros', 'Mbocayaty del Yhaguy',
+    'Loma Grande', 'Primero de Marzo', 'Itacurubí de la Cordillera',
+    'Emboscada', 'Valenzuela',
+  ],
+  'Canindeyú': [
+    'Salto del Guairá', 'Curuguaty', 'Katueté', 'Ypejhú', 'La Paloma',
+    'Maracaná', 'Ygatimí', 'Corpus Christi', 'Nueva Esperanza',
+  ],
+  'Paraguarí': [
+    'Paraguarí', 'Yaguarón', 'Pirayú', 'Carapeguá', 'Acahay', 'Quiindy',
+    'Ybycuí', 'Quyquyhó', 'Sapucai', 'Caapucú', 'Caballero',
+  ],
+  'San Pedro': [
+    'San Pedro del Ycuamandiyú', 'Santa Rosa del Aguaray', 'Choré',
+    'Itacurubí del Rosario', 'General Resquín', 'Lima', 'Capiibary',
+    'Antequera', 'Tacuatí', 'Unión', 'Yataity del Norte',
+  ],
+  'Guairá': [
+    'Villarrica', 'Iturbe', 'Independencia', 'Mauricio José Troche',
+    'Borja', 'Doctor Bottrell', 'Coronel Martínez', 'Yataity',
+    'Félix Pérez Cardozo',
+  ],
+  'Concepción': [
+    'Concepción', 'Horqueta', 'Belén', 'San Lázaro', 'Loreto',
+    'Yby Yaú', 'Paso Barreto',
+  ],
+  'Amambay': [
+    'Pedro Juan Caballero', 'Capitán Bado', 'Bella Vista Norte',
+    'Zanja Pyta', 'Karapaí',
+  ],
+  'Caazapá': [
+    'Caazapá', 'Yuty', 'San Juan Nepomuceno', 'Tavaí', 'Buena Vista',
+    'Maciel', 'Doctor Moisés S. Bertoni', 'Avaí', 'Abaí',
+  ],
+  'Misiones': [
+    'San Juan Bautista', 'Ayolas', 'San Ignacio', 'Santa María',
+    'Santiago', 'Yabebyry', 'Villa Florida', 'San Patricio', 'San Miguel',
+  ],
+  'Ñeembucú': [
+    'Pilar', 'Alberdi', 'Mayor José J. Martínez', 'Tacuaras',
+    'Humaitá', 'Villalbín', 'Cerrito',
+  ],
+  'Presidente Hayes': [
+    'Villa Hayes', 'Benjamín Aceval', 'Pozo Colorado', 'Puerto Pinasco',
+    'Teniente Esteban Martínez', 'Nanawa', 'Tte. Irala Fernández',
+  ],
+  'Boquerón': [
+    'Filadelfia', 'Loma Plata', 'Neuland', 'Mariscal Estigarribia',
+  ],
+  'Alto Paraguay': [
+    'Fuerte Olimpo', 'Bahía Negra', 'Puerto Casado', 'Carmelo Peralta',
+  ],
 };
 const DEPARTMENTS = Object.keys(CITIES_BY_DEPARTMENT);
 
@@ -121,6 +238,7 @@ const DEFAULT_FORM: FormState = {
   phone: '',
   email: '',
   website: '',
+  country: 'PY',
   city: '',
   department: '',
   primary_color: '#059669',
@@ -158,6 +276,7 @@ function buildForm(profile: CompanyProfile | null, email: string, organizationNa
     phone: profile?.phone || '',
     email: profile?.email || email,
     website: profile?.website || '',
+    country: 'PY', // Por ahora solo Paraguay; extensible cuando agreguemos otros países.
     city: profile?.city || '',
     department: profile?.department || '',
     primary_color: profile?.primary_color || '#059669',
@@ -674,8 +793,15 @@ function BusinessStep({ form, errors, onField }: StepProps) {
               <SelectValue placeholder="Seleccioná un rubro" />
             </SelectTrigger>
             <SelectContent>
-              {INDUSTRY_OPTIONS.map(([value, label]) => (
-                <SelectItem key={value} value={value}>{label}</SelectItem>
+              {INDUSTRY_GROUPS.map((group) => (
+                <div key={group.label}>
+                  <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    {group.label}
+                  </div>
+                  {group.options.map(([value, label]) => (
+                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                  ))}
+                </div>
               ))}
             </SelectContent>
           </Select>
@@ -817,7 +943,28 @@ function ContactStep({ form, errors, onField }: StepProps) {
         {errors.website ? <p className="text-xs text-red-400">{errors.website}</p> : null}
       </div>
 
-      <div className="grid gap-5 md:grid-cols-2">
+      <div className="grid gap-5 md:grid-cols-3">
+        <div className="space-y-2">
+          <Label className="text-slate-200">País</Label>
+          <Select
+            value={form.country}
+            onValueChange={(v) => onField('country', v)}
+            disabled={COUNTRY_OPTIONS.length === 1}
+          >
+            <SelectTrigger className="border-white/10 bg-white/5 text-white">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {COUNTRY_OPTIONS.map(([value, label]) => (
+                <SelectItem key={value} value={value}>{label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {COUNTRY_OPTIONS.length === 1 ? (
+            <p className="text-[11px] text-slate-500">Por ahora solo Paraguay.</p>
+          ) : null}
+        </div>
+
         <div className="space-y-2">
           <Label className="text-slate-200">
             Departamento <span className="text-red-400">*</span>
@@ -827,7 +974,7 @@ function ContactStep({ form, errors, onField }: StepProps) {
             onValueChange={(v) => { onField('department', v); onField('city', ''); }}
           >
             <SelectTrigger className={cn('border-white/10 bg-white/5 text-white', errors.department && 'border-red-400')}>
-              <SelectValue placeholder="Seleccioná un departamento" />
+              <SelectValue placeholder="Departamento" />
             </SelectTrigger>
             <SelectContent>
               {DEPARTMENTS.map((option) => (
@@ -848,7 +995,7 @@ function ContactStep({ form, errors, onField }: StepProps) {
             disabled={!form.department}
           >
             <SelectTrigger className={cn('border-white/10 bg-white/5 text-white', errors.city && 'border-red-400')}>
-              <SelectValue placeholder={form.department ? 'Seleccioná una ciudad' : 'Primero seleccioná departamento'} />
+              <SelectValue placeholder={form.department ? 'Ciudad' : 'Primero el departamento'} />
             </SelectTrigger>
             <SelectContent>
               {(CITIES_BY_DEPARTMENT[form.department] || []).map((city) => (
