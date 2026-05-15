@@ -69,9 +69,9 @@ const PAYMENT_METHODS = [
 ] as const;
 
 const QUICK_CASH_BY_CURRENCY: Record<string, number[]> = {
-  PYG: [5000, 10000, 20000, 50000, 100000],
+  PYG: [10000, 20000, 50000, 100000, 200000],
   USD: [5, 10, 20, 50, 100],
-  ARS: [500, 1000, 2000, 5000, 10000],
+  ARS: [1000, 2000, 5000, 10000, 20000],
   BRL: [10, 20, 50, 100, 200],
 };
 
@@ -589,8 +589,8 @@ export default function ProcessSaleModal({
                       <Button type="button" variant="secondary" size="sm" className="h-7" onClick={setCashExact}>Exacto</Button>
                       {getQuickCashValues(config?.storeSettings?.currency || 'PYG').map((v) => (
                         <Button key={v} type="button" variant="outline" size="sm" className="h-7 text-xs"
-                          onClick={() => { const n = totals.total + v; setCashInput(n.toFixed(0)); setCashReceived(n); }}>
-                          +{formatQuickCash(v, config?.storeSettings?.currency || 'PYG')}
+                          onClick={() => { setCashInput(v.toFixed(0)); setCashReceived(v); }}>
+                          {formatQuickCash(v, config?.storeSettings?.currency || 'PYG')}
                         </Button>
                       ))}
                     </div>
