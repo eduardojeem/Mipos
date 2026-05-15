@@ -163,14 +163,33 @@ export default function SalesPage() {
     }
   }, [notificationsEnabled]);
 
-  // Auto-refresh every 5 minutes
+  // Auto-refresh every 5 minutes — pero solo si el tab está visible.
+  // Antes corría siempre, refetcheando 2 queries de Supabase aunque el
+  // user no estuviera mirando la pestaña. Resume al volver a foco.
   useEffect(() => {
-    const interval = setInterval(() => {
+    const tick = () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       queryClient.invalidateQueries({ queryKey: ['sales-summary'] });
       queryClient.invalidateQueries({ queryKey: ['recent-sales'] });
-    }, 5 * 60 * 1000);
+    };
+    const interval = setInterval(tick, 5 * 60 * 1000);
 
-    return () => clearInterval(interval);
+    const onVisible = () => {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        queryClient.invalidateQueries({ queryKey: ['sales-summary'] });
+        queryClient.invalidateQueries({ queryKey: ['recent-sales'] });
+      }
+    };
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisible);
+    }
+
+    return () => {
+      clearInterval(interval);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisible);
+      }
+    };
   }, [queryClient]);
 
   if (isAllLoading) {
