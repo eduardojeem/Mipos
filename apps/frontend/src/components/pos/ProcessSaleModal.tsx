@@ -149,7 +149,7 @@ export default function ProcessSaleModal({
 
   const changeDue = useMemo(() => {
     const change = cashReceived - totals.total;
-    return Number.isFinite(change) ? Math.max(0, change) : 0;
+    return Number.isFinite(change) ? change : 0;
   }, [cashReceived, totals.total]);
 
   const insufficientStock = useMemo(
@@ -251,7 +251,7 @@ export default function ProcessSaleModal({
         }
         if (selectedMethod === PaymentMethod.CASH && !splitEnabled) {
           details.cashReceived = cashReceived;
-          details.change = changeDue;
+          details.change = Math.max(0, changeDue);
         }
         if (splitEnabled) {
           details.mixedPayments = splitPayments.map((p) => ({
@@ -576,12 +576,12 @@ export default function ProcessSaleModal({
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label className="text-sm">Cambio</Label>
+                        <Label className="text-sm">{changeDue < 0 ? 'Falta' : 'Cambio'}</Label>
                         <div className={cn(
                           'h-10 flex items-center justify-center rounded-md border text-lg font-bold tabular-nums',
-                          changeDue > 0 ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-950/20 dark:text-green-400' : 'bg-muted',
+                          changeDue > 0 ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-950/20 dark:text-green-400' : changeDue < 0 ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/20 dark:text-red-400' : 'bg-muted',
                         )}>
-                          {fmtCurrency(changeDue)}
+                          {changeDue < 0 ? `- ${fmtCurrency(Math.abs(changeDue))}` : fmtCurrency(changeDue)}
                         </div>
                       </div>
                     </div>

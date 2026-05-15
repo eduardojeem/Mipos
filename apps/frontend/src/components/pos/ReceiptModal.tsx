@@ -231,105 +231,74 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
         <meta charset="utf-8">
         <title>${escapeHtml(INTERNAL_TICKET_LABEL)} ${escapeHtml(saleData.documentNumber)}</title>
         <style>
+          @page {
+            size: 58mm auto;
+            margin: 0;
+          }
+          @media print {
+            html, body {
+              width: 58mm;
+              height: auto !important;
+              overflow: visible !important;
+            }
+          }
+          html, body {
+            height: auto;
+            overflow: visible;
+          }
           body {
             font-family: 'Courier New', monospace;
-            font-size: 12px;
-            margin: 0;
-            padding: 5mm;
-            width: 80mm;
-            color: #111827;
-            background: #ffffff;
-          }
-          .header,
-          .footer {
-            text-align: center;
-          }
-          .business-name {
-            font-size: 15px;
-            font-weight: 700;
-            margin-bottom: 4px;
-          }
-          .business-meta {
             font-size: 11px;
-            margin-bottom: 2px;
+            line-height: 1.3;
+            margin: 0;
+            padding: 2mm;
+            width: 58mm;
+            max-width: 58mm;
+            color: #000;
+            background: #fff;
           }
-          .notice {
-            margin: 12px 0;
-            padding: 8px;
-            border: 1px solid #dc2626;
-            background: #fef2f2;
-            text-align: center;
-          }
-          .notice strong {
-            display: block;
-            font-size: 12px;
-            margin-bottom: 4px;
-          }
-          .muted {
-            color: #4b5563;
-            font-size: 10px;
-          }
-          .divider {
-            border-top: 1px dashed #9ca3af;
-            margin: 10px 0;
-          }
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          .header, .footer { text-align: center; }
+          .business-name { font-size: 13px; font-weight: 700; }
+          .business-meta { font-size: 9px; }
+          .divider { border-top: 1px dashed #000; margin: 3px 0; }
           .row {
             display: flex;
             justify-content: space-between;
-            gap: 12px;
-            margin-bottom: 4px;
-          }
-          .meta {
-            margin-bottom: 4px;
-            color: #4b5563;
             font-size: 10px;
+            line-height: 1.4;
           }
-          .item {
-            margin-bottom: 8px;
-          }
-          .item-name {
-            font-weight: 700;
-          }
+          .meta { font-size: 8px; }
+          .item { margin-bottom: 2px; }
+          .item-name { font-weight: 700; font-size: 10px; }
           .item-meta {
             display: flex;
             justify-content: space-between;
-            gap: 12px;
-            margin-top: 2px;
-            font-size: 11px;
-          }
-          .totals {
-            margin-top: 8px;
+            font-size: 9px;
           }
           .totals .total {
-            font-size: 14px;
+            font-size: 12px;
             font-weight: 700;
-            padding-top: 4px;
-            border-top: 1px dashed #9ca3af;
+            border-top: 1px dashed #000;
+            padding-top: 2px;
+            margin-top: 2px;
           }
-          .footer {
-            margin-top: 14px;
-            font-size: 10px;
-          }
+          .footer { margin-top: 4px; font-size: 8px; }
         </style>
       </head>
       <body>
         <div class="header">
-          ${business.logo ? `<img src="${escapeHtml(business.logo)}" alt="${escapeHtml(business.name)}" style="max-height:50px;margin-bottom:8px;" />` : ''}
           <div class="business-name">${escapeHtml(business.name)}</div>
           ${business.address ? `<div class="business-meta">${escapeHtml(business.address)}</div>` : ''}
-          ${business.phone ? `<div class="business-meta">${escapeHtml(business.phone)}</div>` : ''}
-          ${business.email ? `<div class="business-meta">${escapeHtml(business.email)}</div>` : ''}
-          ${business.taxId ? `<div class="business-meta">RUC/ID: ${escapeHtml(business.taxId)}</div>` : ''}
+          ${business.phone ? `<div class="business-meta">Tel: ${escapeHtml(business.phone)}</div>` : ''}
+          ${business.taxId ? `<div class="business-meta">RUC: ${escapeHtml(business.taxId)}</div>` : ''}
         </div>
 
-        <div class="notice">
-          <strong>${escapeHtml(saleData.documentDisclaimer)}</strong>
-          <div class="muted">${escapeHtml(saleData.documentDescription)}</div>
-        </div>
+        <div class="divider"></div>
 
         <div class="row">
-          <span>${escapeHtml(INTERNAL_TICKET_LABEL)}</span>
-          <span>${escapeHtml(saleData.documentNumber)}</span>
+          <span><strong>${escapeHtml(INTERNAL_TICKET_LABEL)}</strong></span>
+          <span><strong>${escapeHtml(saleData.documentNumber)}</strong></span>
         </div>
         <div class="row">
           <span>Fecha</span>
@@ -369,15 +338,11 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
 
         ${paymentRows}
 
-        ${saleData.notes ? `
-          <div class="divider"></div>
-          <div class="meta"><strong>Notas:</strong> ${escapeHtml(saleData.notes)}</div>
-        ` : ''}
+        ${saleData.notes ? `<div class="meta">Nota: ${escapeHtml(saleData.notes)}</div><div class="divider"></div>` : ''}
 
         <div class="footer">
-          <div>Ticket interno emitido por el POS</div>
-          <div>${escapeHtml(saleData.documentDisclaimer)}</div>
-          ${business.website ? `<div>${escapeHtml(business.website)}</div>` : ''}
+          <div>Gracias por su compra</div>
+          <div class="muted">${escapeHtml(saleData.documentDisclaimer)}</div>
         </div>
       </body>
       </html>
@@ -459,15 +424,17 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
   const handleThermalPrint = useCallback(async () => {
     setIsPrinting(true);
     try {
-      const printWindow = window.open('', '_blank', 'width=320,height=700');
+      const printWindow = window.open('', '_blank', 'width=240,height=400');
       if (!printWindow) return;
 
-      printWindow.document.write(buildTicketHtml());
+      const html = buildTicketHtml();
+      printWindow.document.write(html);
       printWindow.document.close();
       setTimeout(() => {
+        printWindow.focus();
         printWindow.print();
-        printWindow.close();
-      }, 300);
+        setTimeout(() => printWindow.close(), 500);
+      }, 200);
       onPrint();
     } catch (error) {
       console.error('Error al imprimir ticket interno:', error);
