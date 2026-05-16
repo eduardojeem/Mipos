@@ -223,13 +223,15 @@ router.post('/sync-statistics', asyncHandler(async (req: AuthenticatedRequest, r
       if (customer.totalPurchases !== totalPurchases || 
           customer.lastPurchase?.getTime() !== lastPurchase?.getTime()) {
         
-        await prisma.customer.update({
-          where: { id: customer.id },
-          data: {
-            totalPurchases,
-            lastPurchase: lastPurchase
-          }
-        });
+        await prisma.$executeRaw`
+          UPDATE customers
+          SET total_purchases = ${totalPurchases},
+              "totalPurchases" = ${totalPurchases},
+              "totalSpent" = ${totalPurchases},
+              last_purchase = ${lastPurchase ? lastPurchase.toISOString() : null}::timestamptz,
+              "lastPurchase" = ${lastPurchase ? lastPurchase.toISOString() : null}::timestamptz
+          WHERE id = ${customer.id}
+        `;
         updatedCount++;
       }
     }
