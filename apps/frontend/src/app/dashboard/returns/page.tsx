@@ -22,6 +22,7 @@ import {
   CreateReturnModal,
   ReturnDetailsModal,
   ReturnsFilters,
+  ReturnsInsights,
   ReturnsStats,
   ReturnsTable,
 } from './components';
@@ -271,6 +272,15 @@ function ReturnsPageContent() {
 
       {/* ── Stats cards ── */}
       <ReturnsStats stats={stats} isLoading={isLoading} />
+
+      {/* ── KPI insights (server-side) ──
+          Métricas reales del período (return rate, avg processing,
+          top products/reasons, fraud signals). Antes ReturnsStats
+          calculaba sobre la página actual; estas métricas miran toda
+          la org. */}
+      <PermissionGuard permission="returns.view">
+        <ReturnsInsights periodDays={30} />
+      </PermissionGuard>
 
       {/* ── Main table area ── */}
       <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
