@@ -27,6 +27,8 @@ export function normalizeRefundMethodToDb(value: unknown): string | null {
 }
 
 function normalizeRefundMethodToUi(value: unknown): string {
+    const raw = String(value || '').trim().toUpperCase();
+    if (raw === 'MIXED') return 'mixed';
     const normalized = normalizeRefundMethodToDb(value);
     if (normalized === 'TRANSFER') return 'bank_transfer';
     if (normalized === 'CARD') return 'card';

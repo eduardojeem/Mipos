@@ -20,6 +20,30 @@ import { findScopedOpenCashSession } from './helpers/cash-session-context';
 // Temporary: Using console until logger API is fixed
 const logger = console;
 
+// Sum of CASH refund lines for a return (0 if none).
+// Falls back to legacy single-method `returns.refund_method` when no rows exist
+// in return_refunds (e.g. very old data the backfill missed).
+async function getCashRefundAmount(
+  tx: any,
+  returnId: string,
+  fallbackMethod: string,
+  fallbackTotal: number
+): Promise<number> {
+  const rows: Array<{ total: any }> = await tx.$queryRaw`
+    SELECT COALESCE(SUM(amount), 0)::numeric AS total
+    FROM public.return_refunds
+    WHERE return_id = ${returnId} AND method = 'CASH'
+  `;
+  const lineTotal = Number(rows?.[0]?.total ?? 0);
+  if (lineTotal > 0) return lineTotal;
+
+  const anyRows: Array<{ c: any }> = await tx.$queryRaw`
+    SELECT COUNT(*)::int AS c FROM public.return_refunds WHERE return_id = ${returnId}
+  `;
+  if (Number(anyRows?.[0]?.c ?? 0) > 0) return 0; // explicitly split, no cash line
+  return fallbackMethod === 'CASH' ? fallbackTotal : 0;
+}
+
 // ✅ Improved helper function with proper error handling and balance validation
 async function createCashMovementForReturn(
   tx: any,
@@ -254,6 +278,14 @@ function reasonRequiresPhoto(reason: string | null | undefined): boolean {
   return DAMAGE_REASON_PATTERN.test(String(reason));
 }
 
+const refundLineSchema = z.object({
+  method: refundMethodSchema,
+  amount: z.number()
+    .positive('Refund amount must be positive')
+    .max(999999.99, 'Refund amount too large'),
+  reference: z.string().max(120).optional().transform(val => val ? sanitize.string(val) : val)
+});
+
 const enhancedCreateReturnSchema = z.object({
   originalSaleId: safeIdSchema,
   customerId: safeIdSchema.optional(),
@@ -265,8 +297,15 @@ const enhancedCreateReturnSchema = z.object({
     .max(RETURNS_CONFIG.validation.maxReasonLength, 'Return reason too long')
     .transform(val => sanitize.string(val)),
   refundMethod: refundMethodSchema
-    .default('CASH')
-});
+    .default('CASH'),
+  // Optional split refund. When present, must sum to the return total (±0.01).
+  refunds: z.array(refundLineSchema).max(8, 'Too many refund lines').optional()
+}).refine(data => {
+  if (!data.refunds || data.refunds.length === 0) return true;
+  const sum = data.refunds.reduce((s, r) => s + r.amount, 0);
+  const total = data.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+  return Math.abs(sum - total) <= 0.01;
+}, { message: 'Sum of refund lines must equal the return total', path: ['refunds'] });
 
 const enhancedUpdateReturnStatusSchema = z.object({
   status: returnStatusSchema,
@@ -467,7 +506,22 @@ router.get('/:id',
       throw createError('Return not found', 404);
     }
 
-    res.json(returnRecord);
+    const refundLines = await prisma.$queryRaw<Array<{ method: string; amount: any; reference: string | null; created_at: Date }>>`
+      SELECT method, amount, reference, created_at
+      FROM public.return_refunds
+      WHERE return_id = ${id} AND organization_id = ${organizationId}
+      ORDER BY created_at ASC
+    `;
+
+    res.json({
+      ...returnRecord,
+      refunds: refundLines.map(l => ({
+        method: l.method,
+        amount: Number(l.amount),
+        reference: l.reference,
+        createdAt: l.created_at
+      }))
+    });
   }));
 
 // Create new return
@@ -476,7 +530,14 @@ router.post('/',
   requirePermission('returns', 'create'),
   validateBody(enhancedCreateReturnSchema),
   asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
-    const { originalSaleId, customerId, items, reason, refundMethod } = req.body;
+    const { originalSaleId, customerId, items, reason, refundMethod, refunds } = req.body as {
+      originalSaleId: string;
+      customerId?: string;
+      items: any[];
+      reason: string;
+      refundMethod: string;
+      refunds?: Array<{ method: string; amount: number; reference?: string }>;
+    };
     const userId = req.user!.id;
     // ✅ FIX: organizationId por defecto si no existe en req.user
     const organizationId = requireRequestOrganizationId(req);
@@ -671,6 +732,17 @@ router.post('/',
       }
     }
 
+    // Resolve effective refund lines:
+    //   - explicit `refunds[]` → store all lines; primary method = single value or 'MIXED'
+    //   - otherwise           → single line covering the full total
+    const effectiveRefunds: Array<{ method: string; amount: number; reference?: string }> =
+      refunds && refunds.length > 0
+        ? refunds
+        : [{ method: refundMethod, amount: total }];
+
+    const distinctMethods = new Set(effectiveRefunds.map(r => r.method));
+    const primaryRefundMethod = distinctMethods.size > 1 ? 'MIXED' : effectiveRefunds[0].method;
+
     // Create return in transaction
     const newReturn = await prisma.$transaction(async (tx) => {
       // Create return record
@@ -682,7 +754,7 @@ router.post('/',
           ...(customerId ? { customer: { connect: { id: customerId } } } : {}),
           totalAmount: total,
           reason,
-          refundMethod: refundMethod as any,
+          refundMethod: primaryRefundMethod as any,
           status: 'PENDING'
         }
       });
@@ -734,6 +806,16 @@ router.post('/',
             console.warn('[returns] damage columns write failed:', damageErr);
           }
         }
+      }
+
+      // Persist refund lines (raw SQL — table not in Prisma client yet)
+      for (const line of effectiveRefunds) {
+        await tx.$executeRaw`
+          INSERT INTO public.return_refunds
+            (return_id, organization_id, method, amount, reference, created_by)
+          VALUES
+            (${returnRecord.id}, ${organizationId}, ${line.method}, ${line.amount}, ${line.reference ?? null}, ${userId})
+        `;
       }
 
       return returnRecord;
@@ -1079,15 +1161,18 @@ router.patch('/:id/status',
           0
         );
 
-        await createCashMovementForReturn(
-          tx,
-          returnRecord.id,
-          refundTotal,
-          returnRecord.refundMethod,
-          req.user!.id,
-          organizationId,
-          operationalContext
-        );
+        const cashAmount = await getCashRefundAmount(tx, returnRecord.id, returnRecord.refundMethod, refundTotal);
+        if (cashAmount > 0) {
+          await createCashMovementForReturn(
+            tx,
+            returnRecord.id,
+            cashAmount,
+            'CASH',
+            req.user!.id,
+            organizationId,
+            operationalContext
+          );
+        }
 
         return tx.return.findUnique({
           where: { id }
@@ -1176,8 +1261,11 @@ router.patch('/:id/status',
           0
         );
 
-        // Create cash movement for cash refunds
-        await createCashMovementForReturn(tx, returnRecord.id, total, returnRecord.refundMethod, req.user!.id, organizationId, operationalContext);
+        // Create cash movement for cash refunds (sum of CASH lines only)
+        const cashAmount = await getCashRefundAmount(tx, returnRecord.id, returnRecord.refundMethod, total);
+        if (cashAmount > 0) {
+          await createCashMovementForReturn(tx, returnRecord.id, cashAmount, 'CASH', req.user!.id, organizationId, operationalContext);
+        }
       }
 
       return updated;
@@ -1427,15 +1515,18 @@ router.post('/:id/process',
         0
       );
 
-      await createCashMovementForReturn(
-        tx,
-        returnRecord.id,
-        refundTotal,
-        returnRecord.refundMethod,
-        req.user!.id,
-        organizationId,
-        operationalContext
-      );
+      const cashAmount = await getCashRefundAmount(tx, returnRecord.id, returnRecord.refundMethod, refundTotal);
+      if (cashAmount > 0) {
+        await createCashMovementForReturn(
+          tx,
+          returnRecord.id,
+          cashAmount,
+          'CASH',
+          req.user!.id,
+          organizationId,
+          operationalContext
+        );
+      }
 
       return tx.return.findUnique({
         where: { id }
@@ -1525,16 +1616,19 @@ router.post('/:id/process',
         0
       );
 
-      // Create cash movement for cash refunds
-      await createCashMovementForReturn(
-        tx,
-        returnRecord.id,
-        total,
-        returnRecord.refundMethod,
-        req.user!.id,
-        organizationId,
-        operationalContext
-      );
+      // Create cash movement for cash refunds (sum of CASH lines only)
+      const cashAmount = await getCashRefundAmount(tx, returnRecord.id, returnRecord.refundMethod, total);
+      if (cashAmount > 0) {
+        await createCashMovementForReturn(
+          tx,
+          returnRecord.id,
+          cashAmount,
+          'CASH',
+          req.user!.id,
+          organizationId,
+          operationalContext
+        );
+      }
 
       return updated;
     });

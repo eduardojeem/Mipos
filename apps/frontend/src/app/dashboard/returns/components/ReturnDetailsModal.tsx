@@ -166,7 +166,12 @@ export function ReturnDetailsModal({
     }
   };
 
-  const refundLabel = REFUND_LABEL[activeReturn.refundMethod] || activeReturn.refundMethod || '-';
+  const refundLabel =
+    activeReturn.refundMethod === 'mixed'
+      ? 'Mixto'
+      : REFUND_LABEL[activeReturn.refundMethod] || activeReturn.refundMethod || '-';
+  const refundLines = activeReturn.refunds || [];
+  const hasSplitRefund = refundLines.length > 1;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -293,6 +298,29 @@ export function ReturnDetailsModal({
               <p className="text-lg font-bold">{formatCurrency(activeReturn.totalAmount)}</p>
             </div>
           </div>
+
+          {hasSplitRefund && (
+            <div className="space-y-1.5 rounded-lg border border-indigo-200 bg-indigo-50/60 p-3 dark:border-indigo-800 dark:bg-indigo-950/20">
+              <p className="text-xs font-semibold uppercase tracking-wider text-indigo-700 dark:text-indigo-400">
+                Reembolso dividido
+              </p>
+              {refundLines.map((line, idx) => {
+                const lower = String(line.method || '').toLowerCase();
+                const label =
+                  REFUND_LABEL[lower] ||
+                  REFUND_LABEL[lower === 'transfer' ? 'bank_transfer' : lower] ||
+                  line.method;
+                return (
+                  <div key={idx} className="flex justify-between text-sm">
+                    <span className="text-indigo-900 dark:text-indigo-200">{label}</span>
+                    <span className="font-semibold text-indigo-900 dark:text-indigo-100">
+                      {formatCurrency(line.amount)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           <Separator />
 

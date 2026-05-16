@@ -35,6 +35,13 @@ export interface Return {
   processedBy?: string;
   createdAt: string;
   updatedAt: string;
+  /** Populated by GET /returns/:id when split refunds exist. */
+  refunds?: Array<{
+    method: string;
+    amount: number;
+    reference?: string | null;
+    createdAt?: string;
+  }>;
 }
 
 export interface ReturnsStats {
@@ -71,12 +78,22 @@ export interface ReturnFilters {
   refundMethod?: string;
 }
 
+export type RefundMethodInput = 'cash' | 'card' | 'bank_transfer' | 'other';
+
+export interface RefundLineInput {
+  method: RefundMethodInput;
+  amount: number;
+  reference?: string;
+}
+
 export interface CreateReturnData {
   originalSaleId: string;
   customerId?: string;
   reason: string;
   notes?: string;
-  refundMethod?: 'cash' | 'card' | 'bank_transfer' | 'other';
+  refundMethod?: RefundMethodInput;
+  /** Optional split refund. When present, sum must equal the return total. */
+  refunds?: RefundLineInput[];
   items: Array<{
     originalSaleItemId: string;
     productId: string;

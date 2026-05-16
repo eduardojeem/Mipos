@@ -41,7 +41,7 @@ import {
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { useToast } from '@/components/ui/use-toast';
 import { useSaleLookup, type SaleItem } from '../hooks/useSaleLookup';
-import type { CreateReturnData } from '../hooks/useReturns';
+import type { CreateReturnData, RefundLineInput, RefundMethodInput } from '../hooks/useReturns';
 import { DamagePhotoUploader } from './DamagePhotoUploader';
 
 // Reasons del REASON_OPTIONS que activan el requisito de foto. Tiene que
@@ -191,6 +191,11 @@ export function CreateReturnModal({
     path: string;
   } | null>(null);
   const photoRequired = reasonRequiresPhoto(reason);
+  const [splitRefund, setSplitRefund] = useState(false);
+  const [refundLines, setRefundLines] = useState<RefundLineInput[]>([
+    { method: 'cash', amount: 0 },
+    { method: 'card', amount: 0 },
+  ]);
 
   const resetAll = () => {
     setStep(1);
@@ -201,6 +206,11 @@ export function CreateReturnModal({
     setDamagePhoto(null);
     setNotes('');
     setStep3Errors({});
+    setSplitRefund(false);
+    setRefundLines([
+      { method: 'cash', amount: 0 },
+      { method: 'card', amount: 0 },
+    ]);
     resetLookup();
   };
 
@@ -292,7 +302,35 @@ export function CreateReturnModal({
       return;
     }
 
-    const parsed = step3Schema.safeParse({ reason, refundMethod, notes });
+    // Validate split refund (when toggled on) — sum must equal selectedTotal (±0.01)
+    if (splitRefund) {
+      const positive = refundLines.filter(l => l.amount > 0);
+      if (positive.length < 2) {
+        toast({
+          title: 'Reembolso dividido inválido',
+          description: 'Necesitas al menos 2 métodos con monto > 0 para dividir el reembolso.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      const sum = positive.reduce((s, l) => s + l.amount, 0);
+      if (Math.abs(sum - selectedTotal) > 0.01) {
+        toast({
+          title: 'Los montos no cuadran',
+          description: `Suma actual: ${formatCurrency(sum)} · Esperado: ${formatCurrency(selectedTotal)}`,
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
+    const parsed = step3Schema.safeParse({
+      reason,
+      // When splitting, refundMethod isn't required from the single select — use 'cash' as the
+      // legacy primary value to pass schema validation. Backend will overwrite with 'MIXED'.
+      refundMethod: splitRefund ? 'cash' : refundMethod,
+      notes,
+    });
     if (!parsed.success) {
       const nextErrors: Record<string, string> = {};
       for (const issue of parsed.error.errors) {
@@ -345,6 +383,9 @@ export function CreateReturnModal({
         reason: parsed.data.reason,
         notes: parsed.data.notes || undefined,
         refundMethod: parsed.data.refundMethod,
+        refunds: splitRefund
+          ? refundLines.filter(l => l.amount > 0).map(l => ({ method: l.method, amount: l.amount }))
+          : undefined,
         items,
       });
 
@@ -683,30 +724,144 @@ export function CreateReturnModal({
             )}
 
             <div className="space-y-2">
-              <Label className="flex items-center gap-1.5">
-                <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
-                Método de reembolso <span className="text-destructive">*</span>
-              </Label>
-              <Select
-                value={refundMethod}
-                onValueChange={(value) => {
-                  setRefundMethod(value);
-                  clearStep3Error('refundMethod');
-                }}
-              >
-                <SelectTrigger className={step3Errors.refundMethod ? 'border-destructive' : ''}>
-                  <SelectValue placeholder="Selecciona método..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {REFUND_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
+              <div className="flex items-center justify-between">
+                <Label className="flex items-center gap-1.5">
+                  <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
+                  Método de reembolso <span className="text-destructive">*</span>
+                </Label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSplitRefund(v => !v);
+                    if (!splitRefund) {
+                      // initialize with full amount on first line
+                      setRefundLines(prev => {
+                        const next = [...prev];
+                        next[0] = { ...next[0], amount: selectedTotal };
+                        if (next[1]) next[1] = { ...next[1], amount: 0 };
+                        return next;
+                      });
+                    }
+                  }}
+                  className="text-xs font-medium text-orange-600 hover:underline"
+                >
+                  {splitRefund ? '← Usar un solo método' : 'Dividir reembolso →'}
+                </button>
+              </div>
+
+              {!splitRefund && (
+                <>
+                  <Select
+                    value={refundMethod}
+                    onValueChange={(value) => {
+                      setRefundMethod(value);
+                      clearStep3Error('refundMethod');
+                    }}
+                  >
+                    <SelectTrigger className={step3Errors.refundMethod ? 'border-destructive' : ''}>
+                      <SelectValue placeholder="Selecciona método..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {REFUND_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {step3Errors.refundMethod && (
+                    <p className="text-xs text-destructive">{step3Errors.refundMethod}</p>
+                  )}
+                </>
+              )}
+
+              {splitRefund && (
+                <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
+                  {refundLines.map((line, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <Select
+                        value={line.method}
+                        onValueChange={(value) =>
+                          setRefundLines(prev =>
+                            prev.map((l, i) => (i === idx ? { ...l, method: value as RefundMethodInput } : l))
+                          )
+                        }
+                      >
+                        <SelectTrigger className="w-[170px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {REFUND_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={line.amount || ''}
+                        onChange={(e) => {
+                          const amount = Number(e.target.value) || 0;
+                          setRefundLines(prev =>
+                            prev.map((l, i) => (i === idx ? { ...l, amount } : l))
+                          );
+                        }}
+                        placeholder="0.00"
+                        className="flex-1"
+                      />
+                      {refundLines.length > 2 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            setRefundLines(prev => prev.filter((_, i) => i !== idx))
+                          }
+                        >
+                          <Minus className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
                   ))}
-                </SelectContent>
-              </Select>
-              {step3Errors.refundMethod && (
-                <p className="text-xs text-destructive">{step3Errors.refundMethod}</p>
+
+                  {refundLines.length < 4 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-full gap-1.5"
+                      onClick={() =>
+                        setRefundLines(prev => [...prev, { method: 'other', amount: 0 }])
+                      }
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Agregar método
+                    </Button>
+                  )}
+
+                  {(() => {
+                    const sum = refundLines.reduce((s, l) => s + (l.amount || 0), 0);
+                    const diff = selectedTotal - sum;
+                    if (Math.abs(diff) < 0.01) {
+                      return (
+                        <p className="flex items-center gap-1.5 text-xs font-medium text-emerald-600">
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Suma correcta ({formatCurrency(sum)})
+                        </p>
+                      );
+                    }
+                    return (
+                      <p className="text-xs font-medium text-amber-600">
+                        {diff > 0
+                          ? `Faltan ${formatCurrency(diff)} por asignar`
+                          : `Sobran ${formatCurrency(-diff)} sobre el total`}
+                        {' · Total: '}
+                        {formatCurrency(selectedTotal)}
+                      </p>
+                    );
+                  })()}
+                </div>
               )}
             </div>
 
