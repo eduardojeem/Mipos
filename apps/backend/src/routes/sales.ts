@@ -451,32 +451,48 @@ async function updateCustomerStatisticsWithSupabase(
   organizationId: string,
   total: number,
 ) {
-  const { data: customer, error: customerError } = await supabaseClient
-    .from('customers')
-    .select('id, total_purchases')
-    .eq('id', customerId)
-    .eq('organization_id', organizationId)
-    .maybeSingle();
-
-  if (customerError) {
-    throw createError(customerError.message || 'No se pudo consultar el cliente para actualizar estadísticas', 500);
+  if (typeof total !== 'number' || !Number.isFinite(total)) {
+    throw createError('Invalid total amount for customer stats update: must be a finite number', 400);
   }
 
-  if (!customer) {
-    throw createError('Customer not found or does not belong to your organization', 404);
-  }
+  // Use RPC for atomic increment (avoids race conditions)
+  const { error: rpcError } = await supabaseClient.rpc('increment_customer_stats_safe', {
+    p_customer_id: customerId,
+    p_amount: total,
+  });
 
-  const nextTotalPurchases = Number(customer.total_purchases || 0) + total;
-  const { error: updateError } = await supabaseClient
-    .from('customers')
-    .update({
-      total_purchases: nextTotalPurchases,
-      last_purchase: new Date().toISOString(),
-    })
-    .eq('id', customerId);
+  if (rpcError) {
+    // Fallback: manual update if RPC doesn't exist yet
+    if (rpcError.message?.includes('function') && rpcError.message?.includes('does not exist')) {
+      const { data: customer } = await supabaseClient
+        .from('customers')
+        .select('id, total_purchases')
+        .eq('id', customerId)
+        .eq('organization_id', organizationId)
+        .maybeSingle();
 
-  if (updateError && !isOptionalPersistenceError(updateError)) {
-    throw createError(updateError.message || 'No se pudo actualizar el historial del cliente', 500);
+      if (!customer) {
+        throw createError('Customer not found or does not belong to your organization', 404);
+      }
+
+      const nextTotal = Number(customer.total_purchases || 0) + total;
+      const { error: updateError } = await supabaseClient
+        .from('customers')
+        .update({
+          total_purchases: nextTotal,
+          last_purchase: new Date().toISOString(),
+        })
+        .eq('id', customerId);
+
+      if (updateError && !isOptionalPersistenceError(updateError)) {
+        throw createError(updateError.message || 'No se pudo actualizar el historial del cliente', 500);
+      }
+      return;
+    }
+
+    if (!isOptionalPersistenceError(rpcError)) {
+      throw createError(rpcError.message || 'No se pudo actualizar estadísticas del cliente', 500);
+    }
   }
 }
 
@@ -1404,15 +1420,18 @@ router.post('/', criticalOperationsRateLimit, requirePermission('sales', 'create
 
     // Update customer statistics if customer is provided
     if (customerId) {
-      await tx.customer.update({
-        where: { id: customerId },
-        data: {
-          totalPurchases: {
-            increment: total
-          },
-          lastPurchase: new Date()
-        }
-      });
+      if (typeof total !== 'number' || !Number.isFinite(total)) {
+        throw createError('Invalid total amount for customer stats update', 400);
+      }
+      await tx.$queryRaw`
+        UPDATE customers
+        SET total_purchases = COALESCE(total_purchases, 0) + ${total},
+            "totalPurchases" = COALESCE("totalPurchases", 0) + ${total},
+            "totalSpent" = COALESCE("totalSpent", 0) + ${total},
+            last_purchase = NOW(),
+            "lastPurchase" = NOW()
+        WHERE id = ${customerId}
+      `;
     }
 
     // Create cash movement only for the effective cash component of the sale.
