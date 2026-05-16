@@ -582,10 +582,12 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
   }, [autoShare, isOpen, saleData, handleWhatsAppShare, handleEmailShare]);
 
   // --- Render ---
-  if (!isOpen || !saleData) return null;
-
+  // AnimatePresence necesita ver el componente unmount para animar la
+  // salida. Por eso movemos el null check ADENTRO de AnimatePresence
+  // (vía conditional), no afuera con un early return.
   return (
     <AnimatePresence>
+      {isOpen && saleData ? (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
         <motion.div
           initial={{ opacity: 0 }}
@@ -604,27 +606,24 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
           aria-modal="true"
           aria-labelledby="internal-ticket-title"
         >
-          {/* Header fijo — no se achica, no scrollea. */}
-          <div className="flex-shrink-0 relative overflow-hidden bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-400 px-6 py-8 text-white">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.2),transparent_40%)]" />
-            <div className="absolute -bottom-12 -left-12 h-40 w-40 rounded-full bg-white/10 blur-3xl" />
-            
-            <div className="relative z-10 flex items-start justify-between gap-4">
-              <div className="flex items-center gap-5">
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/20 shadow-xl backdrop-blur-md">
-                  <CheckCircle className="h-10 w-10 text-white" />
+          {/* Header fijo — gradient suavizado, sin blur decorativos pesados.
+              Antes el header competía visualmente con el contenido del
+              recibo (que es lo que el cajero realmente necesita ver). */}
+          <div className="flex-shrink-0 bg-gradient-to-r from-emerald-600 to-emerald-500 px-5 py-5 text-white sm:px-6 sm:py-6">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/15">
+                  <CheckCircle className="h-6 w-6 text-white" />
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm">
-                      ¡Venta Exitosa!
-                    </span>
-                  </div>
-                  <h2 id="internal-ticket-title" className="mt-1 text-2xl font-black tracking-tight">
+                <div className="min-w-0">
+                  <span className="inline-block rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
+                    Venta exitosa
+                  </span>
+                  <h2 id="internal-ticket-title" className="mt-1 truncate text-xl font-bold tracking-tight sm:text-2xl">
                     {INTERNAL_TICKET_LABEL} {saleData.documentNumber}
                   </h2>
-                  <p className="mt-1 text-sm text-emerald-50 opacity-90">
-                    Transacción completada y registrada correctamente.
+                  <p className="mt-0.5 text-xs text-emerald-50 sm:text-sm">
+                    Transacción registrada correctamente.
                   </p>
                 </div>
               </div>
@@ -780,7 +779,10 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
                           </span>
                           {saleData.paymentMethod === 'CASH' && typeof saleData.cashReceived === 'number' && (
                             <span className="text-xs text-slate-500">
-                              Entregado {fmtCurrency(saleData.cashReceived)} · Vuelto {fmtCurrency(saleData.change || 0)}
+                              Entregado {fmtCurrency(saleData.cashReceived)}
+                              {Number(saleData.change || 0) > 0 ? (
+                                <> · Vuelto {fmtCurrency(saleData.change || 0)}</>
+                              ) : null}
                             </span>
                           )}
                         </div>
@@ -939,6 +941,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
           </div>
         </motion.div>
       </div>
+      ) : null}
     </AnimatePresence>
   );
 });
