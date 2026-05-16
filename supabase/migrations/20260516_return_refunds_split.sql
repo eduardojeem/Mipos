@@ -24,14 +24,14 @@ CREATE INDEX IF NOT EXISTS return_refunds_org_method_idx
 -- Backfill from existing single-method returns so historical reads stay consistent.
 INSERT INTO public.return_refunds (return_id, organization_id, method, amount, created_at)
 SELECT r.id,
-       r."organizationId",
-       COALESCE(NULLIF(upper(r."refundMethod"::text), ''), 'CASH'),
-       r."totalAmount",
-       COALESCE(r."processedAt", r."createdAt")
+       r.organization_id,
+       COALESCE(NULLIF(upper(r.refund_method::text), ''), 'CASH'),
+       r.total_amount,
+       COALESCE(r.processed_at, r.created_at)
 FROM public.returns r
 LEFT JOIN public.return_refunds rr ON rr.return_id = r.id
 WHERE rr.id IS NULL
-  AND r."totalAmount" > 0;
+  AND r.total_amount > 0;
 
 -- RLS
 ALTER TABLE public.return_refunds ENABLE ROW LEVEL SECURITY;
