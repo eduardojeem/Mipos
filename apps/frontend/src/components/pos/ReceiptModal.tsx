@@ -366,7 +366,12 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
     const text = generateTicketText();
     const phone = autoShare?.recipientPhone?.replace(/[^0-9]/g, '') || '';
     const base = phone ? `https://wa.me/${phone}` : 'https://wa.me/';
-    window.open(`${base}?text=${encodeURIComponent(text)}`, '_blank');
+    const win = window.open(`${base}?text=${encodeURIComponent(text)}`, '_blank');
+    if (!win) {
+      toast.error('Tu navegador bloqueó la apertura de WhatsApp', {
+        description: 'Permití pop-ups o copiá el ticket y compartilo manualmente.',
+      });
+    }
   }, [autoShare?.recipientPhone, generateTicketText]);
 
   const handleEmailShare = useCallback(() => {
@@ -374,10 +379,17 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
     const subject = `${INTERNAL_TICKET_LABEL} ${saleData.documentNumber} - ${business.name}`;
     const body = generateTicketText();
     const recipient = autoShare?.recipientEmail || '';
-    window.open(
+    const win = window.open(
       `mailto:${encodeURIComponent(recipient)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,
       '_blank',
     );
+    // mailto: a veces NO devuelve null aunque no se abra cliente de mail.
+    // Al menos detectamos popup blocker para los casos en que sí lo hace.
+    if (!win) {
+      toast.error('No se abrió el cliente de correo', {
+        description: 'Permití pop-ups o configurá un cliente de correo predeterminado.',
+      });
+    }
   }, [autoShare?.recipientEmail, business.name, saleData, generateTicketText]);
 
   const handleCopy = useCallback(async () => {
@@ -423,21 +435,39 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
     if (!saleData || isAnyActionRunning) return;
     setIsDownloading(true);
     try {
+      // Antes descargaba un .html que el user tenía que abrir e imprimir
+      // a mano. Ahora abre el ticket en una pestaña nueva con el dialog
+      // de impresión nativo del navegador → user puede "Guardar como PDF"
+      // desde ahí, o imprimir directo. Mejor flow para tickets digitales.
       const html = buildTicketHtml();
-      const blob = new Blob([html], { type: 'text/html' });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `ticket-interno_${saleData.documentNumber}.html`;
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-      URL.revokeObjectURL(url);
+      const win = window.open('', '_blank');
+      if (!win) {
+        // Fallback: si el popup está bloqueado, descargar el HTML como antes.
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = `ticket-interno_${saleData.documentNumber}.html`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+        URL.revokeObjectURL(url);
+        onDownload();
+        toast.success('Ticket descargado como HTML', {
+          description: 'No pudimos abrir vista previa de impresión. Habilitá pop-ups para mejor experiencia.',
+        });
+        return;
+      }
+      win.document.write(html);
+      win.document.close();
+      win.focus();
       onDownload();
-      toast.success('Ticket descargado');
+      toast.success('Ticket abierto', {
+        description: 'Usá Ctrl+P (Cmd+P) o el menú del navegador para guardar como PDF o imprimir.',
+      });
     } catch (error) {
       console.error('Error al descargar ticket interno:', error);
-      toast.error('No se pudo descargar el ticket');
+      toast.error('No se pudo abrir el ticket');
     } finally {
       setIsDownloading(false);
     }
@@ -805,7 +835,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
             <div className="flex gap-3">
               <Button variant="outline" className="flex-1" onClick={handleTicketDownload} disabled={isAnyActionRunning}>
                 <Download className="mr-2 h-4 w-4" />
-                {isDownloading ? 'Descargando...' : 'Descargar ticket'}
+                {isDownloading ? 'Abriendo...' : 'Ver / Guardar PDF'}
               </Button>
               <Button className="flex-1" onClick={thermalPrinter ? handleThermalPrint : onPrint} disabled={isAnyActionRunning}>
                 <Printer className="mr-2 h-4 w-4" />
@@ -814,32 +844,51 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-              <div className="text-sm font-medium text-slate-900">Evaluación de caja</div>
+              <div className="text-sm font-medium text-slate-900">¿Cómo fue tu experiencia?</div>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Tu evaluación nos ayuda a mejorar el servicio.
+              </p>
               {!csatSubmitted ? (
-                <div className="mt-3 flex items-center gap-2">
-                  {[1, 2, 3, 4, 5].map((score) => (
-                    <Button
-                      key={score}
-                      variant={csatScore === score ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setCsatScore(score)}
-                    >
-                      {score}
-                    </Button>
-                  ))}
+                <>
+                  <div className="mt-3 grid grid-cols-5 gap-2">
+                    {[
+                      { score: 1, label: 'Muy mala' },
+                      { score: 2, label: 'Mala' },
+                      { score: 3, label: 'Regular' },
+                      { score: 4, label: 'Buena' },
+                      { score: 5, label: 'Excelente' },
+                    ].map(({ score, label }) => (
+                      <button
+                        key={score}
+                        type="button"
+                        title={label}
+                        onClick={() => setCsatScore(score)}
+                        className={`flex flex-col items-center gap-0.5 rounded-lg border px-2 py-2 text-xs font-medium transition-colors ${
+                          csatScore === score
+                            ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                        }`}
+                      >
+                        <span className="text-base font-bold">{score}</span>
+                        <span className="text-[10px] leading-tight">{label}</span>
+                      </button>
+                    ))}
+                  </div>
                   <Button
                     size="sm"
+                    className="mt-3 w-full"
+                    disabled={csatScore === null}
                     onClick={() => {
-                      if (!saleData) return;
+                      if (!saleData || csatScore === null) return;
                       try {
-                        localStorage.setItem(`csat:${saleData.id}`, String(csatScore ?? ''));
+                        localStorage.setItem(`csat:${saleData.id}`, String(csatScore));
                       } catch {}
                       setCsatSubmitted(true);
                     }}
                   >
-                    Enviar
+                    Enviar evaluación
                   </Button>
-                </div>
+                </>
               ) : (
                 <div className="mt-2 text-sm text-emerald-600">Gracias por su respuesta</div>
               )}
