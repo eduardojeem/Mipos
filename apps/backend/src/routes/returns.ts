@@ -466,7 +466,9 @@ router.post('/',
     // ✅ FIX: organizationId por defecto si no existe en req.user
     const organizationId = requireRequestOrganizationId(req);
 
-    // Verify original sale exists
+    // Verify original sale exists. paymentMethod included so we can
+    // validate refund_method against what the customer actually paid with
+    // (anti-fraud: client paid CASH, attacker tries to refund as CARD).
     const originalSale = await prisma.sale.findFirst({
       where: { id: originalSaleId, organizationId },
         include: {
@@ -488,6 +490,27 @@ router.post('/',
 
     if (!originalSale) {
       throw createError('Original sale not found', 404);
+    }
+
+    // SECURITY: refundMethod must be either OTHER (intentional store-credit
+    // / voucher fallback) or match the original sale's payment method.
+    // Without this check, a customer who paid CASH could be issued a CARD
+    // refund — opening a path to convert physical cash into a chargeback-
+    // free card credit on someone else's plastic.
+    const originalPaymentMethod = String((originalSale as any).paymentMethod || '').toUpperCase();
+    const requestedRefundMethod = String(refundMethod || '').toUpperCase();
+    if (
+      requestedRefundMethod &&
+      requestedRefundMethod !== 'OTHER' &&
+      originalPaymentMethod &&
+      originalPaymentMethod !== 'MIXED' &&
+      originalPaymentMethod !== requestedRefundMethod
+    ) {
+      throw createError(
+        `El método de reembolso (${requestedRefundMethod}) no coincide con el método de pago original (${originalPaymentMethod}). ` +
+        `Usá el mismo método o "Otro" si necesitás emitir crédito de tienda.`,
+        400
+      );
     }
 
     // ✅ MEJORA: Validar ventana de tiempo para devoluciones
@@ -636,6 +659,40 @@ router.post('/',
 
       return returnRecord;
     });
+
+    // Auto-approve under threshold. Some orgs want a lighter friction
+    // path for low-value returns (cashier shouldn't have to chase a
+    // manager for a $5 refund). The threshold lives in
+    // organizations.settings.returns.auto_approve_under (PYG amount,
+    // null/0 = disabled). Best-effort: if anything fails, the return
+    // stays PENDING and a human approves it manually.
+    try {
+      const orgSettings = await prisma.$queryRaw<Array<{ settings: any }>>`
+        SELECT settings FROM organizations WHERE id = ${organizationId}::uuid LIMIT 1
+      `;
+      const settings = orgSettings[0]?.settings || {};
+      const threshold = Number(settings?.returns?.auto_approve_under || 0);
+      if (threshold > 0 && total <= threshold) {
+        await prisma.$executeRaw`
+          UPDATE returns
+             SET status = 'APPROVED',
+                 approved_at = NOW(),
+                 approved_by = ${userId}::uuid,
+                 updated_at = NOW()
+           WHERE id = ${newReturn.id}
+             AND status = 'PENDING'
+        `;
+        logger.info('Return auto-approved under threshold', {
+          returnId: newReturn.id,
+          total,
+          threshold,
+        });
+      }
+    } catch (autoErr) {
+      // Don't fail the create on auto-approve issues. The return is
+      // already persisted; a manager can approve it manually.
+      logger.warn('Auto-approve failed, leaving PENDING', { err: autoErr });
+    }
 
     // Fetch complete return data
     const completeReturn = await prisma.return.findUnique({
