@@ -17,6 +17,7 @@ import {
 import { useCurrencyFormatter } from '@/contexts/BusinessConfigContext';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { toast } from '@/lib/toast';
 import {
   Tooltip,
   TooltipContent,
@@ -88,6 +89,9 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
   const [isPrinting, setIsPrinting] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
+  // Cualquier acción en curso bloquea las otras para evitar dobles
+  // descargas, popups encimados, prints duplicados, etc.
+  const isAnyActionRunning = isPrinting || isDownloading;
   const [csatScore, setCsatScore] = useState<number | null>(null);
   const [csatSubmitted, setCsatSubmitted] = useState(false);
   const autoPrintHandledRef = useRef(false);
@@ -381,14 +385,23 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
       await navigator.clipboard.writeText(generateTicketText());
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+      toast.success('Ticket copiado al portapapeles');
     } catch (error) {
       console.error('Error al copiar ticket interno:', error);
+      toast.error('No se pudo copiar', {
+        description: 'Tu navegador bloqueó el acceso al portapapeles.',
+      });
     }
   }, [generateTicketText]);
 
   const handleNativeShare = useCallback(async () => {
     if (!saleData) return;
     if (!navigator.share) {
+      // En desktop no hay native share — explicamos el fallback en lugar
+      // de copiar silenciosamente (UX antes era ambigua).
+      toast.info('Copiamos el ticket al portapapeles', {
+        description: 'Tu navegador no soporta compartir nativo. Pegalo donde lo necesites.',
+      });
       await handleCopy();
       return;
     }
@@ -399,12 +412,15 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
         text: generateTicketText(),
       });
     } catch (error) {
+      // AbortError = user canceló, no es un fallo real
+      if (error instanceof Error && error.name === 'AbortError') return;
       console.error('Error al compartir ticket interno:', error);
+      toast.error('No se pudo compartir');
     }
   }, [saleData, generateTicketText, handleCopy]);
 
   const handleTicketDownload = useCallback(async () => {
-    if (!saleData) return;
+    if (!saleData || isAnyActionRunning) return;
     setIsDownloading(true);
     try {
       const html = buildTicketHtml();
@@ -418,12 +434,14 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
       document.body.removeChild(anchor);
       URL.revokeObjectURL(url);
       onDownload();
+      toast.success('Ticket descargado');
     } catch (error) {
       console.error('Error al descargar ticket interno:', error);
+      toast.error('No se pudo descargar el ticket');
     } finally {
       setIsDownloading(false);
     }
-  }, [saleData, buildTicketHtml, onDownload]);
+  }, [saleData, buildTicketHtml, onDownload, isAnyActionRunning]);
 
   const handleOpenInvoice = useCallback(() => {
     if (!invoice?.id) return;
@@ -431,10 +449,16 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
   }, [invoice?.id]);
 
   const handleThermalPrint = useCallback(async () => {
+    if (isAnyActionRunning) return;
     setIsPrinting(true);
     try {
       const printWindow = window.open('', '_blank', 'width=240,height=400');
-      if (!printWindow) return;
+      if (!printWindow) {
+        toast.error('No se pudo abrir la ventana de impresión', {
+          description: 'Permití pop-ups para este sitio en tu navegador y reintentá.',
+        });
+        return;
+      }
 
       const html = buildTicketHtml();
       printWindow.document.write(html);
@@ -447,16 +471,31 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
       onPrint();
     } catch (error) {
       console.error('Error al imprimir ticket interno:', error);
+      toast.error('No se pudo imprimir el ticket');
     } finally {
       setIsPrinting(false);
     }
-  }, [buildTicketHtml, onPrint]);
+  }, [buildTicketHtml, onPrint, isAnyActionRunning]);
 
   // --- Effects ---
   useEffect(() => {
     autoPrintHandledRef.current = false;
     autoShareHandledRef.current = false;
   }, [saleData?.id, isOpen]);
+
+  // Cerrar con tecla Esc — esperado por usuarios de teclado y mejora
+  // accesibilidad del modal.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
 
   useEffect(() => {
     if (!saleData || !isOpen || !autoPrint || !thermalPrinter || autoPrintHandledRef.current) return;
@@ -764,11 +803,11 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
             </div>
 
             <div className="flex gap-3">
-              <Button variant="outline" className="flex-1" onClick={handleTicketDownload} disabled={isDownloading}>
+              <Button variant="outline" className="flex-1" onClick={handleTicketDownload} disabled={isAnyActionRunning}>
                 <Download className="mr-2 h-4 w-4" />
                 {isDownloading ? 'Descargando...' : 'Descargar ticket'}
               </Button>
-              <Button className="flex-1" onClick={thermalPrinter ? handleThermalPrint : onPrint} disabled={isPrinting}>
+              <Button className="flex-1" onClick={thermalPrinter ? handleThermalPrint : onPrint} disabled={isAnyActionRunning}>
                 <Printer className="mr-2 h-4 w-4" />
                 {isPrinting ? 'Imprimiendo...' : 'Imprimir ticket'}
               </Button>
@@ -805,6 +844,19 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
                 <div className="mt-2 text-sm text-emerald-600">Gracias por su respuesta</div>
               )}
             </div>
+
+            {/* Botón "Listo" prominente — el cierre principal del modal.
+                Antes solo había un X chiquito en el header; el cajero
+                buscaba algo claro al final del flow. */}
+            <Button
+              variant="default"
+              size="lg"
+              className="w-full"
+              onClick={onClose}
+            >
+              <Check className="mr-2 h-4 w-4" />
+              Listo
+            </Button>
             </div>
           </div>
         </motion.div>
