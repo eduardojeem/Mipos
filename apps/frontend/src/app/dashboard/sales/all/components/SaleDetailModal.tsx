@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { User, Calendar, DollarSign, CreditCard, Package, Hash, Printer } from 'lucide-react';
+import { User, Calendar, DollarSign, CreditCard, Package, Hash, Printer, RotateCcw } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { Sale } from './SalesDataTable';
 import { createLogger } from '@/lib/logger';
 import { formatStatus, formatPaymentMethod, formatSaleType, getStatusBadgeVariant } from '@/lib/sales-formatters';
@@ -20,7 +21,17 @@ interface SaleDetailModalProps {
 const logger = createLogger('SaleDetailModal');
 
 export function SaleDetailModal({ sale, open, onClose }: SaleDetailModalProps) {
+  const router = useRouter();
   if (!sale) return null;
+
+  // Shortcut: cashier wants to return part/all of THIS sale. Closes the
+  // detail modal and navigates to /dashboard/returns?from=<saleId>, which
+  // the returns page reads to auto-open the create modal pre-filled with
+  // the sale.
+  const handleStartReturn = () => {
+    onClose();
+    router.push(`/dashboard/returns?from=${encodeURIComponent(sale.id)}`);
+  };
 
   const subtotal = sale.items?.reduce((sum, item) => sum + item.quantity * item.unit_price, 0) || 0;
   const totalDiscount =
@@ -239,11 +250,18 @@ export function SaleDetailModal({ sale, open, onClose }: SaleDetailModalProps) {
           </div>
         </div>
 
-        <div className="flex justify-between items-center pt-4 border-t">
-          <div className="flex gap-2">
+        <div className="flex flex-wrap justify-between items-center gap-2 pt-4 border-t">
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onClick={handlePrint}>
               <Printer className="h-4 w-4 mr-2" />
               Imprimir
+            </Button>
+            {/* Shortcut: ir a Returns con la venta pre-seleccionada.
+                Antes el cajero tenía que ir a Returns, click "Nueva", y
+                pegar el UUID a mano — 30s perdidos por devolución. */}
+            <Button variant="outline" size="sm" onClick={handleStartReturn}>
+              <RotateCcw className="h-4 w-4 mr-2" />
+              Devolver
             </Button>
           </div>
           <Button variant="outline" size="sm" onClick={onClose}>

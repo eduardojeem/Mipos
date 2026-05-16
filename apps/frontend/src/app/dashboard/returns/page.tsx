@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { PermissionGuard, PermissionProvider } from '@/components/ui/permission-guard';
@@ -140,11 +141,28 @@ export default function ReturnsPage() {
 
 function ReturnsPageContent() {
   const { toast } = useToast();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<string>('all');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [prefilledSaleId, setPrefilledSaleId] = useState<string | null>(null);
   const [selectedReturn, setSelectedReturn] = useState<Return | null>(null);
   const [page, setPage] = useState(1);
   const pageSize = 25;
+
+  // Deep link from /dashboard/sales detail → ?from=<saleId> opens the
+  // create modal pre-filled. Strip the query param after consuming so a
+  // refresh doesn't keep re-opening it.
+  useEffect(() => {
+    const fromSale = searchParams.get('from');
+    if (!fromSale) return;
+    setPrefilledSaleId(fromSale);
+    setIsCreateModalOpen(true);
+    const params = new URLSearchParams(Array.from(searchParams.entries()));
+    params.delete('from');
+    router.replace(`/dashboard/returns${params.toString() ? `?${params.toString()}` : ''}`);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const filters = useReturnFilters();
 
@@ -368,9 +386,13 @@ function ReturnsPageContent() {
       {/* ── Modals ── */}
       <CreateReturnModal
         open={isCreateModalOpen}
-        onOpenChange={setIsCreateModalOpen}
+        onOpenChange={(open) => {
+          setIsCreateModalOpen(open);
+          if (!open) setPrefilledSaleId(null);
+        }}
         onSubmit={createReturn}
         isCreating={isCreating}
+        prefilledSaleId={prefilledSaleId}
       />
 
       {selectedReturn && (

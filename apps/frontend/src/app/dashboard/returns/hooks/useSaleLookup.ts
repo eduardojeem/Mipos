@@ -92,7 +92,14 @@ export function useSaleLookup() {
   const [error, setError] = useState<string | null>(null);
 
   const lookupSale = useCallback(async (saleId: string): Promise<SaleLookup | null> => {
-    const normalizedSaleId = saleId.trim();
+    // Accept common ticket-number prefixes so the cashier can paste what
+    // they see on the printed ticket (#TKT-001234, TICKET-001234, VENTA-X)
+    // without manually stripping them. The backend resolves by exact id.
+    const normalizedSaleId = saleId
+      .trim()
+      .replace(/^[#\s]+/, '')
+      .replace(/^(?:tkt|ticket|venta|sale|nro|no|n|num)\s*[-:.\s_]?\s*/i, '')
+      .trim();
     if (!normalizedSaleId) {
       return null;
     }

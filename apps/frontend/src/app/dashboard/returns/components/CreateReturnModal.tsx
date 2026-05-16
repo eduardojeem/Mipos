@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { z } from 'zod';
 import {
   Dialog,
@@ -80,6 +80,11 @@ interface CreateReturnModalProps {
   onOpenChange: (open: boolean) => void;
   onSubmit: (data: CreateReturnData) => Promise<unknown>;
   isCreating?: boolean;
+  /** Pre-fill the sale lookup with a known sale id (e.g. arriving from
+   *  /dashboard/sales/.../detail → "Devolver" shortcut). When provided,
+   *  the modal opens at step 1 with the input pre-filled and immediately
+   *  triggers the lookup. */
+  prefilledSaleId?: string | null;
 }
 
 const STEP_META = [
@@ -138,6 +143,7 @@ export function CreateReturnModal({
   onOpenChange,
   onSubmit,
   isCreating = false,
+  prefilledSaleId = null,
 }: CreateReturnModalProps) {
   const { toast } = useToast();
   const {
@@ -150,6 +156,20 @@ export function CreateReturnModal({
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [saleIdInput, setSaleIdInput] = useState('');
+
+  // Auto-fill + auto-lookup + auto-advance when entering with a prefilled
+  // sale id (from the "Devolver" shortcut on /dashboard/sales). Lands the
+  // user directly on the item selection step instead of making them paste
+  // the UUID and click search manually.
+  useEffect(() => {
+    if (!open || !prefilledSaleId) return;
+    setSaleIdInput(prefilledSaleId);
+    (async () => {
+      const matched = await lookupSale(prefilledSaleId);
+      if (matched) setStep(2);
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, prefilledSaleId]);
   const [selectedItems, setSelectedItems] = useState<Record<string, SelectedItem>>({});
   const [reason, setReason] = useState('');
   const [refundMethod, setRefundMethod] = useState('');
@@ -323,7 +343,7 @@ export function CreateReturnModal({
             <div className="space-y-2">
               <Label className="flex items-center gap-1.5 text-sm font-medium">
                 <Search className="h-3.5 w-3.5 text-muted-foreground" />
-                ID de la venta original
+                Número de ticket o ID de venta
               </Label>
               <div className="flex gap-2">
                 <Input
@@ -335,9 +355,10 @@ export function CreateReturnModal({
                       void handleSearch();
                     }
                   }}
-                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-                  className="flex-1 font-mono text-sm"
+                  placeholder="Pegá el ticket: TKT-001234, #001234 o el ID completo"
+                  className="flex-1 text-sm"
                   disabled={isSearching}
+                  autoFocus
                 />
                 <Button
                   type="button"
@@ -354,7 +375,13 @@ export function CreateReturnModal({
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Puedes usar el UUID completo o presionar{' '}
+                Tip: si el cliente tiene una venta abierta en el dashboard, andá a{' '}
+                <span className="font-medium">Ventas → Ver venta → Devolver</span> para
+                evitar pegar el ID a mano. Aceptamos prefijos como{' '}
+                <code className="rounded bg-muted px-1 text-[10px]">TKT-</code>{' '}
+                <code className="rounded bg-muted px-1 text-[10px]">#</code>{' '}
+                <code className="rounded bg-muted px-1 text-[10px]">VENTA-</code>.
+                Presioná{' '}
                 <kbd className="rounded border bg-muted px-1 font-mono text-[10px]">Enter</kbd>{' '}
                 para buscar.
               </p>
