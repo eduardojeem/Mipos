@@ -459,33 +459,58 @@ export function CreateReturnModal({
             <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
               {sale.items.map((item) => {
                 const selected = selectedItems[item.id];
+                // Cantidad ya devuelta (de returns APPROVED/COMPLETED previos)
+                // viene del backend en alreadyReturned. Lo restamos del total
+                // vendido para que el cajero no pueda sobre-devolver.
+                const alreadyReturned = item.alreadyReturned || 0;
+                const availableToReturn = Math.max(0, item.quantity - alreadyReturned);
+                const fullyReturned = availableToReturn === 0;
                 return (
                   <div
                     key={item.id}
-                    className={`cursor-pointer rounded-xl border p-3 transition-all duration-150 ${
-                      selected
-                        ? 'border-orange-400 bg-orange-50/70 dark:border-orange-600 dark:bg-orange-950/20'
-                        : 'border-border bg-muted/20 hover:bg-muted/40'
+                    className={`rounded-xl border p-3 transition-all duration-150 ${
+                      fullyReturned
+                        ? 'cursor-not-allowed border-border bg-muted/30 opacity-60'
+                        : selected
+                          ? 'cursor-pointer border-orange-400 bg-orange-50/70 dark:border-orange-600 dark:bg-orange-950/20'
+                          : 'cursor-pointer border-border bg-muted/20 hover:bg-muted/40'
                     }`}
-                    onClick={() => toggleItem(item)}
+                    onClick={() => {
+                      if (fullyReturned) return;
+                      toggleItem(item);
+                    }}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex min-w-0 flex-1 items-start gap-2">
                         <div
                           className={`mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border-2 transition-colors ${
-                            selected
-                              ? 'border-orange-500 bg-orange-500'
-                              : 'border-muted-foreground/40'
+                            fullyReturned
+                              ? 'border-muted-foreground/30 bg-muted'
+                              : selected
+                                ? 'border-orange-500 bg-orange-500'
+                                : 'border-muted-foreground/40'
                           }`}
                         >
                           {selected && <CheckCircle2 className="h-3 w-3 text-white" />}
                         </div>
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">{item.productName}</p>
+                          <p className="truncate text-sm font-medium">
+                            {item.productName}
+                            {fullyReturned && (
+                              <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                Ya devuelto
+                              </span>
+                            )}
+                          </p>
                           <p className="text-xs text-muted-foreground">
                             {item.sku ? `SKU: ${item.sku} · ` : ''}
-                            Disponible: {item.quantity} u. · {formatCurrency(item.unitPrice)}/u.
+                            Vendido: {item.quantity} u. · {formatCurrency(item.unitPrice)}/u.
                           </p>
+                          {alreadyReturned > 0 && !fullyReturned && (
+                            <p className="mt-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+                              Ya devueltas: {alreadyReturned} · Disponible para devolver: {availableToReturn}
+                            </p>
+                          )}
                         </div>
                       </div>
                       <div className="flex-shrink-0 text-right">
@@ -493,7 +518,7 @@ export function CreateReturnModal({
                       </div>
                     </div>
 
-                    {selected && (
+                    {selected && !fullyReturned && (
                       <div
                         className="mt-3 space-y-2 border-t border-orange-200 pt-2 dark:border-orange-800"
                         onClick={(event) => event.stopPropagation()}
@@ -521,13 +546,13 @@ export function CreateReturnModal({
                               variant="ghost"
                               size="icon"
                               className="h-6 w-6"
-                              disabled={selected.returnQty >= item.quantity}
+                              disabled={selected.returnQty >= availableToReturn}
                               onClick={() => adjustQty(item.id, 1)}
                             >
                               <Plus className="h-3 w-3" />
                             </Button>
                             <span className="ml-1 text-xs text-muted-foreground">
-                              / {item.quantity}
+                              / {availableToReturn}
                             </span>
                           </div>
                         </div>

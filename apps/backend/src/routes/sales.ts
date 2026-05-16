@@ -262,7 +262,17 @@ router.get('/:id', requirePermission('sales', 'read'), asyncHandler(async (req: 
               sku: true,
               images: true
             }
-          }
+          },
+          // Include only counted returns (APPROVED + COMPLETED) so the
+          // returns UI can compute "already returned per item" and
+          // disable over-return at the input level instead of waiting
+          // for a backend 400.
+          returnItems: {
+            select: {
+              quantity: true,
+              return: { select: { status: true } },
+            },
+          },
         }
       }
     }
@@ -272,7 +282,23 @@ router.get('/:id', requirePermission('sales', 'read'), asyncHandler(async (req: 
     throw createError('Sale not found', 404);
   }
 
-  res.json({ sale });
+  // Enrich each sale item with alreadyReturned (sum of qty across
+  // APPROVED + COMPLETED return_items). Strips the verbose returnItems
+  // array from the response so the frontend gets a clean number.
+  const enrichedSale = {
+    ...sale,
+    saleItems: sale.saleItems.map((item: any) => {
+      const alreadyReturned = (item.returnItems || []).reduce((sum: number, ri: any) => {
+        const status = String(ri.return?.status || '').toUpperCase();
+        if (status !== 'APPROVED' && status !== 'COMPLETED') return sum;
+        return sum + Number(ri.quantity || 0);
+      }, 0);
+      const { returnItems: _ri, ...rest } = item;
+      return { ...rest, alreadyReturned };
+    }),
+  };
+
+  res.json({ sale: enrichedSale });
 }));
 
 // Helper to apply legal rounding

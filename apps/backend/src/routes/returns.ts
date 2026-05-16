@@ -492,6 +492,29 @@ router.post('/',
       throw createError('Original sale not found', 404);
     }
 
+    // Acquire short-lived lock on the sale_id so two cashiers can't start
+    // a return for the same sale at once. The lock auto-expires (5 min)
+    // and is released after the create transaction succeeds. If another
+    // cashier holds the lock, we 409 with the holder's name so the UI
+    // can surface "Esa venta está siendo devuelta por <user>".
+    type LockRow = {
+      acquired: boolean;
+      locked_by: string | null;
+      locked_by_name: string | null;
+      expires_at: string | null;
+    };
+    const lockResult = await prisma.$queryRaw<LockRow[]>`
+      SELECT acquired, locked_by, locked_by_name, expires_at
+      FROM try_acquire_return_lock(${originalSaleId}::text, ${userId}::uuid, 300)
+    `;
+    const lockRow = lockResult[0];
+    if (!lockRow?.acquired) {
+      throw createError(
+        `Esa venta está siendo devuelta por ${lockRow?.locked_by_name || 'otro cajero'}. Esperá a que termine o reintentá en unos minutos.`,
+        409
+      );
+    }
+
     // SECURITY: refundMethod must be either OTHER (intentional store-credit
     // / voucher fallback) or match the original sale's payment method.
     // Without this check, a customer who paid CASH could be issued a CARD
@@ -841,6 +864,15 @@ router.post('/',
       } catch (syncError) {
         logger.warn('Could not create sync failure record', { error: syncError });
       }
+    }
+
+    // Release the per-sale lock now that the return has been created.
+    // The lock will auto-expire anyway (5 min TTL) if this fails, so it's
+    // best-effort.
+    try {
+      await prisma.$executeRaw`SELECT release_return_lock(${originalSaleId}::text, ${userId}::uuid)`;
+    } catch (lockErr) {
+      logger.warn('Could not release return lock (will auto-expire)', { lockErr });
     }
 
     res.status(201).json({

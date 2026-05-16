@@ -11,6 +11,9 @@ export interface SaleItem {
   quantity: number;
   unitPrice: number;
   totalPrice: number;
+  /** Sum of qty already returned (APPROVED + COMPLETED returns) for this
+   *  sale_item. The "available to return" = quantity - alreadyReturned. */
+  alreadyReturned: number;
 }
 
 export interface SaleLookup {
@@ -37,6 +40,8 @@ type RawSaleItem = {
   unitPrice?: number | string;
   total_price?: number | string;
   totalPrice?: number | string;
+  alreadyReturned?: number | string;
+  already_returned?: number | string;
 };
 
 function mapSaleItem(rawItem: RawSaleItem): SaleItem {
@@ -52,6 +57,7 @@ function mapSaleItem(rawItem: RawSaleItem): SaleItem {
     quantity,
     unitPrice,
     totalPrice: Number(rawItem.total_price ?? rawItem.totalPrice ?? quantity * unitPrice),
+    alreadyReturned: Number(rawItem.alreadyReturned ?? rawItem.already_returned ?? 0),
   };
 }
 
