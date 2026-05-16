@@ -126,6 +126,46 @@ export default function ProcessSaleModal({
   const [autoPrint, setAutoPrint] = useState(Boolean(config?.storeSettings?.autoPrintOnSale));
   const [selectedDocumentType, setSelectedDocumentType] = useState<'internal_ticket' | 'invoice'>('internal_ticket');
 
+  // --- Quick customer creation ---
+  const [showQuickCustomer, setShowQuickCustomer] = useState(false);
+  const [quickCustomerName, setQuickCustomerName] = useState('');
+  const [quickCustomerPhone, setQuickCustomerPhone] = useState('');
+  const [quickCustomerRuc, setQuickCustomerRuc] = useState('');
+  const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
+
+  const handleQuickCreateCustomer = useCallback(async () => {
+    if (!quickCustomerName.trim()) return;
+    setIsCreatingCustomer(true);
+    try {
+      const res = await fetch('/api/pos/customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: quickCustomerName.trim(),
+          phone: quickCustomerPhone.trim() || undefined,
+          ruc: quickCustomerRuc.trim() || undefined,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Error al crear cliente');
+      }
+      const data = await res.json();
+      const newCustomer = data.customer || data;
+      if (newCustomer?.id) {
+        onSelectCustomer?.(newCustomer);
+        setShowQuickCustomer(false);
+        setQuickCustomerName('');
+        setQuickCustomerPhone('');
+        setQuickCustomerRuc('');
+      }
+    } catch (err) {
+      console.error('Error creating quick customer:', err);
+    } finally {
+      setIsCreatingCustomer(false);
+    }
+  }, [quickCustomerName, quickCustomerPhone, quickCustomerRuc, onSelectCustomer]);
+
   // --- Reset on close ---
   useEffect(() => {
     if (!isOpen) {
@@ -450,29 +490,83 @@ export default function ProcessSaleModal({
                     <Label className="text-sm font-semibold">
                       Cliente {selectedDocumentType === 'invoice' ? '(requerido)' : '(opcional)'}
                     </Label>
-                    <Select
-                      value={customer?.id || '__general__'}
-                      onValueChange={(value) => {
-                        const nextCustomer = value === '__general__'
-                          ? null
-                          : customers?.find((item) => String(item.id) === String(value)) || null;
-                        onSelectCustomer?.(nextCustomer);
-                        setErrors([]);
-                      }}
-                    >
-                      <SelectTrigger className="h-10">
-                        <SelectValue placeholder="Selecciona un cliente" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__general__">Cliente general</SelectItem>
-                        {(customers || []).map((item) => (
-                          <SelectItem key={item.id} value={item.id}>
-                            {item.name}
-                            {item.ruc || item.tax_id ? ` - ${item.ruc || item.tax_id}` : ''}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="flex gap-2">
+                      <Select
+                        value={customer?.id || '__general__'}
+                        onValueChange={(value) => {
+                          const nextCustomer = value === '__general__'
+                            ? null
+                            : customers?.find((item) => String(item.id) === String(value)) || null;
+                          onSelectCustomer?.(nextCustomer);
+                          setErrors([]);
+                        }}
+                      >
+                        <SelectTrigger className="h-10 flex-1">
+                          <SelectValue placeholder="Selecciona un cliente" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__general__">Cliente general</SelectItem>
+                          {(customers || []).map((item) => (
+                            <SelectItem key={item.id} value={item.id}>
+                              {item.name}
+                              {item.ruc || item.tax_id ? ` - ${item.ruc || item.tax_id}` : ''}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="h-10 w-10 shrink-0"
+                        onClick={() => setShowQuickCustomer(true)}
+                        title="Agregar cliente nuevo"
+                      >
+                        <span className="text-lg font-bold">+</span>
+                      </Button>
+                    </div>
+                    {showQuickCustomer && (
+                      <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                        <p className="text-xs font-semibold">Nuevo cliente</p>
+                        <Input
+                          placeholder="Nombre *"
+                          value={quickCustomerName}
+                          onChange={(e) => setQuickCustomerName(e.target.value)}
+                          className="h-9"
+                        />
+                        <Input
+                          placeholder="Teléfono"
+                          value={quickCustomerPhone}
+                          onChange={(e) => setQuickCustomerPhone(e.target.value)}
+                          className="h-9"
+                        />
+                        <Input
+                          placeholder="RUC / Cédula"
+                          value={quickCustomerRuc}
+                          onChange={(e) => setQuickCustomerRuc(e.target.value)}
+                          className="h-9"
+                        />
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="flex-1"
+                            disabled={!quickCustomerName.trim() || isCreatingCustomer}
+                            onClick={handleQuickCreateCustomer}
+                          >
+                            {isCreatingCustomer ? 'Guardando...' : 'Guardar'}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => { setShowQuickCustomer(false); setQuickCustomerName(''); setQuickCustomerPhone(''); setQuickCustomerRuc(''); }}
+                          >
+                            Cancelar
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                     <p className="text-xs text-muted-foreground">
                       {selectedDocumentType === 'invoice'
                         ? 'La factura tomará los datos del cliente seleccionado.'

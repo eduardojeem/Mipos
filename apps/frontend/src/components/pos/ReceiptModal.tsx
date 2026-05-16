@@ -501,31 +501,20 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
           aria-modal="true"
           aria-labelledby="internal-ticket-title"
         >
-          {/* Header fijo — no se achica, no scrollea. */}
-          <div className="flex-shrink-0 relative overflow-hidden bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-400 px-6 py-8 text-white">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.2),transparent_40%)]" />
-            <div className="absolute -bottom-12 -left-12 h-40 w-40 rounded-full bg-white/10 blur-3xl" />
-            
-            <div className="relative z-10 flex items-start justify-between gap-4">
-              <div className="flex items-center gap-5">
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/20 shadow-xl backdrop-blur-md">
-                  <CheckCircle className="h-10 w-10 text-white" />
-                </div>
+          {/* Header compacto */}
+          <div className="flex-shrink-0 relative overflow-hidden bg-gradient-to-br from-emerald-600 to-teal-500 px-5 py-4 text-white">
+            <div className="relative z-10 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <CheckCircle className="h-8 w-8 text-white" />
                 <div>
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm">
-                      ¡Venta Exitosa!
-                    </span>
-                  </div>
-                  <h2 id="internal-ticket-title" className="mt-1 text-2xl font-black tracking-tight">
-                    {INTERNAL_TICKET_LABEL} {saleData.documentNumber}
+                  <h2 id="internal-ticket-title" className="text-lg font-bold">
+                    ¡Venta Exitosa!
                   </h2>
-                  <p className="mt-1 text-sm text-emerald-50 opacity-90">
-                    Transacción completada y registrada correctamente.
+                  <p className="text-xs text-emerald-100">
+                    {INTERNAL_TICKET_LABEL} {saleData.documentNumber}
                   </p>
                 </div>
               </div>
-
               <button
                 onClick={onClose}
                 className="rounded-full p-2 text-white/80 transition hover:bg-white/20 hover:text-white active:scale-90"
@@ -536,274 +525,164 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
             </div>
           </div>
 
-          <ScrollArea className="flex-1 bg-slate-50">
-            <div className="p-5 sm:p-6">
-              <div className="rounded-3xl border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-slate-100 px-6 py-6 text-center">
-                  {business.logo && (
-                    <img
-                      src={business.logo}
-                      alt={business.name}
-                      className="mx-auto mb-4 h-14 w-auto object-contain"
-                    />
-                  )}
-                  <h3 className="text-xl font-bold text-slate-900">{business.name}</h3>
-                  {business.address && <p className="mt-1 text-sm text-slate-500">{business.address}</p>}
-                  <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-slate-500">
-                    {business.phone && <span>{business.phone}</span>}
-                    {business.email && <span>{business.email}</span>}
-                    {business.taxId && <span>RUC/ID: {business.taxId}</span>}
+          <ScrollArea className="flex-1 bg-white">
+            <div className="p-4 sm:p-5 space-y-4">
+              {/* Info rápida */}
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <span className="text-xs text-slate-400">Fecha</span>
+                  <p className="font-medium text-slate-900">{formatDate(saleData.createdAt)}</p>
+                </div>
+                <div>
+                  <span className="text-xs text-slate-400">ID Venta</span>
+                  <p className="font-medium text-slate-900">{saleData.saleNumber || saleData.id?.slice(0, 8)}</p>
+                </div>
+                {saleData.cashier && (
+                  <div>
+                    <span className="text-xs text-slate-400">Cajero</span>
+                    <p className="font-medium text-slate-900">{saleData.cashier}</p>
                   </div>
+                )}
+                {saleData.customer?.name && (
+                  <div>
+                    <span className="text-xs text-slate-400">Cliente</span>
+                    <p className="font-medium text-slate-900">{saleData.customer.name}</p>
+                  </div>
+                )}
+              </div>
 
-                  <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-4 text-red-800">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.3em]">{saleData.documentSubtitle}</p>
-                    <p className="mt-2 text-base font-bold">{saleData.documentDisclaimer}</p>
-                    <p className="mt-2 text-xs leading-5 text-red-700/90">{saleData.documentDescription}</p>
-                  </div>
-                  {invoice && (
-                    <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-4 text-left text-sky-900">
-                      <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.24em]">
-                        <FileText className="h-4 w-4" />
-                        Factura generada
+              {invoice && (
+                <div className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-800">
+                  <FileText className="h-4 w-4 shrink-0" />
+                  <span className="font-medium">Factura {invoice.invoiceNumber}</span>
+                </div>
+              )}
+
+              {/* Items - lista simple */}
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  {items.length} producto{items.length !== 1 ? 's' : ''}
+                </p>
+                <div className="divide-y divide-slate-100">
+                  {items.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between py-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-slate-900 truncate">{item.productName}</p>
+                        <p className="text-xs text-slate-500">{item.quantity} x {fmtCurrency(item.unitPrice)}</p>
                       </div>
-                      <p className="mt-2 text-base font-bold">{invoice.invoiceNumber}</p>
-                      <p className="mt-1 text-xs text-sky-800/80">
-                        La factura quedó vinculada a esta venta y está lista para impresión desde el módulo de facturación.
-                      </p>
+                      <span className="text-sm font-semibold text-slate-900 ml-3">{fmtCurrency(item.totalPrice)}</span>
                     </div>
-                  )}
+                  ))}
                 </div>
+              </div>
 
-                <div className="grid gap-3 border-b border-slate-100 px-6 py-5 sm:grid-cols-2">
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Ticket</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-900">{saleData.documentNumber}</p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Fecha</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-900">{formatDate(saleData.createdAt)}</p>
-                  </div>
-                  {saleData.cashier && (
-                    <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Cajero</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-900">{saleData.cashier}</p>
-                    </div>
-                  )}
-                  {saleData.customer?.name && (
-                    <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Cliente</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-900">{saleData.customer.name}</p>
-                    </div>
-                  )}
+              {/* Totales */}
+              <div className="rounded-xl bg-slate-50 p-3 space-y-1 text-sm">
+                <div className="flex justify-between text-slate-600">
+                  <span>Subtotal</span>
+                  <span>{fmtCurrency(subtotal)}</span>
                 </div>
-
-                <div className="px-6 py-5">
-                  <div className="mb-4 flex items-center justify-between">
-                    <h4 className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-500">Detalle de venta</h4>
-                    <span className="text-xs font-medium text-slate-400">{items.length} producto{items.length !== 1 ? 's' : ''}</span>
+                {discount > 0 && (
+                  <div className="flex justify-between text-emerald-700">
+                    <span>Descuento</span>
+                    <span>-{fmtCurrency(discount)}</span>
                   </div>
+                )}
+                <div className="flex justify-between text-slate-600">
+                  <span>IVA</span>
+                  <span>{fmtCurrency(tax)}</span>
+                </div>
+                <div className="flex justify-between pt-2 border-t border-slate-200 text-base font-bold text-slate-900">
+                  <span>Total</span>
+                  <span>{fmtCurrency(total)}</span>
+                </div>
+              </div>
 
-                  <div className="space-y-3">
-                    {items.map((item) => (
-                      <div key={item.id} className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-slate-900">{item.productName}</p>
-                            <p className="mt-1 text-xs text-slate-500">
-                              {item.quantity} x {fmtCurrency(item.unitPrice)}
-                            </p>
-                          </div>
-                          <div className="text-right text-sm font-semibold text-slate-900">
-                            {fmtCurrency(item.totalPrice)}
-                          </div>
-                        </div>
+              {/* Pago */}
+              <div className="text-sm">
+                {saleData.paymentMethod === 'MIXED' && Array.isArray(saleData.mixedPayments) ? (
+                  <div className="space-y-1">
+                    {saleData.mixedPayments.map((part, index) => (
+                      <div key={`${part.type}-${index}`} className="flex justify-between">
+                        <span className="text-slate-600">{getPaymentMethodLabel(part.type)}</span>
+                        <span className="font-medium">{fmtCurrency(part.amount)}</span>
                       </div>
                     ))}
                   </div>
-
-                  <Separator className="my-5" />
-
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between text-slate-600">
-                      <span>Subtotal</span>
-                      <span>{fmtCurrency(subtotal)}</span>
-                    </div>
-                    {discount > 0 && (
-                      <div className="flex justify-between text-emerald-700">
-                        <span>Descuento</span>
-                        <span>-{fmtCurrency(discount)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-slate-600">
-                      <span>IVA</span>
-                      <span>{fmtCurrency(tax)}</span>
-                    </div>
-                    <div className="mt-3 flex justify-between rounded-2xl bg-slate-900 px-4 py-3 text-base font-bold text-white">
-                      <span>Total</span>
-                      <span>{fmtCurrency(total)}</span>
-                    </div>
-                  </div>
-
-                  <Separator className="my-5" />
-
-                  <div className="space-y-3">
-                    <h4 className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-500">Pago</h4>
-
-                    {saleData.paymentMethod === 'MIXED' && Array.isArray(saleData.mixedPayments) ? (
-                      <div className="space-y-2">
-                        {saleData.mixedPayments.map((part, index) => (
-                          <div key={`${part.type}-${index}`} className="rounded-2xl border border-slate-100 px-4 py-3">
-                            <div className="flex justify-between text-sm font-medium text-slate-900">
-                              <span>{getPaymentMethodLabel(part.type)}</span>
-                              <span>{fmtCurrency(part.amount)}</span>
-                            </div>
-                            {part.details?.reference && (
-                              <p className="mt-1 text-xs text-slate-500">Referencia: {part.details.reference}</p>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="rounded-2xl border border-slate-100 px-4 py-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                            {getPaymentMethodLabel(saleData.paymentMethod)}
-                          </span>
-                          {saleData.paymentMethod === 'CASH' && typeof saleData.cashReceived === 'number' && (
-                            <span className="text-xs text-slate-500">
-                              Entregado {fmtCurrency(saleData.cashReceived)} · Vuelto {fmtCurrency(saleData.change || 0)}
-                            </span>
-                          )}
-                        </div>
-                        {saleData.transferReference && (
-                          <p className="mt-2 text-xs text-slate-500">Referencia: {saleData.transferReference}</p>
-                        )}
-                      </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700">
+                      {getPaymentMethodLabel(saleData.paymentMethod)}
+                    </span>
+                    {saleData.paymentMethod === 'CASH' && typeof saleData.cashReceived === 'number' && (
+                      <span className="text-xs text-slate-500">
+                        Recibido {fmtCurrency(saleData.cashReceived)} · Vuelto {fmtCurrency(saleData.change || 0)}
+                      </span>
                     )}
                   </div>
-
-                  {saleData.notes && (
-                    <>
-                      <Separator className="my-5" />
-                      <div>
-                        <h4 className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-500">Notas</h4>
-                        <p className="mt-2 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                          {saleData.notes}
-                        </p>
-                      </div>
-                    </>
-                  )}
-
-                  <Separator className="my-5" />
-
-                  <div className="rounded-2xl bg-slate-100 px-4 py-4 text-center">
-                    <p className="text-sm font-semibold text-slate-900">Conserve este ticket como referencia interna de la compra.</p>
-                    <p className="mt-1 text-xs text-slate-500">{saleData.documentDisclaimer}</p>
-                    {business.website && <p className="mt-2 text-xs text-slate-500">{business.website}</p>}
-                  </div>
-                </div>
+                )}
+                {saleData.transferReference && (
+                  <p className="mt-1 text-xs text-slate-500">Ref: {saleData.transferReference}</p>
+                )}
               </div>
+
+              {saleData.notes && (
+                <p className="text-xs text-slate-500 italic">Nota: {saleData.notes}</p>
+              )}
             </div>
           </ScrollArea>
 
-          {/* Footer con su propio scroll — antes el contenido (factura +
-              share + acciones + CSAT) podía exceder el espacio disponible
-              en pantallas chicas y dejar los botones de Imprimir/Descargar
-              fuera de vista sin manera de llegar. Ahora máx 50vh y
-              scrollea internamente si hace falta. */}
-          <div className="max-h-[50vh] overflow-y-auto space-y-4 border-t border-slate-200 bg-white px-5 py-4 sm:px-6">
-            {invoice && (
-              <Button variant="outline" className="w-full" onClick={handleOpenInvoice}>
-                <FileText className="mr-2 h-4 w-4" />
-                Abrir factura {invoice.invoiceNumber}
+          {/* Acciones */}
+          <div className="flex-shrink-0 space-y-3 border-t border-slate-200 bg-white px-4 py-3 sm:px-5">
+            <div className="flex gap-2">
+              <Button className="flex-1" onClick={thermalPrinter ? handleThermalPrint : onPrint} disabled={isPrinting}>
+                <Printer className="mr-2 h-4 w-4" />
+                {isPrinting ? 'Imprimiendo...' : 'Imprimir'}
               </Button>
-            )}
-            <div className="grid grid-cols-4 gap-2">
+              <Button variant="outline" className="flex-1" onClick={handleTicketDownload} disabled={isDownloading}>
+                <Download className="mr-2 h-4 w-4" />
+                {isDownloading ? 'Descargando...' : 'Descargar'}
+              </Button>
+            </div>
+
+            <div className="flex gap-1.5">
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant="outline" className="flex h-auto flex-col gap-1 py-2" onClick={handleWhatsAppShare}>
-                      <MessageCircle className="h-5 w-5" />
-                      <span className="text-[10px]">WhatsApp</span>
+                    <Button variant="ghost" size="sm" className="flex-1 h-8" onClick={handleWhatsAppShare}>
+                      <MessageCircle className="h-4 w-4 mr-1" />
+                      <span className="text-xs">WhatsApp</span>
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Enviar ticket interno por WhatsApp</TooltipContent>
+                  <TooltipContent>Enviar por WhatsApp</TooltipContent>
                 </Tooltip>
-
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant="outline" className="flex h-auto flex-col gap-1 py-2" onClick={handleEmailShare}>
-                      <Mail className="h-5 w-5" />
-                      <span className="text-[10px]">Email</span>
+                    <Button variant="ghost" size="sm" className="flex-1 h-8" onClick={handleCopy}>
+                      {copied ? <Check className="h-4 w-4 mr-1 text-emerald-600" /> : <Copy className="h-4 w-4 mr-1" />}
+                      <span className="text-xs">{copied ? 'Copiado' : 'Copiar'}</span>
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Enviar ticket interno por email</TooltipContent>
+                  <TooltipContent>Copiar texto</TooltipContent>
                 </Tooltip>
-
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant="outline" className="flex h-auto flex-col gap-1 py-2" onClick={handleCopy}>
-                      {copied ? <Check className="h-5 w-5 text-emerald-600" /> : <Copy className="h-5 w-5" />}
-                      <span className="text-[10px]">{copied ? 'Copiado' : 'Copiar'}</span>
+                    <Button variant="ghost" size="sm" className="flex-1 h-8" onClick={handleNativeShare}>
+                      <Share2 className="h-4 w-4 mr-1" />
+                      <span className="text-xs">Compartir</span>
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Copiar texto del ticket interno</TooltipContent>
-                </Tooltip>
-
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="outline" className="flex h-auto flex-col gap-1 py-2" onClick={handleNativeShare}>
-                      <Share2 className="h-5 w-5" />
-                      <span className="text-[10px]">Compartir</span>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Compartir ticket interno</TooltipContent>
+                  <TooltipContent>Compartir</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             </div>
 
-            <div className="flex gap-3">
-              <Button variant="outline" className="flex-1" onClick={handleTicketDownload} disabled={isDownloading}>
-                <Download className="mr-2 h-4 w-4" />
-                {isDownloading ? 'Descargando...' : 'Descargar ticket'}
+            {invoice && (
+              <Button variant="outline" size="sm" className="w-full" onClick={handleOpenInvoice}>
+                <FileText className="mr-2 h-4 w-4" />
+                Abrir factura {invoice.invoiceNumber}
               </Button>
-              <Button className="flex-1" onClick={thermalPrinter ? handleThermalPrint : onPrint} disabled={isPrinting}>
-                <Printer className="mr-2 h-4 w-4" />
-                {isPrinting ? 'Imprimiendo...' : 'Imprimir ticket'}
-              </Button>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-              <div className="text-sm font-medium text-slate-900">Evaluación de caja</div>
-              {!csatSubmitted ? (
-                <div className="mt-3 flex items-center gap-2">
-                  {[1, 2, 3, 4, 5].map((score) => (
-                    <Button
-                      key={score}
-                      variant={csatScore === score ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setCsatScore(score)}
-                    >
-                      {score}
-                    </Button>
-                  ))}
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      if (!saleData) return;
-                      try {
-                        localStorage.setItem(`csat:${saleData.id}`, String(csatScore ?? ''));
-                      } catch {}
-                      setCsatSubmitted(true);
-                    }}
-                  >
-                    Enviar
-                  </Button>
-                </div>
-              ) : (
-                <div className="mt-2 text-sm text-emerald-600">Gracias por su respuesta</div>
-              )}
-            </div>
+            )}
           </div>
         </motion.div>
       </div>

@@ -17,6 +17,7 @@ import customerRoutes from './routes/customers';
 import purchaseRoutes from './routes/purchases';
 import salesRoutes from './routes/sales';
 import salesStatsRoutes from './routes/sales-stats';
+import salesKpisRoutes from './routes/sales-kpis';
 import returnsRoutes from './routes/returns';
 import inventoryRoutes from './routes/inventory';
 import reportsRoutes from './routes/reports';
@@ -215,6 +216,9 @@ app.use('/api/products', enhancedAuthMiddleware, productRoutes);
 app.use('/api/suppliers', enhancedAuthMiddleware, supplierRoutes);
 app.use('/api/customers', enhancedAuthMiddleware, customerRoutes);
 app.use('/api/purchases', enhancedAuthMiddleware, purchaseRoutes);
+// Mount kpis BEFORE the generic /api/sales router so that GET /sales/kpis
+// does not get swallowed by GET /sales/:id in salesRoutes.
+app.use('/api/sales', enhancedAuthMiddleware, salesKpisRoutes);
 app.use('/api/sales', enhancedAuthMiddleware, salesRoutes);
 app.use('/api/sales-stats', enhancedAuthMiddleware, salesStatsRoutes);
 app.use('/api/returns', enhancedAuthMiddleware, returnsRoutes);

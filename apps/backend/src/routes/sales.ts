@@ -1423,15 +1423,27 @@ router.post('/', criticalOperationsRateLimit, requirePermission('sales', 'create
       if (typeof total !== 'number' || !Number.isFinite(total)) {
         throw createError('Invalid total amount for customer stats update', 400);
       }
-      await tx.$queryRaw`
-        UPDATE customers
-        SET total_purchases = COALESCE(total_purchases, 0) + ${total},
-            "totalPurchases" = COALESCE("totalPurchases", 0) + ${total},
-            "totalSpent" = COALESCE("totalSpent", 0) + ${total},
-            last_purchase = NOW(),
-            "lastPurchase" = NOW()
-        WHERE id = ${customerId}
-      `;
+      const supabaseForStats = getSupabaseClient();
+      if (supabaseForStats) {
+        const { error: rpcErr } = await supabaseForStats.rpc('increment_customer_stats_safe', {
+          p_customer_id: customerId,
+          p_amount: total,
+        });
+        if (rpcErr && !rpcErr.message?.includes('does not exist')) {
+          console.warn('[Sales] increment_customer_stats_safe failed:', rpcErr.message);
+        }
+      } else {
+        // Fallback: direct update via tx (set absolute value)
+        const currentCustomer = await tx.customer.findUnique({ where: { id: customerId }, select: { totalPurchases: true } });
+        const nextTotal = Number(currentCustomer?.totalPurchases || 0) + total;
+        await tx.customer.update({
+          where: { id: customerId },
+          data: {
+            totalPurchases: nextTotal,
+            lastPurchase: new Date(),
+          },
+        });
+      }
     }
 
     // Create cash movement only for the effective cash component of the sale.
