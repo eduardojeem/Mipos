@@ -16,7 +16,6 @@ import {
 } from 'lucide-react';
 import { useCurrencyFormatter } from '@/contexts/BusinessConfigContext';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import {
   Tooltip,
@@ -536,7 +535,13 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
             </div>
           </div>
 
-          <ScrollArea className="flex-1 bg-slate-50">
+          {/* Scroll wrapper — contiene cuerpo del recibo + acciones (footer)
+              en UN solo container scrollable. Antes el ScrollArea solo
+              scrolleaba el cuerpo y el footer competía por espacio,
+              comprimiendo la vista del ticket que se va a imprimir.
+              Ahora todo (recibo + botones de acción + CSAT) scrollea
+              junto, y el header colorido queda fijo arriba. */}
+          <div className="flex-1 min-h-0 overflow-y-auto bg-slate-50">
             <div className="p-5 sm:p-6">
               <div className="rounded-3xl border border-slate-200 bg-white shadow-sm">
                 <div className="border-b border-slate-100 px-6 py-6 text-center">
@@ -704,14 +709,10 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
                 </div>
               </div>
             </div>
-          </ScrollArea>
-
-          {/* Footer con su propio scroll — antes el contenido (factura +
-              share + acciones + CSAT) podía exceder el espacio disponible
-              en pantallas chicas y dejar los botones de Imprimir/Descargar
-              fuera de vista sin manera de llegar. Ahora máx 50vh y
-              scrollea internamente si hace falta. */}
-          <div className="max-h-[50vh] overflow-y-auto space-y-4 border-t border-slate-200 bg-white px-5 py-4 sm:px-6">
+            {/* Acciones — dentro del mismo scroll container que el cuerpo
+                para que el ticket (lo que se imprime) siempre tenga su
+                espacio sin competir con los botones. */}
+            <div className="mt-4 space-y-4 rounded-3xl border border-slate-200 bg-white px-5 py-4 sm:px-6">
             {invoice && (
               <Button variant="outline" className="w-full" onClick={handleOpenInvoice}>
                 <FileText className="mr-2 h-4 w-4" />
@@ -803,6 +804,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
               ) : (
                 <div className="mt-2 text-sm text-emerald-600">Gracias por su respuesta</div>
               )}
+            </div>
             </div>
           </div>
         </motion.div>
