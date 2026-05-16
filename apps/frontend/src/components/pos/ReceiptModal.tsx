@@ -164,6 +164,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
       ...businessLines,
       '--------------------------------',
       `${INTERNAL_TICKET_LABEL.toUpperCase()} ${saleData.documentNumber}`,
+      `ID Venta: ${saleData.saleNumber || saleData.id}`,
       saleData.documentDisclaimer,
       saleData.documentDescription,
       `Fecha: ${formatDate(saleData.createdAt)}`,
@@ -247,43 +248,48 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
             overflow: visible;
           }
           body {
-            font-family: 'Courier New', monospace;
+            font-family: 'Lucida Console', 'Consolas', monospace;
             font-size: 12px;
-            line-height: 1.4;
+            font-weight: 500;
+            line-height: 1.5;
             margin: 0;
             padding: 2mm;
             width: 58mm;
             max-width: 58mm;
             color: #000;
             background: #fff;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
           }
           * { box-sizing: border-box; margin: 0; padding: 0; }
           .header, .footer { text-align: center; }
-          .business-name { font-size: 14px; font-weight: 700; }
-          .business-meta { font-size: 10px; }
-          .divider { border-top: 1px dashed #000; margin: 3px 0; }
+          .business-name { font-size: 15px; font-weight: 900; letter-spacing: 0.5px; }
+          .business-meta { font-size: 10px; font-weight: 600; }
+          .divider { border-top: 1px dashed #000; margin: 4px 0; }
           .row {
             display: flex;
             justify-content: space-between;
             font-size: 11px;
-            line-height: 1.5;
+            font-weight: 600;
+            line-height: 1.6;
           }
-          .meta { font-size: 9px; }
+          .meta { font-size: 9px; font-weight: 500; }
           .item { margin-bottom: 3px; }
-          .item-name { font-weight: 700; font-size: 11px; }
+          .item-name { font-weight: 800; font-size: 11px; }
           .item-meta {
             display: flex;
             justify-content: space-between;
             font-size: 10px;
+            font-weight: 600;
           }
           .totals .total {
             font-size: 14px;
-            font-weight: 700;
+            font-weight: 900;
             border-top: 1px dashed #000;
-            padding-top: 2px;
-            margin-top: 2px;
+            padding-top: 3px;
+            margin-top: 3px;
           }
-          .footer { margin-top: 4px; font-size: 9px; }
+          .footer { margin-top: 5px; font-size: 9px; font-weight: 500; }
         </style>
       </head>
       <body>
@@ -299,6 +305,10 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
         <div class="row">
           <span><strong>${escapeHtml(INTERNAL_TICKET_LABEL)}</strong></span>
           <span><strong>${escapeHtml(saleData.documentNumber)}</strong></span>
+        </div>
+        <div class="row">
+          <span>ID Venta</span>
+          <span>${escapeHtml(saleData.saleNumber || saleData.id)}</span>
         </div>
         <div class="row">
           <span>Fecha</span>
@@ -491,7 +501,8 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
           aria-modal="true"
           aria-labelledby="internal-ticket-title"
         >
-          <div className="relative overflow-hidden bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-400 px-6 py-8 text-white">
+          {/* Header fijo — no se achica, no scrollea. */}
+          <div className="flex-shrink-0 relative overflow-hidden bg-gradient-to-br from-emerald-600 via-emerald-500 to-teal-400 px-6 py-8 text-white">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.2),transparent_40%)]" />
             <div className="absolute -bottom-12 -left-12 h-40 w-40 rounded-full bg-white/10 blur-3xl" />
             
@@ -695,7 +706,12 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
             </div>
           </ScrollArea>
 
-          <div className="space-y-4 border-t border-slate-200 bg-white px-5 py-4 sm:px-6">
+          {/* Footer con su propio scroll — antes el contenido (factura +
+              share + acciones + CSAT) podía exceder el espacio disponible
+              en pantallas chicas y dejar los botones de Imprimir/Descargar
+              fuera de vista sin manera de llegar. Ahora máx 50vh y
+              scrollea internamente si hace falta. */}
+          <div className="max-h-[50vh] overflow-y-auto space-y-4 border-t border-slate-200 bg-white px-5 py-4 sm:px-6">
             {invoice && (
               <Button variant="outline" className="w-full" onClick={handleOpenInvoice}>
                 <FileText className="mr-2 h-4 w-4" />
