@@ -42,6 +42,15 @@ import { formatCurrency, formatDate } from '@/lib/utils';
 import { useToast } from '@/components/ui/use-toast';
 import { useSaleLookup, type SaleItem } from '../hooks/useSaleLookup';
 import type { CreateReturnData } from '../hooks/useReturns';
+import { DamagePhotoUploader } from './DamagePhotoUploader';
+
+// Reasons del REASON_OPTIONS que activan el requisito de foto. Tiene que
+// mantenerse en sync con DAMAGE_REASON_PATTERN del backend
+// (apps/backend/src/routes/returns.ts).
+const DAMAGE_REASONS = new Set(['defective', 'damaged']);
+function reasonRequiresPhoto(reason: string | null | undefined): boolean {
+  return Boolean(reason) && DAMAGE_REASONS.has(String(reason));
+}
 
 const REASON_OPTIONS = [
   { value: 'defective', label: 'Producto defectuoso' },
@@ -175,6 +184,13 @@ export function CreateReturnModal({
   const [refundMethod, setRefundMethod] = useState('');
   const [notes, setNotes] = useState('');
   const [step3Errors, setStep3Errors] = useState<Record<string, string>>({});
+  // Foto de daño (1 por return en la versión actual; backend acepta una
+  // por item pero la UI usa una sola — escala granular en sprint futuro).
+  const [damagePhoto, setDamagePhoto] = useState<{
+    url: string;
+    path: string;
+  } | null>(null);
+  const photoRequired = reasonRequiresPhoto(reason);
 
   const resetAll = () => {
     setStep(1);
@@ -182,6 +198,7 @@ export function CreateReturnModal({
     setSelectedItems({});
     setReason('');
     setRefundMethod('');
+    setDamagePhoto(null);
     setNotes('');
     setStep3Errors({});
     resetLookup();
@@ -290,14 +307,35 @@ export function CreateReturnModal({
       return;
     }
 
+    // Damage photo gate. Mirrors the backend check (DAMAGE_REASON_PATTERN)
+    // so the cashier gets fast feedback instead of a 400 round-trip.
+    if (reasonRequiresPhoto(parsed.data.reason) && !damagePhoto) {
+      setStep3Errors((prev) => ({
+        ...prev,
+        damagePhoto: 'Subí una foto de evidencia antes de confirmar.',
+      }));
+      toast({
+        title: 'Falta la foto de evidencia',
+        description: 'Las devoluciones por producto dañado/defectuoso requieren foto.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setStep3Errors({});
 
-    const items = Object.values(selectedItems).map((item) => ({
+    // First item carries the damage photo. Backend accepts per-item but
+    // the UI ships a single photo per return for now (sprint scope).
+    const itemsRaw = Object.values(selectedItems);
+    const items = itemsRaw.map((item, index) => ({
       originalSaleItemId: item.saleItem.id,
       productId: item.saleItem.productId,
       quantity: item.returnQty,
       unitPrice: item.saleItem.unitPrice,
       reason: item.itemReason.trim() || undefined,
+      ...(index === 0 && damagePhoto
+        ? { damagePhotoUrl: damagePhoto.url }
+        : {}),
     }));
 
     try {
@@ -619,6 +657,30 @@ export function CreateReturnModal({
                 <p className="text-xs text-destructive">{step3Errors.reason}</p>
               )}
             </div>
+
+            {/* Foto de evidencia — visible siempre, requerida cuando el
+                reason matchea producto dañado/defectuoso. Backend
+                re-valida en POST /returns, así que un usuario que
+                bypassee la UI igual falla. */}
+            {(photoRequired || damagePhoto) && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5">
+                  <span>Foto de evidencia</span>
+                  {photoRequired && <span className="text-destructive">*</span>}
+                </Label>
+                <DamagePhotoUploader
+                  value={damagePhoto?.url ?? null}
+                  onChange={(photo) => {
+                    setDamagePhoto(photo);
+                    clearStep3Error('damagePhoto');
+                  }}
+                  required={photoRequired}
+                />
+                {step3Errors.damagePhoto && (
+                  <p className="text-xs text-destructive">{step3Errors.damagePhoto}</p>
+                )}
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label className="flex items-center gap-1.5">

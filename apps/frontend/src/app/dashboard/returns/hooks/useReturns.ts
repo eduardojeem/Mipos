@@ -83,6 +83,11 @@ export interface CreateReturnData {
     quantity: number;
     unitPrice: number;
     reason?: string;
+    /** Signed URL de la foto de evidencia. Requerida cuando reason
+     *  matchea producto dañado/defectuoso (DAMAGE_REASONS en el modal). */
+    damagePhotoUrl?: string;
+    damageSeverity?: 'minor' | 'major' | 'unsellable';
+    restock?: boolean;
   }>;
 }
 

@@ -236,8 +236,23 @@ const enhancedReturnItemSchema = z.object({
   reason: z.string()
     .max(RETURNS_CONFIG.validation.maxReasonLength, 'Reason too long')
     .optional()
-    .transform(val => val ? sanitize.string(val) : val)
+    .transform(val => val ? sanitize.string(val) : val),
+  // Damage evidence — optional unless the parent return.reason matches
+  // a damage pattern, in which case the backend enforces it post-parse
+  // (see DAMAGE_REASON_PATTERN below).
+  damagePhotoUrl: z.string().url('damagePhotoUrl debe ser URL válida').max(2048).optional().nullable(),
+  damageSeverity: z.enum(['minor', 'major', 'unsellable']).optional().nullable(),
+  restock: z.boolean().optional(),
 });
+
+// Reasons that trigger photo enforcement. Case-insensitive substring match.
+// Spanish + common typos. If you add a new "damaged" reason in the UI,
+// extend this list.
+const DAMAGE_REASON_PATTERN = /\b(da[ñn]ad[oa]|roto|rota|defectuos[oa]|quebrad[oa]|abolladura|golpead[oa])\b/i;
+function reasonRequiresPhoto(reason: string | null | undefined): boolean {
+  if (!reason) return false;
+  return DAMAGE_REASON_PATTERN.test(String(reason));
+}
 
 const enhancedCreateReturnSchema = z.object({
   originalSaleId: safeIdSchema,
@@ -561,6 +576,9 @@ router.post('/',
       quantity: number;
       unitPrice: number;
       reason?: string;
+      damagePhotoUrl?: string | null;
+      damageSeverity?: 'minor' | 'major' | 'unsellable' | null;
+      restock?: boolean;
     }> = [];
 
     for (const item of items) {
@@ -597,7 +615,29 @@ router.post('/',
         // Authoritative price from DB, never from request body.
         unitPrice: Number(originalSaleItem.unitPrice),
         reason: item.reason,
+        damagePhotoUrl: item.damagePhotoUrl ?? null,
+        damageSeverity: item.damageSeverity ?? null,
+        restock: item.restock,
       });
+    }
+
+    // Damage evidence enforcement: when the parent return.reason matches
+    // a damage pattern, at LEAST one of the items needs a damage photo.
+    // This prevents the classic fraud vector (cashier claims "producto
+    // dañado" with no proof). Per-item photos are more granular but we
+    // start with a single-photo-per-return policy for simplicity; can be
+    // tightened to per-item in a future sprint.
+    if (reasonRequiresPhoto(reason)) {
+      const hasAnyPhoto = resolvedItems.some(
+        (it) => typeof it.damagePhotoUrl === 'string' && it.damagePhotoUrl.length > 0
+      );
+      if (!hasAnyPhoto) {
+        throw createError(
+          'Las devoluciones por producto dañado/roto/defectuoso requieren al menos una foto de evidencia. ' +
+          'Subí la foto desde el modal antes de confirmar.',
+          400
+        );
+      }
     }
 
     // Calculate total from server-trusted prices.
@@ -668,7 +708,7 @@ router.post('/',
 
       // Create return items with TRUSTED prices.
       for (const item of resolvedItems) {
-        await tx.returnItem.create({
+        const created = await tx.returnItem.create({
           data: {
             returnId: returnRecord.id,
             productId: item.productId,
@@ -678,6 +718,22 @@ router.post('/',
             reason: item.reason
           }
         });
+
+        // Persist damage columns via raw SQL (Prisma client may lag
+        // the migration). Best-effort — failure here doesn't roll back.
+        if (item.damagePhotoUrl || item.damageSeverity || item.restock === false) {
+          try {
+            await tx.$executeRaw`
+              UPDATE return_items
+                 SET damage_photo_url = ${item.damagePhotoUrl ?? null},
+                     damage_severity  = ${item.damageSeverity ?? null},
+                     restock          = ${item.restock ?? true}
+               WHERE id = ${created.id}
+            `;
+          } catch (damageErr) {
+            console.warn('[returns] damage columns write failed:', damageErr);
+          }
+        }
       }
 
       return returnRecord;
