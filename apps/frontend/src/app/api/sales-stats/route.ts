@@ -1,68 +1,69 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import api from '@/lib/api'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { getUserOrganizationId } from '@/app/api/_utils/organization'
 
-export async function GET(request: NextRequest) {
+/**
+ * GET /api/sales-stats
+ *
+ * Lifetime sales aggregate scoped to the authenticated user's organization.
+ * Previously returned cross-org data because it never filtered by
+ * organization_id.
+ *
+ * Note: this endpoint scans the full sales table for the org. For tenants
+ * with large history, replace with a SUM() RPC / materialized view.
+ */
+export async function GET(_request: NextRequest) {
   try {
     const supabase = await createClient()
-    const { data: { user }, error: userError } = await (supabase as any).auth.getUser()
-    const canUseSupabase = typeof (supabase as any).from === 'function'
-    const canQuery = canUseSupabase && !!user && !userError
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
 
-    // En modo mock o sin Supabase, usar el backend para obtener estadísticas
-    if (!canQuery) {
-      try {
-        const response = await api.get('/dashboard/stats')
-        const stats = response.data.stats || response.data.data || {}
-        return NextResponse.json({ success: true, stats, data: stats, count: (stats.transaction_count || 0) })
-      } catch (err) {
-        // Fallback seguro: estadísticas vacías
-        const empty = { total_sales: 0, transaction_count: 0, average_ticket: 0 }
-        return NextResponse.json({ success: true, stats: empty, data: empty, count: 0 })
-      }
+    if (userError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Supabase configurado: obtener ventas y calcular estadísticas
-    const { data: sales, error } = await (supabase as any)
+    const organizationId = await getUserOrganizationId(user.id)
+    if (!organizationId) {
+      return NextResponse.json({ error: 'No organization' }, { status: 403 })
+    }
+
+    const admin = createAdminClient()
+    const { data: sales, error } = await admin
       .from('sales')
-      .select(`
-        id,
-        total,
-        created_at
-      `)
+      .select('id, total, created_at')
+      .eq('organization_id', organizationId)
       .order('created_at', { ascending: false })
+      .limit(5000)
 
     if (error) {
-      console.error('Error fetching sales stats:', error)
+      console.error('sales-stats: query error', error)
       return NextResponse.json(
-        { error: 'Failed to fetch sales statistics', details: error.message },
+        { error: 'Failed to fetch sales statistics' },
         { status: 500 }
       )
     }
 
-    const totalSales = (sales ?? []).reduce(
-      (sum: number, sale: { total?: number }) => sum + (sale.total ?? 0),
+    const rows = sales ?? []
+    const totalSales = rows.reduce(
+      (s: number, r: { total?: number }) => s + Number(r.total ?? 0),
       0
     )
-    const transactionCount = sales?.length || 0
+    const transactionCount = rows.length
     const averageTicket = transactionCount > 0 ? totalSales / transactionCount : 0
+
+    const stats = {
+      total_sales: totalSales,
+      transaction_count: transactionCount,
+      average_ticket: averageTicket,
+    }
 
     return NextResponse.json({
       success: true,
-      stats: {
-        total_sales: totalSales,
-        transaction_count: transactionCount,
-        average_ticket: averageTicket
-      },
-      data: sales || [],
-      count: transactionCount
+      stats,
+      data: rows,
+      count: transactionCount,
     })
-
   } catch (error) {
-    console.error('Unexpected error in sales-stats API:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    console.error('sales-stats: unexpected', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
