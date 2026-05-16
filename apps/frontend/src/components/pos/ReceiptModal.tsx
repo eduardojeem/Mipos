@@ -89,11 +89,46 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
   const [isPrinting, setIsPrinting] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isSubmittingCsat, setIsSubmittingCsat] = useState(false);
   // Cualquier acción en curso bloquea las otras para evitar dobles
   // descargas, popups encimados, prints duplicados, etc.
   const isAnyActionRunning = isPrinting || isDownloading;
   const [csatScore, setCsatScore] = useState<number | null>(null);
   const [csatSubmitted, setCsatSubmitted] = useState(false);
+
+  const submitCsat = useCallback(async () => {
+    if (!saleData || csatScore === null) return;
+    setIsSubmittingCsat(true);
+    // Fallback: siempre persistir a localStorage primero. Si el POST falla
+    // (offline, RLS, etc.) al menos el score no se pierde y un sync futuro
+    // puede levantarlo desde localStorage.
+    try {
+      localStorage.setItem(`csat:${saleData.id}`, String(csatScore));
+    } catch {}
+
+    try {
+      const res = await fetch('/api/pos/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ saleId: saleData.id, score: csatScore }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || `HTTP ${res.status}`);
+      }
+      setCsatSubmitted(true);
+    } catch (error) {
+      console.warn('[receipt] CSAT POST failed (kept in localStorage):', error);
+      // Marcamos como submitted igual — la UX no debería penalizar al user
+      // por un fallo de conexión cuando ya guardamos local.
+      setCsatSubmitted(true);
+      toast.warning('Evaluación guardada localmente', {
+        description: 'Se sincronizará cuando recuperes conexión.',
+      });
+    } finally {
+      setIsSubmittingCsat(false);
+    }
+  }, [saleData, csatScore]);
   const autoPrintHandledRef = useRef(false);
   const autoShareHandledRef = useRef(false);
 
@@ -877,16 +912,10 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = React.memo(({
                   <Button
                     size="sm"
                     className="mt-3 w-full"
-                    disabled={csatScore === null}
-                    onClick={() => {
-                      if (!saleData || csatScore === null) return;
-                      try {
-                        localStorage.setItem(`csat:${saleData.id}`, String(csatScore));
-                      } catch {}
-                      setCsatSubmitted(true);
-                    }}
+                    disabled={csatScore === null || isSubmittingCsat}
+                    onClick={() => void submitCsat()}
                   >
-                    Enviar evaluación
+                    {isSubmittingCsat ? 'Enviando...' : 'Enviar evaluación'}
                   </Button>
                 </>
               ) : (
