@@ -3,18 +3,6 @@ import { createClient } from '@/lib/supabase';
 import { CACHE_CONFIG } from '@/config/sales.config';
 import { useCurrentOrganizationId } from '@/hooks/use-current-organization';
 
-export interface SalesSummary {
-  todaySales: number;
-  todayCount: number;
-  weekSales: number;
-  weekCount: number;
-  monthSales: number;
-  monthCount: number;
-  avgTicket: number;
-  topPaymentMethod: string;
-  growthPercentage: number;
-}
-
 export interface RecentSale {
   id: string;
   total_amount: number;
@@ -22,76 +10,6 @@ export interface RecentSale {
   created_at: string;
   customer_name?: string;
   status: string;
-}
-
-export function useSalesSummary() {
-  const supabase = createClient();
-  const orgId = useCurrentOrganizationId();
-
-  return useQuery({
-    queryKey: ['sales-summary-optimized', orgId],
-    queryFn: async (): Promise<SalesSummary> => {
-      if (!orgId) return { todaySales: 0, todayCount: 0, weekSales: 0, weekCount: 0, monthSales: 0, monthCount: 0, avgTicket: 0, topPaymentMethod: 'N/A', growthPercentage: 0 };
-
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const todayISO = today.toISOString();
-
-      const weekStart = new Date();
-      weekStart.setDate(today.getDate() - 7);
-      weekStart.setHours(0, 0, 0, 0);
-
-      const monthStart = new Date();
-      monthStart.setDate(1);
-      monthStart.setHours(0, 0, 0, 0);
-
-      const [
-        { data: todayData },
-        { data: weekData },
-        { data: monthData }
-      ] = await Promise.all([
-        supabase.from('sales').select('total, payment_method').eq('organization_id', orgId).gte('created_at', todayISO),
-        supabase.from('sales').select('total').eq('organization_id', orgId).gte('created_at', weekStart.toISOString()),
-        supabase.from('sales').select('total').eq('organization_id', orgId).gte('created_at', monthStart.toISOString())
-      ]);
-
-      const calculateTotal = (data: any[]) => data?.reduce((sum, item) => sum + (item.total || 0), 0) || 0;
-
-      const todaySales = calculateTotal(todayData || []);
-      const todayCount = todayData?.length || 0;
-
-      const weekSales = calculateTotal(weekData || []);
-      const weekCount = weekData?.length || 0;
-
-      const monthSales = calculateTotal(monthData || []);
-      const monthCount = monthData?.length || 0;
-
-      const avgTicket = todayCount > 0 ? todaySales / todayCount : 0;
-
-      // Top Payment Method (Simplified)
-      const paymentMethods: Record<string, number> = {};
-      todayData?.forEach((sale: any) => {
-        const method = sale.payment_method || 'UNKNOWN';
-        paymentMethods[method] = (paymentMethods[method] || 0) + 1;
-      });
-      const topPaymentMethod = Object.entries(paymentMethods).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A';
-
-      return {
-        todaySales,
-        todayCount,
-        weekSales,
-        weekCount,
-        monthSales,
-        monthCount,
-        avgTicket,
-        topPaymentMethod,
-        growthPercentage: 0 // Requires historical comparison, skipping for speed
-      };
-    },
-    enabled: !!orgId,
-    staleTime: CACHE_CONFIG.SUMMARY_STALE_TIME,
-    refetchInterval: CACHE_CONFIG.REFETCH_INTERVAL
-  });
 }
 
 export function useRecentSales(limit = 10) {
