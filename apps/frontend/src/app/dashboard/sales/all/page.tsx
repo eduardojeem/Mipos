@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, RefreshCw, Download } from 'lucide-react';
 import Link from 'next/link';
@@ -9,13 +9,15 @@ import { useDebounce } from 'use-debounce';
 import { SalesFilters, SalesFilters as FiltersType } from './components/SalesFilters';
 import { SalesDataTable, Sale } from './components/SalesDataTable';
 import { SaleDetailModal } from './components/SaleDetailModal';
-import { useSales } from './hooks/useSales';
+import { useSales, SortField, SortOrder } from './hooks/useSales';
 import { PermissionProvider, PermissionGuard } from '@/components/ui/permission-guard';
 
 export default function AllSalesPage() {
   const [filters, setFilters] = useState<FiltersType>({});
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
+  const [sortBy, setSortBy] = useState<SortField>('date');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const { toast } = useToast();
@@ -27,15 +29,26 @@ export default function AllSalesPage() {
     [filters, debouncedSearch],
   );
 
-  // Reset to page 1 when filters change
+  // Reset to page 1 when filters or sort change
   useEffect(() => {
     setPage(1);
-  }, [debouncedFilters]);
+  }, [debouncedFilters, sortBy, sortOrder]);
+
+  const handleSort = useCallback((field: SortField) => {
+    if (sortBy === field) {
+      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy(field);
+      setSortOrder('desc');
+    }
+  }, [sortBy]);
 
   const { sales, pagination, isLoading, isExporting, error, refetch, exportSales } = useSales({
     filters: debouncedFilters,
     page,
     limit,
+    sortBy,
+    sortOrder,
   });
 
   useEffect(() => {
@@ -112,6 +125,9 @@ export default function AllSalesPage() {
         onPageSizeChange={(size) => { setLimit(size); setPage(1); }}
         onViewDetails={(sale) => { setSelectedSale(sale); setIsDetailModalOpen(true); }}
         onExport={handleExport}
+        onSort={handleSort}
+        sortBy={sortBy}
+        sortOrder={sortOrder}
         isLoading={isLoading}
       />
 

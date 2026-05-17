@@ -27,7 +27,7 @@ export const CACHE_CONFIG = {
      */
     SUMMARY_STALE_TIME: 2 * 60 * 1000,      // 2 minutos
     RECENT_STALE_TIME: 1 * 60 * 1000,       // 1 minuto
-    LIST_STALE_TIME: 30 * 1000,             // 30 segundos
+    LIST_STALE_TIME: 5 * 60 * 1000,         // 5 minutos
     REFETCH_INTERVAL: 5 * 60 * 1000,        // 5 minutos
     RECENT_REFETCH_INTERVAL: 2 * 60 * 1000, // 2 minutos
 } as const;
