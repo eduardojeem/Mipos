@@ -91,6 +91,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       }
 
       // Supabase returned an error — try backend if available, else surface the error
+      console.error('[GET /api/sales/:id] Supabase error:', supabaseError);
       const backendBase = getBackendBaseURL();
       if (!backendBase) {
         return NextResponse.json(
@@ -111,6 +112,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     // canQuery=false — Supabase client unavailable, must use backend
+    console.error('[GET /api/sales/:id] canQuery=false, user:', !!(user), 'BACKEND_URL set:', !!process.env.BACKEND_URL);
     const backendBase = getBackendBaseURL();
     if (!backendBase) return NextResponse.json({ error: 'Backend URL not configured and Supabase client unavailable' }, { status: 503 });
     const context2 = getRequestOperationalContext(request, {} as Parameters<typeof getRequestOperationalContext>[1]);
@@ -124,6 +126,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const data2 = await res2.json();
     return NextResponse.json({ success: true, sale: data2.sale || data2 });
   } catch (error) {
+    console.error('[GET /api/sales/:id] Unhandled exception:', error);
     return NextResponse.json({ error: 'Failed to fetch sale', details: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 });
   }
 }

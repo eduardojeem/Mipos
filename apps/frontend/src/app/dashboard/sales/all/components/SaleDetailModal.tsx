@@ -64,10 +64,18 @@ export function SaleDetailModal({ sale, open, onClose }: SaleDetailModalProps) {
     isError: errorDetail,
   } = useQuery<SaleDetailResponse>({
     queryKey: ['sale-detail', sale?.id],
-    queryFn: () =>
-      api.get<SaleDetailResponse>(`/sales/${sale!.id}?include=items`, {
-        headers: { 'X-No-Retry': '1' },
-      }).then((r) => r.data),
+    queryFn: async () => {
+      try {
+        const r = await api.get<SaleDetailResponse>(`/sales/${sale!.id}?include=items`, {
+          headers: { 'X-No-Retry': '1' },
+        });
+        return r.data;
+      } catch (err: unknown) {
+        const axiosErr = err as { response?: { data?: unknown } };
+        console.error('[SaleDetailModal] fetch error body:', axiosErr?.response?.data);
+        throw err;
+      }
+    },
     enabled: open && !!sale?.id,
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
