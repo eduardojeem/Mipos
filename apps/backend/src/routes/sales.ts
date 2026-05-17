@@ -13,6 +13,7 @@ import { getSupabaseClient } from '../config/supabase';
 import { getOperationalContext } from './helpers/operational-context';
 import { buildSalePaymentDetails, type StoredSalePaymentDetails } from './helpers/sale-payment-details';
 import { findScopedOpenCashSession } from './helpers/cash-session-context';
+import { createAuditLogFromRequest } from '../lib/audit-logger';
 
 const router = express.Router();
 
@@ -1554,6 +1555,13 @@ router.post('/', criticalOperationsRateLimit, requirePermission('sales', 'create
     console.error('Failed to enqueue sync job for sale', completeSale?.id, err);
   });
 
+  createAuditLogFromRequest(prisma, req, 'SALE_CREATED', 'SALE', completeSale?.id, {
+    total,
+    paymentMethod: salePaymentDetails.primaryMethod,
+    itemCount: items.length,
+    customerId: customerId ?? null,
+  }).catch(() => {});
+
     res.status(201).json({
       sale: attachSaleOperationalFields(completeSale, salePaymentDetails, operationalContext),
       summary: {
@@ -1623,6 +1631,14 @@ router.post('/', criticalOperationsRateLimit, requirePermission('sales', 'create
     }).catch(err => {
       console.error('Failed to enqueue sync job for sale', fallbackResult.sale?.id, err);
     });
+
+    createAuditLogFromRequest(prisma, req, 'SALE_CREATED', 'SALE', fallbackResult.sale?.id, {
+      total: fallbackResult.total,
+      paymentMethod,
+      itemCount: items.length,
+      customerId: customerId ?? null,
+      via: 'supabase_fallback',
+    }).catch(() => {});
 
     res.status(201).json({
       sale: fallbackResult.sale,

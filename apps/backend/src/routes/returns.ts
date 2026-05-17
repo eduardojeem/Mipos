@@ -17,6 +17,7 @@ import { syncReturnToExternalSystem } from './helpers/external-sync';
 import { RETURNS_CONFIG } from '../config/returns-config';
 import { getOperationalContext } from './helpers/operational-context';
 import { findScopedOpenCashSession } from './helpers/cash-session-context';
+import { createAuditLogFromRequest } from '../lib/audit-logger';
 // Temporary: Using console until logger API is fixed
 const logger = console;
 
@@ -1013,6 +1014,14 @@ router.post('/',
       logger.warn('Could not release return lock (will auto-expire)', { lockErr });
     }
 
+    createAuditLogFromRequest(prisma, req, 'RETURN_CREATED', 'RETURN', completeReturn!.id, {
+      originalSaleId,
+      totalAmount: total,
+      reason,
+      refundMethod: primaryRefundMethod,
+      itemCount: items.length,
+    }).catch(() => {});
+
     res.status(201).json({
       return: completeReturn,
       summary: {
@@ -1400,6 +1409,12 @@ router.delete('/:id',
     await prisma.return.deleteMany({
       where: { id, organizationId }
     });
+
+    createAuditLogFromRequest(prisma, req, 'RETURN_DELETED', 'RETURN', id, {
+      previousStatus: returnRecord.status,
+      totalAmount: returnRecord.totalAmount,
+      reason: returnRecord.reason,
+    }).catch(() => {});
 
     res.json({ message: 'Return deleted successfully' });
   }));
