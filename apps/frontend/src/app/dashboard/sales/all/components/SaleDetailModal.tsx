@@ -98,65 +98,117 @@ export function SaleDetailModal({ sale, open, onClose }: SaleDetailModalProps) {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
+    const shortId = sale.id.slice(0, 8).toUpperCase();
+    const dateStr = format(new Date(sale.created_at), "d 'de' MMMM yyyy, HH:mm", { locale: es });
+
     printWindow.document.write(`
       <!DOCTYPE html><html><head>
-        <title>Venta #${sale.id}</title>
+        <title>Comprobante ${shortId}</title>
         <style>
-          body{font-family:Arial,sans-serif;margin:20px;font-size:14px}
-          h2{margin-bottom:4px}
-          p{margin:4px 0}
-          table{width:100%;border-collapse:collapse;margin:16px 0}
-          th,td{border:1px solid #ddd;padding:8px;text-align:left}
-          th{background:#f5f5f5;font-weight:600}
-          .meta{color:#555;font-size:12px;margin-bottom:16px}
-          .totals{margin-top:8px}
-          .total-row{display:flex;justify-content:space-between;margin:4px 0}
-          .total-final{font-weight:bold;font-size:1.1em;border-top:2px solid #000;padding-top:8px;margin-top:4px}
+          *{box-sizing:border-box;margin:0;padding:0}
+          body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;color:#111;background:#fff;padding:32px 40px}
+          @media print{body{padding:0}}
+
+          /* Header */
+          .header{text-align:center;border-bottom:2px solid #111;padding-bottom:16px;margin-bottom:20px}
+          .header h1{font-size:22px;font-weight:700;letter-spacing:.5px}
+          .header .ref{font-size:12px;color:#555;margin-top:4px;font-family:monospace}
+          .header .status{display:inline-block;margin-top:8px;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:600;border:1.5px solid #111}
+
+          /* Meta */
+          .meta{display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;margin-bottom:20px;font-size:12px}
+          .meta-row{display:contents}
+          .meta-label{color:#666}
+          .meta-value{font-weight:500}
+
+          /* Items table */
+          table{width:100%;border-collapse:collapse;margin-bottom:16px;font-size:12.5px}
+          thead tr{border-bottom:1.5px solid #111}
+          tbody tr{border-bottom:1px solid #e0e0e0}
+          tbody tr:last-child{border-bottom:none}
+          th{padding:7px 8px;text-align:left;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:#444}
+          td{padding:8px 8px;vertical-align:middle}
+          .td-right{text-align:right}
+          .sku{font-size:10px;color:#888;display:block}
+          .disc{color:#c0392b}
+
+          /* Totals */
+          .totals{border-top:1.5px solid #111;padding-top:12px;margin-left:auto;width:240px}
+          .total-row{display:flex;justify-content:space-between;padding:3px 0;font-size:12.5px}
+          .total-row.muted span:first-child{color:#666}
+          .total-row.disc{color:#c0392b}
+          .total-row.final{font-weight:700;font-size:15px;border-top:1px solid #ccc;margin-top:6px;padding-top:8px}
+
+          /* Footer */
+          .footer{margin-top:28px;text-align:center;font-size:10.5px;color:#999;border-top:1px solid #e0e0e0;padding-top:12px}
         </style>
       </head><body>
-        <h2>Venta #${sale.id.slice(0, 8)}</h2>
-        <div class="meta">
-          <p>Fecha: ${format(new Date(sale.created_at), 'PPP p', { locale: es })}</p>
-          <p>Cliente: ${sale.customer ? sale.customer.name : 'Sin cliente'}</p>
-          ${cashier ? `<p>Cajero: ${cashier.fullName}</p>` : ''}
-          <p>Método: ${formatPaymentMethod(sale.payment_method)} &nbsp;|&nbsp; Estado: ${formatStatus(sale.status)}</p>
+        <div class="header">
+          <h1>Comprobante de Venta</h1>
+          <div class="ref">Ref: #${shortId}</div>
+          <div class="status">${formatStatus(sale.status)}</div>
         </div>
+
+        <div class="meta">
+          <span class="meta-label">Fecha</span>
+          <span class="meta-value">${dateStr}</span>
+
+          <span class="meta-label">Cliente</span>
+          <span class="meta-value">${sale.customer ? sale.customer.name : 'Sin cliente registrado'}</span>
+
+          ${sale.customer?.email ? `<span class="meta-label">Email</span><span class="meta-value">${sale.customer.email}</span>` : ''}
+          ${sale.customer?.phone ? `<span class="meta-label">Teléfono</span><span class="meta-value">${sale.customer.phone}</span>` : ''}
+
+          <span class="meta-label">Método de pago</span>
+          <span class="meta-value">${formatPaymentMethod(sale.payment_method)}</span>
+
+          ${cashier ? `<span class="meta-label">Cajero</span><span class="meta-value">${cashier.fullName}</span>` : ''}
+        </div>
+
         <table>
           <thead>
             <tr>
-              <th>Producto</th><th>SKU</th><th>Cant.</th><th>Precio</th><th>Desc.</th><th>Total</th>
+              <th>Producto</th>
+              <th class="td-right">Cant.</th>
+              <th class="td-right">Precio u.</th>
+              <th class="td-right">Desc.</th>
+              <th class="td-right">Total</th>
             </tr>
           </thead>
           <tbody>
             ${
-              items
-                .map(
-                  (item) =>
-                    `<tr>
-                      <td>${item.product?.name || item.product_id}</td>
-                      <td>${item.product?.sku || '—'}</td>
-                      <td>${item.quantity}</td>
-                      <td>${formatCurrency(item.unit_price)}</td>
-                      <td>${item.discount_amount > 0 ? `-${formatCurrency(item.discount_amount)}` : '—'}</td>
-                      <td>${formatCurrency(item.total_price)}</td>
-                    </tr>`,
-                )
-                .join('') || '<tr><td colspan="6">Sin productos</td></tr>'
+              items.map((item) => `
+                <tr>
+                  <td>
+                    ${item.product?.name || `Producto ${item.product_id.slice(0, 8)}`}
+                    ${item.product?.sku ? `<span class="sku">SKU: ${item.product.sku}</span>` : ''}
+                  </td>
+                  <td class="td-right">${item.quantity}</td>
+                  <td class="td-right">${formatCurrency(item.unit_price)}</td>
+                  <td class="td-right disc">${item.discount_amount > 0 ? `-${formatCurrency(item.discount_amount)}` : '—'}</td>
+                  <td class="td-right">${formatCurrency(item.total_price)}</td>
+                </tr>
+              `).join('') || '<tr><td colspan="5" style="text-align:center;color:#888;padding:16px">Sin productos</td></tr>'
             }
           </tbody>
         </table>
+
         <div class="totals">
-          <div class="total-row"><span>Subtotal:</span><span>${formatCurrency(subtotal)}</span></div>
-          ${saleDiscount > 0 ? `<div class="total-row"><span>Descuento:</span><span>-${formatCurrency(saleDiscount)}</span></div>` : ''}
-          ${totalTax > 0 ? `<div class="total-row"><span>Impuesto:</span><span>${formatCurrency(totalTax)}</span></div>` : ''}
-          <div class="total-row total-final"><span>Total:</span><span>${formatCurrency(total)}</span></div>
+          <div class="total-row muted"><span>Subtotal</span><span>${formatCurrency(subtotal)}</span></div>
+          ${saleDiscount > 0 ? `<div class="total-row disc"><span>Descuento</span><span>-${formatCurrency(saleDiscount)}</span></div>` : ''}
+          ${totalTax > 0 ? `<div class="total-row muted"><span>Impuesto</span><span>${formatCurrency(totalTax)}</span></div>` : ''}
+          <div class="total-row final"><span>Total</span><span>${formatCurrency(total)}</span></div>
+        </div>
+
+        <div class="footer">
+          Generado el ${format(new Date(), "d/MM/yyyy 'a las' HH:mm", { locale: es })}
+          &nbsp;·&nbsp; ID: ${sale.id}
         </div>
       </body></html>
     `);
     printWindow.document.close();
     printWindow.focus();
     printWindow.print();
-    // Don't auto-close — browser handles this after the print dialog
   };
 
   const hasPartialReturns = items.some((i) => (i.alreadyReturned ?? 0) > 0);
