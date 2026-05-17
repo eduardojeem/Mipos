@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getRequestOperationalContext } from '@/app/api/_utils/operational-context';
+import { getUserOrganizationId } from '@/app/api/_utils/organization';
 
 function getBackendBaseURL(): string | null {
   const url = process.env.BACKEND_URL;
@@ -39,7 +40,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const accessToken: string | undefined = session?.access_token;
     const canQuery = typeof client.from === 'function' && !!user;
 
-    const orgId = (request.headers.get('x-organization-id') || '').trim();
+    let orgId = (request.headers.get('x-organization-id') || '').trim();
+    if (!orgId && user?.id) {
+      const resolved = await getUserOrganizationId(user.id);
+      if (resolved) orgId = resolved;
+    }
     if (!orgId) return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
 
     const include = (new URL(request.url).searchParams.get('include') || '').toLowerCase();
@@ -62,7 +67,20 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         .maybeSingle();
 
       if (!error && sale) {
-        return NextResponse.json({ success: true, sale });
+        // Normalize snake_case Supabase fields to match the Prisma/backend format
+        // so the frontend only needs to handle one shape.
+        const normalized = {
+          ...sale,
+          saleItems: Array.isArray((sale as any).sale_items)
+            ? (sale as any).sale_items.map((item: any) => ({
+                ...item,
+                product: item.products ?? item.product ?? null,
+                products: undefined,
+              }))
+            : undefined,
+          sale_items: undefined,
+        };
+        return NextResponse.json({ success: true, sale: normalized });
       }
     }
 

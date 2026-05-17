@@ -1,6 +1,6 @@
 'use client';
 
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -64,7 +64,7 @@ export function SaleDetailModal({ sale, open, onClose }: SaleDetailModalProps) {
     isError: errorDetail,
   } = useQuery<SaleDetailResponse>({
     queryKey: ['sale-detail', sale?.id],
-    queryFn: () => api.get<SaleDetailResponse>(`/sales/${sale!.id}`).then((r) => r.data),
+    queryFn: () => api.get<SaleDetailResponse>(`/sales/${sale!.id}?include=items`).then((r) => r.data),
     enabled: open && !!sale?.id,
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -234,6 +234,9 @@ export function SaleDetailModal({ sale, open, onClose }: SaleDetailModalProps) {
             </Badge>
           </DialogTitle>
         </DialogHeader>
+        <DialogDescription className="sr-only">
+          Detalle de la venta #{sale.id.slice(0, 8)} — productos, totales y acciones disponibles.
+        </DialogDescription>
 
         <div className="space-y-6">
           {/* Meta grid */}
