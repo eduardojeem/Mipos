@@ -64,16 +64,23 @@ export function SaleDetailModal({ sale, open, onClose }: SaleDetailModalProps) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const supabase = createSupabaseClient() as any;
 
+      // Query sale_items without a products embed — Supabase PostgREST requires
+      // an explicit FK constraint for embedded joins; the sale_items→products FK
+      // may not be declared in the schema. Product info is merged from list cache.
       const { data: itemsData, error: itemsError } = await supabase
         .from('sale_items')
-        .select('id, sale_id, product_id, quantity, unit_price, total_price, discount_amount, products(id, name, sku)')
+        .select('id, sale_id, product_id, quantity, unit_price, total_price, discount_amount')
         .eq('sale_id', sale!.id);
+
+      // Build a product lookup from whatever the list already fetched
+      const productMap = new Map(
+        (sale?.items ?? []).map((i) => [i.product_id, i.product ?? null]),
+      );
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const items: SaleItem[] = (itemsData ?? []).map((item: any) => ({
         ...item,
-        product: item.products ?? null,
-        products: undefined,
+        product: productMap.get(item.product_id) ?? null,
       }));
 
       return {
