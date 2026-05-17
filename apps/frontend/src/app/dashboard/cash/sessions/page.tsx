@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, cn } from "@/lib/utils";
 import { formatDateTime } from "@/lib/date-utils";
-import { Activity, AlertCircle, Clock, RefreshCw, CheckCircle, XCircle, Download, List } from "lucide-react";
+import { Activity, AlertCircle, Clock, RefreshCw, CheckCircle, XCircle, Download, List, Zap, ZapOff } from "lucide-react";
 import { UnifiedPermissionGuard, WithPermission } from "@/components/auth/UnifiedPermissionGuard";
 import { Pagination } from "@/components/ui/Pagination";
 import { usePagination } from "@/hooks/usePagination";
@@ -110,7 +110,19 @@ export default function SessionsPage() {
     orderDir: sortDir,
   });
 
-  useSessionsRealtime(Boolean(organizationId));
+  const [realtimeEnabled, setRealtimeEnabled] = React.useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('cash-sessions-realtime') === 'true';
+  });
+  const handleToggleRealtime = () => {
+    setRealtimeEnabled((prev: boolean) => {
+      const next = !prev;
+      localStorage.setItem('cash-sessions-realtime', String(next));
+      return next;
+    });
+  };
+
+  useSessionsRealtime(organizationId, realtimeEnabled);
 
   const { data: usersRes } = useQuery({
     queryKey: ["usersOptionsSessions", organizationId ?? "no-org"],
@@ -473,6 +485,19 @@ export default function SessionsPage() {
             >
               <RefreshCw className={cn("h-4 w-4 mr-2", loadingSessions && "animate-spin")} />
               {loadingSessions ? "Actualizando..." : "Actualizar"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleToggleRealtime}
+              className={cn(
+                realtimeEnabled && "border-emerald-300 bg-emerald-50/50 dark:bg-emerald-500/10"
+              )}
+            >
+              {realtimeEnabled
+                ? <Zap className="h-4 w-4 mr-2 text-emerald-500" />
+                : <ZapOff className="h-4 w-4 mr-2 text-slate-400" />}
+              Auto-actualizar
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
