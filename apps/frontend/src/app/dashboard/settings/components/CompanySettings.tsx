@@ -14,7 +14,23 @@ import {
   Users,
   Image as ImageIcon,
   AlertTriangle,
+  Store,
+  Laptop,
+  Shirt,
+  ShoppingCart,
+  Pill,
+  Sparkles,
+  Home,
+  Dumbbell,
+  BookOpen,
+  Car,
+  Gamepad2,
+  PawPrint,
+  Hammer,
+  UtensilsCrossed,
+  Layers3,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,6 +44,21 @@ import { useToast } from '@/components/ui/use-toast';
 import type { CompanyProfile } from '@/lib/services/plan-service';
 import { useSystemSettings, useUpdateSystemSettings } from '../hooks/useOptimizedSettings';
 import { usePermissions } from '@/components/ui/permission-guard';
+import { useMarketplaceCategory } from '../hooks/useMarketplaceCategory';
+
+const ICON_MAP: Record<string, LucideIcon> = {
+  UtensilsCrossed, Laptop, Shirt, ShoppingCart, Pill, Sparkles,
+  Home, Dumbbell, BookOpen, Briefcase, Car, Gamepad2, PawPrint, Hammer, Store, Layers3,
+};
+
+function CategoryIcon({ name, color }: { name: string | null; color: string }) {
+  const Icon = (name && ICON_MAP[name]) ? ICON_MAP[name] : Store;
+  return (
+    <span className="flex h-6 w-6 items-center justify-center rounded-md" style={{ backgroundColor: color }}>
+      <Icon className="h-3.5 w-3.5 text-white" />
+    </span>
+  );
+}
 
 const INDUSTRIES = [
   { value: 'retail',      label: '🛍️  Comercio / Retail' },
@@ -61,6 +92,12 @@ export function CompanySettings() {
   const { toast } = useToast();
   const { hasPermission, userRole } = usePermissions();
   const canEdit = hasPermission('settings.edit') || userRole === 'SUPER_ADMIN';
+  const {
+    allCategories: marketplaceCategories,
+    currentCategoryId,
+    updateCategory: saveMarketplaceCategory,
+    isSaving: isSavingCategory,
+  } = useMarketplaceCategory();
 
   const [isSaving, setIsSaving] = useState(false);
   const [form, setForm] = useState({
@@ -224,9 +261,67 @@ export function CompanySettings() {
               />
             </div>
 
+            {/* Rubro público del marketplace */}
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold uppercase text-muted-foreground flex items-center gap-1.5">
+                <Store className="h-3 w-3" />
+                Rubro en el marketplace público
+              </Label>
+              <p className="text-xs text-muted-foreground -mt-1">
+                Los clientes te encontrarán bajo esta categoría en el marketplace.
+              </p>
+              <Select
+                value={currentCategoryId ?? '__none__'}
+                onValueChange={(v) => {
+                  const newId = v === '__none__' ? null : v;
+                  saveMarketplaceCategory(newId);
+                }}
+                disabled={!canEdit || isSavingCategory}
+              >
+                <SelectTrigger className="focus-visible:ring-primary/50">
+                  <SelectValue placeholder="Selecciona el rubro público…">
+                    {currentCategoryId ? (
+                      (() => {
+                        const cat = marketplaceCategories.find((c) => c.id === currentCategoryId);
+                        return cat ? (
+                          <span className="flex items-center gap-2">
+                            <CategoryIcon name={cat.icon ?? null} color={cat.color} />
+                            {cat.name}
+                          </span>
+                        ) : 'Selecciona el rubro público…';
+                      })()
+                    ) : (
+                      <span className="text-muted-foreground">Sin rubro asignado</span>
+                    )}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">
+                    <span className="text-muted-foreground italic">Sin rubro asignado</span>
+                  </SelectItem>
+                  {marketplaceCategories.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id}>
+                      <span className="flex items-center gap-2">
+                        <CategoryIcon name={cat.icon ?? null} color={cat.color} />
+                        {cat.name}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {currentCategoryId && (
+                <p className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Tu empresa aparece en el marketplace bajo este rubro.
+                </p>
+              )}
+            </div>
+
+            <Separator />
+
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label className="text-xs font-semibold uppercase text-muted-foreground">Rubro *</Label>
+                <Label className="text-xs font-semibold uppercase text-muted-foreground">Rubro interno *</Label>
                 <Select value={form.industry} onValueChange={(v) => set('industry', v)} disabled={!canEdit}>
                   <SelectTrigger className="focus-visible:ring-primary/50">
                     <SelectValue placeholder="Selecciona un rubro" />
@@ -436,11 +531,21 @@ export function CompanySettings() {
             </div>
 
             <p className="font-bold text-lg leading-tight truncate">{form.name || 'Nombre del negocio'}</p>
-            {form.industry && (
+            {currentCategoryId ? (
+              (() => {
+                const cat = marketplaceCategories.find((c) => c.id === currentCategoryId);
+                return cat ? (
+                  <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium text-white" style={{ backgroundColor: cat.color }}>
+                    <CategoryIcon name={cat.icon ?? null} color="transparent" />
+                    {cat.name}
+                  </span>
+                ) : null;
+              })()
+            ) : form.industry ? (
               <p className="text-sm text-muted-foreground mt-0.5">
                 {INDUSTRIES.find((i) => i.value === form.industry)?.label || form.industry}
               </p>
-            )}
+            ) : null}
           </CardContent>
         </Card>
 
