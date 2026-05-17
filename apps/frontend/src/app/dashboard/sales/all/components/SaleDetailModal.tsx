@@ -18,7 +18,7 @@ import { createLogger } from '@/lib/logger';
 import { formatStatus, formatPaymentMethod, formatSaleType, getStatusBadgeVariant } from '@/lib/sales-formatters';
 import { formatCurrency } from '@/lib/utils';
 import { useToast } from '@/components/ui/use-toast';
-import api from '@/lib/api';
+import { createClient as createSupabaseClient } from '@/lib/supabase/client';
 
 interface SaleDetailModalProps {
   sale: Sale | null;
@@ -64,17 +64,37 @@ export function SaleDetailModal({ sale, open, onClose }: SaleDetailModalProps) {
     isError: errorDetail,
   } = useQuery<SaleDetailResponse>({
     queryKey: ['sale-detail', sale?.id],
-    queryFn: async () => {
-      try {
-        const r = await api.get<SaleDetailResponse>(`/sales/${sale!.id}?include=items`, {
-          headers: { 'X-No-Retry': '1' },
-        });
-        return r.data;
-      } catch (err: unknown) {
-        const axiosErr = err as { response?: { data?: unknown } };
-        console.error('[SaleDetailModal] fetch error body:', axiosErr?.response?.data);
-        throw err;
-      }
+    queryFn: async (): Promise<SaleDetailResponse> => {
+      const supabase = createSupabaseClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from('sales')
+        .select(`
+          *,
+          customer:customers(id, name, email, phone),
+          sale_items(id, sale_id, product_id, quantity, unit_price, total_price, discount_amount, products(id, name, sku))
+        `)
+        .eq('id', sale!.id)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      if (!data) throw new Error('Sale not found');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const normalized: SaleDetailResponse = {
+        sale: {
+          ...data,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          saleItems: Array.isArray(data.sale_items)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ? data.sale_items.map((item: any) => ({
+                ...item,
+                product: item.products ?? null,
+                products: undefined,
+              }))
+            : [],
+          sale_items: undefined,
+        },
+      };
+      return normalized;
     },
     enabled: open && !!sale?.id,
     staleTime: 5 * 60 * 1000,
