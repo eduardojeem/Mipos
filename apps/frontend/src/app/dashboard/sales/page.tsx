@@ -32,6 +32,7 @@ import { formatDate } from '@/lib/utils';
 import Link from 'next/link';
 import { useRecentSales, RecentSale } from '@/hooks/useOptimizedSales';
 import { useSalesKpis, PaymentBreakdown } from '@/app/dashboard/sales/hooks/useSalesKpis';
+import { SalesTrendChart } from '@/app/dashboard/sales/components/SalesTrendChart';
 import { PremiumDashboardCard } from '@/components/dashboard/shared/PremiumDashboardCard';
 import { DashboardStatCard } from '@/components/dashboard/shared/DashboardStatCard';
 import { cn } from '@/lib/utils';
@@ -285,6 +286,11 @@ export default function SalesPage() {
               accent="from-amber-500 to-orange-500"
               delay={0.4}
             />
+          </motion.div>
+
+          {/* Trend chart */}
+          <motion.div variants={itemVariants}>
+            <SalesTrendChart />
           </motion.div>
 
           {/* Main content */}

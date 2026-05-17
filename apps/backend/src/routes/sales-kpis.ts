@@ -73,14 +73,15 @@ function resolveWindow(range?: string, fromIso?: string, toIso?: string): { from
 
 type SalesKpisRow = { kpis: unknown };
 
+interface TrendPoint {
+  day: string;
+  revenue: number;
+  transactions: number;
+}
+
 /**
  * GET /api/sales/kpis?range=today|yesterday|7d|30d|90d|mtd|ytd
  *                  or ?from=ISO&to=ISO
- *
- * Returns a single jsonb payload computed in Postgres via `get_sales_kpis`:
- *   revenue, transactions, avg_ticket, gross_margin (+ %),
- *   payment_breakdown, top_products_by_qty/by_revenue,
- *   previous_window (same length, delta%) for comparison.
  */
 router.get('/kpis',
   requirePermission('sales', 'read'),
@@ -94,6 +95,42 @@ router.get('/kpis',
     `;
 
     res.json({ success: true, data: rows[0]?.kpis ?? null });
+  })
+);
+
+/**
+ * GET /api/sales/trend?range=7d|30d|90d|mtd|ytd  or ?from=ISO&to=ISO
+ *
+ * Returns daily revenue + transaction count for the requested window.
+ * Used to render the AreaChart in the sales dashboard.
+ */
+router.get('/trend',
+  requirePermission('sales', 'read'),
+  asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
+    const organizationId = requireOrgId(req);
+    const query = querySchema.parse(req.query);
+    const { from, to } = resolveWindow(query.range ?? '7d', query.from, query.to);
+
+    const rows = await prisma.$queryRaw<Array<{ day: Date; revenue: number; transactions: number }>>`
+      SELECT
+        date_trunc('day', created_at)::date            AS day,
+        COUNT(*)::int                                  AS transactions,
+        COALESCE(SUM(total), 0)::numeric               AS revenue
+      FROM sales
+      WHERE organization_id = ${organizationId}
+        AND created_at >= ${from}
+        AND created_at <  ${to}
+      GROUP BY 1
+      ORDER BY 1
+    `;
+
+    const data: TrendPoint[] = rows.map(r => ({
+      day: r.day instanceof Date ? r.day.toISOString().slice(0, 10) : String(r.day),
+      revenue: Number(r.revenue),
+      transactions: Number(r.transactions),
+    }));
+
+    res.json({ success: true, data });
   })
 );
 
