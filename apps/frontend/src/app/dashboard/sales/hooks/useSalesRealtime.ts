@@ -1,20 +1,46 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { createClient } from '@/lib/supabase/client';
 
+// How long to wait after the last event before actually refetching.
+// A busy POS may ring 5 sales in 3 s — we fire one refresh, not five.
+const DEBOUNCE_MS = 3_000;
+
 /**
- * Subscribes to INSERT/UPDATE events on the `sales` table for the given org.
- * Invalidates sales-kpis, sales-trend, sales-breakdown, and recent-sales
- * so all dashboard KPIs refresh instantly when a sale is recorded — without
- * polling every 5 minutes.
+ * Subscribes to INSERT/UPDATE events on `sales` for the given org and
+ * invalidates KPI queries with a debounce so bursts of sales cause at most
+ * one refresh per DEBOUNCE_MS window instead of one per sale.
+ *
+ * Cost model:
+ *  - 1 Supabase Realtime connection per open dashboard tab (not per sale)
+ *  - Messages received: 1 per sale event (filtered server-side by org)
+ *  - Backend refetches: capped at 1 per DEBOUNCE_MS regardless of sale volume
  */
 export function useSalesRealtime(organizationId: string | null | undefined) {
   const queryClient = useQueryClient();
+  const kpisTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recentTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!organizationId) return;
+
+    function invalidateKpis() {
+      if (kpisTimer.current) clearTimeout(kpisTimer.current);
+      kpisTimer.current = setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['sales-kpis'] });
+        queryClient.invalidateQueries({ queryKey: ['sales-trend'] });
+        queryClient.invalidateQueries({ queryKey: ['sales-breakdown'] });
+      }, DEBOUNCE_MS);
+    }
+
+    function invalidateRecent() {
+      if (recentTimer.current) clearTimeout(recentTimer.current);
+      recentTimer.current = setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['recent-sales'] });
+      }, DEBOUNCE_MS);
+    }
 
     const supabase = createClient();
     const channel = supabase
@@ -28,10 +54,8 @@ export function useSalesRealtime(organizationId: string | null | undefined) {
           filter: `organization_id=eq.${organizationId}`,
         },
         () => {
-          queryClient.invalidateQueries({ queryKey: ['sales-kpis'] });
-          queryClient.invalidateQueries({ queryKey: ['sales-trend'] });
-          queryClient.invalidateQueries({ queryKey: ['sales-breakdown'] });
-          queryClient.invalidateQueries({ queryKey: ['recent-sales'] });
+          invalidateKpis();
+          invalidateRecent();
         },
       )
       .on(
@@ -43,13 +67,15 @@ export function useSalesRealtime(organizationId: string | null | undefined) {
           filter: `organization_id=eq.${organizationId}`,
         },
         () => {
-          queryClient.invalidateQueries({ queryKey: ['sales-kpis'] });
-          queryClient.invalidateQueries({ queryKey: ['recent-sales'] });
+          invalidateKpis();
+          invalidateRecent();
         },
       )
       .subscribe();
 
     return () => {
+      if (kpisTimer.current)   clearTimeout(kpisTimer.current);
+      if (recentTimer.current) clearTimeout(recentTimer.current);
       supabase.removeChannel(channel);
     };
   }, [organizationId, queryClient]);
