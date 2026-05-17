@@ -34,6 +34,10 @@ export function formatPaymentMethod(method: string): string {
             return 'Transferencia';
         case 'DIGITAL_WALLET':
             return 'Billetera Digital';
+        case 'QR':
+            return 'QR / Billetera';
+        case 'MIXED':
+            return 'Mixto';
         case 'OTHER':
             return 'Otro';
         default:
