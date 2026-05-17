@@ -2,13 +2,38 @@
 
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { ArrowRight, Building2, Layers3, PackageSearch } from 'lucide-react';
+import { ArrowRight, Building2, PackageSearch, Store, Laptop, Shirt, ShoppingCart, Pill, Sparkles, Home, Dumbbell, BookOpen, Briefcase, Car, Gamepad2, PawPrint, Hammer, UtensilsCrossed, Layers3 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import type { LucideIcon } from 'lucide-react';
 import type { GlobalCategoryCard } from '@/lib/public-site/data';
+
+// Mapa de iconos disponibles de lucide-react para marketplace_categories
+const ICON_MAP: Record<string, LucideIcon> = {
+  UtensilsCrossed,
+  Laptop,
+  Shirt,
+  ShoppingCart,
+  Pill,
+  Sparkles,
+  Home,
+  Dumbbell,
+  BookOpen,
+  Briefcase,
+  Car,
+  Gamepad2,
+  PawPrint,
+  Hammer,
+  Store,
+  Layers3,
+};
 
 type CategoryGridItem = GlobalCategoryCard & {
   key?: string;
   href?: string;
+  slug?: string;
+  icon?: string | null;
+  color?: string;
+  is_featured?: boolean;
   shareOfProducts?: number;
 };
 
@@ -27,69 +52,78 @@ function toCategoryKey(value: string): string {
 }
 
 function resolveHref(category: CategoryGridItem) {
-  if (category.href) {
-    return category.href;
-  }
-
-  const key = category.key || toCategoryKey(category.name);
+  if (category.href) return category.href;
+  const key = category.slug || category.key || toCategoryKey(category.name);
   return `/home/catalogo?category=${encodeURIComponent(key)}`;
 }
 
 function resolveCoverage(category: CategoryGridItem) {
   if (typeof category.shareOfProducts === 'number' && Number.isFinite(category.shareOfProducts)) {
-    return `${Math.max(0, Math.round(category.shareOfProducts * 100))}% del catalogo`;
+    return `${Math.max(0, Math.round(category.shareOfProducts * 100))}% del catálogo`;
   }
-
   return `${category.productCount} productos`;
+}
+
+function resolveIcon(iconName?: string | null): LucideIcon {
+  if (iconName && ICON_MAP[iconName]) return ICON_MAP[iconName];
+  return Layers3;
 }
 
 export function CategoryGrid({ categories }: CategoryGridProps) {
   return (
     <div className="mt-8 grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
-      {categories.map((category, index) => (
-        <Link key={category.id} href={resolveHref(category)} className="block">
-          <motion.article
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: Math.min(index, 7) * 0.04 }}
-            className="group h-full overflow-hidden rounded-lg border border-slate-200/80 bg-white/85 p-6 shadow-sm transition-all hover:-translate-y-1 hover:border-emerald-200 hover:shadow-xl hover:shadow-emerald-500/10 dark:border-slate-800/80 dark:bg-slate-950/80 dark:hover:border-emerald-900/70 dark:hover:shadow-emerald-950/20"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-950 text-white shadow-lg transition-transform group-hover:scale-105 group-hover:bg-emerald-600 dark:bg-emerald-500 dark:text-slate-950 dark:group-hover:bg-emerald-400">
-                <Layers3 className="h-5 w-5" />
+      {categories.map((category, index) => {
+        const Icon = resolveIcon(category.icon);
+        const color = category.color || '#10b981';
+
+        return (
+          <Link key={category.id} href={resolveHref(category)} className="block">
+            <motion.article
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: Math.min(index, 7) * 0.04 }}
+              className="group h-full overflow-hidden rounded-lg border border-slate-200/80 bg-white/85 p-6 shadow-sm transition-all hover:-translate-y-1 hover:border-emerald-200 hover:shadow-xl hover:shadow-emerald-500/10 dark:border-slate-800/80 dark:bg-slate-950/80 dark:hover:border-emerald-900/70 dark:hover:shadow-emerald-950/20"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div
+                  className="flex h-12 w-12 items-center justify-center rounded-lg shadow-lg transition-transform group-hover:scale-105"
+                  style={{ backgroundColor: color }}
+                >
+                  <Icon className="h-5 w-5 text-white" />
+                </div>
+
+                <Badge
+                  variant="outline"
+                  className="rounded-full border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-700 dark:border-emerald-900/70 dark:bg-emerald-950/40 dark:text-emerald-200"
+                >
+                  {resolveCoverage(category)}
+                </Badge>
               </div>
 
-              <Badge
-                variant="outline"
-                className="rounded-full border-emerald-200 bg-emerald-50 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-700 dark:border-emerald-900/70 dark:bg-emerald-950/40 dark:text-emerald-200"
-              >
-                {resolveCoverage(category)}
-              </Badge>
-            </div>
+              <h3 className="mt-6 text-xl font-bold tracking-tight text-slate-950 transition-colors group-hover:text-emerald-700 dark:text-slate-100 dark:group-hover:text-emerald-300">
+                {category.name}
+              </h3>
 
-            <h3 className="mt-6 text-xl font-bold tracking-tight text-slate-950 transition-colors group-hover:text-emerald-700 dark:text-slate-100 dark:group-hover:text-emerald-300">
-              {category.name}
-            </h3>
+              <div className="mt-4 flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
+                <span className="flex items-center gap-1.5">
+                  <PackageSearch className="h-3.5 w-3.5" />
+                  {category.productCount} productos
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Building2 className="h-3.5 w-3.5" />
+                  {category.organizationCount} empresas
+                </span>
+              </div>
 
-            <div className="mt-4 flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
-              <span className="flex items-center gap-1.5">
-                <PackageSearch className="h-3.5 w-3.5" />
-                {category.productCount} productos
-              </span>
-              <span className="flex items-center gap-1.5">
-                <Building2 className="h-3.5 w-3.5" />
-                {category.organizationCount} empresas
-              </span>
-            </div>
-
-            <div className="mt-5 flex items-center gap-2 text-sm font-semibold text-emerald-700 transition-colors group-hover:text-emerald-600 dark:text-emerald-300 dark:group-hover:text-emerald-200">
-              Explorar rubro
-              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-            </div>
-          </motion.article>
-        </Link>
-      ))}
+              <div className="mt-5 flex items-center gap-2 text-sm font-semibold text-emerald-700 transition-colors group-hover:text-emerald-600 dark:text-emerald-300 dark:group-hover:text-emerald-200">
+                Explorar rubro
+                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+              </div>
+            </motion.article>
+          </Link>
+        );
+      })}
     </div>
   );
 }

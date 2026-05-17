@@ -261,7 +261,40 @@ function sortProducts(
   return sorted;
 }
 
-async function fetchActiveOrganizations(): Promise<{
+/**
+ * Resuelve slugs de marketplace_categories a IDs de organización.
+ * Usado para filtrar el catálogo por rubro público (?category=restaurantes).
+ * Retorna Set vacío si los slugs no coinciden con ninguna categoría activa.
+ */
+async function resolveMarketplaceCategoryOrgIds(slugs: string[]): Promise<Set<string>> {
+  if (slugs.length === 0) return new Set();
+
+  const client = await createAdminClient();
+
+  // Obtener los IDs de las marketplace_categories activas que coincidan con los slugs
+  const { data: mktCats, error: mktError } = await client
+    .from("marketplace_categories")
+    .select("id")
+    .in("slug", slugs)
+    .eq("is_active", true);
+
+  if (mktError || !mktCats || mktCats.length === 0) return new Set();
+
+  const mktCatIds = mktCats.map((c: { id: string }) => c.id);
+
+  // Obtener organizaciones vinculadas a esas categorías
+  const { data: orgs, error: orgsError } = await client
+    .from("organizations")
+    .select("id")
+    .in("marketplace_category_id", mktCatIds)
+    .in("subscription_status", PUBLIC_ORGANIZATION_STATUSES);
+
+  if (orgsError || !orgs) return new Set();
+
+  return new Set(orgs.map((o: { id: string }) => o.id));
+}
+
+async function fetchActiveOrganizations(filterOrgIds?: Set<string>): Promise<{
   organizations: PublicOrganization[];
   totalOrganizations: number;
 }> {
@@ -270,13 +303,20 @@ async function fetchActiveOrganizations(): Promise<{
   let totalOrganizations = 0;
   const missingColumns = new Set<string>();
 
-  const runQuery = async (selectClause: string, from: number, to: number) =>
-    client
+  const runQuery = async (selectClause: string, from: number, to: number) => {
+    let q = client
       .from("organizations")
       .select(selectClause, { count: "exact" })
       .in("subscription_status", PUBLIC_ORGANIZATION_STATUSES)
       .order("created_at", { ascending: false })
       .range(from, to);
+
+    if (filterOrgIds && filterOrgIds.size > 0) {
+      q = q.in("id", Array.from(filterOrgIds));
+    }
+
+    return q;
+  };
 
   for (;;) {
     const selectClause = buildSelectClause(
@@ -747,12 +787,8 @@ function filterProducts(
   input: CatalogQueryState,
 ): GlobalProductCard[] {
   return products.filter((product) => {
-    if (
-      input.categories.length > 0 &&
-      (!product.categoryKey || !input.categories.includes(product.categoryKey))
-    ) {
-      return false;
-    }
+    // La categoría de marketplace filtra a nivel de organización (en fetchGlobalCatalogSnapshot),
+    // no a nivel de producto. Aquí solo se aplican filtros de precio, stock, etc.
 
     if (input.onSale && !hasOffer(product)) {
       return false;
@@ -934,10 +970,27 @@ export async function fetchGlobalCatalogSnapshot(
     return emptySnapshot;
   }
 
-  const { organizations, totalOrganizations, businessConfigEntries } = baseData;
+  const { organizations: allOrganizations, totalOrganizations, businessConfigEntries } = baseData;
 
-  if (organizations.length === 0) {
+  if (allOrganizations.length === 0) {
     return emptySnapshot;
+  }
+
+  // Si hay filtros de categoría de marketplace, restringir a las orgs vinculadas a esos rubros.
+  // Esto separa correctamente el filtro público (?category=restaurantes) del filtrado
+  // por categorías internas de productos (que ya no se mezclan con el marketplace).
+  let organizations = allOrganizations;
+  if (input.categories.length > 0) {
+    try {
+      const marketplaceOrgIds = await resolveMarketplaceCategoryOrgIds(input.categories);
+      if (marketplaceOrgIds.size > 0) {
+        organizations = allOrganizations.filter((org) => marketplaceOrgIds.has(org.id));
+      }
+      // Si marketplaceOrgIds está vacío, los slugs no corresponden a marketplace_categories —
+      // se mantiene el listado completo para no romper filtros internos de producto.
+    } catch (err) {
+      console.warn('[GlobalCatalog] Marketplace category filter failed, using all orgs:', err);
+    }
   }
 
   try {

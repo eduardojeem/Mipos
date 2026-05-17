@@ -69,6 +69,7 @@ export interface UserRole {
 // TIPOS DE PRODUCTOS Y CATEGORÍAS
 // ============================================================================
 
+// Categoría privada de una organización (clasificación interna de productos)
 export interface Category {
   id: string;
   name: string;
@@ -81,6 +82,29 @@ export interface Category {
   _count?: {
     products: number;
   };
+}
+
+// Categoría pública del marketplace (global, curada por admin SaaS)
+// Equivalente a "rubros" en MercadoLibre / "categories" en Etsy
+export interface MarketplaceCategory {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  icon?: string | null;       // nombre de icono lucide-react
+  color: string;              // hex color
+  image_url?: string | null;
+  is_active: boolean;
+  is_featured: boolean;
+  sort_order: number;
+  parent_id?: string | null;
+  seo_title?: string | null;
+  seo_description?: string | null;
+  created_at: string;
+  updated_at: string;
+  // Conteos opcionales (retornados por la RPC get_marketplace_categories_with_counts)
+  org_count?: number;
+  product_count?: number;
 }
 
 export interface Product {
