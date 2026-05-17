@@ -31,6 +31,8 @@ import { CurrencyDisplay } from '@/components/ui/currency-display';
 import { formatDate } from '@/lib/utils';
 import Link from 'next/link';
 import { useRecentSales, RecentSale } from '@/hooks/useOptimizedSales';
+import { useCurrentOrganizationId } from '@/hooks/use-current-organization';
+import { useSalesRealtime } from '@/app/dashboard/sales/hooks/useSalesRealtime';
 import { useSalesKpis, PaymentBreakdown } from '@/app/dashboard/sales/hooks/useSalesKpis';
 import { useSalesTrend } from '@/app/dashboard/sales/hooks/useSalesTrend';
 import { useSalesBreakdown } from '@/app/dashboard/sales/hooks/useSalesBreakdown';
@@ -101,9 +103,13 @@ function topPaymentMethod(breakdown: PaymentBreakdown): string {
 export default function SalesPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const orgId = useCurrentOrganizationId();
 
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
+
+  // Realtime: invalidate KPIs instantly on new/updated sale — no polling needed
+  useSalesRealtime(orgId);
 
   const { data: todayKpis, isLoading: todayLoading, refetch: refetchToday } = useSalesKpis({ range: 'today' });
   const { data: weekKpis,  isLoading: weekLoading,  refetch: refetchWeek  } = useSalesKpis({ range: '7d'   });
@@ -157,13 +163,9 @@ export default function SalesPage() {
     }
   }, []);
 
+  // Refresh on tab focus (Realtime handles live updates; this covers the
+  // case where the tab was hidden long enough that the WS connection dropped)
   useEffect(() => {
-    const tick = () => {
-      if (typeof document !== 'undefined' && document.hidden) return;
-      queryClient.invalidateQueries({ queryKey: ['sales-kpis'] });
-      queryClient.invalidateQueries({ queryKey: ['recent-sales'] });
-    };
-    const interval = setInterval(tick, 5 * 60 * 1000);
     const onVisible = () => {
       if (typeof document !== 'undefined' && !document.hidden) {
         queryClient.invalidateQueries({ queryKey: ['sales-kpis'] });
@@ -172,7 +174,6 @@ export default function SalesPage() {
     };
     if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible);
     return () => {
-      clearInterval(interval);
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible);
     };
   }, [queryClient]);
