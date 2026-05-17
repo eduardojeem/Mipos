@@ -8,12 +8,14 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Eye, Download, ShoppingCart,
+  ArrowUpDown, ArrowUp, ArrowDown,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { formatStatus, formatPaymentMethod, formatSaleType, getStatusBadgeVariant } from '@/lib/sales-formatters';
 import { formatCurrency } from '@/lib/utils';
+import { SortField, SortOrder } from '../hooks/useSales';
 
 export interface Sale {
   id: string;
@@ -53,10 +55,43 @@ interface SalesDataTableProps {
   onPageSizeChange: (size: number) => void;
   onViewDetails: (sale: Sale) => void;
   onExport: () => void;
+  onSort?: (field: SortField) => void;
+  sortBy?: SortField;
+  sortOrder?: SortOrder;
   isLoading?: boolean;
 }
 
-function TableSkeleton({ rows = 8 }: { rows?: number }) {
+function SortIcon({ field, sortBy, sortOrder }: { field: SortField; sortBy?: SortField; sortOrder?: SortOrder }) {
+  if (sortBy !== field) return <ArrowUpDown className="ml-1 h-3.5 w-3.5 opacity-40" />;
+  return sortOrder === 'asc'
+    ? <ArrowUp className="ml-1 h-3.5 w-3.5" />
+    : <ArrowDown className="ml-1 h-3.5 w-3.5" />;
+}
+
+function SortableHead({
+  field, children, onSort, sortBy, sortOrder, className,
+}: {
+  field: SortField;
+  children: React.ReactNode;
+  onSort?: (f: SortField) => void;
+  sortBy?: SortField;
+  sortOrder?: SortOrder;
+  className?: string;
+}) {
+  return (
+    <TableHead
+      className={`cursor-pointer select-none hover:bg-muted/50 ${className ?? ''}`}
+      onClick={() => onSort?.(field)}
+    >
+      <span className="flex items-center">
+        {children}
+        <SortIcon field={field} sortBy={sortBy} sortOrder={sortOrder} />
+      </span>
+    </TableHead>
+  );
+}
+
+function TableSkeleton({ rows }: { rows: number }) {
   return (
     <>
       {Array.from({ length: rows }).map((_, i) => (
@@ -82,6 +117,9 @@ export function SalesDataTable({
   onPageSizeChange,
   onViewDetails,
   onExport,
+  onSort,
+  sortBy,
+  sortOrder,
   isLoading = false,
 }: SalesDataTableProps) {
   const startIndex = (pagination.page - 1) * pagination.limit + 1;
@@ -108,18 +146,24 @@ export function SalesDataTable({
           <TableHeader>
             <TableRow>
               <TableHead className="w-[130px]">ID Venta</TableHead>
-              <TableHead className="w-[160px]">Fecha</TableHead>
+              <SortableHead field="date" onSort={onSort} sortBy={sortBy} sortOrder={sortOrder} className="w-[160px]">
+                Fecha
+              </SortableHead>
               <TableHead>Cliente</TableHead>
-              <TableHead className="w-[110px]">Total</TableHead>
+              <SortableHead field="total" onSort={onSort} sortBy={sortBy} sortOrder={sortOrder} className="w-[110px]">
+                Total
+              </SortableHead>
               <TableHead className="w-[140px]">Método de Pago</TableHead>
-              <TableHead className="w-[120px]">Estado</TableHead>
+              <SortableHead field="status" onSort={onSort} sortBy={sortBy} sortOrder={sortOrder} className="w-[120px]">
+                Estado
+              </SortableHead>
               <TableHead className="w-[100px]">Tipo</TableHead>
               <TableHead className="w-[60px]" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableSkeleton />
+              <TableSkeleton rows={pagination.limit} />
             ) : data.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={8} className="h-48 text-center">

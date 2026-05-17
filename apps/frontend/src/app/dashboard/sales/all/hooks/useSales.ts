@@ -5,7 +5,7 @@ import { SalesFilters } from '../components/SalesFilters';
 import { Sale } from '../components/SalesDataTable';
 import { createLogger } from '@/lib/logger';
 import { formatStatus, formatPaymentMethod, formatSaleType } from '@/lib/sales-formatters';
-import { CACHE_CONFIG } from '@/config/sales.config';
+import { CACHE_CONFIG, SALES_CONFIG } from '@/config/sales.config';
 import api from '@/lib/api';
 
 interface SalesResponse {
@@ -21,15 +21,20 @@ interface SalesResponse {
   };
 }
 
+export type SortField = 'date' | 'total' | 'status';
+export type SortOrder = 'asc' | 'desc';
+
 interface UseSalesOptions {
   filters: SalesFilters;
   page: number;
   limit: number;
+  sortBy?: SortField;
+  sortOrder?: SortOrder;
 }
 
 const logger = createLogger('SalesHook');
 
-export function useSales({ filters, page, limit }: UseSalesOptions) {
+export function useSales({ filters, page, limit, sortBy = 'date', sortOrder = 'desc' }: UseSalesOptions) {
   const [isExporting, setIsExporting] = useState(false);
 
   const buildParams = useCallback(
@@ -37,22 +42,24 @@ export function useSales({ filters, page, limit }: UseSalesOptions) {
       const params: Record<string, string> = {
         page: String(overrides.page ?? page),
         limit: String(overrides.limit ?? limit),
+        sortBy: overrides.sortBy ?? sortBy,
+        sortOrder: overrides.sortOrder ?? sortOrder,
       };
 
       if (filters.search) params.search = filters.search;
-      if (filters.dateFrom) params.date_from = format(filters.dateFrom, 'yyyy-MM-dd');
-      if (filters.dateTo) params.date_to = format(filters.dateTo, 'yyyy-MM-dd');
-      if (filters.customerId) params.customer_id = filters.customerId;
-      if (filters.paymentMethod) params.payment_method = filters.paymentMethod;
+      // date_from/date_to were wrong — backend expects startDate/endDate
+      if (filters.dateFrom) params.startDate = format(filters.dateFrom, 'yyyy-MM-dd');
+      if (filters.dateTo) params.endDate = format(filters.dateTo, 'yyyy-MM-dd');
+      if (filters.customerId) params.customerId = filters.customerId;
+      if (filters.paymentMethod) params.paymentMethod = filters.paymentMethod;
       if (filters.status) params.status = filters.status;
-      if (filters.saleType) params.sale_type = filters.saleType;
-      if (filters.minAmount !== undefined) params.min_amount = String(filters.minAmount);
-      if (filters.maxAmount !== undefined) params.max_amount = String(filters.maxAmount);
-      if (filters.hasCoupon !== undefined) params.has_coupon = String(filters.hasCoupon);
+      if (filters.saleType) params.saleType = filters.saleType;
+      if (filters.minAmount !== undefined) params.minAmount = String(filters.minAmount);
+      if (filters.maxAmount !== undefined) params.maxAmount = String(filters.maxAmount);
 
       return { ...params, ...overrides };
     },
-    [filters, page, limit],
+    [filters, page, limit, sortBy, sortOrder],
   );
 
   const { data, isLoading, error, refetch } = useQuery<SalesResponse>({
@@ -65,19 +72,31 @@ export function useSales({ filters, page, limit }: UseSalesOptions) {
     refetchOnWindowFocus: false,
   });
 
+  // Paginate through all pages to build a complete export.
+  // Backend cap is MAX_LIMIT (100) per request, so we fetch page by page.
   const exportSales = useCallback(async () => {
     setIsExporting(true);
     try {
-      const response = await api.get<SalesResponse>('/sales', {
-        params: buildParams({ page: 1, limit: 1000 }),
-      });
-      const sales: Sale[] = response.data?.sales || response.data?.data || [];
+      const pageSize = SALES_CONFIG.MAX_LIMIT;
+      let currentPage = 1;
+      let allSales: Sale[] = [];
+      let totalPages = 1;
+
+      do {
+        const response = await api.get<SalesResponse>('/sales', {
+          params: buildParams({ page: currentPage, limit: pageSize }),
+        });
+        const batch: Sale[] = response.data?.sales || response.data?.data || [];
+        allSales = allSales.concat(batch);
+        totalPages = response.data?.pagination?.pages ?? 1;
+        currentPage++;
+      } while (currentPage <= totalPages);
 
       const headers = [
         'ID Venta', 'Fecha', 'Cliente', 'Email Cliente', 'Teléfono',
         'Total', 'Método de Pago', 'Estado', 'Tipo de Venta', 'Notas',
       ];
-      const rows = sales.map((sale) => [
+      const rows = allSales.map((sale) => [
         sale.id,
         format(new Date(sale.created_at), 'yyyy-MM-dd HH:mm:ss'),
         sale.customer?.name || 'Cliente no registrado',
@@ -91,7 +110,7 @@ export function useSales({ filters, page, limit }: UseSalesOptions) {
       ]);
 
       const csvContent =
-        '\ufeff' +
+        '﻿' +
         [headers, ...rows]
           .map((row) => row.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))
           .join('\n');

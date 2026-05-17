@@ -29,7 +29,6 @@ export interface SalesFilters {
   saleType?: string;
   minAmount?: number;
   maxAmount?: number;
-  hasCoupon?: boolean;
 }
 
 interface SalesFiltersProps {

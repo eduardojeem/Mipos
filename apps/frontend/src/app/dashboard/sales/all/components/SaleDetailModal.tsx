@@ -4,13 +4,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { User, Calendar, DollarSign, CreditCard, Package, Hash, Printer, RotateCcw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import { Sale } from './SalesDataTable';
 import { createLogger } from '@/lib/logger';
 import { formatStatus, formatPaymentMethod, formatSaleType, getStatusBadgeVariant } from '@/lib/sales-formatters';
+import api from '@/lib/api';
 
 interface SaleDetailModalProps {
   sale: Sale | null;
@@ -18,25 +21,53 @@ interface SaleDetailModalProps {
   onClose: () => void;
 }
 
+interface DetailItem {
+  id: string;
+  sale_id: string;
+  product_id: string;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+  discount_amount: number;
+  alreadyReturned?: number;
+  product?: { id: string; name: string; sku: string };
+}
+
+interface SaleDetailResponse {
+  sale: {
+    saleItems?: DetailItem[];
+    [key: string]: any;
+  };
+}
+
 const logger = createLogger('SaleDetailModal');
 
 export function SaleDetailModal({ sale, open, onClose }: SaleDetailModalProps) {
   const router = useRouter();
+
+  // Fetch full detail (including saleItems) only when the modal is open
+  const { data: detail, isLoading: loadingDetail } = useQuery<SaleDetailResponse>({
+    queryKey: ['sale-detail', sale?.id],
+    queryFn: () => api.get<SaleDetailResponse>(`/sales/${sale!.id}`).then((r) => r.data),
+    enabled: open && !!sale?.id,
+    staleTime: 2 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
   if (!sale) return null;
 
-  // Shortcut: cashier wants to return part/all of THIS sale. Closes the
-  // detail modal and navigates to /dashboard/returns?from=<saleId>, which
-  // the returns page reads to auto-open the create modal pre-filled with
-  // the sale.
+  // saleItems from the detail endpoint, falling back to items already on the list object
+  const items: DetailItem[] = detail?.sale?.saleItems ?? (sale.items as DetailItem[] | undefined) ?? [];
+
   const handleStartReturn = () => {
     onClose();
     router.push(`/dashboard/returns?from=${encodeURIComponent(sale.id)}`);
   };
 
-  const subtotal = sale.items?.reduce((sum, item) => sum + item.quantity * item.unit_price, 0) || 0;
+  const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0);
   const totalDiscount =
     (sale.discount_amount || 0) +
-    (sale.items?.reduce((sum, item) => sum + (item.discount_amount || 0), 0) || 0);
+    items.reduce((sum, item) => sum + (item.discount_amount || 0), 0);
   const totalTax = sale.tax_amount || 0;
   const total = sale.total_amount;
 
@@ -64,8 +95,8 @@ export function SaleDetailModal({ sale, open, onClose }: SaleDetailModalProps) {
           <thead><tr><th>Producto</th><th>Cant.</th><th>Precio</th><th>Total</th></tr></thead>
           <tbody>
             ${
-              sale.items
-                ?.map(
+              items
+                .map(
                   (item) =>
                     `<tr>
                       <td>${item.product?.name || item.product_id}${item.product?.sku ? ` (${item.product.sku})` : ''}</td>
@@ -186,7 +217,13 @@ export function SaleDetailModal({ sale, open, onClose }: SaleDetailModalProps) {
               <h3 className="font-medium">Productos</h3>
             </div>
 
-            {sale.items && sale.items.length > 0 ? (
+            {loadingDetail ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-10 w-full rounded" />
+                ))}
+              </div>
+            ) : items.length > 0 ? (
               <div className="rounded-md border overflow-hidden">
                 <table className="w-full text-sm">
                   <thead className="bg-muted">
@@ -199,7 +236,7 @@ export function SaleDetailModal({ sale, open, onClose }: SaleDetailModalProps) {
                     </tr>
                   </thead>
                   <tbody>
-                    {sale.items.map((item) => (
+                    {items.map((item) => (
                       <tr key={item.id} className="border-t">
                         <td className="px-4 py-2">
                           <p className="font-medium">{item.product?.name || `Producto ${item.product_id.slice(0, 8)}`}</p>
@@ -219,7 +256,7 @@ export function SaleDetailModal({ sale, open, onClose }: SaleDetailModalProps) {
                 </table>
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">Sin productos (carga el detalle para verlos)</p>
+              <p className="text-sm text-muted-foreground">Sin productos registrados</p>
             )}
           </div>
 
@@ -256,9 +293,6 @@ export function SaleDetailModal({ sale, open, onClose }: SaleDetailModalProps) {
               <Printer className="h-4 w-4 mr-2" />
               Imprimir
             </Button>
-            {/* Shortcut: ir a Returns con la venta pre-seleccionada.
-                Antes el cajero tenía que ir a Returns, click "Nueva", y
-                pegar el UUID a mano — 30s perdidos por devolución. */}
             <Button variant="outline" size="sm" onClick={handleStartReturn}>
               <RotateCcw className="h-4 w-4 mr-2" />
               Devolver

@@ -74,6 +74,8 @@ const querySchema = z.object({
   minAmount: z.string().transform(val => parseFloat(val)).pipe(z.number().min(0)).optional(),
   maxAmount: z.string().transform(val => parseFloat(val)).pipe(z.number().min(0)).optional(),
   search: z.string().max(100).optional(),
+  sortBy: z.enum(['date', 'total', 'status']).optional().default('date'),
+  sortOrder: z.enum(['asc', 'desc']).optional().default('desc'),
 }).refine((data) => {
   if (data.startDate && data.endDate) {
     const start = new Date(data.startDate);
@@ -149,7 +151,7 @@ router.get('/recent', requirePermission('sales', 'read'), asyncHandler(async (re
 
 // Get all sales with pagination and filters (requires sales:read permission)
 router.get('/', requirePermission('sales', 'read'), asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
-  const { page, limit, startDate, endDate, customerId, paymentMethod, status, saleType, minAmount, maxAmount, search } = querySchema.parse(req.query);
+  const { page, limit, startDate, endDate, customerId, paymentMethod, status, saleType, minAmount, maxAmount, search, sortBy, sortOrder } = querySchema.parse(req.query);
   const organizationId = requireOrganizationId(req);
   const skip = (page - 1) * limit;
 
@@ -209,7 +211,7 @@ router.get('/', requirePermission('sales', 'read'), asyncHandler(async (req: Enh
           }
         } : {})
       },
-      orderBy: { date: 'desc' },
+      orderBy: { [sortBy === 'total' ? 'total' : sortBy === 'status' ? 'status' : 'date']: sortOrder },
       skip,
       take: limit
     }),
