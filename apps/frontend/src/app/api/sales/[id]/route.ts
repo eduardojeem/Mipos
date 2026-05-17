@@ -59,19 +59,22 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       const selectFields = baseFields + itemsFields;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: sale, error } = await (supabase as unknown as Record<string, any>)
+      const { data: sale, error: supabaseError } = await (supabase as unknown as Record<string, any>)
         .from('sales')
         .select(selectFields)
         .eq('organization_id', orgId)
         .eq('id', saleId)
         .maybeSingle();
 
-      if (!error && sale) {
+      if (!supabaseError && sale) {
         // Normalize snake_case Supabase fields to match the Prisma/backend format
         // so the frontend only needs to handle one shape.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const normalized = {
           ...sale,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           saleItems: Array.isArray((sale as any).sale_items)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             ? (sale as any).sale_items.map((item: any) => ({
                 ...item,
                 product: item.products ?? item.product ?? null,
@@ -82,21 +85,44 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         };
         return NextResponse.json({ success: true, sale: normalized });
       }
+
+      if (!supabaseError && !sale) {
+        return NextResponse.json({ error: 'Sale not found' }, { status: 404 });
+      }
+
+      // Supabase returned an error — try backend if available, else surface the error
+      const backendBase = getBackendBaseURL();
+      if (!backendBase) {
+        return NextResponse.json(
+          { error: 'Failed to fetch sale', details: supabaseError?.message ?? 'Unknown Supabase error' },
+          { status: 500 },
+        );
+      }
+      const context = getRequestOperationalContext(request, {} as Parameters<typeof getRequestOperationalContext>[1]);
+      const res = await fetch(`${backendBase.replace(/\/$/, '')}/sales/${saleId}?include=${encodeURIComponent(include)}`, {
+        headers: getBackendHeaders(accessToken, orgId, context),
+      });
+      if (!res.ok) {
+        const details = await res.text().catch(() => 'Unknown error');
+        return NextResponse.json({ error: `Backend error: ${res.status}`, details }, { status: res.status });
+      }
+      const data = await res.json();
+      return NextResponse.json({ success: true, sale: data.sale || data });
     }
 
-    // Fallback to backend
+    // canQuery=false — Supabase client unavailable, must use backend
     const backendBase = getBackendBaseURL();
-    if (!backendBase) return NextResponse.json({ error: 'Backend URL not configured' }, { status: 500 });
-    const context = getRequestOperationalContext(request, {} as Parameters<typeof getRequestOperationalContext>[1]);
-    const res = await fetch(`${backendBase.replace(/\/$/, '')}/sales/${saleId}?include=${encodeURIComponent(include)}`, {
-      headers: getBackendHeaders(accessToken, orgId, context),
+    if (!backendBase) return NextResponse.json({ error: 'Backend URL not configured and Supabase client unavailable' }, { status: 503 });
+    const context2 = getRequestOperationalContext(request, {} as Parameters<typeof getRequestOperationalContext>[1]);
+    const res2 = await fetch(`${backendBase.replace(/\/$/, '')}/sales/${saleId}?include=${encodeURIComponent(include)}`, {
+      headers: getBackendHeaders(accessToken, orgId, context2),
     });
-    if (!res.ok) {
-      const details = await res.text().catch(() => 'Unknown error');
-      return NextResponse.json({ error: `Backend error: ${res.status}`, details }, { status: res.status });
+    if (!res2.ok) {
+      const details = await res2.text().catch(() => 'Unknown error');
+      return NextResponse.json({ error: `Backend error: ${res2.status}`, details }, { status: res2.status });
     }
-    const data = await res.json();
-    return NextResponse.json({ success: true, sale: data.sale || data });
+    const data2 = await res2.json();
+    return NextResponse.json({ success: true, sale: data2.sale || data2 });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch sale', details: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 });
   }

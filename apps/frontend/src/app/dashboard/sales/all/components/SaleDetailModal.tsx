@@ -64,11 +64,14 @@ export function SaleDetailModal({ sale, open, onClose }: SaleDetailModalProps) {
     isError: errorDetail,
   } = useQuery<SaleDetailResponse>({
     queryKey: ['sale-detail', sale?.id],
-    queryFn: () => api.get<SaleDetailResponse>(`/sales/${sale!.id}?include=items`).then((r) => r.data),
+    queryFn: () =>
+      api.get<SaleDetailResponse>(`/sales/${sale!.id}?include=items`, {
+        headers: { 'X-No-Retry': '1' },
+      }).then((r) => r.data),
     enabled: open && !!sale?.id,
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
-    retry: 1,
+    retry: false,
   });
 
   if (!sale) return null;
