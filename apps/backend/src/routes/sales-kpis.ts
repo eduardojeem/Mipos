@@ -134,4 +134,44 @@ router.get('/trend',
   })
 );
 
+/**
+ * GET /api/sales/breakdown?range=7d|30d|90d|mtd|ytd  or ?from=ISO&to=ISO
+ *
+ * Returns revenue + units sold grouped by product category.
+ * Used to render the category drill-down bar chart in the sales dashboard.
+ */
+router.get('/breakdown',
+  requirePermission('sales', 'read'),
+  asyncHandler(async (req: EnhancedAuthenticatedRequest, res) => {
+    const organizationId = requireOrgId(req);
+    const query = querySchema.parse(req.query);
+    const { from, to } = resolveWindow(query.range ?? '7d', query.from, query.to);
+
+    const rows = await prisma.$queryRaw<Array<{ category: string; revenue: number; units: number }>>`
+      SELECT
+        COALESCE(c.name, 'Sin categoría')          AS category,
+        COALESCE(SUM(si.quantity * si.unit_price), 0)::numeric AS revenue,
+        COALESCE(SUM(si.quantity), 0)::int          AS units
+      FROM sale_items si
+      JOIN sales s ON s.id = si.sale_id
+      LEFT JOIN products p  ON p.id  = si.product_id
+      LEFT JOIN categories c ON c.id = p.category_id
+      WHERE s.organization_id = ${organizationId}
+        AND s.created_at >= ${from}
+        AND s.created_at <  ${to}
+      GROUP BY 1
+      ORDER BY 2 DESC
+      LIMIT 10
+    `;
+
+    const data = rows.map(r => ({
+      category: r.category,
+      revenue: Number(r.revenue),
+      units: Number(r.units),
+    }));
+
+    res.json({ success: true, data });
+  })
+);
+
 export default router;

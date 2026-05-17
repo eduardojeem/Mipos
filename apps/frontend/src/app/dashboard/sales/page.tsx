@@ -33,6 +33,7 @@ import Link from 'next/link';
 import { useRecentSales, RecentSale } from '@/hooks/useOptimizedSales';
 import { useSalesKpis, PaymentBreakdown } from '@/app/dashboard/sales/hooks/useSalesKpis';
 import { SalesTrendChart } from '@/app/dashboard/sales/components/SalesTrendChart';
+import { SalesCategoryChart } from '@/app/dashboard/sales/components/SalesCategoryChart';
 import { PremiumDashboardCard } from '@/components/dashboard/shared/PremiumDashboardCard';
 import { DashboardStatCard } from '@/components/dashboard/shared/DashboardStatCard';
 import { cn } from '@/lib/utils';
@@ -288,9 +289,10 @@ export default function SalesPage() {
             />
           </motion.div>
 
-          {/* Trend chart */}
-          <motion.div variants={itemVariants}>
+          {/* Trend + category charts */}
+          <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <SalesTrendChart />
+            <SalesCategoryChart />
           </motion.div>
 
           {/* Main content */}
