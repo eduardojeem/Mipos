@@ -18,13 +18,16 @@ const DEBOUNCE_MS = 3_000;
  *  - Messages received: 1 per sale event (filtered server-side by org)
  *  - Backend refetches: capped at 1 per DEBOUNCE_MS regardless of sale volume
  */
-export function useSalesRealtime(organizationId: string | null | undefined) {
+export function useSalesRealtime(
+  organizationId: string | null | undefined,
+  enabled = false,
+) {
   const queryClient = useQueryClient();
   const kpisTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recentTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!organizationId) return;
+    if (!organizationId || !enabled) return;
 
     function invalidateKpis() {
       if (kpisTimer.current) clearTimeout(kpisTimer.current);
@@ -78,5 +81,5 @@ export function useSalesRealtime(organizationId: string | null | undefined) {
       if (recentTimer.current) clearTimeout(recentTimer.current);
       supabase.removeChannel(channel);
     };
-  }, [organizationId, queryClient]);
+  }, [organizationId, enabled, queryClient]);
 }

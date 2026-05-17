@@ -18,7 +18,9 @@ import {
   Sparkles,
   Plus,
   BarChart2,
-  CreditCard
+  CreditCard,
+  Zap,
+  ZapOff
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -107,9 +109,21 @@ export default function SalesPage() {
 
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
+  const [realtimeEnabled, setRealtimeEnabled] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem('sales-realtime') === 'true';
+  });
 
-  // Realtime: invalidate KPIs instantly on new/updated sale — no polling needed
-  useSalesRealtime(orgId);
+  const handleToggleRealtime = () => {
+    setRealtimeEnabled(prev => {
+      const next = !prev;
+      localStorage.setItem('sales-realtime', String(next));
+      return next;
+    });
+  };
+
+  // Realtime: disabled by default to avoid unnecessary Supabase connections
+  useSalesRealtime(orgId, realtimeEnabled);
 
   const { data: todayKpis, isLoading: todayLoading, refetch: refetchToday } = useSalesKpis({ range: 'today' });
   const { data: weekKpis,  isLoading: weekLoading,  refetch: refetchWeek  } = useSalesKpis({ range: '7d'   });
@@ -214,6 +228,23 @@ export default function SalesPage() {
             </div>
 
             <div className="flex items-center gap-3 flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleToggleRealtime}
+                className={cn(
+                  "rounded-xl border-slate-200 bg-white/50 backdrop-blur-sm self-start md:self-auto",
+                  realtimeEnabled && "border-emerald-300 bg-emerald-50/50 dark:bg-emerald-500/10"
+                )}
+              >
+                {realtimeEnabled ? (
+                  <Zap className="h-4 w-4 mr-2 text-emerald-500" />
+                ) : (
+                  <ZapOff className="h-4 w-4 mr-2 text-slate-400" />
+                )}
+                Auto-actualizar
+              </Button>
+
               <Button
                 variant="outline"
                 size="sm"
@@ -467,6 +498,45 @@ export default function SalesPage() {
                         ))}
                     </div>
                   )}
+                </CardContent>
+              </PremiumDashboardCard>
+
+              {/* Realtime status */}
+              <PremiumDashboardCard className={cn(
+                realtimeEnabled
+                  ? "border-emerald-500/10 bg-emerald-50/10 dark:bg-emerald-500/5"
+                  : "border-slate-200/60"
+              )}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <div className={cn(
+                      "h-2 w-2 rounded-full",
+                      realtimeEnabled
+                        ? "bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]"
+                        : "bg-slate-300"
+                    )} />
+                    {realtimeEnabled ? 'Auto-actualización activa' : 'Auto-actualización inactiva'}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {realtimeEnabled
+                      ? 'Los KPIs se actualizan automáticamente al registrar ventas.'
+                      : 'Activá "Auto-actualizar" para recibir cambios en tiempo real.'}
+                  </p>
+                  <div className="mt-3">
+                    <button
+                      onClick={handleToggleRealtime}
+                      className={cn(
+                        "text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded-md transition-colors",
+                        realtimeEnabled
+                          ? "text-emerald-600 bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-500/20"
+                          : "text-slate-500 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800"
+                      )}
+                    >
+                      {realtimeEnabled ? 'Desactivar' : 'Activar'}
+                    </button>
+                  </div>
                 </CardContent>
               </PremiumDashboardCard>
 
