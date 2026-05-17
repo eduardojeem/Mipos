@@ -32,8 +32,11 @@ import { formatDate } from '@/lib/utils';
 import Link from 'next/link';
 import { useRecentSales, RecentSale } from '@/hooks/useOptimizedSales';
 import { useSalesKpis, PaymentBreakdown } from '@/app/dashboard/sales/hooks/useSalesKpis';
+import { useSalesTrend } from '@/app/dashboard/sales/hooks/useSalesTrend';
+import { useSalesBreakdown } from '@/app/dashboard/sales/hooks/useSalesBreakdown';
 import { SalesTrendChart } from '@/app/dashboard/sales/components/SalesTrendChart';
 import { SalesCategoryChart } from '@/app/dashboard/sales/components/SalesCategoryChart';
+import { ExportPDFButton } from '@/app/dashboard/sales/components/ExportPDFButton';
 import { PremiumDashboardCard } from '@/components/dashboard/shared/PremiumDashboardCard';
 import { DashboardStatCard } from '@/components/dashboard/shared/DashboardStatCard';
 import { cn } from '@/lib/utils';
@@ -106,6 +109,9 @@ export default function SalesPage() {
   const { data: weekKpis,  isLoading: weekLoading,  refetch: refetchWeek  } = useSalesKpis({ range: '7d'   });
   const { data: mtdKpis,   isLoading: mtdLoading,   refetch: refetchMtd   } = useSalesKpis({ range: 'mtd'  });
   const { data: recentSalesData, isLoading: recentLoading, refetch: refetchRecent } = useRecentSales(10);
+  // PDF export data (same range as trend/category charts default — cache hits)
+  const { data: pdfTrend = [] }     = useSalesTrend({ range: '7d' });
+  const { data: pdfBreakdown = [] } = useSalesBreakdown({ range: '7d' });
 
   const recentSales = recentSalesData?.sales || [];
   const isAllLoading = todayLoading && recentLoading;
@@ -234,13 +240,21 @@ export default function SalesPage() {
 
               <Button
                 size="sm"
+                variant="outline"
                 onClick={handleExportRecent}
                 disabled={exportLoading}
-                className="rounded-xl bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
+                className="rounded-xl border-slate-200 bg-white/50 backdrop-blur-sm"
               >
                 <Download className="h-4 w-4 mr-2" />
-                Exportar
+                Excel
               </Button>
+
+              <ExportPDFButton
+                range="today"
+                kpis={todayKpis}
+                trend={pdfTrend}
+                breakdown={pdfBreakdown}
+              />
             </div>
           </motion.div>
 
