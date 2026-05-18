@@ -1,25 +1,26 @@
 import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowRight, Building2, Layers3, PackageSearch } from 'lucide-react';
+import { ArrowRight, Building2, Layers3, PackageSearch, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { resolveRequestTenantContext } from '@/lib/domain/request-tenant';
 import {
   fetchGlobalCategoriesSnapshot,
   type GlobalCategoriesQueryState,
   type GlobalCategoriesSortMode,
+  type GlobalCategoryExplorerItem,
 } from '@/lib/public-site/global-categories-data';
 import { MarketplaceLayout } from '../components/marketplace/MarketplaceLayout';
 import { CategoryGrid } from '../components/marketplace/CategoryGrid';
 import { CategoryFilterBar } from './CategoryFilterBar';
+import { FeaturedCategoriesRow } from './FeaturedCategoriesRow';
 
 type CategoriesQueryRecord = Record<string, string | string[] | undefined>;
 
 const SORT_OPTIONS: Array<{ value: GlobalCategoriesSortMode; label: string }> = [
-  { value: 'products', label: 'Mas productos' },
-  { value: 'companies', label: 'Mas empresas' },
-  { value: 'name', label: 'Nombre' },
+  { value: 'products', label: 'Más productos' },
+  { value: 'companies', label: 'Más empresas' },
+  { value: 'name', label: 'A–Z' },
 ];
 
 function readFirstValue(value: string | string[] | undefined): string {
@@ -36,28 +37,27 @@ function normalizeSearchParams(searchParams: CategoriesQueryRecord): GlobalCateg
   return { search: rawSearch, sortBy };
 }
 
-function formatPercent(value: number) {
-  return `${Math.max(0, Math.round(value * 100))}%`;
-}
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<CategoriesQueryRecord>;
+}): Promise<Metadata> {
+  const raw = await searchParams;
+  const search = readFirstValue(raw.search) || readFirstValue(raw.q);
+  const title = search
+    ? `"${search}" — Rubros | MiPOS Marketplace`
+    : 'Rubros del Marketplace | MiPOS';
+  const description = search
+    ? `Resultados de rubros para "${search}" en el marketplace MiPOS.`
+    : 'Explora todos los rubros del marketplace: Restaurantes, Tecnología, Moda, Supermercados y más. Encuentra empresas y productos por categoría.';
 
-export async function generateMetadata(): Promise<Metadata> {
   return {
-    title: 'Categorías | MiPOS Marketplace',
-    description:
-      'Explora todas las categorías activas del marketplace. Accede al catálogo filtrado por rubro directamente.',
+    title,
+    description,
     alternates: { canonical: '/home/categorias' },
     robots: { index: true, follow: true },
-    openGraph: {
-      title: 'Categorías | MiPOS Marketplace',
-      description: 'Mapa de rubros publicados por empresas activas en MiPOS.',
-      type: 'website',
-      siteName: 'MiPOS Marketplace',
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title: 'Categorías | MiPOS Marketplace',
-      description: 'Mapa de rubros publicados por empresas activas en MiPOS.',
-    },
+    openGraph: { title, description, type: 'website', siteName: 'MiPOS Marketplace' },
+    twitter: { card: 'summary_large_image', title, description },
   };
 }
 
@@ -77,82 +77,158 @@ export default async function CategoriesPage({
   const snapshot = await fetchGlobalCategoriesSnapshot(queryState);
   const hasActiveFilters = Boolean(queryState.search) || queryState.sortBy !== 'products';
 
+  const featuredCategories = snapshot.categories.filter((c) => c.is_featured);
+  const showFeaturedRow = !hasActiveFilters && featuredCategories.length > 0;
+
+  const totalOrgs     = snapshot.totalOrganizations;
+  const totalProducts = snapshot.totalProducts;
+
   return (
     <MarketplaceLayout searchQuery={queryState.search}>
-      <header className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        {queryState.search ? (
-          <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
-            Mostrando resultados para &quot;{queryState.search}&quot;.
-          </p>
-        ) : null}
-      </header>
 
-      <div className="mx-auto max-w-7xl px-4 pb-20 sm:px-6 lg:px-8">
+      {/* ── HERO ────────────────────────────────────────────────── */}
+      {!hasActiveFilters && (
+        <div className="border-b border-slate-200/60 bg-gradient-to-b from-slate-50 to-white dark:border-slate-800/60 dark:from-slate-950 dark:to-slate-900">
+          <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400">
+                  Directorio de rubros
+                </p>
+                <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white sm:text-4xl">
+                  Explora por categoría
+                </h1>
+                <p className="mt-2 max-w-xl text-base text-slate-500 dark:text-slate-400">
+                  Encuentra empresas locales organizadas por rubro. Cada categoría agrupa negocios
+                  verificados con sus productos y servicios.
+                </p>
+              </div>
+
+              {/* Stats pill */}
+              <div className="flex shrink-0 flex-wrap gap-3">
+                <StatPill icon={<Layers3 className="h-3.5 w-3.5" />} value={snapshot.totalCategories} label="rubros" />
+                <StatPill icon={<Building2 className="h-3.5 w-3.5" />} value={totalOrgs} label="empresas" />
+                <StatPill icon={<PackageSearch className="h-3.5 w-3.5" />} value={totalProducts} label="productos" />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="mx-auto max-w-7xl px-4 pb-24 pt-8 sm:px-6 lg:px-8">
+
+        {/* Search + sort */}
+        {queryState.search && (
+          <p className="mb-4 text-sm font-medium text-emerald-700 dark:text-emerald-300">
+            Mostrando resultados para &quot;{queryState.search}&quot;
+          </p>
+        )}
+
         <CategoryFilterBar
           search={queryState.search}
           sortBy={queryState.sortBy}
+          totalCategories={snapshot.totalCategories}
           visibleCategories={snapshot.visibleCategories}
-          categorizedProducts={snapshot.categorizedProducts}
-          uncategorizedProducts={snapshot.uncategorizedProducts}
+          totalOrganizations={totalOrgs}
+          totalProducts={totalProducts}
         />
 
+        {/* ── FEATURED RUBROS ────────────────────────────────────── */}
+        {showFeaturedRow && (
+          <section className="mt-10">
+            <div className="mb-4 flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-amber-500" />
+              <h2 className="text-sm font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                Rubros destacados
+              </h2>
+            </div>
+            <FeaturedCategoriesRow categories={featuredCategories} />
+          </section>
+        )}
+
+        {/* ── ALL CATEGORIES ─────────────────────────────────────── */}
         {snapshot.categories.length > 0 ? (
-          <>
-            <div className="mt-7 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+          <section className="mt-10">
+            <div className="mb-4 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
               <Layers3 className="h-3.5 w-3.5" />
-              {queryState.search
-                ? `${snapshot.visibleCategories} de ${snapshot.totalCategories} categorias`
-                : `${snapshot.totalCategories} categorias activas`}
+              {hasActiveFilters
+                ? `${snapshot.visibleCategories} de ${snapshot.totalCategories} rubros`
+                : `Todos los rubros (${snapshot.totalCategories})`}
             </div>
             <CategoryGrid categories={snapshot.categories} />
-          </>
+          </section>
         ) : (
-          <div className="mt-8 rounded-xl border border-dashed border-slate-300 bg-white/60 px-6 py-16 text-center dark:border-slate-700 dark:bg-slate-950/50">
-            <p className="text-xl font-medium text-slate-900 dark:text-white">
-              No encontramos categorias con esos criterios
+          <div className="mt-10 rounded-xl border border-dashed border-slate-300 bg-white/60 px-6 py-16 text-center dark:border-slate-700 dark:bg-slate-950/50">
+            <Layers3 className="mx-auto h-10 w-10 text-slate-300 dark:text-slate-600" />
+            <p className="mt-4 text-lg font-semibold text-slate-900 dark:text-white">
+              No encontramos rubros con esos criterios
             </p>
-            <p className="mt-3 text-sm leading-6 text-slate-500 dark:text-slate-400">
-              Ajusta la busqueda o limpia los filtros para volver al panorama completo.
+            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+              Ajusta la búsqueda o limpia los filtros para ver todos los rubros.
             </p>
-            {hasActiveFilters ? (
+            {hasActiveFilters && (
               <div className="mt-6">
                 <Link href="/home/categorias">
                   <Button variant="outline" className="rounded-lg">
-                    Ver todas las categorias
+                    Ver todos los rubros
                   </Button>
                 </Link>
               </div>
-            ) : null}
+            )}
           </div>
         )}
 
-        {snapshot.categories.length > 0 && snapshot.categories[0].shareOfProducts ? (
-          <section className="mt-10 rounded-xl border border-slate-200 bg-white/70 p-5 shadow-sm backdrop-blur-sm dark:border-slate-800 dark:bg-slate-950/70">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
-                  Categoria lider
-                </p>
-                <p className="mt-1.5 text-lg font-semibold text-slate-900 dark:text-slate-50">
-                  <span className="text-emerald-700 dark:text-emerald-300">
-                    {snapshot.categories[0].name}
-                  </span>{' '}
-                  concentra el {formatPercent(snapshot.categories[0].shareOfProducts)} del catalogo publicado
-                </p>
-              </div>
-              <Link href={snapshot.categories[0].href}>
-                <Button
-                  size="sm"
-                  className="rounded-lg bg-slate-950 px-4 text-white hover:bg-emerald-700 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white"
-                >
-                  Explorar
-                  <ArrowRight className="ml-2 h-3.5 w-3.5" />
-                </Button>
-              </Link>
-            </div>
-          </section>
-        ) : null}
+        {/* ── LEADER BANNER ──────────────────────────────────────── */}
+        {!hasActiveFilters && snapshot.categories.length > 0 && snapshot.categories[0].organizationCount > 0 && (
+          <LeaderBanner category={snapshot.categories[0]} />
+        )}
       </div>
     </MarketplaceLayout>
+  );
+}
+
+/* ── Sub-components ────────────────────────────────────────────── */
+
+function StatPill({ icon, value, label }: { icon: React.ReactNode; value: number; label: string }) {
+  return (
+    <div className="flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+      <span className="text-emerald-600 dark:text-emerald-400">{icon}</span>
+      <span className="font-bold text-slate-900 dark:text-white">{value.toLocaleString('es')}</span>
+      {label}
+    </div>
+  );
+}
+
+function LeaderBanner({ category }: { category: GlobalCategoryExplorerItem }) {
+  return (
+    <section className="mt-10 overflow-hidden rounded-xl border border-slate-200 bg-white/70 shadow-sm backdrop-blur-sm dark:border-slate-800 dark:bg-slate-950/70">
+      <div
+        className="h-1 w-full"
+        style={{ backgroundColor: category.color || '#10b981' }}
+      />
+      <div className="flex flex-wrap items-center justify-between gap-4 p-5">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+            Rubro líder
+          </p>
+          <p className="mt-1.5 text-lg font-semibold text-slate-900 dark:text-slate-50">
+            <span className="font-extrabold" style={{ color: category.color || '#10b981' }}>
+              {category.name}
+            </span>
+            {' '}· {category.organizationCount} {category.organizationCount === 1 ? 'empresa' : 'empresas'},{' '}
+            {category.productCount} {category.productCount === 1 ? 'producto' : 'productos'}
+          </p>
+        </div>
+        <Link href={`/home/categorias/${category.slug}`}>
+          <Button
+            size="sm"
+            className="rounded-lg bg-slate-950 px-4 text-white hover:bg-emerald-700 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white"
+          >
+            Ver empresas
+            <ArrowRight className="ml-2 h-3.5 w-3.5" />
+          </Button>
+        </Link>
+      </div>
+    </section>
   );
 }
