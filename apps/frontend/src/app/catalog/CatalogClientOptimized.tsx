@@ -247,6 +247,7 @@ export default function CatalogClientOptimized({
       minPrice: advancedFilters.priceRange[0],
       maxPrice: normalizedMaxPrice,
       rating: advancedFilters.rating,
+      country: initialQueryState.country,
       department: initialQueryState.department,
       city: initialQueryState.city,
     };

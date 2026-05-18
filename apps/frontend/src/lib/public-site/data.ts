@@ -97,6 +97,7 @@ export interface GlobalProductCard {
   organizationName: string;
   organizationHref: string;
   organizationId?: string;
+  country?: string;
   department?: string;
   city?: string;
   createdAt?: string | null;
