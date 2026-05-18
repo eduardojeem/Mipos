@@ -36,7 +36,7 @@ const DEFAULT_LIMITS_BY_PLAN: Record<string, Required<PlanLimits>> = {
     maxUsers: 5,
     maxProducts: 3000,
     maxTransactionsPerMonth: 5000,
-    maxLocations: 1,
+    maxLocations: 3,
   },
   professional: {
     maxUsers: 50,

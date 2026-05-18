@@ -5,6 +5,44 @@ import {
 } from '@/app/api/_utils/company-authorization';
 import { createAdminClient } from '@/lib/supabase/server';
 
+// Fallback limits per plan when saas_plans.max_locations is not configured
+const PLAN_MAX_LOCATIONS: Record<string, number> = {
+  FREE: 1,
+  STARTER: 3,
+  PROFESSIONAL: 10,
+  ENTERPRISE: 999,
+};
+
+async function getMaxLocationsForPlan(
+  adminClient: Awaited<ReturnType<typeof createAdminClient>>,
+  planName: string
+): Promise<number> {
+  const normalized = planName.toUpperCase().trim();
+
+  try {
+    const slugCandidates = [
+      normalized.toLowerCase(),
+      normalized.toLowerCase().replace(/_/g, '-'),
+      normalized,
+    ];
+
+    const { data } = await (adminClient as any)
+      .from('saas_plans')
+      .select('max_locations')
+      .in('slug', slugCandidates)
+      .not('max_locations', 'is', null)
+      .order('max_locations', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (data?.max_locations != null) return Number(data.max_locations);
+  } catch {
+    // fall through to hardcoded fallback
+  }
+
+  return PLAN_MAX_LOCATIONS[normalized] ?? 1;
+}
+
 type BranchBody = {
   name?: unknown;
   slug?: unknown;
@@ -115,11 +153,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: countError.message || 'No se pudo validar el limite de sucursales' }, { status: 500 });
   }
 
-  const hasMultiBranch = access.context.features.includes(COMPANY_FEATURE_KEYS.MULTI_BRANCH) ||
-    access.context.features.includes('multiple_branches');
+  const maxLocations = await getMaxLocationsForPlan(adminClient, access.context.plan);
 
-  if ((existingCount || 0) > 0 && !hasMultiBranch) {
-    return NextResponse.json({ error: 'Tu plan actual no permite multiples sucursales' }, { status: 403 });
+  if ((existingCount || 0) >= maxLocations) {
+    const planLabel = access.context.plan || 'actual';
+    const msg =
+      maxLocations === 1
+        ? `Tu plan ${planLabel} solo permite 1 sucursal. Actualiza tu plan para agregar más sedes.`
+        : `Tu plan ${planLabel} permite máximo ${maxLocations} sucursales. Actualiza tu plan para agregar más sedes.`;
+    return NextResponse.json({ error: msg, limitReached: true, maxLocations }, { status: 403 });
   }
 
   const baseSlug = toSlug(asText(body.slug) || name);

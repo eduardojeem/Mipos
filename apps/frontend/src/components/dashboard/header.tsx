@@ -44,6 +44,7 @@ import { NotificationsList } from '@/components/notifications/NotificationsList'
 import { SyncStatusIndicator } from '@/components/sync/SyncStatusIndicator';
 import { cn } from '@/lib/utils';
 import { OrganizationSwitcher } from './OrganizationSwitcher';
+import { BranchSelector } from './BranchSelector';
 import { useUserOrganizations } from '@/hooks/use-user-organizations';
 import { useSystemSettings } from '@/app/dashboard/settings/hooks/useOptimizedSettings';
 
@@ -310,6 +311,9 @@ export function Header({ compact = false }: HeaderProps) {
                 <OrganizationSwitcher />
               </div>
             )}
+
+            {/* Branch Selector — visible when org has multiple branches */}
+            <BranchSelector compact />
 
             {/* Current Time (desktop only) */}
             {!isMobile && (
