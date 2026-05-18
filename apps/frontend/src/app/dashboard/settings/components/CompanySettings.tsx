@@ -2,39 +2,18 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Building2,
-  Briefcase,
-  CheckCircle2,
-  Globe,
-  Mail,
-  MapPin,
-  Palette,
-  Phone,
-  Save,
-  Users,
-  Image as ImageIcon,
-  AlertTriangle,
-  Store,
-  Laptop,
-  Shirt,
-  ShoppingCart,
-  Pill,
-  Sparkles,
-  Home,
-  Dumbbell,
-  BookOpen,
-  Car,
-  Gamepad2,
-  PawPrint,
-  Hammer,
-  UtensilsCrossed,
-  Layers3,
+  Building2, Briefcase, CheckCircle2, Globe, Mail, MapPin, Palette,
+  Phone, Save, Users, Image as ImageIcon, AlertTriangle, Store,
+  Laptop, Shirt, ShoppingCart, Pill, Sparkles, Home, Dumbbell,
+  BookOpen, Car, Gamepad2, PawPrint, Hammer, UtensilsCrossed, Layers3,
+  FileText,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -60,19 +39,11 @@ function CategoryIcon({ name, color }: { name: string | null; color: string }) {
   );
 }
 
-const INDUSTRIES = [
-  { value: 'retail',      label: '🛍️  Comercio / Retail' },
-  { value: 'supermarket', label: '🛒  Supermercado / Minimarket' },
-  { value: 'services',    label: '🛠️  Servicios y reparaciones' },
-  { value: 'technology',  label: '💻  Tecnología / Electrónica' },
-  { value: 'other',       label: '📦  Otro rubro' },
-];
-
 const COMPANY_SIZES = [
-  { value: 'micro', label: '1 – 5 personas' },
-  { value: 'small', label: '6 – 50 personas' },
+  { value: 'micro',  label: '1 – 5 personas' },
+  { value: 'small',  label: '6 – 50 personas' },
   { value: 'medium', label: '51 – 250 personas' },
-  { value: 'large', label: '250+ personas' },
+  { value: 'large',  label: '250+ personas' },
 ];
 
 const PARAGUAY_DEPARTMENTS = [
@@ -108,39 +79,38 @@ export function CompanySettings() {
 
   const [isSaving, setIsSaving] = useState(false);
   const [form, setForm] = useState({
-    // Identity
-    name: '',
-    industry: '',
-    size: '' as CompanyProfile['size'] | '',
+    name:        '',
+    size:        '' as CompanyProfile['size'] | '',
     primary_color: '#2563EB',
-    logo_url: '',
-    // Contact
-    phone: '',
-    email: '',
-    website: '',
-    // Address
-    address: '',
-    country: 'Paraguay',
-    department: '',
-    city: '',
+    logo_url:    '',
+    description: '',
+    phone:       '',
+    email:       '',
+    website:     '',
+    department:  '',
+    city:        '',
+    address:     '',
+    country:     'Paraguay',
+    // Campo interno requerido por plan-service (no visible en UI principal)
+    industry:    '',
   });
 
-  // Sync from both plan context AND system settings
   useEffect(() => {
     setForm((prev) => ({
       ...prev,
-      name: company?.name || systemSettings?.business_name || prev.name,
-      industry: company?.industry || prev.industry,
-      size: company?.size || prev.size,
-      primary_color: company?.primary_color || prev.primary_color,
-      logo_url: systemSettings?.logo_url || prev.logo_url,
-      phone: systemSettings?.phone || prev.phone,
-      email: systemSettings?.email || prev.email,
-      website: systemSettings?.website || prev.website,
-      address:    systemSettings?.address    || prev.address,
-      country:    systemSettings?.country    || prev.country,
-      department: systemSettings?.department || prev.department,
-      city:       systemSettings?.city       || prev.city,
+      name:        company?.name                         || systemSettings?.business_name || prev.name,
+      size:        company?.size                         || prev.size,
+      primary_color: company?.primary_color             || prev.primary_color,
+      logo_url:    systemSettings?.logo_url              || prev.logo_url,
+      description: (systemSettings as any)?.description  || prev.description,
+      phone:       systemSettings?.phone                 || prev.phone,
+      email:       systemSettings?.email                 || prev.email,
+      website:     systemSettings?.website               || prev.website,
+      department:  systemSettings?.department            || prev.department,
+      city:        systemSettings?.city                  || prev.city,
+      address:     systemSettings?.address               || prev.address,
+      country:     systemSettings?.country               || prev.country,
+      industry:    company?.industry                     || prev.industry,
     }));
   }, [company, systemSettings]);
 
@@ -148,83 +118,62 @@ export function CompanySettings() {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
-  // Profile completion
   const completion = useMemo(() => {
-    const fields = [form.name, form.industry, form.size, form.phone, form.email, form.address, form.department, form.city];
+    const fields = [form.name, form.size, form.phone, form.email, form.description, form.department, form.city];
     return Math.round((fields.filter(Boolean).length / fields.length) * 100);
   }, [form]);
 
   const completionColor =
-    completion === 100
-      ? 'bg-emerald-500'
-      : completion >= 60
-      ? 'bg-primary'
-      : 'bg-amber-500';
+    completion === 100 ? 'bg-emerald-500' :
+    completion >= 60   ? 'bg-primary' :
+                         'bg-amber-500';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!canEdit) {
-      toast({
-        title: 'Sin permisos',
-        description: 'No tienes permisos para editar la configuración de la empresa.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Sin permisos', description: 'No tienes permisos para editar esta sección.', variant: 'destructive' });
       return;
     }
 
-    if (!form.name || !form.industry || !form.size) {
-      toast({
-        title: 'Datos incompletos',
-        description: 'Completa el nombre del negocio, rubro y tamaño del equipo.',
-        variant: 'destructive',
-      });
+    if (!form.name || !form.size) {
+      toast({ title: 'Datos incompletos', description: 'Completa el nombre del negocio y tamaño del equipo.', variant: 'destructive' });
       return;
     }
 
     setIsSaving(true);
     try {
-      // 1. Update plan company profile
       const success = await updateCompany({
         name: form.name,
-        industry: form.industry,
+        industry: form.industry || 'other',
         size: form.size,
         primary_color: form.primary_color,
       });
 
       if (!success) throw new Error('plan-update-failed');
 
-      // 2. Sync contact + address + logo to system settings
       await updateSystemSettings.mutateAsync({
         business_name: form.name,
-        logo_url:   form.logo_url   || undefined,
-        phone:      form.phone      || undefined,
-        email:      form.email      || undefined,
-        website:    form.website    || undefined,
-        address:    form.address    || undefined,
-        country:    form.country    || undefined,
-        department: form.department || undefined,
-        city:       form.city       || undefined,
-      });
+        logo_url:    form.logo_url    || undefined,
+        description: form.description || undefined,
+        phone:       form.phone       || undefined,
+        email:       form.email       || undefined,
+        website:     form.website     || undefined,
+        department:  form.department  || undefined,
+        city:        form.city        || undefined,
+        address:     form.address     || undefined,
+        country:     form.country     || undefined,
+      } as any);
 
-      toast({
-        title: '¡Empresa actualizada!',
-        description: 'Los datos de tu negocio se sincronizaron con el sistema.',
-      });
+      toast({ title: '¡Empresa actualizada!', description: 'Los datos se sincronizaron correctamente.' });
     } catch {
-      toast({
-        title: 'Error al guardar',
-        description: 'No se pudieron actualizar los datos. Intenta nuevamente.',
-        variant: 'destructive',
-      });
+      toast({ title: 'Error al guardar', description: 'No se pudieron actualizar los datos.', variant: 'destructive' });
     } finally {
       setIsSaving(false);
     }
   };
 
-  const isLoading = planLoading || sysLoading;
-
-  if (isLoading) {
+  if (planLoading || sysLoading) {
     return (
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <div className="space-y-4">
@@ -239,8 +188,9 @@ export function CompanySettings() {
 
   return (
     <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-[1fr_360px]">
-      {/* LEFT: Form */}
+      {/* LEFT */}
       <div className="space-y-6">
+
         {!canEdit && (
           <Alert className="border-amber-500/25 bg-amber-500/5">
             <AlertDescription className="text-amber-700 dark:text-amber-400">
@@ -248,7 +198,8 @@ export function CompanySettings() {
             </AlertDescription>
           </Alert>
         )}
-        {/* Identity */}
+
+        {/* ── 1. IDENTIDAD ───────────────────────────────────────── */}
         <Card className="rounded-xl border-border/50 shadow-sm">
           <CardHeader className="pb-4">
             <div className="flex items-center gap-3">
@@ -257,105 +208,48 @@ export function CompanySettings() {
               </div>
               <div>
                 <CardTitle className="text-base font-semibold">Identidad del negocio</CardTitle>
-                <CardDescription className="text-sm">Nombre, rubro y tamaño de tu empresa.</CardDescription>
+                <CardDescription className="text-sm">Nombre, descripción y apariencia pública.</CardDescription>
               </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="company-name" className="text-xs font-semibold uppercase text-muted-foreground">
-                Nombre del negocio *
-              </Label>
-              <Input
-                id="company-name"
-                value={form.name}
-                onChange={(e) => set('name', e.target.value)}
-                placeholder="Ej. Mi Tienda Central"
-                className="focus-visible:ring-primary/50"
-                required
-                disabled={!canEdit}
-              />
-            </div>
-
-            {/* Rubro público del marketplace */}
-            <div className="space-y-2">
-              <Label className="text-xs font-semibold uppercase text-muted-foreground flex items-center gap-1.5">
-                <Store className="h-3 w-3" />
-                Rubro en el marketplace público
-              </Label>
-              <p className="text-xs text-muted-foreground -mt-1">
-                Los clientes te encontrarán bajo esta categoría en el marketplace.
-              </p>
-              <Select
-                value={currentCategoryId ?? '__none__'}
-                onValueChange={(v) => {
-                  const newId = v === '__none__' ? null : v;
-                  saveMarketplaceCategory(newId);
-                }}
-                disabled={!canEdit || isSavingCategory}
-              >
-                <SelectTrigger className="focus-visible:ring-primary/50">
-                  <SelectValue placeholder="Selecciona el rubro público…">
-                    {currentCategoryId ? (
-                      (() => {
-                        const cat = marketplaceCategories.find((c) => c.id === currentCategoryId);
-                        return cat ? (
-                          <span className="flex items-center gap-2">
-                            <CategoryIcon name={cat.icon ?? null} color={cat.color} />
-                            {cat.name}
-                          </span>
-                        ) : 'Selecciona el rubro público…';
-                      })()
-                    ) : (
-                      <span className="text-muted-foreground">Sin rubro asignado</span>
-                    )}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">
-                    <span className="text-muted-foreground italic">Sin rubro asignado</span>
-                  </SelectItem>
-                  {marketplaceCategories.map((cat) => (
-                    <SelectItem key={cat.id} value={cat.id}>
-                      <span className="flex items-center gap-2">
-                        <CategoryIcon name={cat.icon ?? null} color={cat.color} />
-                        {cat.name}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {currentCategoryId && (
-                <p className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                  <CheckCircle2 className="h-3 w-3" />
-                  Tu empresa aparece en el marketplace bajo este rubro.
-                </p>
-              )}
-            </div>
-
-            <Separator />
-
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold uppercase text-muted-foreground">Rubro interno *</Label>
-                <Select value={form.industry} onValueChange={(v) => set('industry', v)} disabled={!canEdit}>
-                  <SelectTrigger className="focus-visible:ring-primary/50">
-                    <SelectValue placeholder="Selecciona un rubro" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {INDUSTRIES.map((i) => (
-                      <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="company-name" className="text-xs font-semibold uppercase text-muted-foreground">
+                  Nombre del negocio *
+                </Label>
+                <Input
+                  id="company-name"
+                  value={form.name}
+                  onChange={(e) => set('name', e.target.value)}
+                  placeholder="Ej. Mi Tienda Central"
+                  required
+                  disabled={!canEdit}
+                />
+              </div>
+
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="company-desc" className="text-xs font-semibold uppercase text-muted-foreground flex items-center gap-1.5">
+                  <FileText className="h-3 w-3" /> Descripción pública
+                </Label>
+                <Textarea
+                  id="company-desc"
+                  value={form.description}
+                  onChange={(e) => set('description', e.target.value)}
+                  placeholder="Describe brevemente tu negocio. Aparece en el marketplace para los clientes."
+                  rows={3}
+                  className="resize-none focus-visible:ring-primary/50"
+                  disabled={!canEdit}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Visible en el marketplace público. Máximo 200 caracteres recomendados.
+                </p>
               </div>
 
               <div className="space-y-2">
                 <Label className="text-xs font-semibold uppercase text-muted-foreground">Tamaño del equipo *</Label>
                 <Select value={form.size} onValueChange={(v) => set('size', v)} disabled={!canEdit}>
-                  <SelectTrigger className="focus-visible:ring-primary/50">
-                    <SelectValue placeholder="Selecciona un rango" />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
                   <SelectContent>
                     {COMPANY_SIZES.map((s) => (
                       <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
@@ -367,7 +261,73 @@ export function CompanySettings() {
           </CardContent>
         </Card>
 
-        {/* Contact */}
+        {/* ── 2. RUBRO EN MARKETPLACE ───────────────────────────── */}
+        <Card className="rounded-xl border-border/50 shadow-sm">
+          <CardHeader className="pb-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Store className="h-5 w-5" />
+              </div>
+              <div>
+                <CardTitle className="text-base font-semibold">Rubro en el marketplace</CardTitle>
+                <CardDescription className="text-sm">
+                  Los clientes te encuentran bajo esta categoría en <span className="font-medium">/home/categorias</span>.
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Select
+              value={currentCategoryId ?? '__none__'}
+              onValueChange={(v) => saveMarketplaceCategory(v === '__none__' ? null : v)}
+              disabled={!canEdit || isSavingCategory}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecciona el rubro público…">
+                  {currentCategoryId ? (
+                    (() => {
+                      const cat = marketplaceCategories.find((c) => c.id === currentCategoryId);
+                      return cat ? (
+                        <span className="flex items-center gap-2">
+                          <CategoryIcon name={cat.icon ?? null} color={cat.color} />
+                          {cat.name}
+                        </span>
+                      ) : 'Selecciona el rubro público…';
+                    })()
+                  ) : (
+                    <span className="text-muted-foreground">Sin rubro asignado</span>
+                  )}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">
+                  <span className="text-muted-foreground italic">Sin rubro asignado</span>
+                </SelectItem>
+                {marketplaceCategories.map((cat) => (
+                  <SelectItem key={cat.id} value={cat.id}>
+                    <span className="flex items-center gap-2">
+                      <CategoryIcon name={cat.icon ?? null} color={cat.color} />
+                      {cat.name}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {currentCategoryId ? (
+              <p className="mt-2 text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                <CheckCircle2 className="h-3 w-3" />
+                Tu empresa aparece en el marketplace bajo este rubro.
+              </p>
+            ) : (
+              <p className="mt-2 text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                <AlertTriangle className="h-3 w-3" />
+                Sin rubro, tu empresa no aparecerá en el directorio del marketplace.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ── 3. CONTACTO ───────────────────────────────────────── */}
         <Card className="rounded-xl border-border/50 shadow-sm">
           <CardHeader className="pb-4">
             <div className="flex items-center gap-3">
@@ -376,11 +336,11 @@ export function CompanySettings() {
               </div>
               <div>
                 <CardTitle className="text-base font-semibold">Datos de contacto</CardTitle>
-                <CardDescription className="text-sm">Aparecen en facturas, recibos y la configuración de notificaciones.</CardDescription>
+                <CardDescription className="text-sm">Aparecen en facturas, recibos y el marketplace.</CardDescription>
               </div>
             </div>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="company-phone" className="text-xs font-semibold uppercase text-muted-foreground flex items-center gap-1.5">
@@ -391,7 +351,6 @@ export function CompanySettings() {
                   value={form.phone}
                   onChange={(e) => set('phone', e.target.value)}
                   placeholder="+595 21 000 0000"
-                  className="focus-visible:ring-primary/50"
                   disabled={!canEdit}
                 />
               </div>
@@ -405,7 +364,6 @@ export function CompanySettings() {
                   value={form.email}
                   onChange={(e) => set('email', e.target.value)}
                   placeholder="contacto@mitienda.com"
-                  className="focus-visible:ring-primary/50"
                   disabled={!canEdit}
                 />
               </div>
@@ -418,21 +376,41 @@ export function CompanySettings() {
                   value={form.website}
                   onChange={(e) => set('website', e.target.value)}
                   placeholder="https://mitienda.com"
-                  className="focus-visible:ring-primary/50"
                   disabled={!canEdit}
                 />
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ── 4. UBICACIÓN ─────────────────────────────────────── */}
+        <Card className="rounded-xl border-border/50 shadow-sm">
+          <CardHeader className="pb-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <MapPin className="h-5 w-5" />
+              </div>
+              <div>
+                <CardTitle className="text-base font-semibold">Ubicación</CardTitle>
+                <CardDescription className="text-sm">
+                  Permite a los clientes filtrarte por departamento y ciudad en el marketplace.
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="company-department" className="text-xs font-semibold uppercase text-muted-foreground flex items-center gap-1.5">
-                  <MapPin className="h-3 w-3" /> Departamento
+                <Label htmlFor="company-department" className="text-xs font-semibold uppercase text-muted-foreground">
+                  Departamento
                 </Label>
                 <Select
                   value={form.department || '__none__'}
                   onValueChange={(v) => set('department', v === '__none__' ? '' : v)}
                   disabled={!canEdit}
                 >
-                  <SelectTrigger id="company-department" className="focus-visible:ring-primary/50">
-                    <SelectValue placeholder="Seleccionar departamento" />
+                  <SelectTrigger id="company-department">
+                    <SelectValue placeholder="Seleccionar" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">Sin especificar</SelectItem>
@@ -443,28 +421,26 @@ export function CompanySettings() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="company-city" className="text-xs font-semibold uppercase text-muted-foreground flex items-center gap-1.5">
-                  <MapPin className="h-3 w-3" /> Ciudad
+                <Label htmlFor="company-city" className="text-xs font-semibold uppercase text-muted-foreground">
+                  Ciudad
                 </Label>
                 <Input
                   id="company-city"
                   value={form.city}
                   onChange={(e) => set('city', e.target.value)}
                   placeholder="Asunción, Ciudad del Este..."
-                  className="focus-visible:ring-primary/50"
                   disabled={!canEdit}
                 />
               </div>
               <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="company-address" className="text-xs font-semibold uppercase text-muted-foreground flex items-center gap-1.5">
-                  <MapPin className="h-3 w-3" /> Dirección (calle y número)
+                <Label htmlFor="company-address" className="text-xs font-semibold uppercase text-muted-foreground">
+                  Dirección (calle y número)
                 </Label>
                 <Input
                   id="company-address"
                   value={form.address}
                   onChange={(e) => set('address', e.target.value)}
                   placeholder="Av. Mcal. López 1234"
-                  className="focus-visible:ring-primary/50"
                   disabled={!canEdit}
                 />
               </div>
@@ -472,7 +448,7 @@ export function CompanySettings() {
           </CardContent>
         </Card>
 
-        {/* Branding */}
+        {/* ── 5. MARCA ─────────────────────────────────────────── */}
         <Card className="rounded-xl border-border/50 shadow-sm">
           <CardHeader className="pb-4">
             <div className="flex items-center gap-3">
@@ -495,12 +471,9 @@ export function CompanySettings() {
                 value={form.logo_url}
                 onChange={(e) => set('logo_url', e.target.value)}
                 placeholder="https://ejemplo.com/logo.png"
-                className="focus-visible:ring-primary/50"
                 disabled={!canEdit}
               />
-              <p className="text-xs text-muted-foreground">
-                Ingresa la URL de tu logo. Aparecerá en facturas y recibos.
-              </p>
+              <p className="text-xs text-muted-foreground">Aparecerá en facturas, recibos y el marketplace.</p>
             </div>
 
             <Separator />
@@ -517,9 +490,7 @@ export function CompanySettings() {
                       onClick={() => set('primary_color', hex)}
                       disabled={!canEdit}
                       className={`relative h-10 w-10 rounded-xl border-2 transition-all hover:scale-110 active:scale-95 ${
-                        selected
-                          ? 'border-foreground shadow-lg scale-110'
-                          : 'border-transparent hover:border-border'
+                        selected ? 'border-foreground shadow-lg scale-110' : 'border-transparent hover:border-border'
                       }`}
                       style={{ backgroundColor: hex }}
                       title={name}
@@ -541,45 +512,32 @@ export function CompanySettings() {
         <div className="flex justify-end">
           <Button type="submit" disabled={!canEdit || isSaving} className="min-w-[180px] shadow-sm">
             {isSaving ? (
-              <>
-                <span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                Guardando...
-              </>
+              <><span className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />Guardando...</>
             ) : (
-              <>
-                <Save className="mr-2 h-4 w-4" />
-                Guardar empresa
-              </>
+              <><Save className="mr-2 h-4 w-4" />Guardar empresa</>
             )}
           </Button>
         </div>
       </div>
 
-      {/* RIGHT: Summary Card */}
+      {/* RIGHT: Summary */}
       <div className="space-y-6">
-        {/* Preview card */}
+        {/* Preview */}
         <Card className="rounded-xl border-border/50 overflow-hidden shadow-sm">
-          {/* Color banner */}
           <div className="h-16 w-full" style={{ backgroundColor: form.primary_color }} />
           <CardContent className="pt-0 -mt-8 px-6 pb-6">
-            {/* Logo preview */}
-            <div
-              className="h-16 w-16 rounded-xl border-4 border-background bg-muted flex items-center justify-center mb-4 shadow-md overflow-hidden"
-            >
+            <div className="h-16 w-16 rounded-xl border-4 border-background bg-muted flex items-center justify-center mb-4 shadow-md overflow-hidden">
               {form.logo_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={form.logo_url}
-                  alt="Logo"
-                  className="h-full w-full object-contain"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                />
+                <img src={form.logo_url} alt="Logo" className="h-full w-full object-contain"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
               ) : (
                 <Building2 className="h-7 w-7 text-muted-foreground" />
               )}
             </div>
 
             <p className="font-bold text-lg leading-tight truncate">{form.name || 'Nombre del negocio'}</p>
+
             {currentCategoryId ? (
               (() => {
                 const cat = marketplaceCategories.find((c) => c.id === currentCategoryId);
@@ -590,11 +548,18 @@ export function CompanySettings() {
                   </span>
                 ) : null;
               })()
-            ) : form.industry ? (
-              <p className="text-sm text-muted-foreground mt-0.5">
-                {INDUSTRIES.find((i) => i.value === form.industry)?.label || form.industry}
-              </p>
             ) : null}
+
+            {form.description && (
+              <p className="mt-2 text-xs text-muted-foreground line-clamp-2">{form.description}</p>
+            )}
+
+            {(form.department || form.city) && (
+              <p className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
+                <MapPin className="h-3 w-3 shrink-0" />
+                {[form.city, form.department].filter(Boolean).join(', ')}
+              </p>
+            )}
           </CardContent>
         </Card>
 
@@ -615,20 +580,18 @@ export function CompanySettings() {
               )}
             </div>
             <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-500 ${completionColor}`}
-                style={{ width: `${completion}%` }}
-              />
+              <div className={`h-full rounded-full transition-all duration-500 ${completionColor}`} style={{ width: `${completion}%` }} />
             </div>
             <div className="space-y-1.5">
               {[
-                { label: 'Nombre', done: !!form.name },
-                { label: 'Rubro', done: !!form.industry },
-                { label: 'Tamaño', done: !!form.size },
-                { label: 'Teléfono', done: !!form.phone },
-                { label: 'Email', done: !!form.email },
+                { label: 'Nombre',       done: !!form.name },
+                { label: 'Rubro marketplace', done: !!currentCategoryId },
+                { label: 'Tamaño',       done: !!form.size },
+                { label: 'Descripción',  done: !!form.description },
+                { label: 'Teléfono',     done: !!form.phone },
+                { label: 'Email',        done: !!form.email },
                 { label: 'Departamento', done: !!form.department },
-                { label: 'Ciudad', done: !!form.city },
+                { label: 'Ciudad',       done: !!form.city },
               ].map(({ label, done }) => (
                 <div key={label} className="flex items-center gap-2 text-xs">
                   {done ? (
@@ -668,7 +631,7 @@ export function CompanySettings() {
             {completion < 60 && (
               <div className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
                 <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                Completa los datos de contacto para mejorar tus facturas.
+                Completa tu perfil para aparecer mejor posicionado en el marketplace.
               </div>
             )}
           </CardContent>
