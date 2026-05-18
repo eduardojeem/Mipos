@@ -39,6 +39,9 @@ interface SystemSettings {
   // Información de la tienda (nombres reales de columnas en Supabase)
   business_name?: string;
   address?: string;
+  country?: string;
+  department?: string;
+  city?: string;
   phone?: string;
   email?: string;
   website?: string;

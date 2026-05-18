@@ -12,12 +12,8 @@ import { createAdminClient } from "@/lib/supabase/server";
 import type { GlobalProductCard } from "@/lib/public-site/data";
 
 const PUBLIC_ORGANIZATION_STATUSES = ["ACTIVE", "TRIAL"];
-const ORGANIZATION_BASE_COLUMNS = ["id", "name", "slug"];
-const ORGANIZATION_OPTIONAL_COLUMNS = [
-  "subdomain",
-  "custom_domain",
-  "settings",
-];
+const ORGANIZATION_BASE_COLUMNS = ["id", "name", "slug", "subscription_status"];
+const ORGANIZATION_OPTIONAL_COLUMNS: string[] = [];
 const PRODUCT_BASE_COLUMNS = ["id", "name", "sale_price", "organization_id"];
 const PRODUCT_OPTIONAL_COLUMNS = [
   "description",
@@ -65,6 +61,8 @@ export interface GlobalCatalogCategoryOption {
   label: string;
   productCount: number;
   organizationCount: number;
+  icon?: string | null;
+  color?: string;
 }
 
 export interface GlobalCatalogLocationOption {
@@ -74,6 +72,16 @@ export interface GlobalCatalogLocationOption {
   productCount: number;
 }
 
+export interface ActiveMarketplaceCategory {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  icon: string | null;
+  color: string;
+  is_featured: boolean;
+}
+
 export interface GlobalCatalogSnapshot {
   products: GlobalProductCard[];
   heroProducts: GlobalProductCard[];
@@ -81,9 +89,11 @@ export interface GlobalCatalogSnapshot {
   totalOrganizations: number;
   matchingOrganizations: number;
   categories: GlobalCatalogCategoryOption[];
+  countries: GlobalCatalogLocationOption[];
   departments: GlobalCatalogLocationOption[];
   cities: GlobalCatalogLocationOption[];
   maxPrice: number;
+  activeMarketplaceCategory: ActiveMarketplaceCategory | null;
 }
 
 function isMissingColumnError(error: unknown): boolean {
@@ -259,6 +269,18 @@ function sortProducts(
   }
 
   return sorted;
+}
+
+async function fetchMarketplaceCategoryBySlug(slug: string): Promise<ActiveMarketplaceCategory | null> {
+  const client = await createAdminClient();
+  const { data, error } = await (client as any)
+    .from('marketplace_categories')
+    .select('id,name,slug,description,icon,color,is_featured')
+    .eq('slug', slug)
+    .eq('is_active', true)
+    .single();
+  if (error || !data) return null;
+  return data as ActiveMarketplaceCategory;
 }
 
 /**
@@ -532,17 +554,25 @@ async function fetchCategoryMap(
 function extractOrganizationLocation(
   organization: PublicOrganization,
   businessConfigMap: Map<string, Record<string, unknown>>,
-): { department: string; city: string } {
+): { country: string; department: string; city: string } {
+  let country = "";
   let department = "";
   let city = "";
 
   // 1. Try from business_config in settings table (most reliable source)
   const config = businessConfigMap.get(organization.id);
   if (config) {
+    // Flat fields (new format saved by CompanySettings form)
+    if (!country)    country    = String(config.country    || "").trim();
+    if (!department) department = String(config.department || "").trim();
+    if (!city)       city       = String(config.city       || "").trim();
+
+    // Nested address object (legacy format)
     const address = config.address as Record<string, unknown> | undefined;
     if (address && typeof address === "object") {
-      department = String(address.state || address.department || "").trim();
-      city = String(address.city || address.ciudad || "").trim();
+      if (!country)    country    = String(address.country || "").trim();
+      if (!department) department = String(address.state || address.department || "").trim();
+      if (!city)       city       = String(address.city || address.ciudad || "").trim();
     }
     const contact = config.contact as Record<string, unknown> | undefined;
     if (!city && contact && typeof contact === "object") {
@@ -571,7 +601,7 @@ function extractOrganizationLocation(
     }
   }
 
-  return { department, city };
+  return { country, department, city };
 }
 
 async function fetchBusinessConfigLocations(
@@ -672,6 +702,7 @@ function mapProductsToCards(
         organizationName: normalizeDisplayText(organization.name, "Empresa"),
         organizationHref: buildTenantHomeUrl(organization, requestHost),
         organizationId: organization.id,
+        country: location.country || undefined,
         department: location.department || undefined,
         city: location.city || undefined,
         createdAt: product.created_at || null,
@@ -681,49 +712,25 @@ function mapProductsToCards(
     .filter((product): product is GlobalProductCard => Boolean(product));
 }
 
-function buildCategoryOptions(
-  products: GlobalProductCard[],
-): GlobalCatalogCategoryOption[] {
-  const accumulator = new Map<
-    string,
-    {
-      key: string;
-      label: string;
-      productIds: Set<string>;
-      organizationIds: Set<string>;
-    }
-  >();
-
-  products.forEach((product) => {
-    const key = product.categoryKey || toCategoryKey(product.categoryName);
-    const current = accumulator.get(key) || {
-      key,
-      label: product.categoryName,
-      productIds: new Set<string>(),
-      organizationIds: new Set<string>(),
-    };
-
-    current.productIds.add(product.id);
-    if (product.organizationId) {
-      current.organizationIds.add(product.organizationId);
-    }
-
-    accumulator.set(key, current);
-  });
-
-  return Array.from(accumulator.values())
-    .map((entry) => ({
-      key: entry.key,
-      label: entry.label,
-      productCount: entry.productIds.size,
-      organizationCount: entry.organizationIds.size,
-    }))
-    .sort((left, right) => {
-      if (right.productCount !== left.productCount) {
-        return right.productCount - left.productCount;
-      }
-      return left.label.localeCompare(right.label, "es");
-    });
+async function fetchMarketplaceCategoryOptions(): Promise<GlobalCatalogCategoryOption[]> {
+  const client = await createAdminClient();
+  const { data, error } = await (client as any).rpc('get_marketplace_categories_with_counts');
+  if (error || !data) return [];
+  return (data as Array<{
+    slug: string;
+    name: string;
+    icon: string | null;
+    color: string;
+    org_count: number | string;
+    product_count: number | string;
+  }>).map((row) => ({
+    key: row.slug,
+    label: row.name,
+    icon: row.icon,
+    color: row.color,
+    productCount: Number(row.product_count) || 0,
+    organizationCount: Number(row.org_count) || 0,
+  }));
 }
 
 function toLocationKey(value: string): string {
@@ -740,7 +747,7 @@ function toLocationKey(value: string): string {
 
 function buildLocationOptions(
   products: GlobalProductCard[],
-  field: "department" | "city",
+  field: "country" | "department" | "city",
 ): GlobalCatalogLocationOption[] {
   const accumulator = new Map<
     string,
@@ -787,41 +794,15 @@ function filterProducts(
   input: CatalogQueryState,
 ): GlobalProductCard[] {
   return products.filter((product) => {
-    // La categoría de marketplace filtra a nivel de organización (en fetchGlobalCatalogSnapshot),
-    // no a nivel de producto. Aquí solo se aplican filtros de precio, stock, etc.
-
-    if (input.onSale && !hasOffer(product)) {
-      return false;
-    }
+    if (input.onSale && !hasOffer(product)) return false;
 
     const effectivePrice = getEffectivePrice(product);
-    if (input.minPrice > 0 && effectivePrice < input.minPrice) {
-      return false;
-    }
+    if (input.minPrice > 0 && effectivePrice < input.minPrice) return false;
+    if (input.maxPrice !== null && input.maxPrice > 0 && effectivePrice > input.maxPrice) return false;
 
-    if (
-      input.maxPrice !== null &&
-      input.maxPrice > 0 &&
-      effectivePrice > input.maxPrice
-    ) {
-      return false;
-    }
-
-    if (
-      input.department &&
-      (!product.department ||
-        toLocationKey(product.department) !== toLocationKey(input.department))
-    ) {
-      return false;
-    }
-
-    if (
-      input.city &&
-      (!product.city ||
-        toLocationKey(product.city) !== toLocationKey(input.city))
-    ) {
-      return false;
-    }
+    if (input.country && (!product.country || toLocationKey(product.country) !== toLocationKey(input.country))) return false;
+    if (input.department && (!product.department || toLocationKey(product.department) !== toLocationKey(input.department))) return false;
+    if (input.city && (!product.city || toLocationKey(product.city) !== toLocationKey(input.city))) return false;
 
     return true;
   });
@@ -956,9 +937,11 @@ export async function fetchGlobalCatalogSnapshot(
     totalOrganizations: 0,
     matchingOrganizations: 0,
     categories: [],
+    countries: [],
     departments: [],
     cities: [],
     maxPrice: CATALOG_DEFAULT_MAX_PRICE,
+    activeMarketplaceCategory: null,
   };
 
   let baseData: CachedCatalogBaseData;
@@ -977,17 +960,19 @@ export async function fetchGlobalCatalogSnapshot(
   }
 
   // Si hay filtros de categoría de marketplace, restringir a las orgs vinculadas a esos rubros.
-  // Esto separa correctamente el filtro público (?category=restaurantes) del filtrado
-  // por categorías internas de productos (que ya no se mezclan con el marketplace).
   let organizations = allOrganizations;
+  let activeMarketplaceCategory: ActiveMarketplaceCategory | null = null;
+
   if (input.categories.length > 0) {
     try {
-      const marketplaceOrgIds = await resolveMarketplaceCategoryOrgIds(input.categories);
+      const [marketplaceOrgIds, categoryDetail] = await Promise.all([
+        resolveMarketplaceCategoryOrgIds(input.categories),
+        fetchMarketplaceCategoryBySlug(input.categories[0]),
+      ]);
+      activeMarketplaceCategory = categoryDetail;
       if (marketplaceOrgIds.size > 0) {
         organizations = allOrganizations.filter((org) => marketplaceOrgIds.has(org.id));
       }
-      // Si marketplaceOrgIds está vacío, los slugs no corresponden a marketplace_categories —
-      // se mantiene el listado completo para no romper filtros internos de producto.
     } catch (err) {
       console.warn('[GlobalCatalog] Marketplace category filter failed, using all orgs:', err);
     }
@@ -1016,25 +1001,19 @@ export async function fetchGlobalCatalogSnapshot(
       requestHost,
     );
 
-    // Build category options from ALL products (before category filter) so user can see all available categories
-    // but apply other filters (price, stock, sale) so counts reflect the current non-category filters
-    const productsForCategoryOptions = filterProducts(mappedProducts, {
-      ...input,
-      categories: [], // Don't filter by category when building category options
-    });
-    const categories = buildCategoryOptions(productsForCategoryOptions);
-    const departments = buildLocationOptions(mappedProducts, "department");
-    const cities = buildLocationOptions(mappedProducts, "city");
+    const [categories, countries, departments, cities] = await Promise.all([
+      fetchMarketplaceCategoryOptions(),
+      Promise.resolve(buildLocationOptions(mappedProducts, "country")),
+      Promise.resolve(buildLocationOptions(mappedProducts, "department")),
+      Promise.resolve(buildLocationOptions(mappedProducts, "city")),
+    ]);
     const filteredProducts = filterProducts(mappedProducts, input);
     const sortedProducts = sortProducts(filteredProducts, input.sortBy);
     const start = (input.page - 1) * input.itemsPerPage;
     const matchingOrganizations = new Set(
       filteredProducts.map((product) => product.organizationId).filter(Boolean),
     ).size;
-    const productsForMaxPrice =
-      input.categories.length > 0 || input.onSale
-        ? productsForCategoryOptions
-        : mappedProducts;
+    const productsForMaxPrice = mappedProducts;
 
     return {
       products: sortedProducts.slice(start, start + input.itemsPerPage),
@@ -1043,9 +1022,11 @@ export async function fetchGlobalCatalogSnapshot(
       totalOrganizations,
       matchingOrganizations,
       categories,
+      countries,
       departments,
       cities,
       maxPrice: resolveMaxPrice(productsForMaxPrice),
+      activeMarketplaceCategory,
     };
   } catch (error) {
     console.error('[GlobalCatalog] Failed to fetch catalog products:', error instanceof Error ? error.message : JSON.stringify(error));

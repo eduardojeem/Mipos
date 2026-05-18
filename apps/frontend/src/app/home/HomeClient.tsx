@@ -283,7 +283,7 @@ export default function HomeClient({ initialData }: HomeClientProps) {
                 >
                   <div className="relative aspect-[4/3] overflow-hidden bg-slate-100 dark:bg-slate-800">
                     <Image
-                      src={offer.image || '/placeholder-product.png'}
+                      src={offer.image || '/api/placeholder/480/360'}
                       alt={offer.name}
                       fill
                       className="object-cover transition-transform duration-300 hover:scale-105"
@@ -401,7 +401,7 @@ export default function HomeClient({ initialData }: HomeClientProps) {
                     <Link href={tenantHref(`/catalog/${product.id}`)} className="block">
                       <div className="relative aspect-[4/3] overflow-hidden bg-slate-100 dark:bg-slate-800">
                         <Image
-                          src={product.image || '/placeholder-product.png'}
+                          src={product.image || '/api/placeholder/480/360'}
                           alt={product.name}
                           fill
                           className="object-cover transition-transform duration-300 hover:scale-105"

@@ -73,6 +73,7 @@ interface ToolbarProps extends SharedProps {
   totalProducts: number;
   totalOrganizations: number;
   matchingOrganizations: number;
+  countries: GlobalCatalogLocationOption[];
   departments: GlobalCatalogLocationOption[];
   cities: GlobalCatalogLocationOption[];
 }
@@ -114,6 +115,7 @@ function countActiveFilters(state: CatalogQueryState) {
     state.minPrice > 0 ? 1 : 0,
     state.maxPrice !== null ? 1 : 0,
     state.inStock === false ? 1 : 0,
+    state.country ? 1 : 0,
     state.department ? 1 : 0,
     state.city ? 1 : 0,
   ].reduce((total, value) => total + value, 0);
@@ -205,6 +207,9 @@ function CatalogFiltersForm({
       maxPrice: null,
       rating: null,
       search: '',
+      country: '',
+      department: '',
+      city: '',
       page: CATALOG_DEFAULT_PAGE,
     });
     onApplied?.();
@@ -341,11 +346,11 @@ function CatalogFiltersForm({
         </div>
       </div>
 
-      {/* Categorias con buscador */}
+      {/* Rubros del marketplace */}
       <div className="rounded-xl border border-white/10 bg-white/[0.03] p-5">
         <div className="flex items-center justify-between">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-            Categorias
+            Rubros
           </p>
           {draft.categories.length > 0 && (
             <button
@@ -364,7 +369,7 @@ function CatalogFiltersForm({
             <Input
               value={categorySearch}
               onChange={(e) => setCategorySearch(e.target.value)}
-              placeholder="Buscar categoria..."
+              placeholder="Buscar rubro..."
               className="h-8 border-white/10 bg-slate-950/40 pl-8 text-xs text-white placeholder:text-slate-500"
             />
           </div>
@@ -373,7 +378,7 @@ function CatalogFiltersForm({
         <div className="mt-3 max-h-[280px] space-y-1 overflow-auto pr-1">
           {filteredCategories.length === 0 ? (
             <p className="py-3 text-center text-xs text-slate-500">
-              {categorySearch ? 'Sin resultados' : 'No hay categorias disponibles'}
+              {categorySearch ? 'Sin resultados' : 'No hay rubros disponibles'}
             </p>
           ) : (
             filteredCategories.map((category) => (
@@ -386,7 +391,15 @@ function CatalogFiltersForm({
                   onCheckedChange={(checked) => toggleCategory(category.key, checked === true)}
                 />
                 <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
-                  <span className="truncate">{category.label}</span>
+                  <span className="flex items-center gap-2 truncate">
+                    {category.color && (
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: category.color }}
+                      />
+                    )}
+                    <span className="truncate">{category.label}</span>
+                  </span>
                   <span className="shrink-0 rounded-full bg-white/5 px-2 py-0.5 text-[10px] tabular-nums text-slate-500">
                     {category.productCount}
                   </span>
@@ -427,6 +440,7 @@ export function GlobalCatalogToolbar({
   totalProducts,
   totalOrganizations,
   matchingOrganizations,
+  countries,
   departments,
   cities,
 }: ToolbarProps) {
@@ -463,6 +477,7 @@ export function GlobalCatalogToolbar({
       minPrice: 0,
       maxPrice: null,
       rating: null,
+      country: '',
       department: '',
       city: '',
     });
@@ -472,8 +487,9 @@ export function GlobalCatalogToolbar({
     state.search ? { key: 'search', label: `Busqueda: ${state.search}` } : null,
     ...state.categories.map((categoryKey) => ({
       key: `category:${categoryKey}`,
-      label: categoriesMap.get(categoryKey) || categoryKey,
+      label: `Rubro: ${categoriesMap.get(categoryKey) || categoryKey}`,
     })),
+    state.country ? { key: 'country', label: `País: ${state.country}` } : null,
     state.department ? { key: 'department', label: `Depto: ${state.department}` } : null,
     state.city ? { key: 'city', label: `Ciudad: ${state.city}` } : null,
     state.onSale ? { key: 'sale', label: 'Solo ofertas' } : null,
@@ -511,7 +527,7 @@ export function GlobalCatalogToolbar({
             <span className="font-semibold text-white">{matchingOrganizations}</span> de {totalOrganizations} empresas
           </span>
           <span>
-            <span className="font-semibold text-white">{categories.length}</span> categorias
+            <span className="font-semibold text-white">{categories.length}</span> rubros
           </span>
         </div>
       </div>
@@ -540,6 +556,35 @@ export function GlobalCatalogToolbar({
             ))}
           </SelectContent>
         </Select>
+
+        {/* Country — solo visible si hay más de un país */}
+        {countries.length > 1 && (
+          <Select
+            value={state.country || '__all__'}
+            onValueChange={(value) =>
+              navigate({
+                ...state,
+                country: value === '__all__' ? '' : value,
+                department: '',
+                city: '',
+                page: CATALOG_DEFAULT_PAGE,
+              })
+            }
+          >
+            <SelectTrigger className="h-10 w-auto min-w-[150px] rounded-xl border-white/10 bg-white/[0.03] text-sm text-white">
+              <MapPin className="mr-2 h-3.5 w-3.5 text-sky-400" />
+              <SelectValue placeholder="País" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">Todos los países</SelectItem>
+              {countries.map((c) => (
+                <SelectItem key={c.key} value={c.label}>
+                  {c.label} ({c.organizationCount})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
 
         {/* Department */}
         {departments.length > 0 && (

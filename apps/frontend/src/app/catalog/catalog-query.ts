@@ -27,6 +27,7 @@ export interface CatalogQueryState {
   minPrice: number;
   maxPrice: number | null;
   rating: number | null;
+  country: string;
   department: string;
   city: string;
 }
@@ -125,6 +126,7 @@ export function normalizeCatalogQuery(
     minPrice,
     maxPrice,
     rating: ratingRaw > 0 ? Math.min(ratingRaw, 5) : null,
+    country: normalizeString(readFirstValue(source, 'country')),
     department: normalizeString(readFirstValue(source, 'department')),
     city: normalizeString(readFirstValue(source, 'city')),
   };
@@ -177,6 +179,10 @@ export function buildCatalogSearchParams(
 
   if (state.rating) {
     params.set('rating', String(state.rating));
+  }
+
+  if (state.country) {
+    params.set('country', state.country);
   }
 
   if (state.department) {

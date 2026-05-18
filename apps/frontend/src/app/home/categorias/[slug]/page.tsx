@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { resolveRequestTenantContext } from '@/lib/domain/request-tenant';
 import { fetchCategoryOrgsSnapshot } from '@/lib/public-site/category-organizations-data';
+import { trackCategoryView } from '@/lib/public-site/track-category';
 import { MarketplaceLayout } from '../../components/marketplace/MarketplaceLayout';
 
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -56,7 +57,12 @@ export default async function CategorySlugPage({ params }: PageProps) {
 
   const { slug } = await params;
   const requestHost = context.kind === 'root' ? null : null;
-  const snapshot = await fetchCategoryOrgsSnapshot(slug, requestHost);
+
+  // Fetch data + track view en paralelo (el track no bloquea el render)
+  const [snapshot] = await Promise.all([
+    fetchCategoryOrgsSnapshot(slug, requestHost),
+    trackCategoryView(slug),
+  ]);
 
   if (!snapshot) notFound();
 

@@ -136,7 +136,7 @@ export function GlobalCatalogHeroCarousel({
   const detailHref = buildProductDetailHref(active);
   const organizationHref = normalizeMarketplaceHref(active.organizationHref);
   const currentPrice = hasOffer(active) ? active.offerPrice || active.basePrice : active.basePrice;
-  const imageSrc = imageError.has(active.id) ? '/placeholder-product.png' : active.image;
+  const imageSrc = imageError.has(active.id) ? '/api/placeholder/480/360' : active.image;
 
   return (
     <section
@@ -301,7 +301,7 @@ export function GlobalCatalogHeroCarousel({
       {slides.length > 1 && (
         <div className="absolute bottom-6 right-6 top-6 hidden w-[72px] flex-col gap-2 lg:flex">
           {slides.map((slide, index) => {
-            const src = imageError.has(slide.id) ? '/placeholder-product.png' : slide.image;
+            const src = imageError.has(slide.id) ? '/api/placeholder/480/360' : slide.image;
             return (
               <button
                 key={slide.id}
@@ -315,7 +315,7 @@ export function GlobalCatalogHeroCarousel({
                 }`}
               >
                 <Image
-                  src={src || '/placeholder-product.png'}
+                  src={src || '/api/placeholder/480/360'}
                   alt={slide.name}
                   fill
                   className="object-cover"

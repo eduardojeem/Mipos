@@ -42,7 +42,7 @@ export function ProductGrid({ products, className }: ProductGridProps) {
           >
             <div className="relative aspect-[4/3] overflow-hidden bg-slate-100 dark:bg-slate-900">
               <Image
-                src={product.image || '/placeholder-product.png'}
+                src={product.image || '/api/placeholder/480/360'}
                 alt={product.name}
                 fill
                 className="object-cover transition-transform duration-500 group-hover:scale-105"

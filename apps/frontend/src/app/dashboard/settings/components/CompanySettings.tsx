@@ -75,6 +75,13 @@ const COMPANY_SIZES = [
   { value: 'large', label: '250+ personas' },
 ];
 
+const PARAGUAY_DEPARTMENTS = [
+  'Alto Paraguay', 'Alto Paraná', 'Amambay', 'Boquerón', 'Caaguazú',
+  'Caazapá', 'Canindeyú', 'Central', 'Concepción', 'Cordillera',
+  'Guairá', 'Itapúa', 'Misiones', 'Ñeembucú', 'Paraguarí',
+  'Presidente Hayes', 'San Pedro', 'Asunción (Capital)',
+];
+
 const BRAND_COLORS = [
   { hex: '#2563EB', name: 'Azul' },
   { hex: '#0F766E', name: 'Verde' },
@@ -113,6 +120,9 @@ export function CompanySettings() {
     website: '',
     // Address
     address: '',
+    country: 'Paraguay',
+    department: '',
+    city: '',
   });
 
   // Sync from both plan context AND system settings
@@ -127,7 +137,10 @@ export function CompanySettings() {
       phone: systemSettings?.phone || prev.phone,
       email: systemSettings?.email || prev.email,
       website: systemSettings?.website || prev.website,
-      address: systemSettings?.address || prev.address,
+      address:    systemSettings?.address    || prev.address,
+      country:    systemSettings?.country    || prev.country,
+      department: systemSettings?.department || prev.department,
+      city:       systemSettings?.city       || prev.city,
     }));
   }, [company, systemSettings]);
 
@@ -137,7 +150,7 @@ export function CompanySettings() {
 
   // Profile completion
   const completion = useMemo(() => {
-    const fields = [form.name, form.industry, form.size, form.phone, form.email, form.address];
+    const fields = [form.name, form.industry, form.size, form.phone, form.email, form.address, form.department, form.city];
     return Math.round((fields.filter(Boolean).length / fields.length) * 100);
   }, [form]);
 
@@ -184,11 +197,14 @@ export function CompanySettings() {
       // 2. Sync contact + address + logo to system settings
       await updateSystemSettings.mutateAsync({
         business_name: form.name,
-        logo_url: form.logo_url || undefined,
-        phone: form.phone || undefined,
-        email: form.email || undefined,
-        website: form.website || undefined,
-        address: form.address || undefined,
+        logo_url:   form.logo_url   || undefined,
+        phone:      form.phone      || undefined,
+        email:      form.email      || undefined,
+        website:    form.website    || undefined,
+        address:    form.address    || undefined,
+        country:    form.country    || undefined,
+        department: form.department || undefined,
+        city:       form.city       || undefined,
       });
 
       toast({
@@ -406,15 +422,48 @@ export function CompanySettings() {
                   disabled={!canEdit}
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="company-department" className="text-xs font-semibold uppercase text-muted-foreground flex items-center gap-1.5">
+                  <MapPin className="h-3 w-3" /> Departamento
+                </Label>
+                <Select
+                  value={form.department || '__none__'}
+                  onValueChange={(v) => set('department', v === '__none__' ? '' : v)}
+                  disabled={!canEdit}
+                >
+                  <SelectTrigger id="company-department" className="focus-visible:ring-primary/50">
+                    <SelectValue placeholder="Seleccionar departamento" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Sin especificar</SelectItem>
+                    {PARAGUAY_DEPARTMENTS.map((dep) => (
+                      <SelectItem key={dep} value={dep}>{dep}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="company-city" className="text-xs font-semibold uppercase text-muted-foreground flex items-center gap-1.5">
+                  <MapPin className="h-3 w-3" /> Ciudad
+                </Label>
+                <Input
+                  id="company-city"
+                  value={form.city}
+                  onChange={(e) => set('city', e.target.value)}
+                  placeholder="Asunción, Ciudad del Este..."
+                  className="focus-visible:ring-primary/50"
+                  disabled={!canEdit}
+                />
+              </div>
               <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="company-address" className="text-xs font-semibold uppercase text-muted-foreground flex items-center gap-1.5">
-                  <MapPin className="h-3 w-3" /> Dirección
+                  <MapPin className="h-3 w-3" /> Dirección (calle y número)
                 </Label>
                 <Input
                   id="company-address"
                   value={form.address}
                   onChange={(e) => set('address', e.target.value)}
-                  placeholder="Av. Mcal. López 1234, Asunción"
+                  placeholder="Av. Mcal. López 1234"
                   className="focus-visible:ring-primary/50"
                   disabled={!canEdit}
                 />
@@ -578,7 +627,8 @@ export function CompanySettings() {
                 { label: 'Tamaño', done: !!form.size },
                 { label: 'Teléfono', done: !!form.phone },
                 { label: 'Email', done: !!form.email },
-                { label: 'Dirección', done: !!form.address },
+                { label: 'Departamento', done: !!form.department },
+                { label: 'Ciudad', done: !!form.city },
               ].map(({ label, done }) => (
                 <div key={label} className="flex items-center gap-2 text-xs">
                   {done ? (

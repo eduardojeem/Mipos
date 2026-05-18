@@ -56,6 +56,8 @@ type MarketplaceCategoryRPCRow = {
   image_url: string | null;
   is_featured: boolean;
   sort_order: number;
+  view_count: number | string;
+  click_count: number | string;
   org_count: number | string;
   product_count: number | string;
 };

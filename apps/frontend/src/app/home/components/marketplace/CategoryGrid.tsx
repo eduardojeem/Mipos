@@ -6,6 +6,7 @@ import { ArrowRight, Building2, PackageSearch, Store, Laptop, Shirt, ShoppingCar
 import { Badge } from '@/components/ui/badge';
 import type { LucideIcon } from 'lucide-react';
 import type { GlobalCategoryCard } from '@/lib/public-site/data';
+import { trackCategoryEvent } from '@/hooks/use-track-category';
 
 // Mapa de iconos disponibles de lucide-react para marketplace_categories
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -77,7 +78,15 @@ export function CategoryGrid({ categories }: CategoryGridProps) {
         const color = category.color || '#10b981';
 
         return (
-          <Link key={category.id} href={resolveHref(category)} className="block">
+          <Link
+          key={category.id}
+          href={resolveHref(category)}
+          className="block"
+          onClick={() => {
+            const slug = category.slug || category.key
+            if (slug) trackCategoryEvent(slug, 'click')
+          }}
+        >
             <motion.article
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}

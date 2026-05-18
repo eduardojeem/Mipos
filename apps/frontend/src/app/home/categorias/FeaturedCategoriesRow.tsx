@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { Building2, PackageSearch, ArrowRight, Store, Laptop, Shirt, ShoppingCart, Pill, Sparkles, Home, Dumbbell, BookOpen, Briefcase, Car, Gamepad2, PawPrint, Hammer, UtensilsCrossed, Layers3 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { GlobalCategoryExplorerItem } from '@/lib/public-site/global-categories-data';
+import { trackCategoryEvent } from '@/hooks/use-track-category';
 
 const ICON_MAP: Record<string, LucideIcon> = {
   UtensilsCrossed, Laptop, Shirt, ShoppingCart, Pill, Sparkles,
@@ -27,7 +28,7 @@ export function FeaturedCategoriesRow({ categories }: FeaturedCategoriesRowProps
         const color = cat.color || '#10b981';
 
         return (
-          <Link key={cat.id} href={`/home/categorias/${cat.slug}`}>
+          <Link key={cat.id} href={`/home/categorias/${cat.slug}`} onClick={() => trackCategoryEvent(cat.slug, 'click')}>
             <motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}

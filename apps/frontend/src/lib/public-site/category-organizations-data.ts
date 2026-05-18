@@ -55,13 +55,13 @@ export async function fetchCategoryOrgsSnapshot(
   // 2. Fetch organizations linked to this category
   const { data: orgs, error: orgsError } = await (client as any)
     .from('organizations')
-    .select('id,name,slug,subscription_status,subdomain,custom_domain,settings')
+    .select('id,name,slug,subscription_status')
     .eq('marketplace_category_id', cat.id)
     .in('subscription_status', PUBLIC_STATUSES)
     .order('name', { ascending: true });
 
   if (orgsError) {
-    console.error('[category-organizations-data] orgs error:', orgsError);
+    console.error('[category-organizations-data] orgs error:', orgsError?.message);
     return { category: cat, organizations: [], totalOrganizations: 0, totalProducts: 0 };
   }
 
@@ -105,7 +105,7 @@ export async function fetchCategoryOrgsSnapshot(
     return {
       id:           org.id,
       name:         org.name,
-      slug:         org.slug,
+      slug:         org.slug ?? '',
       href:         buildTenantHomeUrl(org, requestHost),
       logoUrl,
       primaryColor: color,
