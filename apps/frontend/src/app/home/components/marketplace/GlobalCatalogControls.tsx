@@ -557,8 +557,8 @@ export function GlobalCatalogToolbar({
           </SelectContent>
         </Select>
 
-        {/* Country — solo visible si hay más de un país */}
-        {countries.length > 1 && (
+        {/* Country — visible cuando hay al menos un país registrado */}
+        {countries.length > 0 && (
           <Select
             value={state.country || '__all__'}
             onValueChange={(value) =>

@@ -601,6 +601,12 @@ function extractOrganizationLocation(
     }
   }
 
+  // Fallback de país: si hay departamento pero no hay país, asumimos Paraguay
+  // (todos los tenants actuales son paraguayos)
+  if (!country && department) {
+    country = "Paraguay";
+  }
+
   return { country, department, city };
 }
 
@@ -702,7 +708,7 @@ function mapProductsToCards(
         organizationName: normalizeDisplayText(organization.name, "Empresa"),
         organizationHref: buildTenantHomeUrl(organization, requestHost),
         organizationId: organization.id,
-        country: location.country || undefined,
+        country: location.country || "Paraguay",
         department: location.department || undefined,
         city: location.city || undefined,
         createdAt: product.created_at || null,
