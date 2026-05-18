@@ -1,26 +1,22 @@
-'use client';
+'use client'
 
-import { useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense } from 'react';
+import { useSearchParams } from 'next/navigation'
+import { Suspense } from 'react'
+import { SettingsContent } from './components/SettingsContent'
+import { SettingsLoadingSkeleton } from './components/SettingsLoadingSkeleton'
+import { normalizeSettingsTab } from './components/settings-navigation'
 
-function SettingsRedirectInner() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+function SettingsContentWrapper() {
+  const searchParams = useSearchParams()
+  const activeTab = normalizeSettingsTab(searchParams?.get('tab'))
 
-  useEffect(() => {
-    const tab = searchParams?.get('tab');
-    const target = tab ? `/admin/settings?tab=${tab}` : '/admin/settings';
-    router.replace(target);
-  }, [router, searchParams]);
-
-  return null;
+  return <SettingsContent activeTab={activeTab} />
 }
 
 export default function SettingsPage() {
   return (
-    <Suspense fallback={null}>
-      <SettingsRedirectInner />
+    <Suspense fallback={<SettingsLoadingSkeleton />}>
+      <SettingsContentWrapper />
     </Suspense>
-  );
+  )
 }

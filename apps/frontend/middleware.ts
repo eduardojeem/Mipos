@@ -347,8 +347,10 @@ function isPublicApiPath(pathname: string): boolean {
 export async function middleware(request: NextRequest) {
   const url = request.nextUrl;
 
-  if (url.pathname === '/admin/settings') {
-    return NextResponse.redirect(new URL('/dashboard/settings', request.url));
+  if (url.pathname === '/dashboard/settings') {
+    const target = new URL('/admin/settings', request.url);
+    target.search = url.search;
+    return NextResponse.redirect(target);
   }
 
   const host = getRequestHostValue({
