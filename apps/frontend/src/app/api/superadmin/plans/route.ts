@@ -68,9 +68,9 @@ export async function GET(request: NextRequest) {
     }
 
     const DEFAULT_LIMITS: Record<string, PlanLimits> = {
-      free: { maxUsers: 2, maxProducts: 50, maxTransactionsPerMonth: 200, maxLocations: 1 },
-      starter: { maxUsers: 5, maxProducts: 500, maxTransactionsPerMonth: 1000, maxLocations: 1 },
-      professional: { maxUsers: 10, maxProducts: 2000, maxTransactionsPerMonth: 5000, maxLocations: 3 },
+      free: { maxUsers: 1, maxProducts: 50, maxTransactionsPerMonth: 100, maxLocations: 1 },
+      starter: { maxUsers: 5, maxProducts: 500, maxTransactionsPerMonth: 1000, maxLocations: 3 },
+      professional: { maxUsers: 20, maxProducts: 5000, maxTransactionsPerMonth: 10000, maxLocations: 10 },
     };
 
     // Process plans with optimized mapping
@@ -132,8 +132,8 @@ export async function PATCH(request: NextRequest) {
         price_monthly: 100000, 
         price_yearly: 1080000, 
         features: ['basic_inventory','basic_sales','purchase_module','basic_reports','team_management','admin_panel','advanced_inventory'], 
-        limits: { maxUsers: 5, maxProducts: 500, maxTransactionsPerMonth: 1000, maxLocations: 1 },
-        is_active: true 
+        limits: { maxUsers: 5, maxProducts: 500, maxTransactionsPerMonth: 1000, maxLocations: 3 },
+        is_active: true
       },
       { 
         name: 'Professional', 

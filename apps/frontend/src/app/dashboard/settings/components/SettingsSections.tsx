@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
@@ -35,8 +35,12 @@ import {
   Server,
   Settings2,
   ShieldCheck,
+  ShoppingCart,
   Store,
+  Trash2,
+  UserPlus,
   UsersRound,
+  X,
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
@@ -129,6 +133,22 @@ type BranchSummary = {
   phone?: string | null;
   is_active?: boolean | null;
   created_at?: string | null;
+};
+
+type BranchStats = {
+  branch_id: string;
+  users_assigned: number;
+  active_cash_sessions: number;
+  sales_today: number;
+  sales_month: number;
+};
+
+type BranchUser = {
+  user_id: string;
+  email?: string;
+  full_name?: string | null;
+  role?: string | null;
+  assigned_at?: string;
 };
 
 type SessionPreview = {
@@ -1238,18 +1258,99 @@ export function InventorySettings() {
 }
 
 
+type BranchFormData = { name: string; address: string; phone: string };
+type PlanLimitInfo = { message: string; maxLocations: number } | null;
+
+function formatCurrencyShort(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(0)}k`;
+  return String(value);
+}
+
+function BranchFormFields({
+  formData,
+  onChange,
+  nameId = 'branch-name',
+}: {
+  formData: BranchFormData;
+  onChange: (patch: Partial<BranchFormData>) => void;
+  nameId?: string;
+}) {
+  return (
+    <>
+      <div className="space-y-2">
+        <Label htmlFor={nameId}>
+          Nombre <span className="text-destructive">*</span>
+        </Label>
+        <Input
+          id={nameId}
+          value={formData.name}
+          onChange={(e) => onChange({ name: e.target.value })}
+          placeholder="Ej. Sede Central, Sucursal Norte..."
+          className="focus-visible:ring-primary/50"
+          autoFocus
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor={`${nameId}-address`}>Dirección</Label>
+        <Input
+          id={`${nameId}-address`}
+          value={formData.address}
+          onChange={(e) => onChange({ address: e.target.value })}
+          placeholder="Av. Principal 123..."
+          className="focus-visible:ring-primary/50"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor={`${nameId}-phone`}>Teléfono</Label>
+        <Input
+          id={`${nameId}-phone`}
+          value={formData.phone}
+          onChange={(e) => onChange({ phone: e.target.value })}
+          placeholder="+595 9XX XXX XXX"
+          className="focus-visible:ring-primary/50"
+        />
+      </div>
+    </>
+  );
+}
+
 export function BranchesSettings() {
   const organizationId = useCurrentOrganizationId();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+
   const [branches, setBranches] = useState<BranchSummary[]>([]);
+  const [statsMap, setStatsMap] = useState<Record<string, BranchStats>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [planBlocked, setPlanBlocked] = useState(false);
-  const [formData, setFormData] = useState({ name: '', address: '', phone: '' });
+  const [planLimit, setPlanLimit] = useState<PlanLimitInfo>(null);
 
-  const loadBranches = async () => {
+  // Create form
+  const [createForm, setCreateForm] = useState<BranchFormData>({ name: '', address: '', phone: '' });
+
+  // Edit state
+  const [editingBranch, setEditingBranch] = useState<BranchSummary | null>(null);
+  const [editForm, setEditForm] = useState<BranchFormData>({ name: '', address: '', phone: '' });
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
+  // Delete confirm state
+  const [deletingBranch, setDeletingBranch] = useState<BranchSummary | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Toggle active state per-branch
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  // User assignment panel state
+  const [managingBranch, setManagingBranch] = useState<BranchSummary | null>(null);
+  const [branchUsers, setBranchUsers] = useState<BranchUser[]>([]);
+  const [orgUsers, setOrgUsers] = useState<{ id: string; email?: string; full_name?: string | null; role?: string | null }[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [isAssigning, setIsAssigning] = useState(false);
+
+  const loadBranches = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
@@ -1258,66 +1359,64 @@ export function BranchesSettings() {
         setError('Selecciona una organización para ver sus sucursales.');
         return;
       }
+      const [branchRes, statsRes] = await Promise.all([
+        fetch('/api/branches', { cache: 'no-store', headers: selectedOrganizationHeaders(organizationId) }),
+        fetch('/api/branches/stats', { cache: 'no-store', headers: selectedOrganizationHeaders(organizationId) }),
+      ]);
+      const branchPayload = await branchRes.json();
+      if (!branchRes.ok) throw new Error(branchPayload?.error || 'No se pudieron cargar sucursales');
+      setBranches(Array.isArray(branchPayload?.data) ? branchPayload.data : []);
 
-      const response = await fetch('/api/branches', {
-        cache: 'no-store',
-        headers: selectedOrganizationHeaders(organizationId),
-      });
-      const payload = await response.json();
-
-      if (!response.ok) {
-        throw new Error(payload?.error || 'No se pudieron cargar sucursales');
+      if (statsRes.ok) {
+        const statsPayload = await statsRes.json();
+        const map: Record<string, BranchStats> = {};
+        for (const s of (statsPayload?.data ?? []) as BranchStats[]) {
+          map[s.branch_id] = s;
+        }
+        setStatsMap(map);
       }
-
-      setBranches(Array.isArray(payload?.data) ? payload.data : []);
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : 'No se pudieron cargar sucursales');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [organizationId]);
 
   useEffect(() => {
     void loadBranches();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [organizationId]);
+  }, [loadBranches]);
 
   const createBranch = async (event: FormEvent) => {
     event.preventDefault();
-    if (!formData.name.trim()) {
+    if (!createForm.name.trim()) {
       toast({ title: 'Nombre requerido', description: 'Ingresa el nombre de la sucursal.', variant: 'destructive' });
       return;
     }
-
     setIsCreating(true);
-    setPlanBlocked(false);
+    setPlanLimit(null);
     try {
       const response = await fetch('/api/branches', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...selectedOrganizationHeaders(organizationId) },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(createForm),
       });
       const payload = await response.json();
 
       if (response.status === 403) {
-        setPlanBlocked(true);
-        setIsDialogOpen(false);
-        toast({
-          title: 'Plan no permite múltiples sucursales',
-          description: 'Actualiza tu plan para gestionar más de una sede.',
-          variant: 'destructive',
+        setPlanLimit({
+          message: payload?.error ?? 'Tu plan no permite más sucursales.',
+          maxLocations: payload?.maxLocations ?? 1,
         });
+        setIsCreateOpen(false);
         return;
       }
+      if (!response.ok) throw new Error(payload?.error || 'No se pudo crear la sucursal');
 
-      if (!response.ok) {
-        throw new Error(payload?.error || 'No se pudo crear la sucursal');
-      }
-
-      toast({ title: 'Sucursal creada', description: `"${formData.name}" fue agregada correctamente.` });
-      setFormData({ name: '', address: '', phone: '' });
-      setIsDialogOpen(false);
+      toast({ title: 'Sucursal creada', description: `"${createForm.name}" fue agregada correctamente.` });
+      setCreateForm({ name: '', address: '', phone: '' });
+      setIsCreateOpen(false);
       await loadBranches();
+      void queryClient.invalidateQueries({ queryKey: ['branches'] });
     } catch (createError) {
       toast({
         title: 'Error al crear sucursal',
@@ -1328,6 +1427,161 @@ export function BranchesSettings() {
       setIsCreating(false);
     }
   };
+
+  const openEdit = (branch: BranchSummary) => {
+    setEditingBranch(branch);
+    setEditForm({ name: branch.name, address: branch.address ?? '', phone: branch.phone ?? '' });
+  };
+
+  const saveEdit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!editingBranch) return;
+    if (!editForm.name.trim()) {
+      toast({ title: 'Nombre requerido', variant: 'destructive' });
+      return;
+    }
+    setIsSavingEdit(true);
+    try {
+      const response = await fetch(`/api/branches/${editingBranch.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...selectedOrganizationHeaders(organizationId) },
+        body: JSON.stringify(editForm),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error || 'No se pudo actualizar');
+      toast({ title: 'Sucursal actualizada', description: `"${editForm.name}" fue guardada.` });
+      setEditingBranch(null);
+      await loadBranches();
+    } catch (err) {
+      toast({
+        title: 'Error al actualizar',
+        description: err instanceof Error ? err.message : 'No se pudo actualizar la sucursal',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  const toggleActive = async (branch: BranchSummary) => {
+    setTogglingId(branch.id);
+    try {
+      const response = await fetch(`/api/branches/${branch.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...selectedOrganizationHeaders(organizationId) },
+        body: JSON.stringify({ is_active: !branch.is_active }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error);
+      const nextState = payload.data?.is_active ? 'activada' : 'desactivada';
+      toast({ title: `Sucursal ${nextState}`, description: `"${branch.name}" fue ${nextState}.` });
+      await loadBranches();
+    } catch (err) {
+      toast({
+        title: 'Error al cambiar estado',
+        description: err instanceof Error ? err.message : 'No se pudo cambiar el estado',
+        variant: 'destructive',
+      });
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
+  const deleteBranch = async () => {
+    if (!deletingBranch) return;
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`/api/branches/${deletingBranch.id}`, {
+        method: 'DELETE',
+        headers: selectedOrganizationHeaders(organizationId),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error);
+
+      if (payload.softDeleted) {
+        toast({
+          title: 'Sucursal desactivada',
+          description: payload.message ?? 'Tiene datos asociados — fue desactivada en lugar de eliminada.',
+        });
+      } else {
+        toast({ title: 'Sucursal eliminada', description: `"${deletingBranch.name}" fue eliminada.` });
+      }
+      setDeletingBranch(null);
+      await loadBranches();
+    } catch (err) {
+      toast({
+        title: 'No se pudo eliminar',
+        description: err instanceof Error ? err.message : 'Error al eliminar la sucursal',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // ── User assignment ───────────────────────────────────────────
+  const openManageUsers = useCallback(async (branch: BranchSummary) => {
+    setManagingBranch(branch);
+    setIsLoadingUsers(true);
+    try {
+      const headers = selectedOrganizationHeaders(organizationId);
+      const [assignedRes, allUsersRes] = await Promise.all([
+        fetch(`/api/branches/${branch.id}/users`, { cache: 'no-store', headers }),
+        fetch('/api/users?limit=100', { cache: 'no-store', headers }),
+      ]);
+      if (assignedRes.ok) {
+        const p = await assignedRes.json();
+        setBranchUsers(Array.isArray(p?.data) ? p.data : []);
+      }
+      if (allUsersRes.ok) {
+        const p = await allUsersRes.json();
+        setOrgUsers(Array.isArray(p?.data) ? p.data : Array.isArray(p?.users) ? p.users : []);
+      }
+    } finally {
+      setIsLoadingUsers(false);
+    }
+  }, [organizationId]);
+
+  const assignUser = useCallback(async (userId: string) => {
+    if (!managingBranch) return;
+    setIsAssigning(true);
+    try {
+      const response = await fetch(`/api/branches/${managingBranch.id}/users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...selectedOrganizationHeaders(organizationId) },
+        body: JSON.stringify({ user_id: userId }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error);
+      toast({ title: 'Usuario asignado', description: 'Ahora puede operar en esta sucursal.' });
+      await openManageUsers(managingBranch);
+      await loadBranches();
+    } catch (err) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'No se pudo asignar', variant: 'destructive' });
+    } finally {
+      setIsAssigning(false);
+    }
+  }, [managingBranch, organizationId, openManageUsers, loadBranches, toast]);
+
+  const removeUser = useCallback(async (userId: string) => {
+    if (!managingBranch) return;
+    try {
+      const response = await fetch(`/api/branches/${managingBranch.id}/users?user_id=${userId}`, {
+        method: 'DELETE',
+        headers: selectedOrganizationHeaders(organizationId),
+      });
+      if (!response.ok) throw new Error('No se pudo quitar el usuario');
+      toast({ title: 'Usuario removido', description: 'Ya no tiene acceso específico a esta sucursal.' });
+      await openManageUsers(managingBranch);
+      await loadBranches();
+    } catch (err) {
+      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Error al remover', variant: 'destructive' });
+    }
+  }, [managingBranch, organizationId, openManageUsers, loadBranches, toast]);
+
+  const assignedIds = useMemo(() => new Set(branchUsers.map((u) => u.user_id)), [branchUsers]);
+  const unassignedUsers = useMemo(() => orgUsers.filter((u) => !assignedIds.has(u.id)), [orgUsers, assignedIds]);
+  // ──────────────────────────────────────────────────────────────
 
   const activeBranches = branches.filter((b) => b.is_active !== false).length;
   const sortedBranches = useMemo(
@@ -1347,12 +1601,15 @@ export function BranchesSettings() {
         <MetricCard icon={Clock3} label="Última alta" value={lastBranchDate} />
       </div>
 
-      {/* Plan warning */}
-      {planBlocked && (
+      {/* Plan limit warning */}
+      {planLimit && (
         <Alert className="border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-400">
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
-            Tu plan actual solo permite <strong>una sucursal</strong>. Actualiza tu suscripción para habilitar múltiples sedes.
+            {planLimit.message}{' '}
+            <Link href="/admin/settings?tab=subscription" className="font-semibold underline underline-offset-2">
+              Ver planes
+            </Link>
           </AlertDescription>
         </Alert>
       )}
@@ -1371,16 +1628,12 @@ export function BranchesSettings() {
         icon={Building2}
         action={
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => void loadBranches()}
-              disabled={isLoading}
-              title="Actualizar sucursales"
-            >
+            <Button variant="outline" size="icon" onClick={() => void loadBranches()} disabled={isLoading} title="Actualizar">
               <Loader2 className={cn('h-4 w-4', isLoading && 'animate-spin')} />
             </Button>
-            <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(open); if (!open) setFormData({ name: '', address: '', phone: '' }); }}>
+
+            {/* Create dialog */}
+            <Dialog open={isCreateOpen} onOpenChange={(open) => { setIsCreateOpen(open); if (!open) setCreateForm({ name: '', address: '', phone: '' }); }}>
               <DialogTrigger asChild>
                 <Button className="shadow-sm">
                   <Plus className="mr-2 h-4 w-4" />
@@ -1393,48 +1646,12 @@ export function BranchesSettings() {
                     <Store className="h-5 w-5 text-primary" />
                     Nueva sucursal
                   </DialogTitle>
-                  <DialogDescription>
-                    Registra una nueva sede física en Supabase.
-                  </DialogDescription>
+                  <DialogDescription>Registra una nueva sede física.</DialogDescription>
                 </DialogHeader>
                 <form onSubmit={(e) => void createBranch(e)} className="space-y-4 pt-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="branch-name">
-                      Nombre <span className="text-destructive">*</span>
-                    </Label>
-                    <Input
-                      id="branch-name"
-                      value={formData.name}
-                      onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
-                      placeholder="Ej. Sede Central, Sucursal Norte..."
-                      className="focus-visible:ring-primary/50"
-                      autoFocus
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="branch-address">Dirección</Label>
-                    <Input
-                      id="branch-address"
-                      value={formData.address}
-                      onChange={(e) => setFormData((p) => ({ ...p, address: e.target.value }))}
-                      placeholder="Av. Principal 123..."
-                      className="focus-visible:ring-primary/50"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="branch-phone">Teléfono</Label>
-                    <Input
-                      id="branch-phone"
-                      value={formData.phone}
-                      onChange={(e) => setFormData((p) => ({ ...p, phone: e.target.value }))}
-                      placeholder="+595 9XX XXX XXX"
-                      className="focus-visible:ring-primary/50"
-                    />
-                  </div>
+                  <BranchFormFields formData={createForm} onChange={(p) => setCreateForm((prev) => ({ ...prev, ...p }))} nameId="create-branch-name" />
                   <DialogFooter className="gap-2 border-t pt-4">
-                    <Button type="button" variant="ghost" onClick={() => setIsDialogOpen(false)}>
-                      Cancelar
-                    </Button>
+                    <Button type="button" variant="ghost" onClick={() => setIsCreateOpen(false)}>Cancelar</Button>
                     <Button type="submit" disabled={isCreating} className="min-w-[110px]">
                       {isCreating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                       Guardar
@@ -1459,10 +1676,10 @@ export function BranchesSettings() {
             <div>
               <p className="font-semibold">Sin sucursales configuradas</p>
               <p className="mt-1 max-w-xs text-sm text-muted-foreground">
-                Crea tu primera sede para empezar a gestionar inventario y ventas por ubicación.
+                Crea tu primera sede para gestionar inventario y ventas por ubicación.
               </p>
             </div>
-            <Button onClick={() => setIsDialogOpen(true)} variant="outline" size="sm">
+            <Button onClick={() => setIsCreateOpen(true)} variant="outline" size="sm">
               <Plus className="mr-2 h-4 w-4" />
               Crear primera sucursal
             </Button>
@@ -1472,7 +1689,12 @@ export function BranchesSettings() {
             {sortedBranches.map((branch) => (
               <div
                 key={branch.id}
-                className="group flex flex-col gap-3 rounded-xl border border-border/50 bg-card p-4 shadow-sm transition-all hover:border-primary/30 hover:shadow-md"
+                className={cn(
+                  'group flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-sm transition-all hover:shadow-md',
+                  branch.is_active !== false
+                    ? 'border-border/50 hover:border-primary/30'
+                    : 'border-border/30 bg-muted/20 opacity-75'
+                )}
               >
                 {/* Header */}
                 <div className="flex items-start justify-between gap-3">
@@ -1484,7 +1706,7 @@ export function BranchesSettings() {
                       <Store className="h-5 w-5" />
                     </div>
                     <div>
-                      <p className="font-semibold leading-tight group-hover:text-primary transition-colors">
+                      <p className={cn('font-semibold leading-tight transition-colors', branch.is_active !== false && 'group-hover:text-primary')}>
                         {branch.name}
                       </p>
                       {branch.slug && (
@@ -1525,11 +1747,210 @@ export function BranchesSettings() {
                     </div>
                   )}
                 </div>
+
+                {/* Stats row */}
+                {statsMap[branch.id] && (
+                  <div className="grid grid-cols-3 gap-2 rounded-lg bg-muted/30 p-2.5 text-center border-t border-border/50 pt-3">
+                    <div>
+                      <p className="text-[10px] text-muted-foreground">Usuarios</p>
+                      <p className="text-sm font-semibold">{statsMap[branch.id].users_assigned}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground">Cajas abiertas</p>
+                      <p className="text-sm font-semibold">{statsMap[branch.id].active_cash_sessions}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground">Ventas hoy</p>
+                      <p className="text-sm font-semibold">{formatCurrencyShort(statsMap[branch.id].sales_today)}</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex items-center justify-between gap-2 border-t border-border/50 pt-3">
+                  {/* Toggle active */}
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Switch
+                      checked={branch.is_active !== false}
+                      disabled={togglingId === branch.id}
+                      onCheckedChange={() => void toggleActive(branch)}
+                      aria-label={branch.is_active !== false ? 'Desactivar sucursal' : 'Activar sucursal'}
+                    />
+                    <span>{branch.is_active !== false ? 'Activa' : 'Inactiva'}</span>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    {/* Manage users button */}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      title="Gestionar usuarios"
+                      onClick={() => void openManageUsers(branch)}
+                    >
+                      <UsersRound className="h-3.5 w-3.5" />
+                    </Button>
+
+                    {/* Edit button */}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      title="Editar sucursal"
+                      onClick={() => openEdit(branch)}
+                    >
+                      <Settings2 className="h-3.5 w-3.5" />
+                    </Button>
+
+                    {/* Delete button */}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-destructive/60 hover:text-destructive"
+                      title="Eliminar sucursal"
+                      onClick={() => setDeletingBranch(branch)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
         )}
       </SectionCard>
+
+      {/* Edit dialog */}
+      <Dialog open={Boolean(editingBranch)} onOpenChange={(open) => { if (!open) setEditingBranch(null); }}>
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings2 className="h-5 w-5 text-primary" />
+              Editar sucursal
+            </DialogTitle>
+            <DialogDescription>Modifica los datos de {editingBranch?.name}.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={(e) => void saveEdit(e)} className="space-y-4 pt-2">
+            <BranchFormFields formData={editForm} onChange={(p) => setEditForm((prev) => ({ ...prev, ...p }))} nameId="edit-branch-name" />
+            <DialogFooter className="gap-2 border-t pt-4">
+              <Button type="button" variant="ghost" onClick={() => setEditingBranch(null)}>Cancelar</Button>
+              <Button type="submit" disabled={isSavingEdit} className="min-w-[110px]">
+                {isSavingEdit ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                Guardar
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirmation */}
+      <AlertDialog open={Boolean(deletingBranch)} onOpenChange={(open) => { if (!open) setDeletingBranch(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar sucursal?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Vas a eliminar <strong>{deletingBranch?.name}</strong>. Si tiene ventas, cajas o movimientos asociados será
+              desactivada en lugar de eliminada permanentemente. Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => void deleteBranch()}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Manage users dialog */}
+      <Dialog open={Boolean(managingBranch)} onOpenChange={(open) => { if (!open) { setManagingBranch(null); setBranchUsers([]); setOrgUsers([]); } }}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UsersRound className="h-5 w-5 text-primary" />
+              Usuarios — {managingBranch?.name}
+            </DialogTitle>
+            <DialogDescription>
+              Asigna qué miembros del equipo operan en esta sucursal. Sin asignación, el acceso queda abierto para todos.
+            </DialogDescription>
+          </DialogHeader>
+
+          {isLoadingUsers ? (
+            <SettingsSkeleton rows={3} />
+          ) : (
+            <div className="space-y-4 pt-1">
+              {/* Assigned users */}
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
+                  Asignados ({branchUsers.length})
+                </p>
+                {branchUsers.length === 0 ? (
+                  <p className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
+                    Sin usuarios asignados — todos los miembros tienen acceso.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                    {branchUsers.map((u) => (
+                      <div key={u.user_id} className="flex items-center justify-between gap-3 rounded-lg border bg-muted/10 px-3 py-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{u.full_name || u.email || 'Usuario'}</p>
+                          <p className="truncate text-xs text-muted-foreground">{u.email}</p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          {u.role && <Badge variant="outline" className="text-xs">{u.role}</Badge>}
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive/60 hover:text-destructive" onClick={() => void removeUser(u.user_id)}>
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Unassigned users to add */}
+              {unassignedUsers.length > 0 && (
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
+                    Agregar miembro
+                  </p>
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                    {unassignedUsers.map((u) => (
+                      <div key={u.id} className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{u.full_name || u.email || 'Usuario'}</p>
+                          <p className="truncate text-xs text-muted-foreground">{u.email}</p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 shrink-0 gap-1 text-xs"
+                          disabled={isAssigning}
+                          onClick={() => void assignUser(u.id)}
+                        >
+                          {isAssigning ? <Loader2 className="h-3 w-3 animate-spin" /> : <UserPlus className="h-3 w-3" />}
+                          Asignar
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="border-t pt-4">
+            <Button variant="ghost" onClick={() => { setManagingBranch(null); setBranchUsers([]); setOrgUsers([]); }}>
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
