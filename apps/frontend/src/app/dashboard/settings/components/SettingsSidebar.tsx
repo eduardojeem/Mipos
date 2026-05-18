@@ -57,9 +57,10 @@ export default function SettingsSidebar() {
     });
   };
 
+  const basePath = pathname?.startsWith('/admin') ? '/admin/settings' : '/dashboard/settings';
+
   const isActive = (item: SettingsNavigationItem) => {
-    const isSettingsPath =
-      pathname === '/dashboard/settings' || pathname === '/dashboard/settings/general';
+    const isSettingsPath = pathname === basePath || pathname === `${basePath}/general`;
     return isSettingsPath && currentTab === item.id;
   };
 
@@ -138,7 +139,7 @@ export default function SettingsSidebar() {
                     const linkEl = (
                       <Link
                         key={item.id}
-                        href={getSettingsHref(item.id)}
+                        href={getSettingsHref(item.id, basePath)}
                         className={cn(
                           'flex items-center rounded-lg transition-all duration-150',
                           isCollapsed
@@ -185,7 +186,7 @@ export default function SettingsSidebar() {
             return (
               <Link
                 key={item.id}
-                href={getSettingsHref(item.id)}
+                href={getSettingsHref(item.id, basePath)}
                 className={cn(
                   'flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
                   active

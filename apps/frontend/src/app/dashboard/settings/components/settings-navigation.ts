@@ -144,6 +144,6 @@ export function getSettingsTabMeta(tab?: string | null): SettingsNavigationItem 
   return SETTINGS_NAVIGATION.find((item) => item.id === normalized) || SETTINGS_NAVIGATION[0];
 }
 
-export function getSettingsHref(tab: SettingsTab): string {
-  return `/dashboard/settings?tab=${tab}`;
+export function getSettingsHref(tab: SettingsTab, basePath = '/admin/settings'): string {
+  return `${basePath}?tab=${tab}`;
 }

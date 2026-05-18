@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo } from 'react'
 import dynamic from 'next/dynamic'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { CheckCircle2 } from 'lucide-react'
 import SettingsSidebar from './SettingsSidebar'
 import { usePlanSyncContext } from '@/contexts/plan-sync-context'
@@ -36,8 +36,10 @@ const BillingTab = dynamic(() => import('./BillingTab').then((module) => module.
 
 export function SettingsContent({ activeTab }: SettingsContentProps) {
   const router = useRouter()
+  const pathname = usePathname()
   const { company, isLoading, planDisplayName } = usePlanSyncContext()
   const normalizedTab = normalizeSettingsTab(activeTab)
+  const basePath = pathname?.startsWith('/admin') ? '/admin/settings' : '/dashboard/settings'
 
   useEffect(() => {
     if (isLoading || !company) return
@@ -46,9 +48,9 @@ export function SettingsContent({ activeTab }: SettingsContentProps) {
     const isFreePlan = company.plan_type === 'free'
 
     if (isNewUser && isFreePlan && !['general', 'company', 'subscription'].includes(normalizedTab)) {
-      router.replace('/dashboard/settings?tab=general')
+      router.replace(`${basePath}?tab=general`)
     }
-  }, [company, isLoading, normalizedTab, router])
+  }, [company, isLoading, normalizedTab, router, basePath])
 
   const currentMeta = useMemo(() => getSettingsTabMeta(normalizedTab), [normalizedTab])
 
