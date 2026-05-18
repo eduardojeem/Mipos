@@ -452,6 +452,20 @@ export function GlobalCatalogToolbar({
     [categories]
   );
 
+  // Cascada: departamentos filtrados por país seleccionado
+  const visibleDepartments = useMemo(() => {
+    if (!state.country) return departments;
+    const countryKey = state.country.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    return departments.filter((d) => !d.parentKey || d.parentKey === countryKey);
+  }, [departments, state.country]);
+
+  // Cascada: ciudades filtradas por departamento seleccionado
+  const visibleCities = useMemo(() => {
+    if (!state.department) return cities;
+    const deptKey = state.department.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    return cities.filter((c) => !c.parentKey || c.parentKey === deptKey);
+  }, [cities, state.department]);
+
   useEffect(() => {
     setSearchInput(state.search);
   }, [state.search]);
@@ -557,8 +571,8 @@ export function GlobalCatalogToolbar({
           </SelectContent>
         </Select>
 
-        {/* Country — visible cuando hay al menos un país registrado */}
-        {countries.length > 0 && (
+        {/* Country — solo visible cuando hay 2+ países distintos */}
+        {countries.length > 1 && (
           <Select
             value={state.country || '__all__'}
             onValueChange={(value) =>
@@ -586,8 +600,8 @@ export function GlobalCatalogToolbar({
           </Select>
         )}
 
-        {/* Department */}
-        {departments.length > 0 && (
+        {/* Departamento — cascada desde país seleccionado */}
+        {visibleDepartments.length > 0 && (
           <Select
             value={state.department || '__all__'}
             onValueChange={(value) =>
@@ -599,13 +613,13 @@ export function GlobalCatalogToolbar({
               })
             }
           >
-            <SelectTrigger className="h-10 w-auto min-w-[160px] rounded-xl border-white/10 bg-white/[0.03] text-sm text-white">
+            <SelectTrigger className="h-10 w-auto min-w-[170px] rounded-xl border-white/10 bg-white/[0.03] text-sm text-white">
               <MapPin className="mr-2 h-3.5 w-3.5 text-amber-400" />
               <SelectValue placeholder="Departamento" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">Todos los deptos.</SelectItem>
-              {departments.map((dept) => (
+              {visibleDepartments.map((dept) => (
                 <SelectItem key={dept.key} value={dept.label}>
                   {dept.label} ({dept.organizationCount})
                 </SelectItem>
@@ -614,8 +628,8 @@ export function GlobalCatalogToolbar({
           </Select>
         )}
 
-        {/* City */}
-        {cities.length > 0 && (
+        {/* Ciudad — cascada desde departamento seleccionado */}
+        {visibleCities.length > 0 && (
           <Select
             value={state.city || '__all__'}
             onValueChange={(value) =>
@@ -632,7 +646,7 @@ export function GlobalCatalogToolbar({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="__all__">Todas las ciudades</SelectItem>
-              {cities.map((city) => (
+              {visibleCities.map((city) => (
                 <SelectItem key={city.key} value={city.label}>
                   {city.label} ({city.productCount})
                 </SelectItem>

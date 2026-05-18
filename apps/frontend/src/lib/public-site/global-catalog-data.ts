@@ -70,6 +70,8 @@ export interface GlobalCatalogLocationOption {
   label: string;
   organizationCount: number;
   productCount: number;
+  /** Para departamentos: clave del país padre. Para ciudades: clave del departamento padre. */
+  parentKey?: string;
 }
 
 export interface ActiveMarketplaceCategory {
@@ -601,12 +603,6 @@ function extractOrganizationLocation(
     }
   }
 
-  // Fallback de país: si hay departamento pero no hay país, asumimos Paraguay
-  // (todos los tenants actuales son paraguayos)
-  if (!country && department) {
-    country = "Paraguay";
-  }
-
   return { country, department, city };
 }
 
@@ -708,7 +704,7 @@ function mapProductsToCards(
         organizationName: normalizeDisplayText(organization.name, "Empresa"),
         organizationHref: buildTenantHomeUrl(organization, requestHost),
         organizationId: organization.id,
-        country: location.country || "Paraguay",
+        country: location.country || undefined,
         department: location.department || undefined,
         city: location.city || undefined,
         createdAt: product.created_at || null,
@@ -754,12 +750,14 @@ function toLocationKey(value: string): string {
 function buildLocationOptions(
   products: GlobalProductCard[],
   field: "country" | "department" | "city",
+  parentField?: "country" | "department",
 ): GlobalCatalogLocationOption[] {
   const accumulator = new Map<
     string,
     {
       key: string;
       label: string;
+      parentKey: string | undefined;
       organizationIds: Set<string>;
       productCount: number;
     }
@@ -770,9 +768,13 @@ function buildLocationOptions(
     if (!value) return;
 
     const key = toLocationKey(value);
+    const parentValue = parentField ? product[parentField] : undefined;
+    const parentKey = parentValue ? toLocationKey(parentValue) : undefined;
+
     const current = accumulator.get(key) || {
       key,
       label: value,
+      parentKey,
       organizationIds: new Set<string>(),
       productCount: 0,
     };
@@ -789,6 +791,7 @@ function buildLocationOptions(
     .map((entry) => ({
       key: entry.key,
       label: entry.label,
+      parentKey: entry.parentKey,
       organizationCount: entry.organizationIds.size,
       productCount: entry.productCount,
     }))
@@ -1010,8 +1013,8 @@ export async function fetchGlobalCatalogSnapshot(
     const [categories, countries, departments, cities] = await Promise.all([
       fetchMarketplaceCategoryOptions(),
       Promise.resolve(buildLocationOptions(mappedProducts, "country")),
-      Promise.resolve(buildLocationOptions(mappedProducts, "department")),
-      Promise.resolve(buildLocationOptions(mappedProducts, "city")),
+      Promise.resolve(buildLocationOptions(mappedProducts, "department", "country")),
+      Promise.resolve(buildLocationOptions(mappedProducts, "city", "department")),
     ]);
     const filteredProducts = filterProducts(mappedProducts, input);
     const sortedProducts = sortProducts(filteredProducts, input.sortBy);
