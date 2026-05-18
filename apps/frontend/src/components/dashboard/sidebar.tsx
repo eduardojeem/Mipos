@@ -205,17 +205,6 @@ export const navigation: NavItem[] = [
     borderColor: 'border-indigo-200 dark:border-indigo-800'
   },
   {
-    name: 'Configuración',
-    href: '/dashboard/settings',
-    icon: Settings,
-    roles: ['ADMIN', 'CASHIER', 'SUPER_ADMIN', 'OWNER', 'MANAGER'],
-    category: 'admin',
-    description: 'Configuración del sistema',
-    color: 'text-red-600 dark:text-red-400',
-    bgColor: 'bg-red-50 dark:bg-red-900/20',
-    borderColor: 'border-red-200 dark:border-red-800'
-  },
-  {
     name: 'Administración',
     href: '/admin',
     icon: Shield,
@@ -316,10 +305,6 @@ export function Sidebar() {
       // Check plan permissions
       if (isPlanResolved && item.href === '/dashboard/reports' && !permissions.can_access_analytics) return false;
       if (isPlanResolved && item.category === 'admin' && !permissions.can_access_admin_panel && userRole !== 'SUPER_ADMIN') {
-        // Permitir siempre acceder a Configuración aunque el plan no tenga admin panel
-        if (item.href === '/dashboard/settings') {
-          return true;
-        }
         return false;
       }
       

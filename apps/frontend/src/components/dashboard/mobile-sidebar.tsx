@@ -32,7 +32,6 @@ export function MobileSidebar() {
 
     if (isPlanResolved && item.href === '/dashboard/reports' && !permissions.can_access_analytics) return false;
     if (isPlanResolved && item.category === 'admin' && !permissions.can_access_admin_panel && userRole !== 'SUPER_ADMIN') {
-      if (item.href === '/dashboard/settings') return true;
       return false;
     }
 

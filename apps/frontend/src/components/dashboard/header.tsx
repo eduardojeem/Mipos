@@ -372,7 +372,7 @@ export function Header({ compact = false }: HeaderProps) {
                     className="h-9 w-9 rounded-lg"
                     asChild
                   >
-                    <Link href="/dashboard/settings">
+                    <Link href="/admin/settings">
                       <Settings className="h-4 w-4 text-slate-500 hover:rotate-90 transition-transform duration-300" />
                     </Link>
                   </Button>
@@ -449,7 +449,7 @@ export function Header({ compact = false }: HeaderProps) {
                 </DropdownMenuItem>
                 
                 <DropdownMenuItem asChild className="rounded-lg gap-3 py-2.5">
-                  <Link href="/dashboard/settings">
+                  <Link href="/admin/settings">
                     <Settings className="h-4 w-4 text-slate-500" />
                     <span>Configuración</span>
                   </Link>
