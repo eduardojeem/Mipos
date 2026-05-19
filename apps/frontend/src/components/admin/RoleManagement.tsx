@@ -1,14 +1,16 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react'
-import { 
+import {
   Shield, Plus, Search, Settings, Users, Key, Lock, Unlock,
   Edit, Trash2, Copy, MoreHorizontal, CheckCircle, XCircle,
-  AlertTriangle, Info, Eye, EyeOff, Save, X, ChevronDown,
-  ChevronRight, Database, ShoppingCart, FileText, BarChart3,
-  UserCheck, Cog, Building, Package, DollarSign, Calendar,
-  Building2, Filter
+  AlertTriangle, Info, Eye, ChevronDown,
+  ChevronRight, Database, ShoppingCart, BarChart3,
+  Cog, Package,
+  Building2
 } from 'lucide-react'
+import { useAuth, useResolvedRole } from '@/hooks/use-auth'
+import { useUserOrganizations } from '@/hooks/use-user-organizations'
 
 // UI Components
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -105,24 +107,44 @@ const ROLE_COLORS: Record<string, string> = {
   'DEFAULT': 'bg-slate-100 text-slate-800 border-slate-200'
 }
 
+const ROLE_DOT_COLORS: Record<string, string> = {
+  'ADMIN': 'bg-red-500',
+  'SUPER_ADMIN': 'bg-red-700',
+  'OWNER': 'bg-amber-500',
+  'MANAGER': 'bg-purple-500',
+  'CASHIER': 'bg-blue-500',
+  'INVENTORY_MANAGER': 'bg-orange-500',
+  'SELLER': 'bg-green-500',
+  'WAREHOUSE': 'bg-cyan-500',
+  'VIEWER': 'bg-gray-400',
+  'DEFAULT': 'bg-slate-400'
+}
+
 export default function RoleManagement() {
+  // Auth
+  const { user } = useAuth()
+  const resolvedRole = useResolvedRole()
+  const isAdmin = resolvedRole === 'ADMIN' || resolvedRole === 'SUPER_ADMIN'
+
+  // Organizations via shared hook
+  const { organizations: rawOrganizations } = useUserOrganizations(user?.id)
+  const organizations = rawOrganizations.map((o) => ({ id: o.id, name: o.name }))
+
   // State
   const [roles, setRoles] = useState<Role[]>([])
   const [permissions, setPermissions] = useState<Permission[]>([])
   const [permissionCategories, setPermissionCategories] = useState<PermissionCategory[]>([])
-  const [organizations, setOrganizations] = useState<Array<{ id: string; name: string }>>([])
   const [currentOrganization, setCurrentOrganization] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedRole, setSelectedRole] = useState<Role | null>(null)
+  const [roleToDelete, setRoleToDelete] = useState<Role | null>(null)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [formData, setFormData] = useState<RoleFormData>(INITIAL_FORM_DATA)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [expandedCategories, setExpandedCategories] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState('roles')
-  const [isAdmin, setIsAdmin] = useState(false)
 
   const { toast } = useToast()
 
@@ -183,8 +205,6 @@ export default function RoleManagement() {
   // Effects
   useEffect(() => {
     loadData()
-    loadOrganizations()
-    checkUserRole()
   }, [])
 
   useEffect(() => {
@@ -228,34 +248,6 @@ export default function RoleManagement() {
   }, [roles])
 
   // Functions
-  const checkUserRole = async () => {
-    try {
-      const response = await fetch('/api/auth/profile')
-      const data = await response.json()
-      if (data.success && data.data) {
-        const userRole = data.data.role
-        setIsAdmin(userRole === 'ADMIN' || userRole === 'SUPER_ADMIN')
-      }
-    } catch (error) {
-      console.error('Error checking user role:', error)
-    }
-  }
-
-  const loadOrganizations = async () => {
-    try {
-      const response = await fetch('/api/admin/organizations')
-      const data = await response.json()
-      if (data.success && data.organizations) {
-        setOrganizations(data.organizations)
-        if (data.organizations.length > 0 && !currentOrganization) {
-          setCurrentOrganization(data.organizations[0].id)
-        }
-      }
-    } catch (error) {
-      console.error('Error loading organizations:', error)
-    }
-  }
-
   const loadData = async () => {
     try {
       setLoading(true)
@@ -463,16 +455,13 @@ export default function RoleManagement() {
   }
 
   const getRoleColorClass = (color: string) => {
-    // color is actually the CSS classes string from getRoleColor
-    // which comes from ROLE_COLORS[name]
-    // Since we are storing the full class string in role.color, we can just return it.
-    // However, the original code logic was trying to find config in ROLE_COLORS array which is now an object.
-    
-    // If role.color is already a class string (e.g. 'bg-red-100...'), use it.
     if (color && color.includes('bg-')) return color
-    
-    // Fallback
     return ROLE_COLORS['DEFAULT']
+  }
+
+  const getRoleDotColor = (roleName: string) => {
+    const key = roleName.toUpperCase()
+    return ROLE_DOT_COLORS[key] || ROLE_DOT_COLORS['DEFAULT']
   }
 
   const getPermissionIcon = (category: string) => {
@@ -652,7 +641,7 @@ export default function RoleManagement() {
                     <TableRow key={role.id} className="border-slate-700/50 hover:bg-slate-800/30">
                       <TableCell>
                         <div className="flex items-center gap-3">
-                          <div className={`w-3 h-3 rounded-full ${getRoleColorClass(role.color).replace('text-', 'bg-').replace('border-', '').replace('bg-', 'bg-')}`} />
+                          <div className={`w-3 h-3 rounded-full ${getRoleDotColor(role.name)}`} />
                           <div>
                             <div className="font-medium flex items-center gap-2">
                               {role.displayName}
@@ -754,9 +743,9 @@ export default function RoleManagement() {
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             {!role.isSystemRole && (
-                              <DropdownMenuItem 
+                              <DropdownMenuItem
                                 className="text-red-600"
-                                onClick={() => handleDelete(role.id)}
+                                onClick={() => setRoleToDelete(role)}
                               >
                                 <Trash2 className="w-4 h-4 mr-2" />
                                 Eliminar
@@ -840,6 +829,33 @@ export default function RoleManagement() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={Boolean(roleToDelete)} onOpenChange={(open) => { if (!open) setRoleToDelete(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar rol?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción eliminará permanentemente el rol <strong>{roleToDelete?.displayName}</strong>.
+              Los usuarios asignados a este rol perderán sus permisos asociados. Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setRoleToDelete(null)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={async () => {
+                if (roleToDelete) {
+                  await handleDelete(roleToDelete.id)
+                  setRoleToDelete(null)
+                }
+              }}
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Create/Edit Role Dialog */}
       <Dialog open={isCreateDialogOpen || isEditDialogOpen} onOpenChange={(open) => {

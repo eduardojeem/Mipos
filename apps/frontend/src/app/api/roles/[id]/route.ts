@@ -59,7 +59,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     permissions: mappedPermissions,
     userCount: userCount || 0,
     isActive: roleData.is_active,
-    isSystem: roleData.name === 'ADMIN' || roleData.name === 'admin',
+    isSystem: ['ADMIN', 'SUPER_ADMIN', 'OWNER', 'SELLER', 'WAREHOUSE'].includes((roleData.name || '').toUpperCase()),
     priority: 0,
     createdAt: roleData.created_at,
     updatedAt: roleData.updated_at
@@ -165,7 +165,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         permissions: mappedPermissions,
         userCount: userCount || 0,
         isActive: roleData.is_active,
-        isSystem: roleData.name === 'ADMIN' || roleData.name === 'admin',
+        isSystem: ['ADMIN', 'SUPER_ADMIN', 'OWNER', 'SELLER', 'WAREHOUSE'].includes((roleData.name || '').toUpperCase()),
         priority: 0,
         createdAt: roleData.created_at,
         updatedAt: roleData.updated_at
@@ -187,9 +187,10 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const supabase = await createAdminClient()
 
     // Check if system role
+    const SYSTEM_ROLE_NAMES = ['ADMIN', 'SUPER_ADMIN', 'OWNER', 'SELLER', 'WAREHOUSE']
     const { data: roleCheck } = await supabase.from('roles').select('name').eq('id', id).single()
-    if (roleCheck && (roleCheck.name === 'ADMIN' || roleCheck.name === 'admin')) {
-         return NextResponse.json({ message: 'No se pueden eliminar roles del sistema' }, { status: 400 })
+    if (roleCheck && SYSTEM_ROLE_NAMES.includes((roleCheck.name || '').toUpperCase())) {
+      return NextResponse.json({ message: 'No se pueden eliminar roles del sistema' }, { status: 400 })
     }
 
     // Check users

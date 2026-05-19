@@ -161,7 +161,7 @@ export async function assertAdminAllowWithoutOrg(request: NextRequest): Promise<
 // 2. users.role column (legacy, pero confiable porque está en DB)
 // 3. NUNCA user_metadata (controlado por el usuario, no confiable)
 export async function assertSuperAdmin(request: NextRequest): Promise<
-  | { ok: true; session?: any }
+  | { ok: true; userId: string; email: string | null; session?: any }
   | { ok: false; status: number; body: { error: string } }
 > {
   try {
@@ -185,7 +185,7 @@ export async function assertSuperAdmin(request: NextRequest): Promise<
       const dbRoles = userRoles.map((ur: any) => ur.role?.name?.toUpperCase()).filter(Boolean)
       if (dbRoles.includes('SUPER_ADMIN')) {
         logAudit('auth.ok', { mode: 'prod', role: 'SUPER_ADMIN', source: 'user_roles', userId: user.id, url: request.url })
-        return { ok: true }
+        return { ok: true, userId: user.id, email: user.email ?? null }
       }
     }
 
@@ -198,14 +198,14 @@ export async function assertSuperAdmin(request: NextRequest): Promise<
 
     if (!userError && userData?.role === 'SUPER_ADMIN') {
       logAudit('auth.ok', { mode: 'prod', role: 'SUPER_ADMIN', source: 'users_table', userId: user.id, url: request.url })
-      return { ok: true }
+      return { ok: true, userId: user.id, email: user.email ?? null }
     }
 
     // 3. Fallback to app_metadata.role — set server-side only, not user-modifiable
     const appMetaRole = (user.app_metadata as any)?.role?.toUpperCase()
     if (appMetaRole === 'SUPER_ADMIN') {
       logAudit('auth.ok', { mode: 'prod', role: 'SUPER_ADMIN', source: 'app_metadata', userId: user.id, url: request.url })
-      return { ok: true }
+      return { ok: true, userId: user.id, email: user.email ?? null }
     }
 
     // If we got here, user is not a super admin
