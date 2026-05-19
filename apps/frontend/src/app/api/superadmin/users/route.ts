@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
 
     let query = admin
       .from('users')
-      .select('id,email,full_name,role,status,organization_id,created_at,last_login,organization:organizations(name)', { count: 'exact' })
+      .select('id,email,full_name,role,status,organization_id,created_at,last_login', { count: 'exact' })
       .order('created_at', { ascending: false })
 
     if (search) {
@@ -89,6 +89,7 @@ export async function GET(request: NextRequest) {
 
     const { data, error, count } = await query.range(start, end)
     if (error || !Array.isArray(data)) {
+      console.error('[superadmin/users] Query error:', error)
       // SECURITY: do NOT fall back to listing auth users with role read from
       // user_metadata — that field is user-modifiable and would let impostors
       // appear with elevated roles in the admin UI. Fail closed instead.
@@ -100,10 +101,12 @@ export async function GET(request: NextRequest) {
       ...u,
       last_sign_in_at: u.last_sign_in_at ?? u.last_login ?? null,
       is_active: u.status ? String(u.status).toUpperCase() === 'ACTIVE' : true,
+      organization: null, // Will be populated later if needed
     }))
 
     return NextResponse.json({ success: true, users, total: count || data.length, page, limit })
-  } catch {
-    return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
+  } catch (err) {
+    console.error('[superadmin/users] Unexpected error:', err)
+    return NextResponse.json({ error: 'Error interno del servidor', details: err instanceof Error ? err.message : 'Unknown error' }, { status: 500 })
   }
 }
