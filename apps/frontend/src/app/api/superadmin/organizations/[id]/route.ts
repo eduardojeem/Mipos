@@ -25,6 +25,34 @@ function normalizeBillingCycle(raw?: string | null): 'monthly' | 'yearly' {
 const SLUG_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 const DOMAIN_REGEX = /^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$/;
+const ORGANIZATION_DETAIL_SELECT = 'id,name,slug,subscription_plan,subscription_status,settings,created_at,updated_at,subdomain,custom_domain';
+const ORGANIZATION_DETAIL_SELECT_FALLBACK = 'id,name,slug,subscription_plan,subscription_status,settings,created_at,updated_at';
+
+function isMissingOrganizationDomainColumn(error: unknown) {
+  const message = String((error as { message?: string })?.message || '').toLowerCase();
+  return message.includes('column') && message.includes('organizations.') && message.includes('does not exist');
+}
+
+async function selectOrganizationDetail(
+  adminClient: Awaited<ReturnType<typeof createAdminClient>>,
+  id: string
+) {
+  let result = await adminClient
+    .from('organizations')
+    .select(ORGANIZATION_DETAIL_SELECT)
+    .eq('id', id)
+    .single();
+
+  if (result.error && isMissingOrganizationDomainColumn(result.error)) {
+    result = await adminClient
+      .from('organizations')
+      .select(ORGANIZATION_DETAIL_SELECT_FALLBACK)
+      .eq('id', id)
+      .single();
+  }
+
+  return result;
+}
 
 async function ensureUniqueOrganizationField(
   adminClient: Awaited<ReturnType<typeof createAdminClient>>,
@@ -32,12 +60,20 @@ async function ensureUniqueOrganizationField(
   value: string,
   organizationId: string
 ) {
-  const { data } = await adminClient
+  const { data, error } = await adminClient
     .from('organizations')
     .select('id')
     .eq(field, value)
     .neq('id', organizationId)
     .maybeSingle();
+
+  if (error && isMissingOrganizationDomainColumn(error)) {
+    return false;
+  }
+
+  if (error) {
+    throw error;
+  }
 
   return Boolean(data?.id);
 }
@@ -195,11 +231,7 @@ export async function PATCH(
     const adminClient = await createAdminClient();
     const body = await request.json();
 
-    const { data: currentOrganization, error: currentOrganizationError } = await adminClient
-      .from('organizations')
-      .select('id,name,slug,subscription_plan,subscription_status,settings,created_at,updated_at,subdomain,custom_domain')
-      .eq('id', id)
-      .single();
+    const { data: currentOrganization, error: currentOrganizationError } = await selectOrganizationDetail(adminClient, id);
 
     if (currentOrganizationError || !currentOrganization) {
       return NextResponse.json({ error: currentOrganizationError?.message || 'Organizacion no encontrada' }, { status: 404 });
@@ -294,12 +326,31 @@ export async function PATCH(
     let latestOrganization = currentOrganization;
 
     if (Object.keys(updates).length > 0) {
-      const { data: updatedOrganization, error: updateError } = await adminClient
+      let updateResult = await adminClient
         .from('organizations')
         .update(updates)
         .eq('id', id)
-        .select('id,name,slug,subscription_plan,subscription_status,settings,created_at,updated_at,subdomain,custom_domain')
+        .select(ORGANIZATION_DETAIL_SELECT)
         .single();
+
+      if (updateResult.error && isMissingOrganizationDomainColumn(updateResult.error)) {
+        const fallbackUpdates = { ...updates };
+        delete fallbackUpdates.subdomain;
+        delete fallbackUpdates.custom_domain;
+
+        if (typeof updates.subdomain === 'string') {
+          fallbackUpdates.slug = updates.subdomain;
+        }
+
+        updateResult = await adminClient
+          .from('organizations')
+          .update(fallbackUpdates)
+          .eq('id', id)
+          .select(ORGANIZATION_DETAIL_SELECT_FALLBACK)
+          .single();
+      }
+
+      const { data: updatedOrganization, error: updateError } = updateResult;
 
       if (updateError || !updatedOrganization) {
         structuredLogger.error('Error updating organization detail', updateError || new Error('Update failed'), {
@@ -332,11 +383,7 @@ export async function PATCH(
         await promoteOrganizationAdminsForPaidPlan(adminClient, id);
       }
 
-      const { data: refreshedOrganization } = await adminClient
-        .from('organizations')
-        .select('id,name,slug,subscription_plan,subscription_status,settings,created_at,updated_at,subdomain,custom_domain')
-        .eq('id', id)
-        .single();
+      const { data: refreshedOrganization } = await selectOrganizationDetail(adminClient, id);
 
       if (refreshedOrganization) {
         latestOrganization = refreshedOrganization;

@@ -371,6 +371,22 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
     loadConfig();
   }, [loadConfig]); // Recargar cuando cambia organizationId
 
+  useEffect(() => {
+    if (!organizationId) return;
+
+    void flushQueue();
+
+    if (typeof window === 'undefined') return;
+    const handleOnline = () => {
+      void flushQueue();
+    };
+
+    window.addEventListener('online', handleOnline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [flushQueue, organizationId]);
+
   // Configurar suscripciones y listeners - separado del loadConfig
   useEffect(() => {
     if (!organizationId) return; // No suscribirse sin organizaciÃ³n

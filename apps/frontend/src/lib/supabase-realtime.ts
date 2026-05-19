@@ -1342,15 +1342,13 @@ export class SupabaseRealtimeService {
           .catch(() => { /* no-op */ });
       }
     } catch { /* no-op */ }
-    const orgFilter = orgId && String(orgId).trim() ? `organization_id=eq.${String(orgId).trim()}` : undefined;
+    const selectedOrgId = orgId && String(orgId).trim() ? String(orgId).trim() : null;
 
     const channel = this.supabase
       .channel(channelName)
       .on(
         'postgres_changes',
-        orgFilter
-          ? { event: '*', schema: 'public', table: 'settings', filter: `${orgFilter},key=eq.business_config` }
-          : { event: '*', schema: 'public', table: 'settings', filter: 'key=eq.business_config' },
+        { event: '*', schema: 'public', table: 'settings', filter: 'key=eq.business_config' },
         (payload: RealtimePostgresChangesPayload<RowData>) => {
           const rawNew = payload.new as RowData | undefined;
           const rawOld = payload.old as RowData | undefined;
@@ -1358,8 +1356,10 @@ export class SupabaseRealtimeService {
           const keyOld = rawOld?.['key'];
           if (keyNew !== 'business_config' && keyOld !== 'business_config') return;
 
+          const oid = rawNew?.['organization_id'] ?? rawOld?.['organization_id'];
+          if (selectedOrgId && oid && String(oid) !== selectedOrgId) return;
+
           if (orgIds.length > 0) {
-            const oid = rawNew?.['organization_id'] ?? rawOld?.['organization_id'];
             if (oid && !orgIds.includes(String(oid))) return;
           }
 

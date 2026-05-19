@@ -1,10 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/server'
 import { defaultBusinessConfig } from '@/types/business-config'
 import { invalidateCachedConfig } from '../cache'
 import { logAudit } from '../../admin/_utils/audit'
 import { requireCompanyAccess } from '@/app/api/_utils/company-authorization'
 import { COMPANY_FEATURE_KEYS, COMPANY_PERMISSIONS } from '@/lib/company-access'
+
+function revalidateBusinessConfigConsumers() {
+  try {
+    revalidateTag('business-config')
+    revalidateTag('organizations')
+    revalidateTag('catalog')
+  } catch (error) {
+    console.warn('Could not revalidate business config consumers:', error)
+  }
+}
 
 type SettingsValueRow = {
   value?: typeof defaultBusinessConfig
@@ -74,6 +85,7 @@ export async function POST(request: NextRequest) {
     try {
       invalidateCachedConfig(organizationId)
     } catch {}
+    revalidateBusinessConfigConsumers()
 
     await logAudit(
       'business_config.reset',

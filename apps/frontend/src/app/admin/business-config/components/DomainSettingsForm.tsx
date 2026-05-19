@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   CheckCircle,
@@ -47,6 +47,17 @@ export function DomainSettingsForm({
   const [customDomain, setCustomDomain] = useState(selectedOrganization?.custom_domain || '');
   const [saving, setSaving] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    setIdentifier(selectedOrganization?.subdomain || selectedOrganization?.slug || '');
+    setCustomDomain(selectedOrganization?.custom_domain || '');
+    setCopiedUrl(null);
+  }, [
+    selectedOrganization?.id,
+    selectedOrganization?.slug,
+    selectedOrganization?.subdomain,
+    selectedOrganization?.custom_domain,
+  ]);
 
   const baseHostLabel = useMemo(() => {
     if (typeof window !== 'undefined') {
@@ -143,8 +154,13 @@ export function DomainSettingsForm({
         throw new Error(payload?.error || 'No se pudo actualizar la ruta publica');
       }
 
+      const savedOrganization =
+        payload?.organization && typeof payload.organization === 'object'
+          ? payload.organization
+          : {};
       const nextOrganization = {
         ...selectedOrganization,
+        ...savedOrganization,
         subdomain: normalizedIdentifier,
         custom_domain: normalizedCustomDomain || null,
       };

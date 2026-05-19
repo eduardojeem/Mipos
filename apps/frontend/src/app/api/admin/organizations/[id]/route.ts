@@ -1,10 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { structuredLogger } from '@/lib/logger'
 import { requireCompanyAccess } from '@/app/api/_utils/company-authorization'
 import { COMPANY_FEATURE_KEYS, COMPANY_PERMISSIONS } from '@/lib/company-access'
 
 const COMPONENT = 'AdminOrganizationAPI'
+
+function revalidateOrganizationConsumers() {
+  try {
+    revalidateTag('business-config')
+    revalidateTag('organizations')
+    revalidateTag('catalog')
+  } catch (error) {
+    structuredLogger.warn('Could not revalidate organization consumers', {
+      component: COMPONENT,
+      action: 'PATCH',
+      metadata: { error: String(error) },
+    })
+  }
+}
 
 export async function PATCH(
   request: NextRequest,
@@ -166,6 +181,7 @@ export async function PATCH(
       action: 'PATCH',
       metadata: { id, userId: user.id, updates: Object.keys(updates) },
     })
+    revalidateOrganizationConsumers()
 
     return NextResponse.json({ success: true, organization: data })
   } catch (error) {

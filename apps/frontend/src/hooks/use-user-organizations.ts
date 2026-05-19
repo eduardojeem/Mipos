@@ -122,7 +122,10 @@ function isSameOrganization(a: Organization | null, b: Organization | null): boo
     a.name === b.name &&
     a.slug === b.slug &&
     a.subscription_plan === b.subscription_plan &&
-    a.subscription_status === b.subscription_status
+    a.subscription_status === b.subscription_status &&
+    (a.subdomain || null) === (b.subdomain || null) &&
+    (a.custom_domain || null) === (b.custom_domain || null) &&
+    (a.domain_verified || false) === (b.domain_verified || false)
   );
 }
 

@@ -8,6 +8,8 @@ export interface Organization {
   subscription_plan: 'FREE' | 'PRO' | 'ENTERPRISE';
   subscription_status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'TRIAL';
   created_at: string;
+  subdomain?: string | null;
+  custom_domain?: string | null;
   settings?: Record<string, unknown>;
   branding?: {
     logo?: string;
@@ -35,6 +37,11 @@ export function useAllOrganizations(options: UseAllOrganizationsOptions = {}) {
   
   const supabase = createClient();
 
+  const isMissingDomainColumnError = (error: unknown) => {
+    const message = String((error as { message?: string })?.message || '').toLowerCase();
+    return message.includes('column') && message.includes('organizations.') && message.includes('does not exist');
+  };
+
   const fetchAllOrganizations = useCallback(async () => {
     if (!enabled) {
       setOrganizations([]);
@@ -48,16 +55,23 @@ export function useAllOrganizations(options: UseAllOrganizationsOptions = {}) {
     
     try {
       // Fetch ALL organizations (requires super admin permissions)
-      const { data: orgsData, error: orgsError } = await supabase
+      let result = await supabase
         .from('organizations')
         .select('id,name,slug,subscription_plan,subscription_status,created_at,subdomain,custom_domain,branding,settings')
-        .order('name');
+        .order('name') as { data: Organization[] | null; error: any };
 
-      if (orgsError) {
-        throw orgsError;
+      if (result.error && isMissingDomainColumnError(result.error)) {
+        result = await supabase
+          .from('organizations')
+          .select('id,name,slug,subscription_plan,subscription_status,created_at,branding,settings')
+          .order('name') as { data: Organization[] | null; error: any };
       }
 
-      setOrganizations(orgsData || []);
+      if (result.error) {
+        throw result.error;
+      }
+
+      setOrganizations(result.data || []);
     } catch (err) {
       const error = err as { name?: string; message?: string; code?: string; status?: number; details?: string; hint?: string };
       const name = error?.name ?? 'Unknown';

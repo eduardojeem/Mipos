@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/server'
 import { validateBusinessConfig } from '@/app/api/admin/_utils/business-config-validation'
 import { logAudit } from '@/app/api/admin/_utils/audit'
@@ -7,6 +8,16 @@ import { defaultBusinessConfig } from '@/types/business-config'
 import { getCachedConfig, setCachedConfig } from './cache'
 import { requireCompanyAccess } from '@/app/api/_utils/company-authorization'
 import { COMPANY_FEATURE_KEYS, COMPANY_PERMISSIONS } from '@/lib/company-access'
+
+function revalidateBusinessConfigConsumers() {
+  try {
+    revalidateTag('business-config')
+    revalidateTag('organizations')
+    revalidateTag('catalog')
+  } catch (error) {
+    console.warn('Could not revalidate business config consumers:', error)
+  }
+}
 
 function sanitizeBusinessConfigForAccess(config: BusinessConfig, isSuperAdmin: boolean): BusinessConfig {
   if (isSuperAdmin) return config
@@ -216,6 +227,11 @@ export async function PUT(request: NextRequest) {
         printReceipts: b(raw?.storeSettings?.printReceipts, !!defaultBusinessConfig.storeSettings.printReceipts),
         enableCashDrawer: b(raw?.storeSettings?.enableCashDrawer, !!defaultBusinessConfig.storeSettings.enableCashDrawer),
         decimalPlaces: n(raw?.storeSettings?.decimalPlaces, raw?.storeSettings?.currency === 'PYG' ? 0 : 2),
+        autoPrintOnSale: b(raw?.storeSettings?.autoPrintOnSale, !!defaultBusinessConfig.storeSettings.autoPrintOnSale),
+        autoShareReceipt: {
+          whatsapp: b(raw?.storeSettings?.autoShareReceipt?.whatsapp, !!defaultBusinessConfig.storeSettings.autoShareReceipt?.whatsapp),
+          email: b(raw?.storeSettings?.autoShareReceipt?.email, !!defaultBusinessConfig.storeSettings.autoShareReceipt?.email),
+        },
       },
       systemSettings,
       carousel: {
@@ -334,6 +350,7 @@ export async function PUT(request: NextRequest) {
 
     const persistedConfig = (((persistedRow as SettingsValueRow | null)?.value) || body) as BusinessConfig
     setCachedConfig(organizationId, persistedConfig)
+    revalidateBusinessConfigConsumers()
 
     await logAudit(
       'business_config.update',

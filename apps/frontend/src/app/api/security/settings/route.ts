@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidateTag } from 'next/cache';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { validateRole } from '@/app/api/_utils/role-validation';
 import { getUserOrganizationId } from '@/app/api/_utils/organization';
@@ -7,6 +8,16 @@ import type { BusinessConfig } from '@/types/business-config';
 import { defaultBusinessConfig } from '@/types/business-config';
 
 type AdminClient = Awaited<ReturnType<typeof createAdminClient>>;
+
+function revalidateBusinessConfigConsumers() {
+  try {
+    revalidateTag('business-config');
+    revalidateTag('organizations');
+    revalidateTag('catalog');
+  } catch (error) {
+    console.warn('Could not revalidate business config consumers:', error);
+  }
+}
 
 interface SecuritySettings {
   two_factor_enabled: boolean;
@@ -240,6 +251,7 @@ async function persistOrganizationSecuritySettings(
   }
 
   setCachedConfig(organizationId, nextConfig);
+  revalidateBusinessConfigConsumers();
 }
 
 function validateSecuritySettings(settings: SecuritySettings): string[] {

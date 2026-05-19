@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidateTag } from 'next/cache';
 import { createAdminClient } from '@/lib/supabase/server';
 import { assertAdmin } from '@/app/api/_utils/auth';
 import { getUserOrganizationId } from '@/app/api/_utils/organization';
@@ -18,6 +19,16 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
   BRL: 'R$',
   ARS: '$',
 };
+
+function revalidateBusinessConfigConsumers() {
+  try {
+    revalidateTag('business-config');
+    revalidateTag('organizations');
+    revalidateTag('catalog');
+  } catch (error) {
+    console.warn('Could not revalidate business config consumers:', error);
+  }
+}
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -643,6 +654,7 @@ export async function PUT(request: NextRequest) {
 
     await persistBusinessConfig(adminClient, resolvedOrg, updatedConfig);
     setCachedConfig(resolvedOrg, updatedConfig);
+    revalidateBusinessConfigConsumers();
 
     logAudit('system.settings.update', {
       userId,
