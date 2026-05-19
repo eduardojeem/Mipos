@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import type { Database } from '../../types/supabase';
 import { isSupabaseActive, isMockAuthEnabled } from '../env';
 import { ACCESS_SECTIONS, canPlanAccessSection } from '@/lib/access-policy';
+import { canAccessAdmin, canAccessDashboard, canAccessReports, normalizeRole } from '@/lib/roles';
 
 type ProfileRole = { role?: string | null };
 
@@ -65,34 +66,28 @@ async function getUserRoles(supabase: any, user: any): Promise<{ primaryRole: st
   ]);
 
   const profileRole = profileResult.status === 'fulfilled'
-    ? String(((profileResult.value as { data?: ProfileRole | null })?.data ?? {})?.role || '').toUpperCase()
-    : '';
+    ? normalizeRole(((profileResult.value as { data?: ProfileRole | null })?.data ?? {})?.role)
+    : 'USER';
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rbacNames: string[] = rolesResult.status === 'fulfilled'
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ? (Array.isArray((rolesResult.value as any)?.data) ? (rolesResult.value as any).data : [])
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .map((r: any) => String(r?.role?.name || '').toUpperCase())
-        .filter(Boolean)
+        .map((r: any) => normalizeRole(r?.role?.name))
+        .filter((r: string) => r !== 'USER')
     : [];
 
-  const ADMIN_ROLES = ['ADMIN', 'SUPER_ADMIN', 'OWNER'];
-  const KNOWN_ROLES = ['ADMIN', 'SUPER_ADMIN', 'OWNER', 'MANAGER', 'CASHIER'];
-
   let primaryRole = profileRole;
-  let hasAdminRole = ADMIN_ROLES.includes(primaryRole);
+  let hasAdminRole = canAccessAdmin(primaryRole);
 
   if (!hasAdminRole && rbacNames.length > 0) {
-    const adminRbac = rbacNames.find((n: string) => ADMIN_ROLES.includes(n));
+    const adminRbac = rbacNames.find((n: string) => canAccessAdmin(n));
     if (adminRbac) {
       primaryRole = adminRbac;
       hasAdminRole = true;
-    } else {
-      const knownRbac = rbacNames.find((n: string) => KNOWN_ROLES.includes(n));
-      if (knownRbac && !primaryRole) {
-        primaryRole = knownRbac;
-      }
+    } else if (primaryRole === 'USER' && rbacNames.length > 0) {
+      primaryRole = rbacNames[0];
     }
   }
 
@@ -217,7 +212,7 @@ export async function updateSession(request: NextRequest) {
       url.pathname = '/403';
       return NextResponse.redirect(url);
     }
-    // ADMIN (not SUPER_ADMIN/OWNER) needs plan check
+    // Solo ADMIN puro (no OWNER ni SUPER_ADMIN) necesita verificación de plan
     if (primaryRole === 'ADMIN') {
       const plan = await getUserOrganizationPlan(supabase, user.id);
       if (!canPlanAccessSection(plan || undefined, ACCESS_SECTIONS.ADMIN_PANEL)) {
@@ -249,8 +244,7 @@ export async function updateSession(request: NextRequest) {
 
   // --- /dashboard/reports ---
   if (path.startsWith('/dashboard/reports')) {
-    const allowedRoles = ['ADMIN', 'MANAGER', 'SUPER_ADMIN', 'OWNER'];
-    if (!allowedRoles.includes(primaryRole)) {
+    if (!canAccessReports(primaryRole)) {
       const url = request.nextUrl.clone();
       url.pathname = '/403';
       url.searchParams.set('reason', 'reports.view');
@@ -261,8 +255,7 @@ export async function updateSession(request: NextRequest) {
 
   // --- /dashboard (non-reports) ---
   if (path.startsWith('/dashboard')) {
-    const allowedRoles = ['ADMIN', 'MANAGER', 'CASHIER', 'SUPER_ADMIN', 'OWNER'];
-    if (!allowedRoles.includes(primaryRole)) {
+    if (!canAccessDashboard(primaryRole)) {
       const url = request.nextUrl.clone();
       url.pathname = '/home';
       return NextResponse.redirect(url);
@@ -272,8 +265,7 @@ export async function updateSession(request: NextRequest) {
 
   // --- /api/reports ---
   if (path.startsWith('/api/reports')) {
-    const allowedRoles = ['ADMIN', 'MANAGER', 'SUPER_ADMIN', 'OWNER'];
-    if (!allowedRoles.includes(primaryRole)) {
+    if (!canAccessReports(primaryRole)) {
       return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
     }
     return supabaseResponse;

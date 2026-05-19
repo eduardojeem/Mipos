@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase-admin'
 import { assertSuperAdmin } from '@/app/api/_utils/auth'
 import { buildUserResponse } from '@/app/api/users/_lib'
@@ -7,7 +6,7 @@ import { buildUserResponse } from '@/app/api/users/_lib'
 export async function GET(request: NextRequest) {
   const auth = await assertSuperAdmin(request);
   if (!('ok' in auth) || auth.ok === false) {
-      return NextResponse.json(auth.body, { status: auth.status });
+    return NextResponse.json(auth.body, { status: auth.status });
   }
 
   try {
@@ -21,8 +20,10 @@ export async function GET(request: NextRequest) {
     const start = (page - 1) * limit
     const end = start + limit - 1
 
+    const admin = createAdminClient() as any
+
     if (organizationId) {
-      const admin = createAdminClient() as any
+      // Filtrar por organización — status no existe en users, se omite del join
       const { data: memberships, error } = await admin
         .from('organization_members')
         .select(`
@@ -32,7 +33,7 @@ export async function GET(request: NextRequest) {
           is_owner,
           created_at,
           updated_at,
-          user:users(id,email,full_name,phone,status,created_at,updated_at),
+          user:users(id,email,full_name,phone,created_at,updated_at,last_login),
           role:roles(name,display_name),
           organization:organizations(id,name)
         `)
@@ -40,6 +41,7 @@ export async function GET(request: NextRequest) {
         .order('created_at', { ascending: false })
 
       if (error) {
+        console.error('[superadmin/users] Organization members query error:', error)
         return NextResponse.json({ error: 'Error listando miembros de la organizacion', details: error.message }, { status: 500 })
       }
 
@@ -76,11 +78,10 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    const admin = createAdminClient() as any
-
+    // Query general — sin columna status (no existe en la tabla)
     let query = admin
       .from('users')
-      .select('id,email,full_name,role,status,organization_id,created_at,last_login', { count: 'exact' })
+      .select('id,email,full_name,role,organization_id,created_at,last_login', { count: 'exact' })
       .order('created_at', { ascending: false })
 
     if (search) {
@@ -88,6 +89,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { data, error, count } = await query.range(start, end)
+
     if (error || !Array.isArray(data)) {
       console.error('[superadmin/users] Query error:', error)
       // SECURITY: do NOT fall back to listing auth users with role read from
@@ -96,13 +98,44 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Error listando usuarios', details: error?.message || 'consulta no disponible' }, { status: 500 })
     }
 
-    // Normalize field names and map status to is_active
-    const users = data.map((u: any) => ({
-      ...u,
-      last_sign_in_at: u.last_sign_in_at ?? u.last_login ?? null,
-      is_active: u.status ? String(u.status).toUpperCase() === 'ACTIVE' : true,
-      organization: null, // Will be populated later if needed
-    }))
+    // Enriquecer con el rol real de organization_members (fuente de verdad para el rol en org)
+    // y con el nombre de la organización
+    const userIds = data.map((u: any) => u.id).filter(Boolean)
+    let membershipsByUserId: Record<string, { roleName: string; orgName: string | null }> = {}
+
+    if (userIds.length > 0) {
+      const { data: memberships } = await admin
+        .from('organization_members')
+        .select('user_id, is_owner, role:roles(name), organization:organizations(name)')
+        .in('user_id', userIds)
+
+      if (Array.isArray(memberships)) {
+        for (const m of memberships) {
+          const uid = m.user_id
+          if (!uid || membershipsByUserId[uid]) continue // tomar solo la primera membresía por usuario
+          const roleRaw = Array.isArray(m.role) ? m.role[0]?.name : m.role?.name
+          const orgRaw = Array.isArray(m.organization) ? m.organization[0]?.name : m.organization?.name
+          membershipsByUserId[uid] = {
+            roleName: roleRaw || (m.is_owner ? 'ADMIN' : ''),
+            orgName: orgRaw || null,
+          }
+        }
+      }
+    }
+
+    // Normalize field names — la tabla no tiene status, todos se consideran activos
+    const users = data.map((u: any) => {
+      const membership = membershipsByUserId[u.id]
+      // Preferir el rol de organization_members sobre users.role (más actualizado)
+      const effectiveRole = membership?.roleName || u.role || null
+      return {
+        ...u,
+        role: effectiveRole,
+        last_sign_in_at: u.last_sign_in_at ?? u.last_login ?? null,
+        is_active: true, // tabla users no tiene columna status
+        organization: membership?.orgName ? { name: membership.orgName } : null,
+      }
+    })
 
     return NextResponse.json({ success: true, users, total: count || data.length, page, limit })
   } catch (err) {

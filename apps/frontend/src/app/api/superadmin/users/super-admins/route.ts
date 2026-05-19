@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase-admin'
 import { assertSuperAdmin } from '@/app/api/_utils/auth'
 
 export async function GET(request: NextRequest) {
@@ -9,7 +9,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const supabase = await createClient()
+    // Usar admin client para bypass RLS; status no existe en tabla users
+    const supabase = createAdminClient() as any
 
     const searchParams = new URL(request.url).searchParams
     const pageRaw = parseInt(searchParams.get('page') ?? '1', 10)
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
 
     let query = supabase
       .from('users')
-      .select('id,email,full_name,role,status,created_at,last_login', { count: 'exact' })
+      .select('id,email,full_name,role,created_at,last_login', { count: 'exact' })
       .eq('role', 'SUPER_ADMIN')
       .order('created_at', { ascending: false })
 
@@ -39,9 +40,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Normalize field name: the DB stores last_login but the frontend expects last_sign_in_at
+    // La tabla users no tiene columna status, todos se consideran activos
     const users = data.map((u: any) => ({
       ...u,
       last_sign_in_at: u.last_sign_in_at ?? u.last_login ?? null,
+      is_active: true,
     }))
 
     return NextResponse.json({ success: true, users, total: count || data.length, page, limit, source: 'db' })

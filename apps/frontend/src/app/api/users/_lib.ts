@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase-admin'
+import { normalizeRole } from '@/lib/roles'
 
 export const COMPANY_USER_ROLES = ['OWNER', 'ADMIN', 'SELLER', 'WAREHOUSE'] as const
 export const COMPANY_USER_STATUSES = ['ACTIVE', 'INACTIVE', 'SUSPENDED'] as const
@@ -49,11 +50,11 @@ function firstRelation<T>(value?: T | T[] | null): T | null {
 }
 
 export function normalizeCompanyUserRole(role?: string | null): CompanyUserRole {
-  const normalized = String(role || '').toUpperCase().trim()
-  if (normalized === 'OWNER') return 'OWNER'
-  if (normalized === 'ADMIN' || normalized === 'MANAGER') return 'ADMIN'
-  if (normalized === 'SELLER' || normalized === 'VENDEDOR' || normalized === 'CASHIER') return 'SELLER'
-  if (normalized === 'WAREHOUSE' || normalized === 'DEPOSITO') return 'WAREHOUSE'
+  const r = normalizeRole(role)
+  if (r === 'OWNER') return 'OWNER'
+  if (r === 'ADMIN' || r === 'MANAGER') return 'ADMIN'
+  if (r === 'CASHIER') return 'SELLER'   // CASHIER/SELLER/VENDEDOR → SELLER (rol de org)
+  if (r === 'EMPLOYEE') return 'WAREHOUSE'
   return 'SELLER'
 }
 

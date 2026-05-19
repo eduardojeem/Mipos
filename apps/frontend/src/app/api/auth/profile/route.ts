@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { User } from '@supabase/supabase-js';
 import { createAdminClient, createClient } from '@/lib/supabase/server';
+import { normalizeRole, pickHighestRole } from '@/lib/roles';
 
 interface UserProfileResponse {
   id: string;
@@ -14,25 +15,6 @@ interface UserProfileResponse {
   created_at: string;
   updated_at: string;
   lastLogin?: string;
-}
-
-const ROLE_PRIORITY = ['SUPER_ADMIN', 'OWNER', 'ADMIN', 'MANAGER', 'CASHIER', 'EMPLOYEE', 'USER'] as const;
-
-function normalizeRoleName(role?: string | null): string {
-  const normalized = String(role || '').toUpperCase().trim();
-  if (!normalized) return 'USER';
-  if (normalized === 'SUPER_ADMIN') return 'SUPER_ADMIN';
-  if (normalized === 'OWNER') return 'OWNER';
-  if (normalized === 'ADMIN') return 'ADMIN';
-  if (normalized === 'MANAGER') return 'MANAGER';
-  if (normalized === 'CASHIER') return 'CASHIER';
-  if (normalized === 'EMPLOYEE') return 'EMPLOYEE';
-  return 'USER';
-}
-
-function pickHighestRole(...roles: Array<string | null | undefined>): string {
-  const normalizedRoles = roles.map(normalizeRoleName);
-  return ROLE_PRIORITY.find((role) => normalizedRoles.includes(role)) || 'USER';
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

@@ -174,7 +174,7 @@ export async function assertSuperAdmin(request: NextRequest): Promise<
 
     const adminClient = await createAdminClient()
     
-    // 1. Check user_roles table (new RBAC system)
+    // 1. Check user_roles table (new RBAC system) — uses admin client to bypass RLS
     const { data: userRoles, error: rolesError } = await adminClient
       .from('user_roles')
       .select('role:roles(name)')
@@ -189,8 +189,8 @@ export async function assertSuperAdmin(request: NextRequest): Promise<
       }
     }
 
-    // 2. Fallback to users.role column (legacy but reliable - it's in DB, not user-controlled)
-    const { data: userData, error: userError } = await supabase
+    // 2. Fallback to users.role column — uses admin client to bypass RLS
+    const { data: userData, error: userError } = await adminClient
       .from('users')
       .select('role')
       .eq('id', user.id)
@@ -201,8 +201,15 @@ export async function assertSuperAdmin(request: NextRequest): Promise<
       return { ok: true }
     }
 
+    // 3. Fallback to app_metadata.role — set server-side only, not user-modifiable
+    const appMetaRole = (user.app_metadata as any)?.role?.toUpperCase()
+    if (appMetaRole === 'SUPER_ADMIN') {
+      logAudit('auth.ok', { mode: 'prod', role: 'SUPER_ADMIN', source: 'app_metadata', userId: user.id, url: request.url })
+      return { ok: true }
+    }
+
     // If we got here, user is not a super admin
-    const rolesFound = userRoles?.map((ur: any) => ur.role?.name).filter(Boolean).join(',') || userData?.role || 'none'
+    const rolesFound = userRoles?.map((ur: any) => ur.role?.name).filter(Boolean).join(',') || userData?.role || appMetaRole || 'none'
     logAudit('auth.denied', { mode: 'prod', reason: 'not_super_admin', role: rolesFound, userId: user.id, url: request.url })
     return { ok: false, status: 403, body: { error: 'Requiere permisos de Super Administrador' } }
   } catch (e) {

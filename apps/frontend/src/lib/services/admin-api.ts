@@ -1,14 +1,15 @@
 import { api } from '@/lib/api';
 import { getEnvMode, isMockAuthEnabled } from '@/lib/env';
+import type { AppRole } from '@/lib/roles';
 
 // Types for API responses
 export interface User {
   id: string;
   email: string;
   name: string;
-  role: 'OWNER' | 'ADMIN' | 'SELLER' | 'WAREHOUSE' | 'SUPER_ADMIN' | 'CASHIER' | 'MANAGER' | 'EMPLOYEE' | 'VIEWER' | 'INACTIVE';
+  role: AppRole | 'SELLER' | 'WAREHOUSE' | 'VIEWER' | 'INACTIVE'; // SELLER/WAREHOUSE son aliases legacy de org
   status: 'active' | 'inactive' | 'suspended';
-  organizationId?: string;  // NUEVO: Multi-tenant support
+  organizationId?: string;
   organizationName?: string;
   isOwner?: boolean;
   createdAt: string;

@@ -8,6 +8,7 @@ import {
 import { createClient } from '@/lib/supabase'
 import { AdminApiService } from '@/lib/services/admin-api'
 import { api } from '@/lib/api'
+import { normalizeRole, ROLE_LABELS } from '@/lib/roles'
 
 // Interfaz actualizada para coincidir con la estructura de Supabase
 export interface User {
@@ -105,36 +106,16 @@ class UserService {
 
   // Mapea permisos básicos por rol para compatibilidad en el cliente
   private getRolePermissions(role?: string): string[] {
+    const r = normalizeRole(role)
     const map: Record<string, string[]> = {
-      OWNER: [
-        'manage_company',
-        'manage_billing',
-        'manage_users',
-        'view_reports',
-        'edit_products',
-        'create_sales',
-        'update_stock'
-      ],
-      ADMIN: [
-        'manage_users',
-        'view_reports',
-        'edit_products',
-        'create_sales',
-        'update_stock'
-      ],
-      SELLER: [
-        'create_sales',
-        'view_products',
-        'view_customers'
-      ],
-      WAREHOUSE: [
-        'view_products',
-        'update_stock',
-        'create_purchase'
-      ]
+      SUPER_ADMIN: ['manage_company', 'manage_billing', 'manage_users', 'view_reports', 'edit_products', 'create_sales', 'update_stock'],
+      OWNER:       ['manage_company', 'manage_billing', 'manage_users', 'view_reports', 'edit_products', 'create_sales', 'update_stock'],
+      ADMIN:       ['manage_users', 'view_reports', 'edit_products', 'create_sales', 'update_stock'],
+      MANAGER:     ['view_reports', 'edit_products', 'create_sales', 'update_stock'],
+      CASHIER:     ['create_sales', 'view_products', 'view_customers'],
+      EMPLOYEE:    ['view_products', 'update_stock', 'create_purchase'],
     }
-    const key = (role || 'SELLER').toUpperCase()
-    return map[key] || map.SELLER
+    return map[r] ?? map.CASHIER
   }
 
   // Función auxiliar para transformar datos de Supabase al formato esperado
@@ -796,15 +777,10 @@ export const isUserActive = (user: User): boolean => {
 }
 
 export const getUserRoleDisplayName = (roleId: string): string => {
-  const roleMap: Record<string, string> = {
-    'OWNER': 'Owner',
-    'ADMIN': 'Administrador',
-    'SELLER': 'Vendedor',
-    'WAREHOUSE': 'Deposito'
-  }
-  return roleMap[roleId] || roleId
+  return ROLE_LABELS[normalizeRole(roleId)] ?? roleId
 }
 
 export const canUserPerformAction = (user: User, permission: string): boolean => {
-  return (user.permissions?.includes(permission) ?? false) || user.role === 'ADMIN' || user.role === 'OWNER'
+  const r = normalizeRole(user.role)
+  return (user.permissions?.includes(permission) ?? false) || r === 'ADMIN' || r === 'OWNER' || r === 'SUPER_ADMIN'
 }

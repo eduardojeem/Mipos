@@ -8,6 +8,7 @@ import {
   type CompanyFeatureKey,
   type CompanyPermissionKey,
 } from '@/lib/company-access'
+import { normalizeRole, type AppRole } from '@/lib/roles'
 
 export {
   COMPANY_FEATURE_KEYS,
@@ -16,7 +17,8 @@ export {
   type CompanyPermissionKey,
 } from '@/lib/company-access'
 
-type RoleName = 'OWNER' | 'ADMIN' | 'SELLER' | 'WAREHOUSE' | 'SUPER_ADMIN' | 'UNKNOWN'
+// RoleName sigue siendo el tipo local de este módulo (incluye UNKNOWN para membresías sin rol)
+type RoleName = AppRole | 'UNKNOWN'
 
 type OrganizationSummaryRow = {
   id?: string | null
@@ -70,14 +72,9 @@ export type CompanyAccessResult =
 
 function normalizeRoleName(role?: string | null, isOwner = false): RoleName {
   if (isOwner) return 'OWNER'
-
-  const normalized = String(role || '').toUpperCase().trim()
-  if (normalized === 'SUPER_ADMIN') return 'SUPER_ADMIN'
-  if (normalized === 'OWNER') return 'OWNER'
-  if (normalized === 'ADMIN' || normalized === 'MANAGER') return 'ADMIN'
-  if (normalized === 'SELLER' || normalized === 'VENDEDOR' || normalized === 'CASHIER') return 'SELLER'
-  if (normalized === 'WAREHOUSE' || normalized === 'DEPOSITO') return 'WAREHOUSE'
-  return 'UNKNOWN'
+  const r = normalizeRole(role)
+  if (r === 'USER') return 'UNKNOWN'
+  return r
 }
 
 function getFallbackFeatures(planName?: string | null): string[] {

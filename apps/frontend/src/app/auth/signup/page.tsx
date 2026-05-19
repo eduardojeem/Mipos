@@ -25,7 +25,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/components/ui/use-toast';
-import { createClient } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 
 const signUpSchema = z.object({
@@ -51,8 +50,6 @@ export default function SignUpPage() {
   const [signupSuccess, setSignupSuccess] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
-  const supabase = createClient();
-
   const {
     register,
     handleSubmit,
@@ -86,27 +83,23 @@ export default function SignUpPage() {
   const onSubmit = async (data: SignUpFormData) => {
     setIsLoading(true);
     try {
-      // Create organization slug from name
-      const slug = data.organizationName
-        .toLowerCase()
-        .replace(/\s+/g, '-')
-        .replace(/[^a-z0-9-]/g, '');
-
-      const { error } = await supabase.auth.signUp({
-        email: data.email,
-        password: data.password,
-        options: {
-          data: {
-            full_name: data.fullName,
-            organization_name: data.organizationName,
-            organization_slug: slug,
-            role: 'ADMIN', // First user is always admin of the organization
-          },
-        },
+      // Llamar al endpoint de registro que crea usuario + organización + membresía
+      const response = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: data.email,
+          password: data.password,
+          name: data.fullName,
+          organizationName: data.organizationName,
+          planSlug: 'free',
+        }),
       });
 
-      if (error) {
-        throw new Error(error.message);
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Error al crear la cuenta');
       }
 
       setSignupSuccess(true);

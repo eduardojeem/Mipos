@@ -59,6 +59,7 @@ import { useUsers, AdminUser } from '../hooks/useUsers';
 import { useUserStats } from '../hooks/useUserStats';
 import { toast } from '@/lib/toast';
 import { useDebounce } from 'use-debounce';
+import { ROLE_LABELS, ROLE_BADGE_CLASSES, normalizeRole } from '@/lib/roles';
 
 export default function SuperAdminUsersPage() {
   const [search, setSearch] = useState('');
@@ -115,19 +116,12 @@ export default function SuperAdminUsersPage() {
 
   const getRoleBadge = (role: string | null) => {
     if (!role) return null;
-    
-    const roleConfig: Record<string, { color: string; label: string }> = {
-      'SUPER_ADMIN': { color: 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300', label: 'Super Admin' },
-      'ADMIN': { color: 'bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-950/30 dark:text-blue-300', label: 'Admin' },
-      'MANAGER': { color: 'bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-950/30 dark:text-emerald-300', label: 'Manager' },
-      'CASHIER': { color: 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/30 dark:text-amber-300', label: 'Cajero' },
-    };
-
-    const config = roleConfig[role] || { color: 'bg-slate-100 text-slate-700 border-slate-300', label: role };
-
+    const normalized = normalizeRole(role);
+    const label = ROLE_LABELS[normalized] ?? role;
+    const colorClass = ROLE_BADGE_CLASSES[normalized] ?? 'bg-slate-100 text-slate-700 border-slate-300';
     return (
-      <Badge variant="outline" className={`text-xs ${config.color}`}>
-        {config.label}
+      <Badge variant="outline" className={`text-xs ${colorClass}`}>
+        {label}
       </Badge>
     );
   };

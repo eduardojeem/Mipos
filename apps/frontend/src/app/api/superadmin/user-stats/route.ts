@@ -12,17 +12,15 @@ export async function GET(request: NextRequest) {
     const admin = await createAdminClient()
 
     // Use COUNT queries instead of fetching all rows — scales to any number of users
+    // Nota: la tabla users no tiene columnas status ni is_active
     const [
       totalRes,
       withOrgsRes,
-      activeRes,
       byRoleRes,
     ] = await Promise.all([
       admin.from('users').select('*', { count: 'exact', head: true }),
       admin.from('users').select('*', { count: 'exact', head: true }).not('organization_id', 'is', null),
-      admin.from('users').select('*', { count: 'exact', head: true }).eq('is_active', true),
-      // Fetch role distribution — limited to 1000 rows but sufficient for aggregation
-      // since the number of distinct roles is small (< 10)
+      // Fetch role distribution — limited to 10000 rows for aggregation
       admin.from('users').select('role').limit(10000),
     ])
 
@@ -33,8 +31,9 @@ export async function GET(request: NextRequest) {
     const total = totalRes.count ?? 0
     const withOrgs = withOrgsRes.count ?? 0
     const withoutOrgs = total - withOrgs
-    const activeUsers = activeRes.count ?? 0
-    const inactiveUsers = total - activeUsers
+    // La tabla users no tiene columna status/is_active — todos se consideran activos
+    const activeUsers = total
+    const inactiveUsers = 0
 
     const byRole: Record<string, number> = {}
     if (Array.isArray(byRoleRes.data)) {
