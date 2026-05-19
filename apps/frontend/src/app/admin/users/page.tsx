@@ -1,7 +1,5 @@
-'use client'
+import { redirect } from 'next/navigation'
 
-import UserManagement from '@/components/admin/UserManagement'
-
-export default function UsersPage() {
-  return <UserManagement />
+export default function AdminUsersRedirectPage() {
+  redirect('/admin/users-roles?tab=users')
 }

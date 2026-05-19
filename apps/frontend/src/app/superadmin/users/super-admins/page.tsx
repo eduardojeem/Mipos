@@ -26,7 +26,6 @@ import {
   Sparkles
 } from 'lucide-react';
 import { SuperAdminGuard } from '../../components/SuperAdminGuard';
-import { createClient } from '@/lib/supabase';
 import { toast } from '@/lib/toast';
 
 type SuperAdminUser = {
@@ -54,8 +53,6 @@ export default function SuperAdminsPage() {
   }, [users, search]);
 
   const loadSuperAdmins = async (isRefresh = false) => {
-    const supabase = createClient();
-    
     if (isRefresh) {
       setRefreshing(true);
     } else {
@@ -63,22 +60,20 @@ export default function SuperAdminsPage() {
     }
 
     try {
-      // Fetch only SUPER_ADMIN users
-      const { data, error } = await supabase
-        .from('users')
-        .select('id, email, full_name, role, created_at')
-        .eq('role', 'SUPER_ADMIN')
-        .order('created_at', { ascending: false });
+      // Use the protected API route instead of querying Supabase directly.
+      // This ensures the request goes through assertSuperAdmin server-side auth.
+      const res = await fetch('/api/superadmin/users/super-admins');
+      const json = await res.json();
 
-      if (error) {
-        throw error;
+      if (!res.ok) {
+        throw new Error(json?.error || `Error ${res.status}`);
       }
 
-      setUsers(data || []);
+      setUsers(json.users || []);
 
       if (isRefresh) {
         toast.success('Super Admins actualizados', {
-          description: `Se han cargado ${data?.length || 0} super administradores`
+          description: `Se han cargado ${json.users?.length || 0} super administradores`
         });
       }
     } catch (error) {

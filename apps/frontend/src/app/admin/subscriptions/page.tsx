@@ -1,8 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import Link from 'next/link'
-import { ArrowRight, BadgeCheck, Building2, CreditCard, RefreshCw, Shield, Sparkles } from 'lucide-react'
+import { BadgeCheck, Building2, CreditCard, RefreshCw, Shield, Sparkles } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { useUserOrganizations } from '@/hooks/use-user-organizations'
 import { useSubscription } from '@/hooks/use-subscription'
@@ -32,6 +31,7 @@ const PLAN_STYLES: Record<string, { tone: string; icon: typeof Sparkles }> = {
   free: { tone: 'text-slate-700 dark:text-slate-100', icon: Sparkles },
   starter: { tone: 'text-blue-700 dark:text-blue-200', icon: BadgeCheck },
   professional: { tone: 'text-fuchsia-700 dark:text-fuchsia-200', icon: Shield },
+  enterprise: { tone: 'text-violet-700 dark:text-violet-200', icon: Shield },
 }
 
 function getPlanStyle(slug?: string) {
@@ -330,12 +330,6 @@ export default function AdminSubscriptionsPage() {
                 )
               })
             )}
-            <Button variant="outline" className="w-full justify-between" asChild>
-              <Link href="/dashboard/settings?tab=plan">
-                <span>Ver detalles ampliados en settings</span>
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
           </CardContent>
         </Card>
 

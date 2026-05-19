@@ -12,12 +12,9 @@ import { normalizeSettingsTab, getSettingsTabMeta } from './settings-navigation'
 import {
   CompanyProfileSettings,
   GeneralSettings,
-  IntegrationsSettings,
   InventorySettings,
-  BranchesSettings,
   SalesBillingSettings,
   SecurityWorkspaceSettings,
-  UsersRolesSettings,
 } from './SettingsSections'
 
 interface SettingsContentProps {
@@ -25,11 +22,6 @@ interface SettingsContentProps {
 }
 
 const AppearanceTab = dynamic(() => import('./AppearanceTab').then((module) => module.AppearanceTab), {
-  ssr: false,
-  loading: () => <SettingsLoadingSkeleton />,
-})
-
-const BillingTab = dynamic(() => import('./BillingTab').then((module) => module.BillingTab), {
   ssr: false,
   loading: () => <SettingsLoadingSkeleton />,
 })
@@ -47,7 +39,7 @@ export function SettingsContent({ activeTab }: SettingsContentProps) {
     const isNewUser = !company.name || !company.industry || !company.size
     const isFreePlan = company.plan_type === 'free'
 
-    if (isNewUser && isFreePlan && !['general', 'company', 'subscription'].includes(normalizedTab)) {
+    if (isNewUser && isFreePlan && !['general', 'company'].includes(normalizedTab)) {
       router.replace(`${basePath}?tab=general`)
     }
   }, [company, isLoading, normalizedTab, router, basePath])
@@ -60,22 +52,14 @@ export function SettingsContent({ activeTab }: SettingsContentProps) {
         return <GeneralSettings />
       case 'company':
         return <CompanyProfileSettings />
-      case 'users-roles':
-        return <UsersRolesSettings />
       case 'sales':
         return <SalesBillingSettings />
       case 'inventory':
         return <InventorySettings />
-      case 'branches':
-        return <BranchesSettings />
-      case 'integrations':
-        return <IntegrationsSettings />
       case 'appearance':
         return <AppearanceTab />
       case 'security':
         return <SecurityWorkspaceSettings />
-      case 'subscription':
-        return <BillingTab />
       default:
         return <GeneralSettings />
     }

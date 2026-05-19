@@ -215,6 +215,7 @@ export async function PUT(request: NextRequest) {
         enableBarcodeScanner: b(raw?.storeSettings?.enableBarcodeScanner, !!defaultBusinessConfig.storeSettings.enableBarcodeScanner),
         printReceipts: b(raw?.storeSettings?.printReceipts, !!defaultBusinessConfig.storeSettings.printReceipts),
         enableCashDrawer: b(raw?.storeSettings?.enableCashDrawer, !!defaultBusinessConfig.storeSettings.enableCashDrawer),
+        decimalPlaces: n(raw?.storeSettings?.decimalPlaces, raw?.storeSettings?.currency === 'PYG' ? 0 : 2),
       },
       systemSettings,
       carousel: {

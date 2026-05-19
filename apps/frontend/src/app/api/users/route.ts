@@ -6,6 +6,7 @@ import {
   resolveCompanyAccess,
 } from '@/app/api/_utils/company-authorization'
 import { getSubscriptionSnapshot, resolveSubscriptionPlanLimits } from '@/app/api/subscription/_lib'
+import { getPasswordPolicyForOrganization, validatePasswordAgainstPolicy } from '@/app/api/_utils/password-policy'
 import {
   buildUserResponse,
   COMPANY_USER_ROLES,
@@ -227,10 +228,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'El formato del email no es valido' }, { status: 400 })
     }
 
-    if (password.length < 8) {
-      return NextResponse.json({ error: 'La contrasena debe tener al menos 8 caracteres' }, { status: 400 })
-    }
-
     if (!COMPANY_USER_ROLES.includes(role)) {
       return NextResponse.json({ error: 'Rol invalido' }, { status: 400 })
     }
@@ -243,6 +240,14 @@ export async function POST(request: NextRequest) {
     }
 
     const admin = createAdminClient()
+    const policyError = validatePasswordAgainstPolicy(
+      password,
+      await getPasswordPolicyForOrganization(admin, companyId)
+    )
+    if (policyError) {
+      return NextResponse.json({ error: policyError.replace('La nueva contrasena', 'La contrasena') }, { status: 400 })
+    }
+
     const { data: existingMemberships, error: countError } = await admin
       .from('organization_members')
       .select('user_id', { count: 'exact' })

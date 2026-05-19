@@ -57,7 +57,11 @@ export default function SettingsSidebar() {
     });
   };
 
-  const basePath = pathname?.startsWith('/admin') ? '/admin/settings' : '/dashboard/settings';
+  const isAdminSettings = pathname?.startsWith('/admin');
+  const basePath = isAdminSettings ? '/admin/settings' : '/dashboard/settings';
+  const navigationItems = isAdminSettings
+    ? SETTINGS_NAVIGATION.filter((item) => item.id !== 'appearance')
+    : SETTINGS_NAVIGATION;
 
   const isActive = (item: SettingsNavigationItem) => {
     const isSettingsPath = pathname === basePath || pathname === `${basePath}/general`;
@@ -122,7 +126,8 @@ export default function SettingsSidebar() {
           )}
         >
           {GROUPS.map((group) => {
-            const groupItems = SETTINGS_NAVIGATION.filter((item) => item.group === group);
+            const groupItems = navigationItems.filter((item) => item.group === group);
+            if (groupItems.length === 0) return null;
             return (
               <div key={group} className="py-1.5 first:pt-1 last:pb-1">
                 {!isCollapsed && (
@@ -181,7 +186,7 @@ export default function SettingsSidebar() {
 
         {/* Mobile: horizontal scroll */}
         <nav className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-2 xl:hidden">
-          {SETTINGS_NAVIGATION.map((item) => {
+          {navigationItems.map((item) => {
             const active = isActive(item);
             return (
               <Link

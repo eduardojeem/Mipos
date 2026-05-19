@@ -39,7 +39,10 @@ import { cn } from '@/lib/utils'
 const breadcrumbLabels: Record<string, string> = {
   admin: 'Admin',
   users: 'Usuarios',
+  'users-roles': 'Usuarios y Roles',
   roles: 'Roles',
+  sucursal: 'Sucursales',
+  sucursales: 'Sucursales',
   audit: 'Auditoria',
   sessions: 'Sesiones',
   reports: 'Reportes',
@@ -49,6 +52,7 @@ const breadcrumbLabels: Record<string, string> = {
   subscriptions: 'Plan y Suscripcion',
   plans: 'Planes SaaS',
   maintenance: 'Mantenimiento',
+  appearance: 'Apariencia',
 }
 
 export function AdminHeader({ compact = false }: { compact?: boolean }) {
@@ -91,7 +95,8 @@ export function AdminHeader({ compact = false }: { compact?: boolean }) {
       <header
         className={cn(
           'border-b border-border bg-background/80 backdrop-blur-xl',
-          compact ? 'px-4 py-3 lg:px-6' : 'px-6 py-4'
+          'sticky top-0 z-40',
+          compact ? 'px-4 py-2.5 lg:px-6' : 'px-6 py-4'
         )}
       >
         <div className="flex items-center justify-between gap-4">
@@ -118,8 +123,8 @@ export function AdminHeader({ compact = false }: { compact?: boolean }) {
               </nav>
 
               {currentItem && (
-                <div className="mt-1">
-                  <h1 className="truncate text-lg font-semibold text-foreground">{currentItem.title}</h1>
+                <div className="mt-0.5">
+                  <h1 className="truncate text-base font-semibold text-foreground">{currentItem.title}</h1>
                   <p className="truncate text-sm text-muted-foreground">{currentItem.description}</p>
                 </div>
               )}
@@ -162,7 +167,7 @@ export function AdminHeader({ compact = false }: { compact?: boolean }) {
             </Button>
 
             <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl" asChild>
-              <Link href="/dashboard/settings">
+              <Link href="/admin/settings">
                 <Settings className="h-4 w-4" />
               </Link>
             </Button>
@@ -196,7 +201,7 @@ export function AdminHeader({ compact = false }: { compact?: boolean }) {
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
-                  <Link href="/dashboard/settings">
+                  <Link href="/admin/settings">
                     <Settings className="mr-2 h-4 w-4" />
                     Configuracion
                   </Link>

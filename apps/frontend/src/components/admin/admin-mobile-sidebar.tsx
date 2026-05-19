@@ -43,8 +43,8 @@ export function AdminMobileSidebar() {
             <div className="border-b border-border px-5 py-5">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Admin</p>
-                  <h2 className="text-lg font-semibold text-foreground">Centro de Control</h2>
+                  <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">MiPOS</p>
+                  <h2 className="text-lg font-semibold text-foreground">Administracion</h2>
                 </div>
                 <Badge variant="outline" className="gap-1">
                   <Shield className="h-3 w-3" />
@@ -53,7 +53,7 @@ export function AdminMobileSidebar() {
               </div>
 
               {currentItem && (
-                <div className="mt-4 rounded-2xl border border-border bg-muted/40 p-4">
+                <div className="mt-4 rounded-lg border border-border bg-muted/40 p-3">
                   <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Actual</p>
                   <p className="mt-2 text-sm font-semibold text-foreground">{currentItem.title}</p>
                   <p className="mt-1 text-sm text-muted-foreground">{currentItem.description}</p>
@@ -89,7 +89,7 @@ export function AdminMobileSidebar() {
                               href={item.href}
                               onClick={() => setOpen(false)}
                               className={cn(
-                                'flex items-start gap-3 rounded-2xl px-3 py-3 transition-colors',
+                                'flex items-start gap-3 rounded-lg px-3 py-2.5 transition-colors',
                                 isActive ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
                               )}
                             >
@@ -114,7 +114,7 @@ export function AdminMobileSidebar() {
             </ScrollArea>
 
             <div className="border-t border-border px-4 py-4">
-              <div className="rounded-2xl border border-border bg-muted/30 p-3">
+              <div className="rounded-lg border border-border bg-muted/30 p-3">
                 <p className="truncate text-sm font-medium text-foreground">{user?.email || 'Administrador'}</p>
                 <p className="mt-1 text-xs uppercase tracking-[0.16em] text-muted-foreground">{role}</p>
               </div>

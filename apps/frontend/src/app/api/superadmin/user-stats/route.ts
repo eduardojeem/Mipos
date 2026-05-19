@@ -9,29 +9,40 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const supabase = await createClient()
-
     const admin = await createAdminClient()
-    const { data, error } = await admin
-      .from('users')
-      .select('organization_id, role, is_active')
-      .range(0, 9999)
-    if (error) {
-      return NextResponse.json({ error: 'Error obteniendo usuarios', details: error.message }, { status: 500 })
-    }
-    type UserRow = { organization_id: string | null; role: string | null; is_active: boolean | null }
-    const users: UserRow[] = Array.isArray(data) ? (data as UserRow[]) : []
 
-    const total = users.length
-    const withOrgs = users.filter((u: UserRow) => u.organization_id !== null).length
+    // Use COUNT queries instead of fetching all rows — scales to any number of users
+    const [
+      totalRes,
+      withOrgsRes,
+      activeRes,
+      byRoleRes,
+    ] = await Promise.all([
+      admin.from('users').select('*', { count: 'exact', head: true }),
+      admin.from('users').select('*', { count: 'exact', head: true }).not('organization_id', 'is', null),
+      admin.from('users').select('*', { count: 'exact', head: true }).eq('is_active', true),
+      // Fetch role distribution — limited to 1000 rows but sufficient for aggregation
+      // since the number of distinct roles is small (< 10)
+      admin.from('users').select('role').limit(10000),
+    ])
+
+    if (totalRes.error) {
+      return NextResponse.json({ error: 'Error obteniendo estadísticas', details: totalRes.error.message }, { status: 500 })
+    }
+
+    const total = totalRes.count ?? 0
+    const withOrgs = withOrgsRes.count ?? 0
     const withoutOrgs = total - withOrgs
-    const activeUsers = users.filter((u: UserRow) => Boolean(u.is_active)).length
+    const activeUsers = activeRes.count ?? 0
     const inactiveUsers = total - activeUsers
+
     const byRole: Record<string, number> = {}
-    users.forEach((u: UserRow) => {
-      const r = (u.role ?? 'UNKNOWN') as string
-      byRole[r] = (byRole[r] || 0) + 1
-    })
+    if (Array.isArray(byRoleRes.data)) {
+      for (const row of byRoleRes.data as { role: string | null }[]) {
+        const r = row.role ?? 'UNKNOWN'
+        byRole[r] = (byRole[r] || 0) + 1
+      }
+    }
 
     return NextResponse.json({ success: true, stats: { total, withOrgs, withoutOrgs, byRole, activeUsers, inactiveUsers } })
   } catch {

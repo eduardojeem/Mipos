@@ -96,6 +96,7 @@ export interface BusinessConfig {
     enableBarcodeScanner?: boolean;
     printReceipts?: boolean;
     enableCashDrawer?: boolean;
+    decimalPlaces?: number;
     // POS Auto Actions
     autoPrintOnSale?: boolean;
     autoShareReceipt?: { whatsapp?: boolean; email?: boolean };

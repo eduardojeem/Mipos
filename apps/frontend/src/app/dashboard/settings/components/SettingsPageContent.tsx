@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { AlertCircle, HelpCircle, FileText, Mail, User, Palette, Settings, Shield, ShoppingCart, CreditCard } from 'lucide-react';
+import { AlertCircle, HelpCircle, FileText, Mail, User, Palette, Settings, Shield, ShoppingCart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -15,7 +15,6 @@ const NotificationsTab = dynamic(() => import('./NotificationsTab').then(m => m.
 const SecuritySettingsTab = dynamic(() => import('./SecuritySettingsTab').then(m => m.SecuritySettingsTab), { ssr: false });
 const POSTab = dynamic(() => import('./POSTab').then(m => m.POSTab), { ssr: false });
 const AppearanceTab = dynamic(() => import('./AppearanceTab').then(m => m.AppearanceTab), { ssr: false });
-const BillingTab = dynamic(() => import('./BillingTab').then(m => m.BillingTab), { ssr: false });
 import { SettingsLoadingSkeleton } from './SettingsLoadingSkeleton';
 import {
   useUserSettings,
@@ -46,7 +45,7 @@ export default function SettingsPageContent() {
 
   useEffect(() => {
     const t = (searchParams?.get('tab') || '').trim();
-    if (t && ['profile','system','security','pos','notifications','appearance','billing'].includes(t)) {
+    if (t && ['profile','system','security','pos','notifications','appearance'].includes(t)) {
       setActiveTab(t);
     }
     const loadHealth = async () => {
@@ -194,16 +193,6 @@ export default function SettingsPageContent() {
               <span className="font-semibold">Apariencia</span>
             </TabsTrigger>
 
-            {/* Always visible - Plan y Facturación */}
-            <TabsTrigger
-              value="billing"
-              className="flex-1 items-center gap-2.5 py-3 px-6 rounded-xl data-[state=active]:bg-background data-[state=active]:text-amber-600 data-[state=active]:shadow-lg transition-all duration-300 group"
-            >
-              <div className="p-1.5 rounded-lg bg-amber-500/10 group-data-[state=active]:bg-amber-600 group-data-[state=active]:text-white transition-colors duration-300">
-                <CreditCard className="h-4 w-4" />
-              </div>
-              <span className="font-semibold">Plan</span>
-            </TabsTrigger>
           </TabsList>
         </div>
 
@@ -277,16 +266,6 @@ export default function SettingsPageContent() {
           <AppearanceTab />
         </TabsContent>
 
-        {/* Billing Tab */}
-        <TabsContent value="billing" className="space-y-6 animate-in fade-in-50 slide-in-from-bottom-2 duration-300">
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold tracking-tight">Plan y Facturación</h2>
-            <p className="text-muted-foreground mt-1">
-              Gestiona tu suscripción y cambia de plan
-            </p>
-          </div>
-          <BillingTab />
-        </TabsContent>
       </Tabs>
 
       {/* Help Section with premium feel */}

@@ -46,6 +46,7 @@ interface SystemSettings {
   email?: string;
   website?: string;
   logo_url?: string;
+  description?: string;
   
   // Configuración fiscal y monetaria
   tax_rate?: number;

@@ -102,6 +102,12 @@ const PLAN_STYLES = {
     badgeClass: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200',
     accentClass: 'text-emerald-100',
   },
+  enterprise: {
+    icon: ShieldCheck,
+    panelClass: 'bg-violet-950 text-white',
+    badgeClass: 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-200',
+    accentClass: 'text-violet-100',
+  },
 } as const
 
 const USAGE_STATE_META = {

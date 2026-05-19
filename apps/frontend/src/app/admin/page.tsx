@@ -94,7 +94,7 @@ export default function AdminDashboardPage() {
 
           <div className="flex flex-wrap gap-3">
             <Button asChild>
-              <Link href="/admin/users">
+              <Link href="/admin/users-roles">
                 <Users className="mr-2 h-4 w-4" />
                 Gestionar usuarios
               </Link>

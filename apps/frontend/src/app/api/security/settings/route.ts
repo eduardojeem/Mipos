@@ -268,7 +268,7 @@ export async function GET(request: NextRequest) {
   try {
     const auth = await validateRole(request, {
       roles: ['ADMIN', 'SUPER_ADMIN', 'MANAGER'],
-      permissions: ['settings:view', 'settings:update'],
+      permissions: ['settings.view', 'settings.read', 'settings:update'],
     });
     if (!auth.ok) return NextResponse.json(auth.body, { status: auth.status });
 
@@ -316,7 +316,7 @@ export async function PUT(request: NextRequest) {
   try {
     const auth = await validateRole(request, {
       roles: ['ADMIN', 'SUPER_ADMIN', 'MANAGER'],
-      permissions: ['settings:update'],
+      permissions: ['settings.update', 'settings.edit', 'settings:update'],
     });
     if (!auth.ok) return NextResponse.json(auth.body, { status: auth.status });
 

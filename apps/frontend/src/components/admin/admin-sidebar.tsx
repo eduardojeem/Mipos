@@ -19,14 +19,14 @@ export function AdminSidebar() {
   return (
     <TooltipProvider delayDuration={0}>
       <div className={cn(
-        'flex h-full flex-col border-r border-border bg-background/95 backdrop-blur',
-        isCollapsed ? 'w-[80px]' : 'w-[320px]'
+        'flex h-full flex-col border-r border-border bg-background/95 shadow-sm backdrop-blur',
+        isCollapsed ? 'w-[72px]' : 'w-[288px]'
       )}>
-        <div className="flex items-center justify-between border-b border-border px-4 py-4">
+        <div className="flex h-16 items-center justify-between border-b border-border px-3">
           {!isCollapsed && (
             <div className="min-w-0">
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Admin</p>
-              <h2 className="truncate text-lg font-semibold text-foreground">Centro de Control</h2>
+              <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">MiPOS</p>
+              <h2 className="truncate text-base font-semibold text-foreground">Administracion</h2>
             </div>
           )}
 
@@ -36,21 +36,21 @@ export function AdminSidebar() {
         </div>
 
         {!isCollapsed && currentItem && (
-          <div className="border-b border-border px-4 py-4">
-            <div className="rounded-2xl border border-border bg-muted/40 p-4">
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Seccion actual</p>
-              <p className="mt-2 text-sm font-semibold text-foreground">{currentItem.title}</p>
-              <p className="mt-1 text-sm text-muted-foreground">{currentItem.description}</p>
+          <div className="border-b border-border px-3 py-3">
+            <div className="rounded-lg border border-border bg-muted/35 p-3">
+              <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Actual</p>
+              <p className="mt-1 truncate text-sm font-semibold text-foreground">{currentItem.title}</p>
+              <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{currentItem.description}</p>
             </div>
           </div>
         )}
 
-        <ScrollArea className="flex-1 px-3 py-4">
-          <nav className="space-y-5">
+        <ScrollArea className="flex-1 px-2 py-3">
+          <nav className="space-y-4">
             {sections.map((section) => (
               <div key={section.key} className="space-y-2">
                 {!isCollapsed && (
-                  <p className="px-3 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                  <p className="px-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                     {section.label}
                   </p>
                 )}
@@ -66,7 +66,7 @@ export function AdminSidebar() {
                             <Link
                               href={item.href}
                               className={cn(
-                                'mx-auto flex h-11 w-11 items-center justify-center rounded-xl transition-colors',
+                                'mx-auto flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
                                 isActive ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                               )}
                             >
@@ -86,7 +86,7 @@ export function AdminSidebar() {
                         key={item.href}
                         href={item.href}
                         className={cn(
-                          'flex items-start gap-3 rounded-2xl px-3 py-3 transition-colors',
+                          'flex items-start gap-3 rounded-lg px-3 py-2.5 transition-colors',
                           isActive ? 'bg-primary text-primary-foreground shadow-sm' : 'text-foreground hover:bg-muted'
                         )}
                       >
@@ -114,7 +114,7 @@ export function AdminSidebar() {
         <div className="border-t border-border px-3 py-3">
           {!isCollapsed ? (
             <div className="space-y-3">
-              <div className="rounded-2xl border border-border bg-muted/30 p-3">
+              <div className="rounded-lg border border-border bg-muted/30 p-3">
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
                     <Shield className="h-5 w-5 text-primary" />

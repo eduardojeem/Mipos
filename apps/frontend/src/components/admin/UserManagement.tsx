@@ -415,7 +415,7 @@ export default function UserManagement() {
               <Button
                 variant="default"
                 className="gap-2"
-                onClick={() => window.location.href = '/dashboard/settings?tab=subscription'}
+                onClick={() => window.location.href = '/admin/subscriptions'}
               >
                 <Wifi className="h-4 w-4" />
                 Mejorar plan

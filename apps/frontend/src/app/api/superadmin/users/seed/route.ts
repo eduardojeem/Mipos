@@ -8,6 +8,11 @@ function slugify(name: string) {
 }
 
 export async function POST(request: NextRequest) {
+  // Endpoint de seed — solo disponible fuera de producción
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'No disponible en producción' }, { status: 404 })
+  }
+
   const auth = await assertSuperAdmin(request);
   if (!('ok' in auth) || auth.ok === false) {
       return NextResponse.json(auth.body, { status: auth.status });

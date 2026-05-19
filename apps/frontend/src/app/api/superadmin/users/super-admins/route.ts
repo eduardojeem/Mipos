@@ -38,7 +38,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Error listando super admins', details: error?.message || 'consulta no disponible' }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, users: data, total: count || data.length, page, limit, source: 'db' })
+    // Normalize field name: the DB stores last_login but the frontend expects last_sign_in_at
+    const users = data.map((u: any) => ({
+      ...u,
+      last_sign_in_at: u.last_sign_in_at ?? u.last_login ?? null,
+    }))
+
+    return NextResponse.json({ success: true, users, total: count || data.length, page, limit, source: 'db' })
   } catch {
     return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
   }

@@ -731,7 +731,8 @@ export function useCurrencyFormatter() {
   const { config } = useBusinessConfig();
   const currencyCode = config?.storeSettings?.currency || 'PYG';
   const currencyLocale = config?.regional?.locale || 'es-PY';
-  const currencyDecimals = currencyCode === 'PYG' ? 0 : 2;
+  const configuredDecimals = config?.storeSettings?.decimalPlaces;
+  const currencyDecimals = typeof configuredDecimals === 'number' ? configuredDecimals : (currencyCode === 'PYG' ? 0 : 2);
   return (value: number) => {
     return formatCurrency(value, currencyCode, currencyLocale, currencyDecimals);
   };

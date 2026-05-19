@@ -13,6 +13,16 @@ import {
   TableHeader, 
   TableRow 
 } from '@/components/ui/table';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { 
   Users, 
   Search, 
@@ -33,7 +43,8 @@ import {
   FileText,
   Trash2,
   UserCheck,
-  UserX
+  UserX,
+  Circle
 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { 
@@ -54,6 +65,7 @@ export default function SuperAdminUsersPage() {
   const [debouncedSearch] = useDebounce(search, 500);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const pageSize = 20; // Paginación real
   
   // Use the custom hook for data fetching with pagination
@@ -147,13 +159,17 @@ export default function SuperAdminUsersPage() {
 
   const handleBulkDelete = async () => {
     if (!selectedUsers.length) return;
-    if (window.confirm(`¿Estás seguro de eliminar ${selectedUsers.length} usuarios?`)) {
-      try {
-        await bulkDeleteUsers(selectedUsers);
-        setSelectedUsers([]);
-      } catch (error) {
-        // Error handled in hook
-      }
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmBulkDelete = async () => {
+    try {
+      await bulkDeleteUsers(selectedUsers);
+      setSelectedUsers([]);
+    } catch {
+      // Error handled in hook
+    } finally {
+      setDeleteDialogOpen(false);
     }
   };
 
@@ -186,7 +202,7 @@ export default function SuperAdminUsersPage() {
         Estado: user.is_active ? 'Activo' : 'Inactivo'
       }));
       await exportCSV(dataToExport as Record<string, unknown>[], 'usuarios_pos');
-      toast.success('CSV exportado correctamente');
+      toast.success(`CSV exportado (${users.length} de ${totalCount} usuarios — solo página actual)`);
     } catch (error) {
       console.error('Export error:', error);
       toast.error('Error al exportar CSV');
@@ -211,7 +227,7 @@ export default function SuperAdminUsersPage() {
         Estado: user.is_active ? 'Activo' : 'Inactivo'
       }));
       await exportExcel(dataToExport as Record<string, unknown>[], 'usuarios_pos', 'Usuarios');
-      toast.success('Excel exportado correctamente');
+      toast.success(`Excel exportado (${users.length} de ${totalCount} usuarios — solo página actual)`);
     } catch (error) {
       console.error('Export error:', error);
       toast.error('Error al exportar Excel');
@@ -419,6 +435,12 @@ export default function SuperAdminUsersPage() {
                           Último acceso
                         </div>
                       </TableHead>
+                      <TableHead className="font-semibold">
+                        <div className="flex items-center gap-2">
+                          <Circle className="h-4 w-4" />
+                          Estado
+                        </div>
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -458,11 +480,24 @@ export default function SuperAdminUsersPage() {
                         <TableCell className="text-sm text-slate-600 dark:text-slate-400">
                           {formatDate(user.last_sign_in_at)}
                         </TableCell>
+                        <TableCell>
+                          {user.is_active ? (
+                            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800 gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                              Activo
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-slate-50 text-slate-500 border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700 gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-slate-400 inline-block" />
+                              Inactivo
+                            </Badge>
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))}
                     {users.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-12">
+                        <TableCell colSpan={8} className="text-center py-12">
                           <div className="flex flex-col items-center gap-3">
                             <Users className="h-12 w-12 text-slate-300 dark:text-slate-700" />
                             <div>
@@ -570,6 +605,27 @@ export default function SuperAdminUsersPage() {
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar {selectedUsers.length} usuario{selectedUsers.length !== 1 ? 's' : ''}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción es permanente y no se puede deshacer. Los usuarios seleccionados serán eliminados del sistema junto con todos sus datos asociados.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmBulkDelete}
+              className="bg-rose-600 hover:bg-rose-700 text-white"
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </SuperAdminGuard>
   );
 }

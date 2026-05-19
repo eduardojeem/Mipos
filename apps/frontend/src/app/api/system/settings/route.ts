@@ -175,6 +175,9 @@ function legacyRowToBusinessConfig(row: Record<string, unknown> | null | undefin
       enableBarcodeScanner: booleanValue(row.enable_barcode_scanner, true),
       printReceipts: booleanValue(row.enable_receipt_printer, true),
       enableCashDrawer: booleanValue(row.enable_cash_drawer, true),
+      ...(row.decimal_places !== undefined
+        ? { decimalPlaces: numberValue(row.decimal_places, stringValue(row.currency, defaultBusinessConfig.storeSettings.currency) === 'PYG' ? 0 : 2) }
+        : {}),
       ...(row.max_discount_percentage !== undefined
         ? { maxDiscountPercentage: numberValue(row.max_discount_percentage, 50) }
         : {}),
@@ -232,17 +235,21 @@ function businessConfigToSystemSettings(config: BusinessConfig) {
   return {
     business_name: config.businessName || '',
     address: config.address?.street || '',
+    country: config.address?.country || '',
+    department: config.address?.department || '',
+    city: config.address?.city || '',
     phone: config.contact?.phone || '',
     email: config.contact?.email || '',
     website: config.contact?.website || '',
     logo_url: config.branding?.logo || '',
+    description: config.heroDescription || '',
     currency: storeSettings.currency || 'PYG',
     timezone: regional.timezone || 'America/Asuncion',
     language: regional.language || 'es-PY',
     date_format: regional.dateFormat || 'DD/MM/YYYY',
     time_format: normalizeTimeFormat(regional.timeFormat),
     tax_rate: taxRateToPercent(storeSettings.taxRate),
-    decimal_places: storeSettings.currency === 'PYG' ? 0 : 2,
+    decimal_places: numberValue(storeSettings.decimalPlaces, storeSettings.currency === 'PYG' ? 0 : 2),
     receipt_footer: '',
     enable_inventory_tracking: storeSettings.enableInventoryTracking ?? true,
     enable_loyalty_program: Boolean(storeSettings.enableLoyaltyProgram ?? false),
@@ -418,10 +425,14 @@ function applySystemSettings(config: BusinessConfig, settings: SystemSettingsPay
 
   if (hasOwn(settings, 'business_name')) next.businessName = stringValue(settings.business_name, next.businessName);
   if (hasOwn(settings, 'address')) next.address = { ...next.address, street: stringValue(settings.address, next.address.street) };
+  if (hasOwn(settings, 'country')) next.address = { ...next.address, country: stringValue(settings.country, next.address.country) };
+  if (hasOwn(settings, 'department')) next.address = { ...next.address, department: stringValue(settings.department, next.address.department) };
+  if (hasOwn(settings, 'city')) next.address = { ...next.address, city: stringValue(settings.city, next.address.city) };
   if (hasOwn(settings, 'phone')) next.contact = { ...next.contact, phone: stringValue(settings.phone, next.contact.phone) };
   if (hasOwn(settings, 'email')) next.contact = { ...next.contact, email: stringValue(settings.email, next.contact.email) };
   if (hasOwn(settings, 'website')) next.contact = { ...next.contact, website: stringValue(settings.website, next.contact.website) };
   if (hasOwn(settings, 'logo_url')) next.branding = { ...next.branding, logo: stringValue(settings.logo_url, next.branding.logo) };
+  if (hasOwn(settings, 'description')) next.heroDescription = stringValue(settings.description, next.heroDescription);
 
   if (hasOwn(settings, 'currency')) {
     const currency = stringValue(settings.currency, storeSettings.currency);
@@ -436,6 +447,7 @@ function applySystemSettings(config: BusinessConfig, settings: SystemSettingsPay
   if (hasOwn(settings, 'enable_cash_drawer')) storeSettings.enableCashDrawer = booleanValue(settings.enable_cash_drawer, true);
   if (hasOwn(settings, 'max_discount_percentage')) storeSettings.maxDiscountPercentage = numberValue(settings.max_discount_percentage, 50);
   if (hasOwn(settings, 'require_customer_info')) storeSettings.requireCustomerInfo = booleanValue(settings.require_customer_info, false);
+  if (hasOwn(settings, 'decimal_places')) storeSettings.decimalPlaces = numberValue(settings.decimal_places, numberValue(storeSettings.decimalPlaces, storeSettings.currency === 'PYG' ? 0 : 2));
   if (hasOwn(settings, 'enable_loyalty_program')) storeSettings.enableLoyaltyProgram = booleanValue(settings.enable_loyalty_program, false);
   if (hasOwn(settings, 'loyalty_points_per_purchase')) storeSettings.loyaltyPointsPerPurchase = numberValue(settings.loyalty_points_per_purchase, 1);
   if (hasOwn(settings, 'loyalty_points_for_reward')) storeSettings.loyaltyPointsForReward = numberValue(settings.loyalty_points_for_reward, 100);

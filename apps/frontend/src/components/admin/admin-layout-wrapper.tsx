@@ -18,21 +18,21 @@ function AdminLayoutContent({ children }: { children: ReactNode }) {
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.08),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(16,185,129,0.07),transparent_26%)]" />
       </div>
 
-      <div className="relative flex h-screen">
+      <div className="relative flex min-h-screen">
         <aside className="hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:flex-col">
           <AdminSidebar />
         </aside>
 
         <div
           className={cn(
-            'flex flex-1 flex-col transition-all duration-300 ease-in-out',
-            isCollapsed ? 'lg:pl-[80px]' : 'lg:pl-[320px]'
+            'flex min-h-screen flex-1 flex-col transition-all duration-300 ease-in-out',
+            isCollapsed ? 'lg:pl-[72px]' : 'lg:pl-[288px]'
           )}
         >
           <AdminHeader compact />
 
-          <main className="flex-1 overflow-y-auto">
-            <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+          <main className="flex-1">
+            <div className="mx-auto w-full max-w-[1440px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
               <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">{children}</div>
             </div>
           </main>

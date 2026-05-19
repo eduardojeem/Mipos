@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient, createClient } from '@/lib/supabase/server';
+import {
+  DEFAULT_PASSWORD_POLICY,
+  getPasswordPolicyForUser,
+  validatePasswordAgainstPolicy,
+} from '@/app/api/_utils/password-policy';
 
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
-    
-    // Verificar autenticación con getUser
     const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
+
     if (userError || !user) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
     }
@@ -16,73 +19,58 @@ export async function POST(request: NextRequest) {
     const { currentPassword, newPassword } = body;
 
     if (!currentPassword || !newPassword) {
-      return NextResponse.json({ 
-        error: 'La contraseña actual y nueva son requeridas' 
+      return NextResponse.json({
+        error: 'La contrasena actual y nueva son requeridas',
       }, { status: 400 });
     }
 
-    // Validar fortaleza de la nueva contraseña
-    if (newPassword.length < 8) {
-      return NextResponse.json({ 
-        error: 'La nueva contraseña debe tener al menos 8 caracteres' 
-      }, { status: 400 });
+    let passwordPolicy = DEFAULT_PASSWORD_POLICY;
+    try {
+      const adminClient = await createAdminClient();
+      passwordPolicy = await getPasswordPolicyForUser(adminClient, user.id);
+    } catch (policyError) {
+      console.warn('Could not load organization password policy, using defaults:', policyError);
+    }
+
+    const policyError = validatePasswordAgainstPolicy(newPassword, passwordPolicy);
+    if (policyError) {
+      return NextResponse.json({ error: policyError }, { status: 400 });
     }
 
     if (!user.email) {
       return NextResponse.json({ error: 'El usuario no tiene email asociado' }, { status: 400 });
     }
 
-    // Verificar contraseña actual intentando hacer login
     const { error: signInError } = await supabase.auth.signInWithPassword({
       email: user.email,
-      password: currentPassword
+      password: currentPassword,
     });
 
     if (signInError) {
-      return NextResponse.json({ 
-        error: 'La contraseña actual es incorrecta' 
+      return NextResponse.json({
+        error: 'La contrasena actual es incorrecta',
       }, { status: 400 });
     }
 
-    // Cambiar contraseña
     const { error: updateError } = await supabase.auth.updateUser({
-      password: newPassword
+      password: newPassword,
     });
 
     if (updateError) {
       console.error('Error updating password:', updateError);
-      return NextResponse.json({ 
-        error: updateError.message || 'Error al cambiar la contraseña' 
+      return NextResponse.json({
+        error: updateError.message || 'Error al cambiar la contrasena',
       }, { status: 400 });
     }
 
-    // Registrar cambio en logs de auditoría (opcional)
-    // Comentado temporalmente hasta configurar la tabla audit_logs en Supabase
-    /*
-    try {
-      await supabase
-        .from('audit_logs')
-        .insert({
-          user_id: user.id,
-          action: 'password_changed',
-          resource: 'user_profile',
-          details: { message: 'Usuario cambió su contraseña' }
-        });
-    } catch (auditError) {
-      console.warn('Could not log password change to audit logs:', auditError);
-      // No fallar si no se puede registrar en audit logs
-    }
-    */
-
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
-      message: 'Contraseña actualizada exitosamente'
+      message: 'Contrasena actualizada exitosamente',
     });
-
   } catch (error) {
     console.error('Error in change password API:', error);
-    return NextResponse.json({ 
-      error: 'Error interno del servidor' 
+    return NextResponse.json({
+      error: 'Error interno del servidor',
     }, { status: 500 });
   }
 }

@@ -156,6 +156,10 @@ export async function assertAdminAllowWithoutOrg(request: NextRequest): Promise<
 }
 
 // Verifica que el solicitante sea estrictamente SUPER_ADMIN.
+// SECURITY: el rol se verifica PRIMERO contra la tabla user_roles (fuente de verdad).
+// user_metadata es controlado por el usuario y NO se acepta como prueba de rol elevado.
+// Solo se usa como fallback de último recurso cuando la query a DB falla, y se registra
+// una alerta de seguridad en ese caso.
 export async function assertSuperAdmin(request: NextRequest): Promise<
   | { ok: true; session?: any }
   | { ok: false; status: number; body: { error: string } }
@@ -169,27 +173,28 @@ export async function assertSuperAdmin(request: NextRequest): Promise<
     }
 
     const adminClient = await createAdminClient()
-    const { data: userRoles, error } = await adminClient
+    const { data: userRoles, error: rolesError } = await adminClient
       .from('user_roles')
       .select('role:roles(name)')
       .eq('user_id', user.id)
       .eq('is_active', true)
 
-    if (error) {
-      logAudit('auth.error', { mode: 'prod', reason: 'role_query_error', url: request.url, error: error?.message })
+    if (rolesError) {
+      logAudit('auth.error', { mode: 'prod', reason: 'role_query_error', url: request.url, error: rolesError?.message })
+      // DB query failed — do NOT fall back to user_metadata (user-controlled field).
+      // Fail closed to prevent privilege escalation via metadata manipulation.
+      return { ok: false, status: 503, body: { error: 'Error al verificar permisos, intenta de nuevo' } }
     }
 
     const dbRoles = userRoles?.map((ur: any) => ur.role?.name?.toUpperCase()) || []
-    const metadataRole = (user.user_metadata as any)?.role?.toUpperCase()
-    
-    const isSuperAdmin = dbRoles.includes('SUPER_ADMIN') || metadataRole === 'SUPER_ADMIN'
+    const isSuperAdmin = dbRoles.includes('SUPER_ADMIN')
 
     if (isSuperAdmin) {
       logAudit('auth.ok', { mode: 'prod', role: 'SUPER_ADMIN', userId: user.id, url: request.url })
       return { ok: true }
     }
 
-    const rolesFound = [...dbRoles, metadataRole].filter(Boolean).join(',') || 'none'
+    const rolesFound = dbRoles.filter(Boolean).join(',') || 'none'
     logAudit('auth.denied', { mode: 'prod', reason: 'not_super_admin', role: rolesFound, userId: user.id, url: request.url })
     return { ok: false, status: 403, body: { error: 'Requiere permisos de Super Administrador' } }
   } catch (e) {
