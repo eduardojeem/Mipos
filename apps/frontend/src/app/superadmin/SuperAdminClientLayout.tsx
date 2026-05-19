@@ -8,13 +8,18 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Building2,
   Users,
   Settings,
   BarChart3,
   Shield,
   CreditCard,
-  Bell,
   Activity,
   UserCheck,
   ChevronDown,
@@ -26,6 +31,8 @@ import {
   UserCog,
   FileText,
   TrendingUp,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SuperAdminThemeToggle } from "./components/SuperAdminThemeToggle";
@@ -171,7 +178,14 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
   const pathname = usePathname();
   const [activeItem, setActiveItem] = useState<string>("");
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem("superadmin_sidebar_collapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
 
   // ✅ Prefetch de datos comunes para mejorar navegación
   useSuperAdminPrefetch();
@@ -228,6 +242,14 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
     }
   }, [expandedItems]);
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("superadmin_sidebar_collapsed", isCollapsed ? "1" : "0");
+    } catch {
+      return;
+    }
+  }, [isCollapsed]);
+
   const toggleExpanded = (title: string) => {
     const newExpanded = new Set(expandedItems);
     if (newExpanded.has(title)) {
@@ -252,114 +274,97 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-gray-50 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 relative overflow-hidden transition-colors duration-500">
-        {/* Animated Background Elements */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-40 -right-40 w-80 h-80 bg-slate-400/20 dark:bg-slate-600/10 rounded-full blur-3xl animate-pulse transition-colors duration-500"></div>
-          <div
-            className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-400/20 dark:bg-blue-600/10 rounded-full blur-3xl animate-pulse transition-colors duration-500"
-            style={{ animationDelay: "1s" }}
-          ></div>
-          <div
-            className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-slate-300/15 dark:bg-slate-700/10 rounded-full blur-3xl animate-pulse transition-colors duration-500"
-            style={{ animationDelay: "2s" }}
-          ></div>
-        </div>
-
-        <div className="flex h-screen relative z-10">
-          {/* Sidebar with Glassmorphism */}
+    <TooltipProvider delayDuration={150}>
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors">
+        <div className="flex h-screen">
+          {/* Sidebar */}
           <div
             className={cn(
-              "backdrop-blur-xl bg-white/95 dark:bg-slate-900/95 border-r border-slate-200/50 dark:border-slate-700/50 transition-all duration-300 flex flex-col shadow-xl",
-              isCollapsed ? "w-20" : "w-80",
+              "bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 transition-[width] duration-200 flex flex-col",
+              isCollapsed ? "w-16" : "w-64",
             )}
           >
             {/* Header */}
-            <div className="p-6 border-b border-slate-200/50 dark:border-slate-700/50">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Button
-                    onClick={() => setIsCollapsed(!isCollapsed)}
-                    className="w-12 h-12 p-0 rounded-2xl bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center shadow-lg shadow-slate-500/25 hover:scale-105 transition-transform border-0"
-                  >
-                    <Crown className="h-6 w-6 text-white" />
-                  </Button>
-                  {!isCollapsed && (
-                    <div>
-                      <h1 className="text-xl font-bold bg-gradient-to-r from-slate-700 to-slate-900 dark:from-slate-300 dark:to-slate-100 bg-clip-text text-transparent">
-                        Super Admin
-                      </h1>
-                      <p className="text-xs text-slate-600 dark:text-slate-400 font-medium">
-                        Panel de Control SaaS
-                      </p>
-                    </div>
-                  )}
+            <div className="h-14 px-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+              <div className={cn("flex items-center gap-2", isCollapsed && "mx-auto")}>
+                <div className="w-9 h-9 rounded-lg bg-slate-900 dark:bg-slate-100 flex items-center justify-center">
+                  <Crown className="h-5 w-5 text-white dark:text-slate-900" />
                 </div>
+                {!isCollapsed && (
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-slate-900 dark:text-slate-100 leading-tight">
+                      Super Admin
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight">
+                      Panel SaaS
+                    </div>
+                  </div>
+                )}
               </div>
+              {!isCollapsed && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-slate-500"
+                      onClick={() => setIsCollapsed(true)}
+                    >
+                      <PanelLeftClose className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">Colapsar sidebar</TooltipContent>
+                </Tooltip>
+              )}
             </div>
 
             {/* Navigation */}
-            <ScrollArea className="flex-1 px-3 py-6">
-              <nav className="space-y-1">
-                {visibleNavigationItems.map((item) => (
-                  <div key={item.title} className="group">
+            <ScrollArea className="flex-1 px-2 py-3">
+              <nav className="space-y-0.5">
+                {visibleNavigationItems.map((item) => {
+                  const isActive =
+                    activeItem === item.href ||
+                    (item.children && item.children.some((c) => activeItem.startsWith(c.href)));
+
+                  const trigger = (
                     <Button
                       variant="ghost"
                       className={cn(
-                        "w-full justify-start gap-3 h-auto py-3 px-4 transition-all duration-200",
-                        !isCollapsed && "text-left",
-                        (activeItem === item.href || (item.children && item.children.some((c) => activeItem.startsWith(c.href)))) &&
-                        "bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-800 dark:to-slate-700 border border-slate-300 dark:border-slate-600 shadow-md",
-                        "hover:bg-gradient-to-r hover:from-slate-50 hover:to-slate-100 dark:hover:from-slate-800 dark:hover:to-slate-700 hover:scale-[1.02] hover:shadow-sm",
+                        "w-full gap-3 h-9 px-2 rounded-md transition-colors",
+                        isCollapsed ? "justify-center" : "justify-start",
+                        isActive
+                          ? "bg-slate-900 text-white hover:bg-slate-900 hover:text-white dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-100"
+                          : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800",
                       )}
                       onClick={() => {
-                        if (item.children) {
+                        if (item.children && !isCollapsed) {
                           toggleExpanded(item.title);
                         } else {
                           router.push(item.href);
                         }
                       }}
                     >
-                      <div
-                        className={cn(
-                          "p-2 rounded-xl transition-all duration-200",
-                          (activeItem === item.href || (item.children && item.children.some((c) => activeItem.startsWith(c.href))))
-                            ? "bg-gradient-to-br from-slate-600 to-slate-700 shadow-lg shadow-slate-500/25"
-                            : "bg-slate-100 dark:bg-slate-800 group-hover:bg-gradient-to-br group-hover:from-slate-600 group-hover:to-slate-700",
-                        )}
-                      >
-                        <item.icon
-                          className={cn(
-                            "h-5 w-5 transition-colors",
-                            (activeItem === item.href || (item.children && item.children.some((c) => activeItem.startsWith(c.href))))
-                              ? "text-white"
-                              : "text-slate-600 dark:text-slate-400 group-hover:text-white",
-                          )}
-                        />
-                      </div>
+                      <item.icon className="h-4 w-4 shrink-0" />
                       {!isCollapsed && (
                         <>
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold text-slate-800 dark:text-slate-200">
-                                {item.title}
-                              </span>
-                              {item.badge && (
-                                <Badge className="text-xs px-2 py-0.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white border-0">
-                                  {item.badge}
-                                </Badge>
+                          <span className="flex-1 text-left text-sm font-medium truncate">
+                            {item.title}
+                          </span>
+                          {item.badge && (
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "h-5 px-1.5 text-[10px] font-medium border-slate-200 dark:border-slate-700",
+                                isActive ? "bg-white/10 text-white border-white/20 dark:bg-slate-900/10 dark:text-slate-900 dark:border-slate-900/20" : "bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-400",
                               )}
-                            </div>
-                            {item.description && (
-                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                                {item.description}
-                              </p>
-                            )}
-                          </div>
+                            >
+                              {item.badge}
+                            </Badge>
+                          )}
                           {item.children && (
                             <ChevronDown
                               className={cn(
-                                "h-4 w-4 transition-transform text-slate-600 dark:text-slate-400",
+                                "h-3.5 w-3.5 transition-transform shrink-0",
                                 expandedItems.has(item.title) && "rotate-180",
                               )}
                             />
@@ -367,134 +372,128 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
                         </>
                       )}
                     </Button>
+                  );
 
-                    {/* Subitems */}
-                    {!isCollapsed &&
-                      item.children &&
-                      expandedItems.has(item.title) && (
-                        <div className="ml-8 mt-1 space-y-1 border-l-2 border-slate-300 dark:border-slate-700 pl-4 py-2">
+                  return (
+                    <div key={item.title}>
+                      {isCollapsed ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>{trigger}</TooltipTrigger>
+                          <TooltipContent side="right" className="flex items-center gap-2">
+                            <span>{item.title}</span>
+                            {item.badge && (
+                              <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">
+                                {item.badge}
+                              </Badge>
+                            )}
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        trigger
+                      )}
+
+                      {/* Subitems */}
+                      {!isCollapsed && item.children && expandedItems.has(item.title) && (
+                        <div className="ml-7 mt-0.5 space-y-0.5 border-l border-slate-200 dark:border-slate-800 pl-2">
                           {item.children.map((child) => (
                             <Button
                               key={child.href}
                               variant="ghost"
                               className={cn(
-                                "w-full justify-start gap-3 h-10 px-3 text-sm transition-all duration-200",
-                                activeItem === child.href &&
-                                "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300",
-                              "hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:translate-x-1",
-                            )}
-                            onClick={() => {
-                              router.push(child.href);
-                            }}
-                          >
-                            <child.icon className="h-4 w-4" />
-                            <span className="font-medium">{child.title}</span>
-                          </Button>
-                        ))}
-                      </div>
-                    )}
-                </div>
-              ))}
-            </nav>
-          </ScrollArea>
+                                "w-full justify-start gap-2.5 h-8 px-2 rounded-md text-[13px] font-normal",
+                                activeItem === child.href
+                                  ? "bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-slate-100"
+                                  : "text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50",
+                              )}
+                              onClick={() => router.push(child.href)}
+                            >
+                              <child.icon className="h-3.5 w-3.5 shrink-0" />
+                              <span className="truncate">{child.title}</span>
+                            </Button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </nav>
+            </ScrollArea>
 
           {/* User Info & Actions */}
-          <div className="p-4 border-t border-slate-200/50 dark:border-slate-700/50">
-            {!isCollapsed && (
-              <div className="mb-4 p-4 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-50 dark:from-slate-800 dark:to-slate-700 border border-slate-300 dark:border-slate-600 backdrop-blur-sm">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center shadow-lg shadow-slate-500/25">
-                    <UserCheck className="h-6 w-6 text-white" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-sm truncate text-slate-800 dark:text-slate-200">
-                      {user.name || user.email}
-                    </p>
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <Crown className="h-3 w-3 text-slate-600 dark:text-slate-400" />
-                      <span className="text-xs font-medium text-slate-700 dark:text-slate-400">
-                        Super Admin
-                      </span>
-                    </div>
+          <div className="p-2 border-t border-slate-200 dark:border-slate-800">
+            {!isCollapsed ? (
+              <div className="flex items-center gap-2 p-2 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center shrink-0">
+                  <UserCheck className="h-4 w-4 text-slate-600 dark:text-slate-300" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate text-slate-900 dark:text-slate-100">
+                    {user.name || user.email}
+                  </p>
+                  <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
+                    <Crown className="h-3 w-3" />
+                    <span>Super Admin</span>
                   </div>
                 </div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleLogout}
+                      className="h-8 w-8 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                    >
+                      <LogOut className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top">Cerrar sesión</TooltipContent>
+                </Tooltip>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-1">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setIsCollapsed(false)}
+                      className="h-9 w-9 text-slate-500"
+                    >
+                      <PanelLeftOpen className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">Expandir sidebar</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={handleLogout}
+                      className="h-9 w-9 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                    >
+                      <LogOut className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">Cerrar sesión</TooltipContent>
+                </Tooltip>
               </div>
             )}
-
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsCollapsed(!isCollapsed)}
-                className={cn(
-                  "flex-1 border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800",
-                  isCollapsed && "w-full",
-                )}
-              >
-                {isCollapsed ? "→" : "←"}
-              </Button>
-              {!isCollapsed && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleLogout}
-                  className="flex-1 gap-2 border-red-300 dark:border-red-700 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 dark:text-red-400"
-                >
-                  <LogOut className="h-4 w-4" />
-                  Salir
-                </Button>
-              )}
-            </div>
           </div>
         </div>
 
         {/* Main Content */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Top Bar with Glassmorphism */}
-          <div className="backdrop-blur-xl bg-white/95 dark:bg-slate-900/95 border-b border-slate-200/50 dark:border-slate-700/50 px-8 py-6 shadow-lg transition-colors duration-300">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-3xl font-bold bg-gradient-to-r from-slate-700 to-slate-900 dark:from-slate-300 dark:to-slate-100 bg-clip-text text-transparent transition-all duration-300">
-                  Panel Super Admin
-                </h2>
-                <p className="text-slate-600 dark:text-slate-400 mt-1 font-medium transition-colors duration-300">
-                  Gestión completa del sistema SaaS
-                </p>
-              </div>
-
-              <div className="flex items-center gap-4">
-                {/* System Status */}
-                <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-green-100 dark:bg-green-900/30 border border-green-300 dark:border-green-700">
-                  <div className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse shadow-lg shadow-green-500/50"></div>
-                  <span className="text-sm font-semibold text-green-700 dark:text-green-400">
-                    Sistema Operativo
-                  </span>
-                </div>
-
-                {/* Theme Toggle */}
-                <SuperAdminThemeToggle />
-
-                {/* Notifications */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-2 border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 relative"
-                >
-                  <Bell className="h-4 w-4" />
-                  <Badge className="absolute -top-2 -right-2 text-xs px-1.5 py-0.5 bg-gradient-to-r from-red-600 to-red-700 text-white border-0 shadow-lg shadow-red-500/25">
-                    3
-                  </Badge>
-                </Button>
-              </div>
-            </div>
+          {/* Top Bar — slim utility bar (page owns its own title) */}
+          <div className="h-14 px-4 sm:px-6 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-end gap-2">
+            <SuperAdminThemeToggle />
           </div>
 
           {/* Content Area */}
-          <div className="flex-1 overflow-auto p-8">
-            <div className="max-w-7xl mx-auto">{children}</div>
-          </div>
+          <div className="flex-1 overflow-auto">{children}</div>
         </div>
       </div>
     </div>
+    </TooltipProvider>
   );
 }

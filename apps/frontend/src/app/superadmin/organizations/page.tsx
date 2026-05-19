@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useDebounce } from 'use-debounce';
 import {
-  Activity,
   Building2,
   CheckCircle2,
   ChevronLeft,
@@ -294,40 +293,25 @@ function StatCard({
   );
 }
 
-function StatusPill({
-  active,
-  label,
-  count,
-  onClick,
-}: {
-  active: boolean;
-  label: string;
-  count: number;
-  onClick: () => void;
-}) {
-  return (
-    <Button
-      type="button"
-      variant="outline"
-      onClick={onClick}
-      className={cn(
-        'h-9 rounded-full px-3 text-sm',
-        active
-          ? 'border-slate-900 bg-slate-900 text-white hover:bg-slate-800 hover:text-white dark:border-slate-100 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-slate-200'
-          : 'border-slate-200 bg-background text-slate-600 dark:border-slate-800 dark:text-slate-300'
-      )}
-    >
-      <span>{label}</span>
-      <span
-        className={cn(
-          'ml-2 inline-flex min-w-6 items-center justify-center rounded-full px-1.5 text-[11px]',
-          active ? 'bg-white/15 text-white dark:bg-slate-900/10 dark:text-slate-950' : 'bg-slate-100 text-slate-600 dark:bg-slate-900 dark:text-slate-300'
-        )}
-      >
-        {count}
-      </span>
-    </Button>
-  );
+function getOrgInitials(name: string): string {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '??';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function getOrgAvatarColor(name: string): string {
+  const palette = [
+    'bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300',
+    'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300',
+    'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300',
+    'bg-rose-100 text-rose-700 dark:bg-rose-950/30 dark:text-rose-300',
+    'bg-violet-100 text-violet-700 dark:bg-violet-950/30 dark:text-violet-300',
+    'bg-cyan-100 text-cyan-700 dark:bg-cyan-950/30 dark:text-cyan-300',
+  ];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash + name.charCodeAt(i)) % palette.length;
+  return palette[hash];
 }
 
 export default function OrganizationsPage() {
@@ -709,119 +693,12 @@ export default function OrganizationsPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-                  <Activity className="h-4 w-4" />
-                  <span>{totalCount} resultados</span>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex flex-wrap gap-2">
-                  <StatusPill
-                    active={statusFilter === 'ALL'}
-                    label="Todas"
-                    count={metrics.total}
-                    onClick={() => {
-                      setStatusFilter('ALL');
-                      setCurrentPage(1);
-                    }}
-                  />
-                  <StatusPill
-                    active={statusFilter === 'ACTIVE'}
-                    label="Activas"
-                    count={metrics.active}
-                    onClick={() => {
-                      setStatusFilter('ACTIVE');
-                      setCurrentPage(1);
-                    }}
-                  />
-                  <StatusPill
-                    active={statusFilter === 'TRIAL'}
-                    label="Trial"
-                    count={metrics.trial}
-                    onClick={() => {
-                      setStatusFilter('TRIAL');
-                      setCurrentPage(1);
-                    }}
-                  />
-                  <StatusPill
-                    active={statusFilter === 'SUSPENDED'}
-                    label="Suspendidas"
-                    count={metrics.suspended}
-                    onClick={() => {
-                      setStatusFilter('SUSPENDED');
-                      setCurrentPage(1);
-                    }}
-                  />
-                </div>
-
                 {hasActiveFilters && (
-                  <Button variant="ghost" className="h-9 justify-start px-0 text-slate-500" onClick={clearFilters}>
+                  <Button variant="ghost" className="h-9 px-3 text-sm text-slate-500" onClick={clearFilters}>
                     Limpiar filtros
                   </Button>
                 )}
               </div>
-
-              {selectedCount > 0 && (
-                <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/60 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="space-y-1">
-                    <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                      {selectedCount} organizaciones seleccionadas
-                    </div>
-                    <div className="text-sm text-slate-500 dark:text-slate-400">
-                      Acciones masivas sobre la pagina filtrada actual.
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant="outline"
-                      className="gap-2"
-                      onClick={() => handleBulkStatusChange('ACTIVE')}
-                      disabled={isUpdating}
-                    >
-                      <CheckCircle2 className="h-4 w-4" />
-                      Activar
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="gap-2"
-                      onClick={() => handleBulkStatusChange('SUSPENDED')}
-                      disabled={isUpdating}
-                    >
-                      <XCircle className="h-4 w-4" />
-                      Suspender
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="gap-2"
-                      onClick={() => handleBulkPlanChange('STARTER')}
-                      disabled={isUpdating}
-                    >
-                      <CreditCard className="h-4 w-4" />
-                      Pasar a Starter
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="gap-2"
-                      onClick={() => handleBulkPlanChange('PROFESSIONAL')}
-                      disabled={isUpdating}
-                    >
-                      <CreditCard className="h-4 w-4" />
-                      Pasar a Professional
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="gap-2 text-rose-600 hover:text-rose-600"
-                      onClick={() => openArchiveDialog(selectedOrgs, `${selectedCount} organizaciones`)}
-                      disabled={isUpdating}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Archivar
-                    </Button>
-                  </div>
-                </div>
-              )}
             </CardHeader>
 
             <CardContent className="p-0">
@@ -863,28 +740,29 @@ export default function OrganizationsPage() {
                           (updating === 'bulk' || updating === org.id) && 'pointer-events-none opacity-60'
                         )}
                       >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-start gap-3">
-                            <Checkbox
-                              checked={selectedOrgs.includes(org.id)}
-                              onCheckedChange={() => toggleSelectOrg(org.id)}
-                              className="mt-1"
-                            />
-                            <button
-                              type="button"
-                              className="min-w-0 text-left"
-                              onClick={() => router.push(`/superadmin/organizations/${org.id}`)}
-                            >
-                              <div className="truncate text-base font-semibold text-slate-950 dark:text-slate-50">
-                                {org.name}
-                              </div>
-                              <div className="truncate text-sm text-slate-500 dark:text-slate-400">/{org.slug}</div>
-                            </button>
+                        <div className="flex items-start gap-3">
+                          <Checkbox
+                            checked={selectedOrgs.includes(org.id)}
+                            onCheckedChange={() => toggleSelectOrg(org.id)}
+                            className="mt-1"
+                          />
+                          <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-semibold', getOrgAvatarColor(org.name))}>
+                            {getOrgInitials(org.name)}
                           </div>
+                          <button
+                            type="button"
+                            className="min-w-0 flex-1 text-left"
+                            onClick={() => router.push(`/superadmin/organizations/${org.id}`)}
+                          >
+                            <div className="truncate text-sm font-semibold text-slate-950 dark:text-slate-50">
+                              {org.name}
+                            </div>
+                            <div className="truncate text-xs text-slate-500 dark:text-slate-400">/{org.slug}</div>
+                          </button>
 
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl">
+                              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
                                 {updating === org.id ? (
                                   <Loader2 className="h-4 w-4 animate-spin" />
                                 ) : (
@@ -934,27 +812,17 @@ export default function OrganizationsPage() {
                           </DropdownMenu>
                         </div>
 
-                        <div className="mt-4 flex flex-wrap gap-2">
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
                           {getStatusBadge(org.subscription_status)}
                           {getPlanBadge(org.subscription_plan)}
+                          <span className="text-xs text-slate-500 dark:text-slate-400">
+                            · {getMemberCount(org)} usuarios · {formatDate(org.created_at)}
+                          </span>
                         </div>
 
-                        <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                          <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900">
-                            <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Usuarios</div>
-                            <div className="mt-1 font-semibold">{getMemberCount(org)}</div>
-                          </div>
-                          <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-900">
-                            <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Creada</div>
-                            <div className="mt-1 font-semibold">{formatDate(org.created_at)}</div>
-                          </div>
-                          <div className="col-span-2 rounded-xl bg-slate-50 p-3 dark:bg-slate-900">
-                            <div className="flex items-center gap-2 text-xs uppercase tracking-[0.12em] text-slate-500">
-                              <Globe className="h-3.5 w-3.5" />
-                              Dominio principal
-                            </div>
-                            <div className="mt-1 truncate font-medium">{getPrimaryDomain(org)}</div>
-                          </div>
+                        <div className="mt-3 flex items-center gap-1.5 truncate text-xs text-slate-500 dark:text-slate-400">
+                          <Globe className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{getPrimaryDomain(org)}</span>
                         </div>
                       </div>
                     ))}
@@ -974,11 +842,10 @@ export default function OrganizationsPage() {
                             aria-label="Seleccionar todas"
                           />
                         </TableHead>
-                        <TableHead className="min-w-[280px]">Organizacion</TableHead>
+                        <TableHead className="min-w-[320px]">Organización</TableHead>
                         <TableHead>Estado</TableHead>
                         <TableHead>Plan</TableHead>
                         <TableHead className="text-center">Usuarios</TableHead>
-                        <TableHead>Dominio</TableHead>
                         <TableHead>Creada</TableHead>
                         <TableHead className="w-20 text-right">Acciones</TableHead>
                       </TableRow>
@@ -1003,9 +870,6 @@ export default function OrganizationsPage() {
                               <div className="mx-auto h-6 w-10 rounded bg-slate-100 dark:bg-slate-800" />
                             </TableCell>
                             <TableCell>
-                              <div className="h-6 w-40 rounded bg-slate-100 dark:bg-slate-800" />
-                            </TableCell>
-                            <TableCell>
                               <div className="h-6 w-24 rounded bg-slate-100 dark:bg-slate-800" />
                             </TableCell>
                             <TableCell>
@@ -1015,7 +879,7 @@ export default function OrganizationsPage() {
                         ))
                       ) : organizations.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={8} className="px-6 py-20 text-center">
+                          <TableCell colSpan={7} className="px-6 py-20 text-center">
                             <div className="mx-auto flex max-w-md flex-col items-center gap-3">
                               <div className="rounded-full bg-slate-100 p-4 text-slate-400 dark:bg-slate-900 dark:text-slate-500">
                                 <Search className="h-8 w-8" />
@@ -1054,16 +918,17 @@ export default function OrganizationsPage() {
                             </TableCell>
                             <TableCell className="py-4">
                               <div className="flex items-center gap-3">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-900 dark:text-slate-300">
-                                  <Building2 className="h-4 w-4" />
+                                <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-semibold', getOrgAvatarColor(org.name))}>
+                                  {getOrgInitials(org.name)}
                                 </div>
                                 <div className="min-w-0">
                                   <div className="truncate font-semibold text-slate-950 dark:text-slate-50">
                                     {org.name}
                                   </div>
-                                  <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+                                  <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                                     <span className="truncate">/{org.slug}</span>
-                                    <span className="text-slate-300 dark:text-slate-700">-</span>
+                                    <span className="text-slate-300 dark:text-slate-700">·</span>
+                                    <Globe className="h-3 w-3 shrink-0" />
                                     <span className="truncate">{getPrimaryDomain(org)}</span>
                                   </div>
                                 </div>
@@ -1072,9 +937,6 @@ export default function OrganizationsPage() {
                             <TableCell>{getStatusBadge(org.subscription_status)}</TableCell>
                             <TableCell>{getPlanBadge(org.subscription_plan)}</TableCell>
                             <TableCell className="text-center font-medium">{getMemberCount(org)}</TableCell>
-                            <TableCell className="max-w-[220px] truncate text-sm text-slate-600 dark:text-slate-300">
-                              {getPrimaryDomain(org)}
-                            </TableCell>
                             <TableCell className="text-sm text-slate-500 dark:text-slate-400">
                               {formatDate(org.created_at)}
                             </TableCell>
@@ -1189,6 +1051,87 @@ export default function OrganizationsPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Bulk Actions Floating Bar */}
+        {selectedCount > 0 && (
+          <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 animate-in fade-in slide-in-from-bottom-4 duration-200">
+            <Card className="flex items-center gap-3 rounded-2xl border-slate-700 bg-slate-900 px-4 py-2 text-white shadow-2xl dark:bg-slate-800">
+              <div className="flex items-center gap-2 border-r border-slate-700 pr-3">
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-500 text-sm font-bold">
+                  {selectedCount}
+                </div>
+                <span className="text-sm text-slate-300">seleccionadas</span>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 gap-1.5 text-emerald-400 hover:bg-emerald-900/20 hover:text-emerald-300"
+                  onClick={() => handleBulkStatusChange('ACTIVE')}
+                  disabled={isUpdating}
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Activar
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 gap-1.5 text-amber-400 hover:bg-amber-900/20 hover:text-amber-300"
+                  onClick={() => handleBulkStatusChange('SUSPENDED')}
+                  disabled={isUpdating}
+                >
+                  <XCircle className="h-3.5 w-3.5" />
+                  Suspender
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 gap-1.5 text-blue-400 hover:bg-blue-900/20 hover:text-blue-300"
+                      disabled={isUpdating}
+                    >
+                      <CreditCard className="h-3.5 w-3.5" />
+                      Plan
+                      <ChevronRight className="h-3 w-3 rotate-90" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => handleBulkPlanChange('FREE')}>
+                      Cambiar a Gratis
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleBulkPlanChange('STARTER')}>
+                      Cambiar a Starter
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleBulkPlanChange('PROFESSIONAL')}>
+                      Cambiar a Professional
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 gap-1.5 text-rose-400 hover:bg-rose-900/20 hover:text-rose-300"
+                  onClick={() => openArchiveDialog(selectedOrgs, `${selectedCount} organizaciones`)}
+                  disabled={isUpdating}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Archivar
+                </Button>
+              </div>
+
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 border-l border-slate-700 pl-3 text-slate-400 hover:text-white"
+                onClick={() => setSelectedOrgs([])}
+              >
+                Cancelar
+              </Button>
+            </Card>
+          </div>
+        )}
 
         <AlertDialog
           open={archiveDialog.open}
