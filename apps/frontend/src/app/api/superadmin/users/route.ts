@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
 
     let query = admin
       .from('users')
-      .select('id,email,full_name,role,status,created_at,last_login', { count: 'exact' })
+      .select('id,email,full_name,role,status,organization_id,created_at,last_login,organization:organizations(name)', { count: 'exact' })
       .order('created_at', { ascending: false })
 
     if (search) {
@@ -95,10 +95,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Error listando usuarios', details: error?.message || 'consulta no disponible' }, { status: 500 })
     }
 
-    // Normalize field name: the DB stores last_login but the frontend expects last_sign_in_at
+    // Normalize field names and map status to is_active
     const users = data.map((u: any) => ({
       ...u,
       last_sign_in_at: u.last_sign_in_at ?? u.last_login ?? null,
+      is_active: u.status ? String(u.status).toUpperCase() === 'ACTIVE' : true,
     }))
 
     return NextResponse.json({ success: true, users, total: count || data.length, page, limit })
