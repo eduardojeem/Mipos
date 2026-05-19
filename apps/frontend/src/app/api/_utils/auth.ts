@@ -156,10 +156,10 @@ export async function assertAdminAllowWithoutOrg(request: NextRequest): Promise<
 }
 
 // Verifica que el solicitante sea estrictamente SUPER_ADMIN.
-// SECURITY: el rol se verifica PRIMERO contra la tabla user_roles (fuente de verdad).
-// user_metadata es controlado por el usuario y NO se acepta como prueba de rol elevado.
-// Solo se usa como fallback de último recurso cuando la query a DB falla, y se registra
-// una alerta de seguridad en ese caso.
+// SECURITY: el rol se verifica en este orden de prioridad:
+// 1. user_roles table (fuente de verdad para el nuevo sistema RBAC)
+// 2. users.role column (legacy, pero confiable porque está en DB)
+// 3. NUNCA user_metadata (controlado por el usuario, no confiable)
 export async function assertSuperAdmin(request: NextRequest): Promise<
   | { ok: true; session?: any }
   | { ok: false; status: number; body: { error: string } }
@@ -173,28 +173,36 @@ export async function assertSuperAdmin(request: NextRequest): Promise<
     }
 
     const adminClient = await createAdminClient()
+    
+    // 1. Check user_roles table (new RBAC system)
     const { data: userRoles, error: rolesError } = await adminClient
       .from('user_roles')
       .select('role:roles(name)')
       .eq('user_id', user.id)
       .eq('is_active', true)
 
-    if (rolesError) {
-      logAudit('auth.error', { mode: 'prod', reason: 'role_query_error', url: request.url, error: rolesError?.message })
-      // DB query failed — do NOT fall back to user_metadata (user-controlled field).
-      // Fail closed to prevent privilege escalation via metadata manipulation.
-      return { ok: false, status: 503, body: { error: 'Error al verificar permisos, intenta de nuevo' } }
+    if (!rolesError && userRoles && userRoles.length > 0) {
+      const dbRoles = userRoles.map((ur: any) => ur.role?.name?.toUpperCase()).filter(Boolean)
+      if (dbRoles.includes('SUPER_ADMIN')) {
+        logAudit('auth.ok', { mode: 'prod', role: 'SUPER_ADMIN', source: 'user_roles', userId: user.id, url: request.url })
+        return { ok: true }
+      }
     }
 
-    const dbRoles = userRoles?.map((ur: any) => ur.role?.name?.toUpperCase()) || []
-    const isSuperAdmin = dbRoles.includes('SUPER_ADMIN')
+    // 2. Fallback to users.role column (legacy but reliable - it's in DB, not user-controlled)
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
+      .single()
 
-    if (isSuperAdmin) {
-      logAudit('auth.ok', { mode: 'prod', role: 'SUPER_ADMIN', userId: user.id, url: request.url })
+    if (!userError && userData?.role === 'SUPER_ADMIN') {
+      logAudit('auth.ok', { mode: 'prod', role: 'SUPER_ADMIN', source: 'users_table', userId: user.id, url: request.url })
       return { ok: true }
     }
 
-    const rolesFound = dbRoles.filter(Boolean).join(',') || 'none'
+    // If we got here, user is not a super admin
+    const rolesFound = userRoles?.map((ur: any) => ur.role?.name).filter(Boolean).join(',') || userData?.role || 'none'
     logAudit('auth.denied', { mode: 'prod', reason: 'not_super_admin', role: rolesFound, userId: user.id, url: request.url })
     return { ok: false, status: 403, body: { error: 'Requiere permisos de Super Administrador' } }
   } catch (e) {
