@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   AlertTriangle,
   Building2,
@@ -113,6 +114,7 @@ function TeamStatCard({
 }
 
 export default function UserManagement() {
+  const router = useRouter()
   const { user } = useAuth()
   const resolvedRole = useResolvedRole()
   const { toast } = useToast()
@@ -415,7 +417,7 @@ export default function UserManagement() {
               <Button
                 variant="default"
                 className="gap-2"
-                onClick={() => window.location.href = '/admin/subscriptions'}
+                onClick={() => router.push('/admin/subscriptions')}
               >
                 <Wifi className="h-4 w-4" />
                 Mejorar plan
@@ -423,7 +425,7 @@ export default function UserManagement() {
               <Button
                 variant="outline"
                 className="gap-2"
-                onClick={() => window.location.href = '/inicio/planes'}
+                onClick={() => router.push('/inicio/planes')}
               >
                 Ver planes disponibles
               </Button>

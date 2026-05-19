@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     const admin = createAdminClient() as any
 
     if (organizationId) {
-      // Filtrar por organización — status no existe en users, se omite del join
+      // Filtrar por organización
       const { data: memberships, error } = await admin
         .from('organization_members')
         .select(`
@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
           is_owner,
           created_at,
           updated_at,
-          user:users(id,email,full_name,phone,created_at,updated_at,last_login),
+          user:users(id,email,full_name,phone,is_active,created_at,updated_at),
           role:roles(name,display_name),
           organization:organizations(id,name)
         `)
@@ -45,8 +45,27 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: 'Error listando miembros de la organizacion', details: error.message }, { status: 500 })
       }
 
+      // Enriquecer last_sign_in_at desde auth.admin.listUsers
+      const memberUserIds = (memberships || []).map((m: any) => m.user_id).filter(Boolean)
+      const lastSignInMap = new Map<string, string | null>()
+      if (memberUserIds.length > 0) {
+        try {
+          const { data: authList } = await admin.auth.admin.listUsers({ page: 1, perPage: Math.min(200, memberUserIds.length) })
+          const authUsers = (authList?.users as any[]) || []
+          for (const au of authUsers) {
+            if (memberUserIds.includes(au.id)) {
+              lastSignInMap.set(au.id, au.last_sign_in_at || null)
+            }
+          }
+        } catch {
+          // optional enrichment
+        }
+      }
+
       let users = (memberships || []).map((member: any) => {
         const mapped = buildUserResponse(member)
+        const userObj = Array.isArray(member.user) ? member.user[0] : member.user
+        const isActive = typeof userObj?.is_active === 'boolean' ? userObj.is_active : (mapped.status === 'active')
         return {
           id: mapped.id,
           email: mapped.email || '',
@@ -55,8 +74,8 @@ export async function GET(request: NextRequest) {
           organization_id: mapped.organizationId,
           organization: mapped.organizationName ? { name: mapped.organizationName } : null,
           created_at: mapped.createdAt,
-          last_sign_in_at: mapped.lastLogin || null,
-          is_active: mapped.status === 'active',
+          last_sign_in_at: lastSignInMap.get(mapped.id) ?? mapped.lastLogin ?? null,
+          is_active: isActive,
         }
       })
 
@@ -78,10 +97,10 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Query general — sin columna status (no existe en la tabla)
+    // Query general — requiere migración 20260519_add_is_active_to_users.sql
     let query = admin
       .from('users')
-      .select('id,email,full_name,role,organization_id,created_at,last_login', { count: 'exact' })
+      .select('id,email,full_name,role,is_active,organization_id,created_at', { count: 'exact' })
       .order('created_at', { ascending: false })
 
     if (search) {
@@ -99,18 +118,24 @@ export async function GET(request: NextRequest) {
     }
 
     // Enriquecer con el rol real de organization_members (fuente de verdad para el rol en org)
-    // y con el nombre de la organización
+    // y con el nombre de la organización + last_sign_in_at desde auth.users
     const userIds = data.map((u: any) => u.id).filter(Boolean)
     let membershipsByUserId: Record<string, { roleName: string; orgName: string | null }> = {}
+    const lastSignInMap = new Map<string, string | null>()
 
     if (userIds.length > 0) {
-      const { data: memberships } = await admin
-        .from('organization_members')
-        .select('user_id, is_owner, role:roles(name), organization:organizations(name)')
-        .in('user_id', userIds)
+      const [membershipsRes, authListRes] = await Promise.all([
+        admin
+          .from('organization_members')
+          .select('user_id, is_owner, role:roles(name), organization:organizations(name)')
+          .in('user_id', userIds),
+        admin.auth.admin
+          .listUsers({ page: 1, perPage: Math.min(200, userIds.length) })
+          .catch(() => ({ data: { users: [] } } as any)),
+      ])
 
-      if (Array.isArray(memberships)) {
-        for (const m of memberships) {
+      if (Array.isArray(membershipsRes?.data)) {
+        for (const m of membershipsRes.data) {
           const uid = m.user_id
           if (!uid || membershipsByUserId[uid]) continue // tomar solo la primera membresía por usuario
           const roleRaw = Array.isArray(m.role) ? m.role[0]?.name : m.role?.name
@@ -121,9 +146,15 @@ export async function GET(request: NextRequest) {
           }
         }
       }
+
+      const authUsers = (authListRes?.data?.users as any[]) || []
+      for (const au of authUsers) {
+        if (userIds.includes(au.id)) {
+          lastSignInMap.set(au.id, au.last_sign_in_at || null)
+        }
+      }
     }
 
-    // Normalize field names — la tabla no tiene status, todos se consideran activos
     const users = data.map((u: any) => {
       const membership = membershipsByUserId[u.id]
       // Preferir el rol de organization_members sobre users.role (más actualizado)
@@ -131,8 +162,8 @@ export async function GET(request: NextRequest) {
       return {
         ...u,
         role: effectiveRole,
-        last_sign_in_at: u.last_sign_in_at ?? u.last_login ?? null,
-        is_active: true, // tabla users no tiene columna status
+        last_sign_in_at: lastSignInMap.get(u.id) ?? null,
+        is_active: typeof u.is_active === 'boolean' ? u.is_active : true,
         organization: membership?.orgName ? { name: membership.orgName } : null,
       }
     })
@@ -140,6 +171,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, users, total: count || data.length, page, limit })
   } catch (err) {
     console.error('[superadmin/users] Unexpected error:', err)
-    return NextResponse.json({ error: 'Error interno del servidor', details: err instanceof Error ? err.message : 'Unknown error' }, { status: 500 })
+    return NextResponse.json({
+      error: 'Error interno del servidor',
+      details: process.env.NODE_ENV !== 'production' ? (err instanceof Error ? err.message : 'Unknown error') : undefined,
+    }, { status: 500 })
   }
 }

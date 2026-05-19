@@ -5,13 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
 } from '@/components/ui/table';
 import {
   AlertDialog,
@@ -23,10 +23,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { 
-  Users, 
-  Search, 
-  RefreshCw, 
+import {
+  Users,
+  Search,
+  RefreshCw,
   Crown,
   Mail,
   Calendar,
@@ -44,14 +44,16 @@ import {
   Trash2,
   UserCheck,
   UserX,
-  Circle
+  Circle,
+  MoreHorizontal
 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 import { exportCSV, exportExcel } from '@/lib/export-utils';
 import { SuperAdminGuard } from '../components/SuperAdminGuard';
@@ -67,16 +69,20 @@ export default function SuperAdminUsersPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [singleDeleteUser, setSingleDeleteUser] = useState<AdminUser | null>(null);
   const pageSize = 20; // Paginación real
-  
+
   // Use the custom hook for data fetching with pagination
-  const { 
-    users, 
-    loading, 
-    refresh, 
+  const {
+    users,
+    loading,
+    refresh,
     totalCount,
     bulkUpdateUsers,
     bulkDeleteUsers,
+    deleteUser,
+    activateUser,
+    deactivateUser,
     updating
   } = useUsers({
     filters: { search: debouncedSearch },
@@ -146,7 +152,7 @@ export default function SuperAdminUsersPage() {
   };
 
   const toggleSelectUser = (id: string) => {
-    setSelectedUsers(prev => 
+    setSelectedUsers(prev =>
       prev.includes(id) ? prev.filter(uid => uid !== id) : [...prev, id]
     );
   };
@@ -164,6 +170,30 @@ export default function SuperAdminUsersPage() {
       // Error handled in hook
     } finally {
       setDeleteDialogOpen(false);
+    }
+  };
+
+  const confirmSingleDelete = async () => {
+    if (!singleDeleteUser) return;
+    try {
+      await deleteUser(singleDeleteUser.id);
+      setSelectedUsers((prev) => prev.filter((id) => id !== singleDeleteUser.id));
+    } catch {
+      // Error handled in hook
+    } finally {
+      setSingleDeleteUser(null);
+    }
+  };
+
+  const handleToggleActive = async (user: AdminUser) => {
+    try {
+      if (user.is_active) {
+        await deactivateUser(user.id);
+      } else {
+        await activateUser(user.id);
+      }
+    } catch {
+      // Error handled in hook
     }
   };
 
@@ -244,7 +274,7 @@ export default function SuperAdminUsersPage() {
               Todos los usuarios del sistema SaaS
             </p>
           </div>
-          
+
           <div className="flex items-center gap-3">
             <Badge variant="outline" className="px-4 py-2 text-sm bg-slate-50 border-slate-200 text-slate-700 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300">
               <Users className="h-4 w-4 mr-2" />
@@ -349,7 +379,7 @@ export default function SuperAdminUsersPage() {
                     </>
                   )}
                 </Button>
-                
+
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
@@ -393,7 +423,7 @@ export default function SuperAdminUsersPage() {
                   <TableHeader>
                     <TableRow className="bg-slate-50 dark:bg-slate-900/50">
                       <TableHead className="w-[50px]">
-                        <Checkbox 
+                        <Checkbox
                           checked={selectedUsers.length === users.length && users.length > 0}
                           onCheckedChange={toggleSelectAll}
                         />
@@ -435,16 +465,17 @@ export default function SuperAdminUsersPage() {
                           Estado
                         </div>
                       </TableHead>
+                      <TableHead className="w-[60px] text-right font-semibold">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {users.map((user) => (
-                      <TableRow 
+                      <TableRow
                         key={user.id}
                         className={`hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors ${selectedUsers.includes(user.id) ? 'bg-slate-50/80 dark:bg-slate-900/80' : ''}`}
                       >
                         <TableCell>
-                          <Checkbox 
+                          <Checkbox
                             checked={selectedUsers.includes(user.id)}
                             onCheckedChange={() => toggleSelectUser(user.id)}
                           />
@@ -487,11 +518,43 @@ export default function SuperAdminUsersPage() {
                             </Badge>
                           )}
                         </TableCell>
+                        <TableCell className="text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm" disabled={updating}>
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-44">
+                              <DropdownMenuItem onClick={() => handleToggleActive(user)}>
+                                {user.is_active ? (
+                                  <>
+                                    <UserX className="h-4 w-4 mr-2 text-amber-500" />
+                                    Desactivar
+                                  </>
+                                ) : (
+                                  <>
+                                    <UserCheck className="h-4 w-4 mr-2 text-emerald-500" />
+                                    Activar
+                                  </>
+                                )}
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-rose-600 focus:text-rose-700"
+                                onClick={() => setSingleDeleteUser(user)}
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Eliminar
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
                       </TableRow>
                     ))}
                     {users.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-12">
+                        <TableCell colSpan={9} className="text-center py-12">
                           <div className="flex flex-col items-center gap-3">
                             <Users className="h-12 w-12 text-slate-300 dark:text-slate-700" />
                             <div>
@@ -553,11 +616,11 @@ export default function SuperAdminUsersPage() {
                 </div>
                 <span className="font-medium text-slate-300">seleccionados</span>
               </div>
-              
+
               <div className="flex items-center gap-2">
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
+                <Button
+                  variant="ghost"
+                  size="sm"
                   className="text-emerald-400 hover:text-emerald-300 hover:bg-emerald-900/20 gap-2 h-10 px-4"
                   onClick={() => handleBulkStatusChange(true)}
                   disabled={updating}
@@ -565,9 +628,9 @@ export default function SuperAdminUsersPage() {
                   <UserCheck className="h-4 w-4" />
                   Activar
                 </Button>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
+                <Button
+                  variant="ghost"
+                  size="sm"
                   className="text-amber-400 hover:text-amber-300 hover:bg-amber-900/20 gap-2 h-10 px-4"
                   onClick={() => handleBulkStatusChange(false)}
                   disabled={updating}
@@ -575,9 +638,9 @@ export default function SuperAdminUsersPage() {
                   <UserX className="h-4 w-4" />
                   Desactivar
                 </Button>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
+                <Button
+                  variant="ghost"
+                  size="sm"
                   className="text-rose-400 hover:text-rose-300 hover:bg-rose-900/20 gap-2 h-10 px-4"
                   onClick={handleBulkDelete}
                   disabled={updating}
@@ -586,10 +649,10 @@ export default function SuperAdminUsersPage() {
                   Eliminar
                 </Button>
               </div>
-              
-              <Button 
-                variant="ghost" 
-                size="sm" 
+
+              <Button
+                variant="ghost"
+                size="sm"
                 className="ml-auto text-slate-400 hover:text-white"
                 onClick={() => setSelectedUsers([])}
               >
@@ -600,7 +663,7 @@ export default function SuperAdminUsersPage() {
         )}
       </div>
 
-      {/* Delete Confirmation Dialog */}
+      {/* Bulk Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -610,9 +673,34 @@ export default function SuperAdminUsersPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel disabled={updating}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmBulkDelete}
+              disabled={updating}
+              className="bg-rose-600 hover:bg-rose-700 text-white"
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Single Delete Confirmation Dialog */}
+      <AlertDialog open={Boolean(singleDeleteUser)} onOpenChange={(open) => { if (!open) setSingleDeleteUser(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar usuario?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción eliminará permanentemente la cuenta de{' '}
+              <strong>{singleDeleteUser?.full_name || singleDeleteUser?.email}</strong>.
+              Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={updating}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmSingleDelete}
+              disabled={updating}
               className="bg-rose-600 hover:bg-rose-700 text-white"
             >
               Eliminar
@@ -623,4 +711,3 @@ export default function SuperAdminUsersPage() {
     </SuperAdminGuard>
   );
 }
-

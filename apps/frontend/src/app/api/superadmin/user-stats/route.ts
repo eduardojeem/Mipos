@@ -1,26 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
 import { assertSuperAdmin } from '@/app/api/_utils/auth'
 
 export async function GET(request: NextRequest) {
   const auth = await assertSuperAdmin(request);
   if (!('ok' in auth) || auth.ok === false) {
-      return NextResponse.json(auth.body, { status: auth.status });
+    return NextResponse.json(auth.body, { status: auth.status });
   }
 
   try {
     const admin = await createAdminClient()
 
-    // Use COUNT queries instead of fetching all rows — scales to any number of users
-    // Nota: la tabla users no tiene columnas status ni is_active
+    // COUNT queries — escalan a cualquier número de usuarios sin traer filas
     const [
       totalRes,
       withOrgsRes,
+      activeRes,
       byRoleRes,
     ] = await Promise.all([
       admin.from('users').select('*', { count: 'exact', head: true }),
       admin.from('users').select('*', { count: 'exact', head: true }).not('organization_id', 'is', null),
-      // Fetch role distribution — limited to 10000 rows for aggregation
+      // is_active requiere la migración 20260519_add_is_active_to_users.sql
+      admin.from('users').select('*', { count: 'exact', head: true }).eq('is_active', true),
+      // Distribución de roles — limitado a 10000 filas para agregación
       admin.from('users').select('role').limit(10000),
     ])
 
@@ -31,9 +33,9 @@ export async function GET(request: NextRequest) {
     const total = totalRes.count ?? 0
     const withOrgs = withOrgsRes.count ?? 0
     const withoutOrgs = total - withOrgs
-    // La tabla users no tiene columna status/is_active — todos se consideran activos
-    const activeUsers = total
-    const inactiveUsers = 0
+    // Si la query de is_active falló (e.g. migración no aplicada), asumir todos activos
+    const activeUsers = activeRes.error ? total : (activeRes.count ?? total)
+    const inactiveUsers = total - activeUsers
 
     const byRole: Record<string, number> = {}
     if (Array.isArray(byRoleRes.data)) {
@@ -44,7 +46,14 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({ success: true, stats: { total, withOrgs, withoutOrgs, byRole, activeUsers, inactiveUsers } })
-  } catch {
-    return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
+  } catch (e: any) {
+    console.error('[superadmin/user-stats][GET] internal error:', e?.message || e, e?.stack)
+    return NextResponse.json(
+      {
+        error: 'Error interno del servidor',
+        details: process.env.NODE_ENV !== 'production' ? (e?.message || String(e)) : undefined,
+      },
+      { status: 500 },
+    )
   }
 }
