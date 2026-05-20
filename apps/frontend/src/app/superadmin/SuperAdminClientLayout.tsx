@@ -569,73 +569,73 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
   // ─── Layout ──────────────────────────────────────────────────────────────────
   return (
     <TooltipProvider delayDuration={150}>
-      <div className="min-h-screen bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
-        <div className="flex h-screen">
+      <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
 
-          {/* Sidebar desktop */}
-          <aside
-            className={cn(
-              "hidden shrink-0 border-r border-slate-200 transition-[width] duration-200 dark:border-slate-800 md:flex",
-              isCollapsed ? "w-[60px]" : "w-64"
-            )}
-          >
-            {renderSidebar("desktop")}
-          </aside>
+        {/* Sidebar desktop */}
+        <aside
+          className={cn(
+            "hidden shrink-0 border-r border-slate-200 transition-[width] duration-200 dark:border-slate-800 md:flex",
+            isCollapsed ? "w-[60px]" : "w-64"
+          )}
+        >
+          {renderSidebar("desktop")}
+        </aside>
 
-          {/* Contenido principal */}
-          <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        {/* Contenido principal */}
+        <div className="flex flex-1 flex-col overflow-hidden">
 
-            {/* Topbar */}
-            <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 dark:border-slate-800 dark:bg-slate-900">
-              <div className="flex min-w-0 items-center gap-3">
+          {/* Topbar */}
+          <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex min-w-0 items-center gap-3">
 
-                {/* Hamburger mobile */}
-                <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
-                  <SheetTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-9 w-9 md:hidden">
-                      <Menu className="h-5 w-5" />
-                    </Button>
-                  </SheetTrigger>
-                  <SheetContent side="left" className="w-64 p-0">
-                    <SheetHeader className="sr-only">
-                      <SheetTitle>Menú Super Admin</SheetTitle>
-                    </SheetHeader>
-                    {renderSidebar("mobile")}
-                  </SheetContent>
-                </Sheet>
+              {/* Hamburger mobile */}
+              <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
+                <SheetTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-9 w-9 md:hidden">
+                    <Menu className="h-5 w-5" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="left" className="w-64 p-0">
+                  <SheetHeader className="sr-only">
+                    <SheetTitle>Menú Super Admin</SheetTitle>
+                  </SheetHeader>
+                  {renderSidebar("mobile")}
+                </SheetContent>
+              </Sheet>
 
-                {/* Breadcrumb activo */}
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-50">
-                    {activeItem?.title ?? "Super Admin"}
+              {/* Breadcrumb activo */}
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-50">
+                  {activeItem?.title ?? "Super Admin"}
+                </p>
+                {"description" in (activeItem ?? {}) && (activeItem as NavItem)?.description && (
+                  <p className="hidden truncate text-xs text-slate-500 dark:text-slate-400 sm:block">
+                    {(activeItem as NavItem).description}
                   </p>
-                  {"description" in (activeItem ?? {}) && (activeItem as NavItem)?.description && (
-                    <p className="hidden truncate text-xs text-slate-500 dark:text-slate-400 sm:block">
-                      {(activeItem as NavItem).description}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex shrink-0 items-center gap-2">
-                {activeItem && "badge" in activeItem && (activeItem as NavItem).badge && (
-                  <Badge
-                    variant="outline"
-                    className="hidden rounded border-slate-200 text-xs text-slate-500 sm:inline-flex dark:border-slate-700 dark:text-slate-400"
-                  >
-                    {(activeItem as NavItem).badge}
-                  </Badge>
                 )}
-                <Separator orientation="vertical" className="hidden h-5 sm:block" />
-                <SuperAdminThemeToggle />
               </div>
-            </header>
+            </div>
 
-            {/* Página */}
-            <main className="min-w-0 flex-1 overflow-auto p-4 sm:p-6">
+            <div className="flex shrink-0 items-center gap-2">
+              {activeItem && "badge" in activeItem && (activeItem as NavItem).badge && (
+                <Badge
+                  variant="outline"
+                  className="hidden rounded border-slate-200 text-xs text-slate-500 sm:inline-flex dark:border-slate-700 dark:text-slate-400"
+                >
+                  {(activeItem as NavItem).badge}
+                </Badge>
+              )}
+              <Separator orientation="vertical" className="hidden h-5 sm:block" />
+              <SuperAdminThemeToggle />
+            </div>
+          </header>
+
+          {/* Página — scroll vertical Y horizontal */}
+          <main className="flex-1 overflow-x-auto overflow-y-auto">
+            <div className="min-w-0 p-4 sm:p-6">
               {children}
-            </main>
-          </div>
+            </div>
+          </main>
         </div>
       </div>
     </TooltipProvider>
