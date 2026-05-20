@@ -308,7 +308,7 @@ export async function getPublicBusinessConfig(organization: PublicOrganization):
   return fetchConfig(organization.id, organization.name);
 }
 
-export async function getGlobalMarketplaceHomeData(
+async function getGlobalMarketplaceHomeDataUncached(
   requestHost?: string | null,
   searchQuery?: string | null
 ): Promise<GlobalMarketplaceHomeData> {
@@ -561,6 +561,12 @@ export async function getGlobalMarketplaceHomeData(
     featuredProducts,
   };
 }
+
+export const getGlobalMarketplaceHomeData = unstable_cache(
+  getGlobalMarketplaceHomeDataUncached,
+  ['global-marketplace-home'],
+  { revalidate: 120, tags: ['global-marketplace-home'] }
+);
 
 async function _getGlobalMarketplaceHomeDataLegacy(
   requestHost?: string | null,

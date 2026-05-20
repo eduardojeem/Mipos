@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { unstable_cache } from 'next/cache';
 import { createAdminClient } from '@/lib/supabase/server';
 import { fetchPublicOffersSnapshot } from '@/lib/public-site/offers-data';
 import { enrichPublicCatalogProductsWithOffers } from '@/lib/public-site/catalog-data';
@@ -38,7 +39,7 @@ function extractPrimaryImage(product: Pick<Product, 'image_url' | 'images'>): st
   return '/api/placeholder/480/360';
 }
 
-export async function fetchTenantHomeSnapshot(organizationId: string): Promise<TenantHomeSnapshot> {
+async function fetchTenantHomeSnapshotUncached(organizationId: string): Promise<TenantHomeSnapshot> {
   const adminClient = await createAdminClient();
 
   const [productCountResult, categoryCountResult, offersCountResult, categoriesResult, productsResult, categoryProductsResult] =
@@ -162,4 +163,21 @@ export async function fetchTenantHomeSnapshot(organizationId: string): Promise<T
     offers,
     products,
   };
+}
+
+/**
+ * Snapshot del home de un tenant cacheado por 60s.
+ * Cada request a /home dispara ~8 queries a Supabase; cachear evita ese
+ * costo en visitas dentro de la misma ventana.
+ *
+ * Invalidar manualmente con revalidateTag('tenant-home') en mutaciones
+ * de products/categories/offers si se quiere ver el cambio inmediato.
+ */
+export async function fetchTenantHomeSnapshot(organizationId: string): Promise<TenantHomeSnapshot> {
+  const cached = unstable_cache(
+    (orgId: string) => fetchTenantHomeSnapshotUncached(orgId),
+    [`tenant-home-snapshot-${organizationId}`],
+    { revalidate: 60, tags: ['tenant-home', `tenant-home-${organizationId}`] }
+  );
+  return cached(organizationId);
 }
