@@ -32,8 +32,6 @@ import HomeSalesShowcase from './components/HomeSalesShowcase';
 import type { TenantHomeSnapshot } from './home-types';
 import type { Product } from '@/types';
 
-const CART_PRODUCT_FALLBACK_DATE = '1970-01-01T00:00:00.000Z';
-
 interface HomeClientProps {
   initialData: TenantHomeSnapshot;
 }
@@ -98,7 +96,7 @@ export default function HomeClient({ initialData }: HomeClientProps) {
     const next: Array<{ href: string; label: string; variant: 'primary' | 'secondary' }> = [];
     if (sections.showCatalog) {
       next.push({
-        href: '/catalog',
+        href: tenantHref('/catalog'),
         label: content.heroPrimaryCtaLabel || 'Ver catalogo',
         variant: 'primary',
       });
@@ -106,12 +104,12 @@ export default function HomeClient({ initialData }: HomeClientProps) {
 
     if (sections.showOffers) {
       next.push({
-        href: '/offers',
+        href: tenantHref('/offers'),
         label: content.heroSecondaryCtaLabel || 'Ver ofertas',
         variant: 'secondary',
       });
     } else if (sections.showOrderTracking) {
-      next.push({ href: '/orders/track', label: 'Seguir pedido', variant: 'secondary' });
+      next.push({ href: tenantHref('/orders/track'), label: 'Seguir pedido', variant: 'secondary' });
     }
 
     return next;
@@ -121,6 +119,7 @@ export default function HomeClient({ initialData }: HomeClientProps) {
     sections.showCatalog,
     sections.showOffers,
     sections.showOrderTracking,
+    tenantHref,
   ]);
 
   const addPreviewToCart = (product: {
@@ -131,12 +130,17 @@ export default function HomeClient({ initialData }: HomeClientProps) {
     offerPrice?: number;
     stock?: number;
   }) => {
+    // El snapshot del home expone solo lo necesario para mostrar la tarjeta.
+    // Construimos un Product mínimo válido para el carrito; los campos
+    // ausentes (sku, cost_price, category_id) los completa el flujo de
+    // checkout que vuelve a buscar el producto en DB por id.
+    const now = new Date().toISOString();
     const cartProduct: Product = {
       id: product.id,
       name: product.name,
-      sku: product.id,
+      sku: '',
       description: '',
-      cost_price: product.basePrice,
+      cost_price: 0,
       sale_price: product.basePrice,
       offer_price: product.offerPrice,
       stock_quantity: product.stock ?? 999,
@@ -144,14 +148,11 @@ export default function HomeClient({ initialData }: HomeClientProps) {
       category_id: '',
       image_url: product.image,
       is_active: true,
-      created_at: CART_PRODUCT_FALLBACK_DATE,
-      updated_at: CART_PRODUCT_FALLBACK_DATE,
+      created_at: now,
+      updated_at: now,
     };
 
-    addToCart(
-      cartProduct,
-      1
-    );
+    addToCart(cartProduct, 1);
   };
 
   return (
