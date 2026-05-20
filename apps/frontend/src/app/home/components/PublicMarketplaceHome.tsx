@@ -1,12 +1,9 @@
-"use client";
-
 import Link from 'next/link';
 import {
   ArrowRight,
   ArrowUpRight,
   Sparkles,
 } from 'lucide-react';
-import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { GlobalMarketplaceHomeData } from '@/lib/public-site/data';
@@ -30,11 +27,7 @@ export function PublicMarketplaceHome({
       <section className="relative overflow-hidden pb-24 pt-16 lg:pb-32 lg:pt-24">
         <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="text-center">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.5 }}
-            >
+            <div className="motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95 motion-safe:duration-500">
               <Badge
                 variant="outline"
                 className="rounded-full border-emerald-200 bg-emerald-50/60 px-6 py-2 text-xs font-bold uppercase tracking-[0.2em] text-emerald-700 backdrop-blur-sm dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200"
@@ -42,51 +35,42 @@ export function PublicMarketplaceHome({
                 <Sparkles className="mr-2 h-3 w-3 fill-emerald-500" />
                 Ecosistema publico multiempresa
               </Badge>
-            </motion.div>
+            </div>
 
-            <motion.h1
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2, duration: 0.6 }}
-              className="mt-8 font-['Outfit'] text-6xl font-black leading-tight tracking-tight text-slate-950 sm:text-7xl lg:text-8xl dark:text-slate-100"
+            <h1
+              className="mt-8 font-['Outfit'] text-5xl font-black leading-tight tracking-tight text-slate-950 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-5 motion-safe:duration-700 motion-safe:fill-mode-both motion-safe:delay-200 sm:text-6xl md:text-7xl lg:text-8xl dark:text-slate-100"
             >
               Directorio comercial <br />
               <span className="bg-gradient-to-r from-emerald-600 via-teal-600 to-amber-500 bg-clip-text text-transparent">
                 conectado a MiPOS
               </span>
-            </motion.h1>
+            </h1>
 
-            <motion.p
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4, duration: 0.6 }}
-              className="mx-auto mt-8 max-w-2xl text-xl leading-relaxed text-slate-600 dark:text-slate-300"
+            <p
+              className="mx-auto mt-8 max-w-2xl text-lg leading-relaxed text-slate-600 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-5 motion-safe:duration-700 motion-safe:fill-mode-both motion-safe:delay-300 sm:text-xl dark:text-slate-300"
             >
               El dominio principal concentra empresas, categorias y productos publicados, mientras cada
               negocio conserva su catalogo, marca y operacion propia.
-            </motion.p>
+            </p>
 
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.6, duration: 0.6 }}
-              className="mt-12 flex flex-wrap items-center justify-center gap-4"
+            <div
+              className="mt-10 flex flex-wrap items-center justify-center gap-3 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-5 motion-safe:duration-700 motion-safe:fill-mode-both motion-safe:delay-500 sm:mt-12 sm:gap-4"
             >
-              <Link href="/home/catalogo">
-                <Button className="h-16 rounded-2xl bg-slate-950 px-10 text-lg font-bold text-white shadow-2xl shadow-emerald-500/20 transition-all hover:-translate-y-1 hover:bg-emerald-700 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400 dark:hover:shadow-emerald-950/40">
+              <Link href="/home/catalogo" className="w-full sm:w-auto">
+                <Button className="h-12 w-full rounded-2xl bg-slate-950 px-6 text-base font-bold text-white shadow-2xl shadow-emerald-500/20 transition-transform hover:-translate-y-1 hover:bg-emerald-700 sm:h-14 sm:w-auto sm:px-8 sm:text-lg lg:h-16 lg:px-10 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400 dark:hover:shadow-emerald-950/40">
                   Explorar catalogo global
-                  <ArrowRight className="ml-3 h-5 w-5" />
+                  <ArrowRight className="ml-2 h-4 w-4 sm:ml-3 sm:h-5 sm:w-5" />
                 </Button>
               </Link>
-              <Link href={buildPublicRegistrationPath('starter')}>
+              <Link href={buildPublicRegistrationPath('starter')} className="w-full sm:w-auto">
                 <Button
                   variant="outline"
-                  className="h-16 rounded-2xl border-slate-200 bg-white/50 px-10 text-lg font-bold backdrop-blur-sm transition-all hover:bg-white dark:border-slate-700 dark:bg-slate-950/50 dark:text-slate-100 dark:hover:bg-slate-900"
+                  className="h-12 w-full rounded-2xl border-slate-200 bg-white/50 px-6 text-base font-bold backdrop-blur-sm transition-colors hover:bg-white sm:h-14 sm:w-auto sm:px-8 sm:text-lg lg:h-16 lg:px-10 dark:border-slate-700 dark:bg-slate-950/50 dark:text-slate-100 dark:hover:bg-slate-900"
                 >
                   Registrar mi empresa
                 </Button>
               </Link>
-            </motion.div>
+            </div>
           </div>
         </div>
       </section>
