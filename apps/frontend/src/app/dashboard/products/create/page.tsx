@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { LayoutDashboard } from 'lucide-react';
-// import ProductForm from '@/components/products/ProductForm'; // TODO: Component does not exist
+import { ProductForm } from '@/components/products';
 import productService from '@/services/productService';
 
 import { Category } from '@/types/supabase'
@@ -40,7 +40,8 @@ export default function CreateProductPage() {
         stock_quantity: data.stock,
         min_stock: data.minStock,
         category_id: data.categoryId,
-        image_url: data.images || undefined,
+        image_url: data.images?.[0] || undefined,
+        images: Array.isArray(data.images) ? data.images : (data.images ? [data.images] : undefined),
         is_active: true,
       };
 
@@ -73,18 +74,13 @@ export default function CreateProductPage() {
         ]}
       />
 
-      {/* <ProductForm
+      <ProductForm
         categories={categories}
         onSubmit={handleCreate}
         onCancel={handleCancel}
         isLoading={isLoading}
         mode="create"
-      /> */}
-      <div className="p-8 text-center">
-        <h2 className="text-2xl font-bold mb-4">Formulario en construcción</h2>
-        <p>El componente ProductForm necesita ser migrado desde la página de productos.</p>
-        <p className="mt-2 text-muted-foreground">Por favor use la vista de productos principal para crear/editar productos.</p>
-      </div>
+      />
     </div>
   );
-}
+}

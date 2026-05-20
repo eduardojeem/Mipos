@@ -26,7 +26,7 @@ export async function GET(_request: NextRequest) {
       return NextResponse.json({ error: 'No organization' }, { status: 403 })
     }
 
-    const admin = createAdminClient()
+    const admin = await createAdminClient()
     const { data: sales, error } = await admin
       .from('sales')
       .select('id, total, created_at')

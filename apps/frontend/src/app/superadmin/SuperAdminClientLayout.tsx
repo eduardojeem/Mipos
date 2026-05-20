@@ -28,22 +28,18 @@ import {
   CreditCard,
   Crown,
   FileText,
-  FlaskConical,
-  LayoutDashboard,
   LogOut,
+  LayoutDashboard,
   Mail,
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
   Settings,
-  Settings2,
   Shield,
   Sparkles,
-  TrendingUp,
   UserCheck,
   Users,
-  Wrench,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SuperAdminThemeToggle } from "./components/SuperAdminThemeToggle";
@@ -67,7 +63,7 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
   badge?: string;
   description?: string;
-  section: "overview" | "tenants" | "billing" | "system" | "dev";
+  section: "overview" | "tenants" | "billing" | "system";
   children?: NavChild[];
 }
 
@@ -77,7 +73,6 @@ const SECTION_LABELS: Record<NavItem["section"], string> = {
   tenants:  "Tenants",
   billing:  "Facturación",
   system:   "Sistema",
-  dev:      "Herramientas",
 };
 
 const SECTION_ORDER: NavItem["section"][] = [
@@ -85,7 +80,6 @@ const SECTION_ORDER: NavItem["section"][] = [
   "tenants",
   "billing",
   "system",
-  "dev",
 ];
 
 // ─── Navegación ───────────────────────────────────────────────────────────────
@@ -96,21 +90,6 @@ const NAV_ITEMS: NavItem[] = [
     href: "/superadmin",
     icon: BarChart3,
     description: "Métricas globales del sistema",
-    section: "overview",
-  },
-  {
-    title: "Métricas SaaS",
-    href: "/superadmin/saas-metrics",
-    icon: TrendingUp,
-    description: "MRR, churn, LTV y KPIs del negocio",
-    section: "overview",
-  },
-  {
-    title: "Monitoreo",
-    href: "/superadmin/monitoring",
-    icon: Activity,
-    badge: "Live",
-    description: "Salud, rendimiento y conexiones",
     section: "overview",
   },
 
@@ -133,12 +112,6 @@ const NAV_ITEMS: NavItem[] = [
         href: "/superadmin/organizations/create",
         icon: Plus,
         description: "Crear un nuevo tenant",
-      },
-      {
-        title: "Configuración global",
-        href: "/superadmin/organizations/settings",
-        icon: Settings2,
-        description: "Ajustes aplicados a todos los tenants",
       },
     ],
   },
@@ -187,15 +160,16 @@ const NAV_ITEMS: NavItem[] = [
     description: "Historial de facturación",
     section: "billing",
   },
-  {
-    title: "Facturación legacy",
-    href: "/superadmin/billing",
-    icon: CreditCard,
-    description: "Registros anteriores al sistema actual",
-    section: "billing",
-  },
 
   // ── Sistema ─────────────────────────────────────────────────────────────────
+  {
+    title: "Monitoreo",
+    href: "/superadmin/monitoring",
+    icon: Activity,
+    badge: "Live",
+    description: "Salud, rendimiento y conexiones",
+    section: "system",
+  },
   {
     title: "Audit Logs",
     href: "/superadmin/audit-logs",
@@ -218,28 +192,6 @@ const NAV_ITEMS: NavItem[] = [
     section: "system",
   },
 
-  // ── Herramientas dev ────────────────────────────────────────────────────────
-  {
-    title: "Diagnóstico",
-    href: "/superadmin/diagnostic",
-    icon: FlaskConical,
-    description: "Herramientas de diagnóstico técnico",
-    section: "dev",
-  },
-  {
-    title: "Panel Admin",
-    href: "/admin",
-    icon: Wrench,
-    description: "Panel de administración del negocio",
-    section: "dev",
-  },
-  {
-    title: "Dashboard Ventas",
-    href: "/dashboard",
-    icon: LayoutDashboard,
-    description: "Vista operativa de ventas",
-    section: "dev",
-  },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -316,7 +268,11 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
   const toggleExpanded = (title: string) =>
     setExpandedItems((prev) => {
       const next = new Set(prev);
-      next.has(title) ? next.delete(title) : next.add(title);
+      if (next.has(title)) {
+        next.delete(title);
+      } else {
+        next.add(title);
+      }
       return next;
     });
 
@@ -621,6 +577,58 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
             </div>
 
             <div className="flex shrink-0 items-center gap-2">
+              <div className="hidden items-center gap-2 md:flex">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 gap-2"
+                  onClick={() => navigate("/admin")}
+                >
+                  <Shield className="h-4 w-4" />
+                  Admin
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 gap-2"
+                  onClick={() => navigate("/dashboard")}
+                >
+                  <LayoutDashboard className="h-4 w-4" />
+                  Dashboard
+                </Button>
+              </div>
+
+              <div className="flex items-center gap-1 md:hidden">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9"
+                      aria-label="Ir a Admin"
+                      onClick={() => navigate("/admin")}
+                    >
+                      <Shield className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Ir a Admin</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-9 w-9"
+                      aria-label="Ir a Dashboard"
+                      onClick={() => navigate("/dashboard")}
+                    >
+                      <LayoutDashboard className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Ir a Dashboard</TooltipContent>
+                </Tooltip>
+              </div>
+
               {activeItem && "badge" in activeItem && (activeItem as NavItem).badge && (
                 <Badge
                   variant="outline"

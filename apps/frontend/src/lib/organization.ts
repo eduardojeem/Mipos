@@ -1,7 +1,9 @@
 import { cookies } from 'next/headers';
 import { NextRequest } from 'next/server';
+import type { User } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase-admin';
+import { normalizeRole } from '@/lib/roles';
 
 export interface OrganizationContext {
   organizationId: string;
@@ -26,19 +28,84 @@ async function getAuthenticatedUserId(
   return user.id;
 }
 
+async function getAuthenticatedUser(
+  supabase: Awaited<ReturnType<typeof createClient>>
+): Promise<User | null> {
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error || !user) {
+    return null;
+  }
+  return user;
+}
+
+function extractRoleName(value: unknown): string {
+  if (!value || typeof value !== 'object') return '';
+  const record = value as { name?: unknown };
+  return typeof record.name === 'string' ? record.name : '';
+}
+
+async function isSuperAdminUser(
+  client: Awaited<ReturnType<typeof getDbClient>>,
+  user: User
+): Promise<boolean> {
+  const appRole = typeof user.app_metadata?.role === 'string' ? user.app_metadata.role : '';
+  if (normalizeRole(appRole) === 'SUPER_ADMIN') {
+    return true;
+  }
+
+  const [profileResult, rolesResult] = await Promise.allSettled([
+    client.from('users').select('role').eq('id', user.id).maybeSingle(),
+    client
+      .from('user_roles')
+      .select('role:roles(name)')
+      .eq('user_id', user.id)
+      .eq('is_active', true),
+  ]);
+
+  const profileRole =
+    profileResult.status === 'fulfilled'
+      ? ((profileResult.value as { data?: { role?: string | null } | null }).data?.role || '')
+      : '';
+
+  if (normalizeRole(profileRole) === 'SUPER_ADMIN') {
+    return true;
+  }
+
+  const roles =
+    rolesResult.status === 'fulfilled'
+      ? (((rolesResult.value as { data?: Array<{ role?: unknown }> | null }).data || []) as Array<{ role?: unknown }>)
+      : [];
+
+  return roles.some((row) => {
+    const roleValue = Array.isArray(row.role) ? row.role[0] : row.role;
+    return normalizeRole(extractRoleName(roleValue)) === 'SUPER_ADMIN';
+  });
+}
+
 async function validateRequestedOrganizationId(
   _supabase: Awaited<ReturnType<typeof createClient>>,
-  userId: string,
+  user: User,
   requestedOrgId: string
 ): Promise<string | null> {
   const normalizedOrgId = requestedOrgId.trim();
   if (!normalizedOrgId) return null;
 
   const client = await getDbClient();
+
+  if (await isSuperAdminUser(client, user)) {
+    const { data: organization } = await client
+      .from('organizations')
+      .select('id')
+      .eq('id', normalizedOrgId)
+      .maybeSingle();
+
+    return organization?.id || null;
+  }
+
   const { data, error } = await client
     .from('organization_members')
     .select('organization_id')
-    .eq('user_id', userId)
+    .eq('user_id', user.id)
     .eq('organization_id', normalizedOrgId)
     .maybeSingle();
 
@@ -47,7 +114,7 @@ async function validateRequestedOrganizationId(
     const { data: userRow } = await client
       .from('users')
       .select('organization_id')
-      .eq('id', userId)
+      .eq('id', user.id)
       .maybeSingle();
 
     if (userRow?.organization_id === normalizedOrgId) {
@@ -61,13 +128,13 @@ async function validateRequestedOrganizationId(
 
 async function getFallbackOrganizationId(
   _supabase: Awaited<ReturnType<typeof createClient>>,
-  userId: string
+  user: User
 ): Promise<string | null> {
   const client = await getDbClient();
   const { data: memberData } = await client
     .from('organization_members')
     .select('organization_id')
-    .eq('user_id', userId)
+    .eq('user_id', user.id)
     .limit(1)
     .maybeSingle();
 
@@ -79,78 +146,102 @@ async function getFallbackOrganizationId(
   const { data: userRow } = await client
     .from('users')
     .select('organization_id')
-    .eq('id', userId)
+    .eq('id', user.id)
     .maybeSingle();
 
-  return userRow?.organization_id || null;
+  if (userRow?.organization_id) {
+    return userRow.organization_id;
+  }
+
+  if (await isSuperAdminUser(client, user)) {
+    const { data: organization } = await client
+      .from('organizations')
+      .select('id')
+      .neq('subscription_status', 'SUSPENDED')
+      .order('name', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    return organization?.id || null;
+  }
+
+  return null;
 }
 
 export async function getValidatedOrganizationId(
   request: NextRequest
 ): Promise<string | null> {
   const supabase = await createClient();
-  const userId = await getAuthenticatedUserId(supabase);
+  const user = await getAuthenticatedUser(supabase);
 
-  if (!userId) {
+  if (!user) {
     return null;
   }
 
   const requestedOrgId = request.headers.get('x-organization-id')?.trim();
   if (requestedOrgId) {
-    const validatedOrgId = await validateRequestedOrganizationId(supabase, userId, requestedOrgId);
+    const validatedOrgId = await validateRequestedOrganizationId(supabase, user, requestedOrgId);
     if (validatedOrgId) {
       return validatedOrgId;
     }
   }
 
-  return getFallbackOrganizationId(supabase, userId);
+  const cookieOrgId = request.cookies.get('x-organization-id')?.value?.trim();
+  if (cookieOrgId) {
+    const validatedOrgId = await validateRequestedOrganizationId(supabase, user, cookieOrgId);
+    if (validatedOrgId) {
+      return validatedOrgId;
+    }
+  }
+
+  return getFallbackOrganizationId(supabase, user);
 }
 
 export async function resolveOrganizationId(
   request: NextRequest
 ): Promise<string | null> {
   const supabase = await createClient();
-  const userId = await getAuthenticatedUserId(supabase);
+  const user = await getAuthenticatedUser(supabase);
   const headerOrgId = request.headers.get('x-organization-id')?.trim();
   if (headerOrgId) {
-    if (!userId) {
+    if (!user) {
       return null;
     }
 
-    const validatedOrgId = await validateRequestedOrganizationId(supabase, userId, headerOrgId);
+    const validatedOrgId = await validateRequestedOrganizationId(supabase, user, headerOrgId);
     if (validatedOrgId) {
       return validatedOrgId;
     }
 
-    return getFallbackOrganizationId(supabase, userId);
+    return getFallbackOrganizationId(supabase, user);
   }
 
   const cookieOrgId = request.cookies.get('x-organization-id')?.value?.trim();
   if (cookieOrgId) {
-    if (!userId) {
+    if (!user) {
       return null;
     }
 
-    const validatedOrgId = await validateRequestedOrganizationId(supabase, userId, cookieOrgId);
+    const validatedOrgId = await validateRequestedOrganizationId(supabase, user, cookieOrgId);
     if (validatedOrgId) {
       return validatedOrgId;
     }
 
-    return getFallbackOrganizationId(supabase, userId);
+    return getFallbackOrganizationId(supabase, user);
   }
 
-  if (!userId) {
+  if (!user) {
     return null;
   }
 
-  return getFallbackOrganizationId(supabase, userId);
+  return getFallbackOrganizationId(supabase, user);
 }
 
 export async function getValidatedOrganizationIdFromCookies(): Promise<string | null> {
   const supabase = await createClient();
-  const userId = await getAuthenticatedUserId(supabase);
+  const user = await getAuthenticatedUser(supabase);
 
-  if (!userId) {
+  if (!user) {
     return null;
   }
 
@@ -158,13 +249,13 @@ export async function getValidatedOrganizationIdFromCookies(): Promise<string | 
   const cookieOrgId = cookieStore.get('x-organization-id')?.value?.trim();
 
   if (cookieOrgId) {
-    const validatedOrgId = await validateRequestedOrganizationId(supabase, userId, cookieOrgId);
+    const validatedOrgId = await validateRequestedOrganizationId(supabase, user, cookieOrgId);
     if (validatedOrgId) {
       return validatedOrgId;
     }
   }
 
-  return getFallbackOrganizationId(supabase, userId);
+  return getFallbackOrganizationId(supabase, user);
 }
 
 export async function requireOrganization(request: NextRequest): Promise<string> {

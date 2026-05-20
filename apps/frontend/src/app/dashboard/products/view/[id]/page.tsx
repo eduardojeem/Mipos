@@ -223,10 +223,10 @@ export default function ProductViewPage({ params }: { params: { id: string } }) 
 
       const salesQuery = supabase
         .from('sale_items')
-        .select('quantity, unit_price, created_at')
+        .select('quantity, unit_price, sales!inner(created_at, organization_id)')
         .eq('product_id', productId)
-        .gte('created_at', thirtyDaysAgo)
-        .order('created_at', { ascending: true });
+        .gte('sales.created_at', thirtyDaysAgo)
+        .order('created_at', { foreignTable: 'sales', ascending: true });
 
       const movementsQuery = supabase
         .from('inventory_movements')
@@ -236,7 +236,7 @@ export default function ProductViewPage({ params }: { params: { id: string } }) 
         .limit(10);
 
       if (orgId) {
-        (salesQuery as any).eq('organization_id', orgId);
+        (salesQuery as any).eq('sales.organization_id', orgId);
         (movementsQuery as any).eq('organization_id', orgId);
       }
 
@@ -252,7 +252,10 @@ export default function ProductViewPage({ params }: { params: { id: string } }) 
         // Group by date for chart
         const salesByDate = new Map<string, { amount: number, quantity: number }>();
         rawSales.forEach((item: any) => {
-          const date = new Date(item.created_at).toLocaleDateString('es-MX', { month: 'short', day: 'numeric' });
+          const createdAt = item.sales?.created_at || item.created_at;
+          const date = createdAt
+            ? new Date(createdAt).toLocaleDateString('es-MX', { month: 'short', day: 'numeric' })
+            : 'N/A';
           const current = salesByDate.get(date) || { amount: 0, quantity: 0 };
           salesByDate.set(date, {
             amount: current.amount + (Number(item.quantity) * Number(item.unit_price)),

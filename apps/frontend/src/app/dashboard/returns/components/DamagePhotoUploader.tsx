@@ -138,7 +138,6 @@ export function DamagePhotoUploader({
         type="file"
         accept={ALLOWED_MIME.join(',')}
         // capture permite usar cámara directamente en mobile.
-        // @ts-expect-error capture es válido en input[type=file] pero TS lo marca.
         capture="environment"
         onChange={handleFileChange}
         disabled={disabled || isUploading}

@@ -36,6 +36,11 @@ export async function POST(
         .update({ status: 'CANCELED', updated_at: new Date().toISOString() })
         .eq('id', id);
 
+      await supabaseAdmin
+        .from('organizations')
+        .update({ subscription_status: 'CANCELLED', updated_at: new Date().toISOString() })
+        .eq('id', saasSub.organization_id);
+
       // Deactivate the plan in plan_subscriptions
       await supabaseAdmin
         .from('plan_subscriptions')
@@ -49,6 +54,11 @@ export async function POST(
         .from('saas_subscriptions')
         .update({ status: 'CANCELED', updated_at: new Date().toISOString() })
         .eq('id', id);
+
+      await supabaseAdmin
+        .from('organizations')
+        .update({ subscription_status: 'CANCELLED', updated_at: new Date().toISOString() })
+        .eq('id', saasSub.organization_id);
         
       await supabaseAdmin
         .from('plan_subscriptions')

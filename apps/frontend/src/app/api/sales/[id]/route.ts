@@ -34,7 +34,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!saleId) return NextResponse.json({ error: 'Missing sale id' }, { status: 400 });
 
     const supabase = await createClient();
-    const client = supabase as unknown as { auth: { getUser: () => Promise<{ data: { user: unknown } }>; getSession: () => Promise<{ data: { session: { access_token?: string } | null } }> }; from: (table: string) => unknown };
+    const client = supabase as unknown as { auth: { getUser: () => Promise<{ data: { user: { id: string } | null } }>; getSession: () => Promise<{ data: { session: { access_token?: string } | null } }> }; from: (table: string) => unknown };
     const { data: { user } } = await client.auth.getUser();
     const { data: { session } } = await client.auth.getSession();
     const accessToken: string | undefined = session?.access_token;

@@ -4,10 +4,11 @@ import {
   COMPANY_PERMISSIONS,
   type CompanyFeatureKey,
   type CompanyPermissionKey,
+  type CompanyAccessRequirement,
   requireCompanyAccess,
 } from '@/app/api/_utils/company-authorization'
 
-type AllowedRole = 'OWNER' | 'ADMIN' | 'SELLER' | 'WAREHOUSE' | 'SUPER_ADMIN'
+type AllowedRole = NonNullable<CompanyAccessRequirement['allowedRoles']>[number]
 
 interface AdminApiAccessOptions {
   permission: CompanyPermissionKey

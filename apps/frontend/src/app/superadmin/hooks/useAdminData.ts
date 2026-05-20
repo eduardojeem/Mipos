@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { createClient } from '@/lib/supabase/client';
 import { ErrorState, classifyError } from '@/types/error-state';
 import { 
   loadAdminDataCache, 
@@ -86,6 +85,17 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const isFetchingRef = useRef(false);
 
+  const readErrorBody = async (response: Response) => {
+    try {
+      const body = await response.json();
+      if (typeof body?.error === 'string') return body.error;
+      if (typeof body?.message === 'string') return body.message;
+      return JSON.stringify(body);
+    } catch {
+      return response.text().catch(() => response.statusText);
+    }
+  };
+
   useEffect(() => {
     onErrorRef.current = onError;
     onSuccessRef.current = onSuccess;
@@ -143,14 +153,11 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
 
       const [statsRes, orgsRes] = await Promise.allSettled([
         fetch('/api/superadmin/stats', { headers: { 'Content-Type': 'application/json' }, cache: 'no-store', signal }),
-        (async () => {
-          const supabase = createClient();
-          const { data, error } = await supabase
-            .from('organizations')
-            .select('*')
-            .order('created_at', { ascending: false });
-          return { data, error };
-        })(),
+        fetch('/api/superadmin/organizations?pageSize=100&sortBy=created_at&sortOrder=desc&page=1', {
+          headers: { 'Content-Type': 'application/json' },
+          cache: 'no-store',
+          signal,
+        }),
       ]);
 
       const fetchDuration = Date.now() - fetchStartTime;
@@ -184,15 +191,20 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
 
       if (orgsRes.status === 'fulfilled') {
         const r = orgsRes.value;
-        if (r.error) {
-          console.error('❌ [useAdminData] Organizations error:', r.error);
-          orgsError = classifyError(new Error(String(r.error.message || 'Organizations query failed')), {
+        console.log(`🏢 [useAdminData] Organizations response: ${r.status} ${r.statusText}`);
+        if (r.ok) {
+          const payload = await r.json();
+          orgsData = (payload.organizations as Organization[]) || [];
+          console.log(`✅ [useAdminData] Organizations data received: ${orgsData?.length ?? 0} items`);
+        } else {
+          const errorText = await readErrorBody(r);
+          console.error('❌ [useAdminData] Organizations error:', errorText);
+          const err = new Error(`Error ${r.status}: ${errorText}`) as Error & { statusCode?: number };
+          err.statusCode = r.status;
+          orgsError = classifyError(err, {
             url: '/api/superadmin/organizations',
             method: 'GET',
           });
-        } else {
-          orgsData = (r.data as any) || [];
-          console.log(`✅ [useAdminData] Organizations data received: ${orgsData?.length ?? 0} items`);
         }
       } else {
         console.error('❌ [useAdminData] Organizations request failed:', orgsRes.reason);

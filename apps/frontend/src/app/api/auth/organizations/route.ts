@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { normalizeRole } from "@/lib/roles";
 
 type OrganizationRow = {
   id: string;
@@ -16,6 +17,15 @@ type OrganizationRow = {
   } | null;
 };
 
+type UserRoleRow = {
+  role?: { name?: string | null } | Array<{ name?: string | null }> | null;
+};
+
+function getRoleName(row: UserRoleRow): string {
+  const role = Array.isArray(row.role) ? row.role[0] : row.role;
+  return typeof role?.name === "string" ? role.name : "";
+}
+
 export async function GET() {
   try {
     const supabase = await createClient();
@@ -30,6 +40,49 @@ export async function GET() {
 
     const admin = await createAdminClient();
     let organizationIds: string[] = [];
+
+    const [profileResult, rolesResult] = await Promise.allSettled([
+      admin.from("users").select("role, organization_id").eq("id", user.id).maybeSingle(),
+      admin
+        .from("user_roles")
+        .select("role:roles(name)")
+        .eq("user_id", user.id)
+        .eq("is_active", true),
+    ]);
+
+    const profile =
+      profileResult.status === "fulfilled"
+        ? ((profileResult.value as { data?: { role?: string | null; organization_id?: string | null } | null }).data || null)
+        : null;
+    const roleRows =
+      rolesResult.status === "fulfilled"
+        ? (((rolesResult.value as { data?: UserRoleRow[] | null }).data || []) as UserRoleRow[])
+        : [];
+    const appRole =
+      typeof user.app_metadata?.role === "string" ? user.app_metadata.role : "";
+    const isSuperAdmin =
+      normalizeRole(appRole) === "SUPER_ADMIN" ||
+      normalizeRole(profile?.role) === "SUPER_ADMIN" ||
+      roleRows.some((row) => normalizeRole(getRoleName(row)) === "SUPER_ADMIN");
+
+    if (isSuperAdmin) {
+      const { data: organizations, error: orgsError } = await admin
+        .from("organizations")
+        .select(
+          "id, name, slug, subscription_plan, subscription_status, created_at, settings, branding",
+        )
+        .neq("subscription_status", "SUSPENDED")
+        .order("name", { ascending: true });
+
+      if (orgsError) {
+        return NextResponse.json({ error: orgsError.message }, { status: 500 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        organizations: organizations || [],
+      });
+    }
 
     const { data: memberships } = await admin
       .from("organization_members")
@@ -57,16 +110,10 @@ export async function GET() {
       // If this codepath fires, the data inconsistency should be fixed in the
       // DB (either by creating the membership with a proper role, or by
       // clearing users.organization_id).
-      const { data: userRow } = await admin
-        .from("users")
-        .select("organization_id")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (userRow?.organization_id) {
-        organizationIds = [userRow.organization_id];
+      if (profile?.organization_id) {
+        organizationIds = [profile.organization_id];
         console.warn(
-          `[auth/organizations] User ${user.id} has users.organization_id=${userRow.organization_id} but no organization_members row. Surfacing as legacy fallback; admin should reconcile.`,
+          `[auth/organizations] User ${user.id} has users.organization_id=${profile.organization_id} but no organization_members row. Surfacing as legacy fallback; admin should reconcile.`,
         );
       }
     }

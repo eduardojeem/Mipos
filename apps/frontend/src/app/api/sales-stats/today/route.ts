@@ -33,7 +33,7 @@ export async function GET(_request: NextRequest) {
 
     // Use the admin client only AFTER resolving the org — purely to bypass
     // potentially restrictive RLS aggregation perms. Filter is enforced here.
-    const admin = createAdminClient()
+    const admin = await createAdminClient()
     const { data: sales, error: salesError } = await admin
       .from('sales')
       .select('id, total, payment_method')

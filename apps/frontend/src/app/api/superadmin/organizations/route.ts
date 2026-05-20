@@ -4,6 +4,7 @@ import { structuredLogger } from '@/lib/logger';
 import { getSupabaseAdminConfig } from '@/lib/env';
 import { assertSuperAdmin } from '@/app/api/_utils/auth';
 import { getCanonicalPlanAliases, normalizePlanCode } from '@/lib/plan-catalog';
+import { getPlanRecord, syncOrganizationSubscriptionState } from '../../subscription/_lib';
 
 const COMPONENT = 'SuperAdminOrganizationsAPI';
 const ALLOWED_PLANS = new Set(['FREE', 'STARTER', 'PROFESSIONAL']);
@@ -383,6 +384,13 @@ export async function PATCH(request: NextRequest) {
     const adminClient = await createAdminClient();
     const targetIds = id ? [id] : ids;
     const shouldPromoteAdmins = typeof allowedUpdates.subscription_plan === 'string' && allowedUpdates.subscription_plan !== 'FREE';
+    const requestedPlanRecord = typeof allowedUpdates.subscription_plan === 'string'
+      ? await getPlanRecord(allowedUpdates.subscription_plan)
+      : null;
+
+    if (typeof allowedUpdates.subscription_plan === 'string' && !requestedPlanRecord) {
+      return NextResponse.json({ error: 'Plan no encontrado' }, { status: 400 });
+    }
 
     let freePlanOrganizationIds: string[] = [];
     if (shouldPromoteAdmins && targetIds.length > 0) {
@@ -409,6 +417,16 @@ export async function PATCH(request: NextRequest) {
     if (error) {
       structuredLogger.error('Error updating organization(s)', error, { component: COMPONENT, action: 'PATCH', metadata: { id, ids } });
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    if (requestedPlanRecord) {
+      await Promise.all((data || []).map((organization: any) =>
+        syncOrganizationSubscriptionState({
+          organization,
+          plan: requestedPlanRecord,
+          billingCycle: organization.settings?.billingCycle === 'yearly' ? 'yearly' : 'monthly',
+        })
+      ));
     }
 
     if (freePlanOrganizationIds.length > 0) {

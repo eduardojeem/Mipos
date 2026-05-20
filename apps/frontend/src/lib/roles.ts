@@ -49,7 +49,7 @@ export const ORG_ADMIN_ROLES: AppRole[] = ['SUPER_ADMIN', 'OWNER', 'ADMIN'];
  */
 export function normalizeRole(role?: string | null): AppRole {
   const r = String(role || '').toUpperCase().trim();
-  if (r === 'SUPER_ADMIN') return 'SUPER_ADMIN';
+  if (r === 'SUPER_ADMIN' || r === 'SUPERADMIN' || r === 'SUPER-ADMIN') return 'SUPER_ADMIN';
   if (r === 'OWNER') return 'OWNER';
   if (r === 'ADMIN' || r === 'MANAGER_ADMIN') return 'ADMIN';
   if (r === 'MANAGER') return 'MANAGER';

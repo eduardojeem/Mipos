@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
       .from('cash_sessions')
       .select('branch_id, status')
       .in('branch_id', branchIds)
-      .eq('status', 'open'),
+      .eq('status', 'OPEN'),
 
     // Sales today per branch
     adminClient

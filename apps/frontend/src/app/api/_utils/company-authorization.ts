@@ -296,7 +296,8 @@ export async function resolveCompanyAccess(
       metadataRole,
       ...activeRoleNames,
       role,
-      role === 'SELLER' ? 'CASHIER' : '',
+      role === 'CASHIER' ? 'SELLER' : '',
+      role === 'EMPLOYEE' ? 'WAREHOUSE' : '',
       role === 'ADMIN' ? 'MANAGER' : '',
     ].filter(Boolean)))
 

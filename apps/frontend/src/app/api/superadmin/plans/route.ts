@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
 import { assertSuperAdmin } from '@/app/api/_utils/auth'
 import { dedupeCanonicalPlans, getCanonicalPlanDisplayName, normalizePlanSlug } from '@/lib/plan-catalog'
 
@@ -10,6 +10,28 @@ interface PlanLimits {
   maxLocations: number
 }
 
+type PlanRow = {
+  id?: string
+  slug: string
+  limits?: PlanLimits
+  price_monthly?: number | null
+  price_yearly?: number | null
+  [key: string]: unknown
+}
+
+type PlanSubscriptionRow = {
+  plan_id?: string | null
+  organization_id?: string | null
+  status?: string | null
+  billing_cycle?: string | null
+}
+
+type OrganizationPlanRow = {
+  id?: string | null
+  subscription_plan?: string | null
+  subscription_status?: string | null
+}
+
 export async function GET(request: NextRequest) {
   const auth = await assertSuperAdmin(request);
   if (!('ok' in auth) || auth.ok === false) {
@@ -17,7 +39,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const supabase = await createClient()
+    const supabase = await createAdminClient()
 
     const { searchParams } = new URL(request.url)
     const search = (searchParams.get('search') || '').trim()
@@ -71,31 +93,94 @@ export async function GET(request: NextRequest) {
       free: { maxUsers: 1, maxProducts: 50, maxTransactionsPerMonth: 100, maxLocations: 1 },
       starter: { maxUsers: 5, maxProducts: 500, maxTransactionsPerMonth: 1000, maxLocations: 3 },
       professional: { maxUsers: 20, maxProducts: 5000, maxTransactionsPerMonth: 10000, maxLocations: 10 },
+      enterprise: { maxUsers: -1, maxProducts: -1, maxTransactionsPerMonth: -1, maxLocations: -1 },
     };
+    const planRows = (data || []) as PlanRow[]
+
+    const planCodes = new Set(planRows.map((plan) => normalizePlanSlug(plan.slug)))
+    const usageByPlan = new Map<string, { organizations: Set<string>; active: number; mrr: number }>()
+    const priceByPlan = new Map<string, { monthly: number; yearly: number }>()
+
+    planRows.forEach((plan) => {
+      const code = normalizePlanSlug(String(plan.slug || ''))
+      priceByPlan.set(code, {
+        monthly: Number(plan.price_monthly || 0),
+        yearly: Number(plan.price_yearly || 0),
+      })
+    })
+
+    if (planCodes.size > 0) {
+      const [{ data: organizations, error: organizationsError }, { data: subscriptions, error: usageError }] = await Promise.all([
+        supabase
+          .from('organizations')
+          .select('id, subscription_plan, subscription_status'),
+        supabase
+          .from('saas_subscriptions')
+          .select('organization_id, status, billing_cycle'),
+      ])
+
+      if (organizationsError) {
+        console.error('Error fetching organization plan usage:', organizationsError)
+      }
+
+      if (usageError) {
+        console.error('Error fetching subscription billing usage:', usageError)
+      }
+
+      const subscriptionByOrg = new Map(
+        ((subscriptions || []) as PlanSubscriptionRow[])
+          .filter((subscription) => subscription.organization_id)
+          .map((subscription) => [String(subscription.organization_id), subscription])
+      )
+
+      ;((organizations || []) as OrganizationPlanRow[]).forEach((organization) => {
+        const organizationId = String(organization.id || '')
+        if (!organizationId) return
+
+        const code = normalizePlanSlug(organization.subscription_plan)
+        if (!planCodes.has(code)) return
+
+        const current = usageByPlan.get(code) || { organizations: new Set<string>(), active: 0, mrr: 0 }
+        current.organizations.add(organizationId)
+
+        const organizationStatus = String(organization.subscription_status || '').toUpperCase()
+        const isActive = ['ACTIVE', 'TRIAL', 'TRIALING'].includes(organizationStatus)
+        if (isActive) {
+          const subscription = subscriptionByOrg.get(organizationId)
+          const billingCycle = String(subscription?.billing_cycle || '').toLowerCase()
+          const prices = priceByPlan.get(code)
+          current.active += 1
+          current.mrr += billingCycle === 'yearly' ? Number(prices?.yearly || 0) / 12 : Number(prices?.monthly || 0)
+        }
+
+        usageByPlan.set(code, current)
+      })
+    }
 
     // Process plans with optimized mapping
-    const plans = dedupeCanonicalPlans((data || []).map((plan: { slug: string; limits?: PlanLimits; [key: string]: unknown }) => {
+    const plans = dedupeCanonicalPlans(planRows.map((plan) => {
       if (!plan.limits) {
         const slug = normalizePlanSlug(String(plan.slug || '').toLowerCase());
         plan.limits = DEFAULT_LIMITS[slug] || { maxUsers: 2, maxProducts: 50, maxTransactionsPerMonth: 200, maxLocations: 1 };
       }
+      const usage = usageByPlan.get(normalizePlanSlug(String(plan.slug || '')))
       return {
         ...plan,
         slug: normalizePlanSlug(String(plan.slug || '')),
         name: getCanonicalPlanDisplayName(plan.slug as string),
+        organization_count: usage?.organizations.size || 0,
+        active_subscription_count: usage?.active || 0,
+        mrr: usage?.mrr || 0,
       };
     }))
 
-    // Add caching headers for better performance
     const response = NextResponse.json({
       plans: plans,
       total: count || 0,
       page,
       pageSize,
     })
-    
-    // Cache for 5 minutes on successful responses
-    response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600')
+    response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
     
     return response
   } catch (err) {
@@ -114,7 +199,7 @@ export async function PATCH(request: NextRequest) {
   }
 
   try {
-    const supabase = await createClient()
+    const supabase = await createAdminClient()
 
     const defaults = [
       { 
@@ -143,6 +228,15 @@ export async function PATCH(request: NextRequest) {
         features: ['basic_inventory','basic_sales','purchase_module','basic_reports','advanced_reports','multi_branch','audit_logs','unlimited_users','export_reports','team_management','admin_panel','advanced_inventory','loyalty_program','custom_branding'], 
         limits: { maxUsers: -1, maxProducts: -1, maxTransactionsPerMonth: -1, maxLocations: -1 },
         is_active: true 
+      },
+      {
+        name: 'Enterprise',
+        slug: 'enterprise',
+        price_monthly: 0,
+        price_yearly: 0,
+        features: ['basic_inventory','basic_sales','purchase_module','advanced_reports','multi_branch','audit_logs','export_reports','team_management','admin_panel','advanced_inventory','loyalty_program','custom_branding','api_access'],
+        limits: { maxUsers: -1, maxProducts: -1, maxTransactionsPerMonth: -1, maxLocations: -1 },
+        is_active: false
       }
     ]
 
@@ -166,11 +260,11 @@ export async function PATCH(request: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    const allowed = ['free','starter','professional']
+    const allowed = ['free','starter','professional','enterprise']
     await supabase
       .from('saas_plans')
       .update({ is_active: false })
-      .not('slug','in', allowed)
+      .not('slug','in', `(${allowed.join(',')})`)
 
     return NextResponse.json({ success: true, message: 'Planes sincronizados correctamente' })
   } catch (err) {
@@ -185,7 +279,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const supabase = await createClient()
+    const supabase = await createAdminClient()
 
     const body = await request.json()
     const normalizedSlug = normalizePlanSlug(String(body.slug || '').toLowerCase())
@@ -241,7 +335,9 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error && String(error.code) === '42703') {
-      const { currency, ...minimal } = plan as any
+      const minimal = Object.fromEntries(
+        Object.entries(plan).filter(([key]) => key !== 'currency')
+      )
       const retry = await supabase
         .from('saas_plans')
         .insert(minimal)
@@ -280,7 +376,7 @@ export async function PUT(request: NextRequest) {
   }
 
   try {
-    const supabase = await createClient()
+    const supabase = await createAdminClient()
 
     const body = await request.json()
     const id = String(body.id || '')
@@ -374,7 +470,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'ID inválido' }, { status: 400 })
     }
 
-    const supabase = await createClient()
+    const supabase = await createAdminClient()
 
     // First check if plan exists and can be deleted
     const { data: existingPlan } = await supabase
@@ -404,6 +500,34 @@ export async function DELETE(request: NextRequest) {
     if (subscriptions && subscriptions.length > 0) {
       return NextResponse.json({ 
         error: 'No se puede eliminar este plan porque está siendo utilizado por organizaciones activas',
+        code: 'PLAN_IN_USE'
+      }, { status: 400 })
+    }
+
+    const { data: planToDelete } = await supabase
+      .from('saas_plans')
+      .select('slug')
+      .eq('id', id)
+      .single()
+
+    const planCode = normalizePlanSlug(planToDelete?.slug)
+    const { data: organizations, error: orgUsageError } = await supabase
+      .from('organizations')
+      .select('id')
+      .in('subscription_plan', [planCode, planCode.toUpperCase()])
+      .limit(1)
+
+    if (orgUsageError) {
+      console.error('Error checking organization usage for plan:', orgUsageError)
+      return NextResponse.json({
+        error: 'Error al validar organizaciones del plan',
+        details: process.env.NODE_ENV === 'development' ? orgUsageError.message : undefined
+      }, { status: 500 })
+    }
+
+    if (organizations && organizations.length > 0) {
+      return NextResponse.json({
+        error: 'No se puede eliminar este plan porque esta asignado a organizaciones',
         code: 'PLAN_IN_USE'
       }, { status: 400 })
     }

@@ -737,7 +737,7 @@ export function useIsFallbackMode() {
 // Unifica el origen del rol en frontend devolviendo un valor normalizado
 function normalizeRole(role?: string): string {
   const key = (role || '').toUpperCase();
-  if (key === USER_ROLES.SUPER_ADMIN) return USER_ROLES.SUPER_ADMIN;
+  if (key === USER_ROLES.SUPER_ADMIN || key === 'SUPERADMIN' || key === 'SUPER-ADMIN') return USER_ROLES.SUPER_ADMIN;
   if (key === 'OWNER' || key === USER_ROLES.ADMIN) return USER_ROLES.ADMIN;
   if (key === USER_ROLES.MANAGER) return USER_ROLES.MANAGER;
   if (key === USER_ROLES.CASHIER) return USER_ROLES.CASHIER;
