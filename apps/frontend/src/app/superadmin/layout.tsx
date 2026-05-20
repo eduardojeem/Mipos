@@ -46,57 +46,46 @@ export default async function SuperAdminLayout({
   children: React.ReactNode;
 }) {
   const supabase = await createClient();
-  
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
 
-  // Verificar autenticación
-  if (!user) {
-    redirect('/auth/signin');
-  }
+  if (!user) redirect('/auth/signin');
 
-  // Verificar rol de Super Admin (Server-Side)
-  // 1. Check Metadata (Fastest)
-  const metadataRole = (user.user_metadata as any)?.role?.toUpperCase();
-  if (metadataRole === 'SUPER_ADMIN') {
-    return <SuperAdminClientLayout>{children}</SuperAdminClientLayout>;
-  }
+  // SECURITY: verificar en este orden de prioridad:
+  // 1. user_roles table (RBAC — fuente de verdad)
+  // 2. users.role column (legacy, confiable porque está en DB)
+  // 3. app_metadata.role (server-managed, no modificable por el usuario)
+  // NUNCA user_metadata.role (el usuario puede auto-asignarlo)
 
-  // 2. Check DB via Admin Client (Most Robust)
   let adminClient: any = null;
-  try {
-    adminClient = await createAdminClient();
-  } catch {
-    adminClient = null;
-  }
-  
-  // Check user_roles table
-  let hasRole = false;
+  try { adminClient = await createAdminClient(); } catch {}
+
   if (adminClient) {
+    // 1. user_roles
     const { data: userRoles } = await adminClient
       .from('user_roles')
       .select('role:roles(name)')
       .eq('user_id', user.id)
       .eq('is_active', true);
-    hasRole = userRoles?.some((ur: any) => ur.role?.name === 'SUPER_ADMIN') === true;
+    if (userRoles?.some((ur: any) => ur.role?.name === 'SUPER_ADMIN')) {
+      return <SuperAdminClientLayout>{children}</SuperAdminClientLayout>;
+    }
+
+    // 2. users.role
+    const { data: userData } = await adminClient
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle();
+    if (userData?.role === 'SUPER_ADMIN') {
+      return <SuperAdminClientLayout>{children}</SuperAdminClientLayout>;
+    }
   }
-  
-  if (hasRole) {
+
+  // 3. app_metadata (server-managed)
+  const appRole = (user.app_metadata as any)?.role?.toUpperCase();
+  if (appRole === 'SUPER_ADMIN') {
     return <SuperAdminClientLayout>{children}</SuperAdminClientLayout>;
   }
 
-  // 3. Check users table (Legacy/Fallback)
-  const { data: userData } = await supabase
-    .from('users')
-    .select('role')
-    .eq('id', user.id)
-    .single();
-
-  if (userData?.role === 'SUPER_ADMIN') {
-    return <SuperAdminClientLayout>{children}</SuperAdminClientLayout>;
-  }
-
-  // Si no es Super Admin, redirigir
   redirect('/dashboard');
 }
