@@ -1,13 +1,44 @@
 "use client";
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowRight, LogIn, Menu, Search, Store, X } from 'lucide-react';
+import { ArrowRight, LayoutDashboard, LogIn, LogOut, Menu, Search, Store, User, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { useAuth } from '@/hooks/use-auth';
 
 interface MarketplaceHeaderProps {
   searchQuery?: string;
+}
+
+function getUserPanelHref(role: string | null | undefined): string {
+  const r = (role || '').toUpperCase();
+  if (r === 'SUPER_ADMIN') return '/superadmin';
+  if (r === 'OWNER' || r === 'ADMIN') return '/admin';
+  return '/dashboard';
+}
+
+function getUserProfileHref(role: string | null | undefined): string {
+  const r = (role || '').toUpperCase();
+  if (r === 'OWNER' || r === 'ADMIN' || r === 'SUPER_ADMIN') return '/admin/profile';
+  return '/dashboard/profile';
+}
+
+function getUserInitials(name?: string | null, email?: string | null): string {
+  const source = (name || email || '').trim();
+  if (!source) return '?';
+  const parts = source.split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
 const navItems = [
@@ -18,8 +49,19 @@ const navItems = [
 ];
 
 export function MarketplaceHeader({ searchQuery = '' }: MarketplaceHeaderProps) {
+  const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isSearchVisible, setIsSearchVisible] = useState(false);
+  const { user, loading: authLoading, signOut } = useAuth();
+  const panelHref = useMemo(() => getUserPanelHref(user?.role), [user?.role]);
+  const profileHref = useMemo(() => getUserProfileHref(user?.role), [user?.role]);
+  const userInitials = useMemo(() => getUserInitials(user?.name, user?.email), [user?.name, user?.email]);
+
+  const handleSignOut = async () => {
+    setIsMobileMenuOpen(false);
+    await signOut();
+    router.push('/home');
+  };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-slate-200/80 bg-white/80 backdrop-blur-2xl transition-all duration-300 dark:border-slate-800/80 dark:bg-slate-950/80">
@@ -64,17 +106,62 @@ export function MarketplaceHeader({ searchQuery = '' }: MarketplaceHeaderProps) 
           </form>
 
           <div className="hidden items-center gap-2 sm:flex">
-            <Link href="/auth/signin">
-              <Button variant="ghost" className="h-10 rounded-full px-4 text-slate-700 hover:bg-slate-100/60 dark:text-slate-200 dark:hover:bg-slate-800/70">
-                <LogIn className="mr-2 h-4 w-4" />
-                Ingresar
-              </Button>
-            </Link>
-            <Link href="/inicio#como-funciona">
-              <Button className="h-10 rounded-full bg-slate-950 px-6 text-white transition-all hover:bg-emerald-700 hover:shadow-lg hover:shadow-emerald-500/20 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white">
-                Crear-empresa
-              </Button>
-            </Link>
+            {authLoading ? (
+              <div className="h-10 w-32 animate-pulse rounded-full bg-slate-100 dark:bg-slate-800" />
+            ) : user ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="h-10 gap-2 rounded-full border border-slate-200 bg-white px-2 pr-4 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-slate-950 to-emerald-700 text-[11px] font-semibold text-white dark:from-slate-100 dark:to-emerald-400 dark:text-slate-950">
+                      {userInitials}
+                    </span>
+                    <span className="max-w-[140px] truncate text-sm font-medium">
+                      {user.name || user.email}
+                    </span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel className="flex flex-col gap-0.5">
+                    <span className="truncate text-sm font-semibold">{user.name || 'Sesión activa'}</span>
+                    <span className="truncate text-xs font-normal text-muted-foreground">{user.email}</span>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => router.push(panelHref)} className="cursor-pointer">
+                    <LayoutDashboard className="mr-2 h-4 w-4" />
+                    Ir a mi panel
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => router.push(profileHref)} className="cursor-pointer">
+                    <User className="mr-2 h-4 w-4" />
+                    Mi perfil
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={handleSignOut}
+                    className="cursor-pointer text-rose-600 focus:text-rose-700"
+                  >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Cerrar sesión
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <>
+                <Link href="/auth/signin">
+                  <Button variant="ghost" className="h-10 rounded-full px-4 text-slate-700 hover:bg-slate-100/60 dark:text-slate-200 dark:hover:bg-slate-800/70">
+                    <LogIn className="mr-2 h-4 w-4" />
+                    Ingresar
+                  </Button>
+                </Link>
+                <Link href="/inicio#como-funciona">
+                  <Button className="h-10 rounded-full bg-slate-950 px-6 text-white transition-all hover:bg-emerald-700 hover:shadow-lg hover:shadow-emerald-500/20 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white">
+                    Crear-empresa
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
 
           <div className="flex items-center gap-1 lg:hidden">
@@ -160,16 +247,56 @@ export function MarketplaceHeader({ searchQuery = '' }: MarketplaceHeaderProps) 
               </nav>
 
               <div className="mt-auto flex flex-col gap-3 pt-8">
-                <Link href="/auth/signin" onClick={() => setIsMobileMenuOpen(false)}>
-                  <Button variant="outline" className="h-14 w-full rounded-2xl border-slate-200 text-lg font-bold dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800">
-                    Ingresar
-                  </Button>
-                </Link>
-                <Link href="/inicio#como-funciona" onClick={() => setIsMobileMenuOpen(false)}>
-                  <Button className="h-14 w-full rounded-2xl bg-slate-950 text-lg font-bold dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white">
-                    Crear-empresa
-                  </Button>
-                </Link>
+                {authLoading ? (
+                  <div className="h-14 w-full animate-pulse rounded-2xl bg-slate-100 dark:bg-slate-800" />
+                ) : user ? (
+                  <>
+                    <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900">
+                      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-slate-950 to-emerald-700 text-sm font-semibold text-white dark:from-slate-100 dark:to-emerald-400 dark:text-slate-950">
+                        {userInitials}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-base font-semibold text-slate-950 dark:text-slate-100">
+                          {user.name || 'Sesión activa'}
+                        </p>
+                        <p className="truncate text-xs text-slate-500 dark:text-slate-400">{user.email}</p>
+                      </div>
+                    </div>
+                    <Link href={panelHref} onClick={() => setIsMobileMenuOpen(false)}>
+                      <Button className="h-14 w-full gap-2 rounded-2xl bg-slate-950 text-lg font-bold dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white">
+                        <LayoutDashboard className="h-5 w-5" />
+                        Ir a mi panel
+                      </Button>
+                    </Link>
+                    <Link href={profileHref} onClick={() => setIsMobileMenuOpen(false)}>
+                      <Button variant="outline" className="h-14 w-full gap-2 rounded-2xl border-slate-200 text-lg font-bold dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800">
+                        <User className="h-5 w-5" />
+                        Mi perfil
+                      </Button>
+                    </Link>
+                    <Button
+                      variant="ghost"
+                      className="h-12 w-full gap-2 rounded-2xl text-base font-semibold text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/30"
+                      onClick={handleSignOut}
+                    >
+                      <LogOut className="h-5 w-5" />
+                      Cerrar sesión
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Link href="/auth/signin" onClick={() => setIsMobileMenuOpen(false)}>
+                      <Button variant="outline" className="h-14 w-full rounded-2xl border-slate-200 text-lg font-bold dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800">
+                        Ingresar
+                      </Button>
+                    </Link>
+                    <Link href="/inicio#como-funciona" onClick={() => setIsMobileMenuOpen(false)}>
+                      <Button className="h-14 w-full rounded-2xl bg-slate-950 text-lg font-bold dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white">
+                        Crear-empresa
+                      </Button>
+                    </Link>
+                  </>
+                )}
               </div>
             </div>
           </motion.div>

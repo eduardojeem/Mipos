@@ -523,20 +523,7 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
               </Tooltip>
             </div>
           ) : (
-            <div className="flex flex-col items-center gap-1">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setIsCollapsed(false)}
-                    className="h-9 w-9 text-slate-400"
-                  >
-                    <PanelLeftOpen className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="right">Expandir menú</TooltipContent>
-              </Tooltip>
+            <div className="flex flex-col items-center gap-1 py-1">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -587,6 +574,23 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
           {/* Topbar */}
           <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 dark:border-slate-800 dark:bg-slate-900">
             <div className="flex min-w-0 items-center gap-3">
+
+              {/* Botón expandir sidebar (solo desktop, cuando está colapsado) */}
+              {isCollapsed && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="hidden h-9 w-9 text-slate-500 md:flex"
+                      onClick={() => setIsCollapsed(false)}
+                    >
+                      <PanelLeftOpen className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Expandir menú</TooltipContent>
+                </Tooltip>
+              )}
 
               {/* Hamburger mobile */}
               <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>

@@ -3,10 +3,40 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { ArrowRight, Building2, LogIn, Menu, X } from 'lucide-react';
+import { ArrowRight, Building2, LayoutDashboard, LogIn, LogOut, Menu, User, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { useAuth } from '@/hooks/use-auth';
 import { buildPublicRegistrationPath } from '@/lib/public-plan-utils';
 import { cn } from '@/lib/utils';
+
+function getUserPanelHref(role: string | null | undefined): string {
+  const r = (role || '').toUpperCase();
+  if (r === 'SUPER_ADMIN') return '/superadmin';
+  if (r === 'OWNER' || r === 'ADMIN') return '/admin';
+  return '/dashboard';
+}
+
+function getUserProfileHref(role: string | null | undefined): string {
+  const r = (role || '').toUpperCase();
+  if (r === 'OWNER' || r === 'ADMIN' || r === 'SUPER_ADMIN') return '/admin/profile';
+  return '/dashboard/profile';
+}
+
+function getUserInitials(name?: string | null, email?: string | null): string {
+  const source = (name || email || '').trim();
+  if (!source) return '?';
+  const parts = source.split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
 
 type NavItem =
   | { kind: 'scroll'; label: string; sectionId: string; active: (pathname: string) => boolean }
@@ -43,6 +73,16 @@ export function LandingHeader() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
+  const { user, loading: authLoading, signOut } = useAuth();
+  const panelHref = useMemo(() => getUserPanelHref(user?.role), [user?.role]);
+  const profileHref = useMemo(() => getUserProfileHref(user?.role), [user?.role]);
+  const userInitials = useMemo(() => getUserInitials(user?.name, user?.email), [user?.name, user?.email]);
+
+  const handleSignOut = async () => {
+    setMobileMenuOpen(false);
+    await signOut();
+    router.push('/inicio');
+  };
   const isLandingPage = pathname === '/inicio' || pathname === '/';
   const isPlansPage = pathname.startsWith('/inicio/planes');
   const isRegistrationPage = pathname.startsWith('/inicio/registro');
@@ -150,21 +190,66 @@ export function LandingHeader() {
           </nav>
 
           <div className="hidden items-center gap-2 lg:flex">
-            <Link href="/auth/signin">
-              <Button
-                variant="ghost"
-                className="rounded-full px-4 text-slate-300 hover:bg-white/5 hover:text-white"
-              >
-                <LogIn className="mr-2 h-4 w-4" />
-                Ingresar
-              </Button>
-            </Link>
-            <Link href={primaryCta.href}>
-              <Button className="gradient-primary rounded-full px-5 text-white shadow-[0_18px_36px_-18px_rgba(16,185,129,0.9)]">
-                {primaryCta.label}
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            </Link>
+            {authLoading ? (
+              <div className="h-10 w-32 animate-pulse rounded-full bg-white/5" />
+            ) : user ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="h-10 gap-2 rounded-full border border-white/10 bg-white/5 px-2 pr-4 text-slate-200 hover:bg-white/10 hover:text-white"
+                  >
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 text-[11px] font-semibold text-white">
+                      {userInitials}
+                    </span>
+                    <span className="max-w-[140px] truncate text-sm font-medium">
+                      {user.name || user.email}
+                    </span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel className="flex flex-col gap-0.5">
+                    <span className="truncate text-sm font-semibold">{user.name || 'Sesión activa'}</span>
+                    <span className="truncate text-xs font-normal text-muted-foreground">{user.email}</span>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => router.push(panelHref)} className="cursor-pointer">
+                    <LayoutDashboard className="mr-2 h-4 w-4" />
+                    Ir a mi panel
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => router.push(profileHref)} className="cursor-pointer">
+                    <User className="mr-2 h-4 w-4" />
+                    Mi perfil
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={handleSignOut}
+                    className="cursor-pointer text-rose-600 focus:text-rose-700"
+                  >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Cerrar sesión
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <>
+                <Link href="/auth/signin">
+                  <Button
+                    variant="ghost"
+                    className="rounded-full px-4 text-slate-300 hover:bg-white/5 hover:text-white"
+                  >
+                    <LogIn className="mr-2 h-4 w-4" />
+                    Ingresar
+                  </Button>
+                </Link>
+                <Link href={primaryCta.href}>
+                  <Button className="gradient-primary rounded-full px-5 text-white shadow-[0_18px_36px_-18px_rgba(16,185,129,0.9)]">
+                    {primaryCta.label}
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
 
           <button
@@ -217,23 +302,64 @@ export function LandingHeader() {
               </div>
 
               <div className="landing-divider mt-3 border-t pt-3">
-                <div className="grid gap-2">
-                  <Link href="/auth/signin" onClick={() => setMobileMenuOpen(false)}>
-                    <Button
-                      variant="outline"
-                      className="w-full rounded-xl border-white/10 bg-transparent text-white hover:bg-white/5"
-                    >
-                      <LogIn className="mr-2 h-4 w-4" />
-                      Ingresar
-                    </Button>
-                  </Link>
-                  <Link href={primaryCta.href} onClick={() => setMobileMenuOpen(false)}>
-                    <Button className="gradient-primary w-full rounded-xl text-white">
-                      {primaryCta.label}
-                      <ArrowRight className="ml-2 h-4 w-4" />
-                    </Button>
-                  </Link>
-                </div>
+                {authLoading ? (
+                  <div className="h-12 w-full animate-pulse rounded-xl bg-white/5" />
+                ) : user ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3 rounded-xl bg-white/5 px-3 py-2.5">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 text-xs font-semibold text-white">
+                        {userInitials}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-white">{user.name || 'Sesión activa'}</p>
+                        <p className="truncate text-xs text-slate-400">{user.email}</p>
+                      </div>
+                    </div>
+                    <div className="grid gap-2">
+                      <Link href={panelHref} onClick={() => setMobileMenuOpen(false)}>
+                        <Button className="gradient-primary w-full rounded-xl text-white">
+                          <LayoutDashboard className="mr-2 h-4 w-4" />
+                          Ir a mi panel
+                        </Button>
+                      </Link>
+                      <Link href={profileHref} onClick={() => setMobileMenuOpen(false)}>
+                        <Button
+                          variant="outline"
+                          className="w-full rounded-xl border-white/10 bg-transparent text-white hover:bg-white/5"
+                        >
+                          <User className="mr-2 h-4 w-4" />
+                          Mi perfil
+                        </Button>
+                      </Link>
+                      <Button
+                        variant="ghost"
+                        className="w-full rounded-xl text-rose-300 hover:bg-rose-500/10 hover:text-rose-200"
+                        onClick={handleSignOut}
+                      >
+                        <LogOut className="mr-2 h-4 w-4" />
+                        Cerrar sesión
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid gap-2">
+                    <Link href="/auth/signin" onClick={() => setMobileMenuOpen(false)}>
+                      <Button
+                        variant="outline"
+                        className="w-full rounded-xl border-white/10 bg-transparent text-white hover:bg-white/5"
+                      >
+                        <LogIn className="mr-2 h-4 w-4" />
+                        Ingresar
+                      </Button>
+                    </Link>
+                    <Link href={primaryCta.href} onClick={() => setMobileMenuOpen(false)}>
+                      <Button className="gradient-primary w-full rounded-xl text-white">
+                        {primaryCta.label}
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </Button>
+                    </Link>
+                  </div>
+                )}
               </div>
             </div>
           </div>
