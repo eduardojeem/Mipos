@@ -110,8 +110,8 @@ export default function TrackOrderClient() {
           badge={content.heroBadge || 'Pedidos'}
           title={content.orderTrackingTitle || 'Sigue tu pedido'}
           description={content.orderTrackingDescription || 'Consulta el estado de tu compra con una vista clara, cronológica y pensada para clientes finales.'}
-          actions={[{ href: '/orders/track', label: 'Consultar pedido', variant: 'primary' }]}
-          metrics={[{ label: 'Canal', value: 'Publico', helpText: 'Disponible desde el subdominio del tenant.' }]}
+          actions={[]}
+          metrics={[{ label: 'Canal', value: 'Público', helpText: 'Buscá por número de pedido o por el email usado al comprar.' }]}
         />
 
         <div className="mt-8 space-y-6">

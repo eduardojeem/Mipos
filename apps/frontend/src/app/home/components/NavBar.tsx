@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   Home,
   Menu,
@@ -49,6 +50,12 @@ function NavBarComponent({
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const { tenantHref } = useTenantPublicRouting();
+  const pathname = usePathname() || '';
+  const router = useRouter();
+  // Detecta si el usuario está físicamente en la home del tenant
+  // (path puede ser '/home' en server-rendered o '/{slug}/home' tras
+  // el rewrite del middleware en producción).
+  const isOnHome = pathname === '/home' || pathname.endsWith('/home');
 
   const sections = getTenantPublicSections(config);
   const announcement = getTenantAnnouncement(config);
@@ -56,7 +63,14 @@ function NavBarComponent({
   const primary = config?.branding?.primaryColor || '#0f766e';
 
   const handleNavigate = (id: string) => {
-    onNavigate(id);
+    // En home: deja que el padre haga scroll + actualice activeSection.
+    // Fuera de home: navega a /home con hash; el componente de home
+    // detectará el hash y scrolleará al cargar.
+    if (isOnHome) {
+      onNavigate(id);
+    } else {
+      router.push(tenantHref(`/home#${id}`));
+    }
     setIsMenuOpen(false);
   };
 

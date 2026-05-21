@@ -179,7 +179,10 @@ export default function OffersClient({
       try {
         const response = await fetch(target, {
           method: 'GET',
-          cache: 'no-store',
+          // 'default' respeta los Cache-Control de la API. Antes hacíamos
+          // round-trip completo en cada cambio de filtro aun cuando la
+          // respuesta no había cambiado.
+          cache: 'default',
           signal: controller.signal,
         });
 
@@ -374,23 +377,29 @@ export default function OffersClient({
           </section>
         ) : null}
 
-        <PublicOffersCarousel
-          initialItems={initialCarouselItems}
-          showCart={canUseCart}
-          onAddToCart={
-            canUseCart
-              ? ((productLike: CatalogCartProduct) => {
-                  addToCart(productLike, 1);
-                  const price = Number(productLike.offer_price ?? productLike.sale_price ?? 0);
-                  setAriaLive(`Producto agregado: ${productLike.name} - ${formatCurrency(price)}`);
-                })
-              : undefined
-          }
-          onViewDetails={(item) => {
-            setSelectedItem(item);
-            setDetailOpen(true);
-          }}
-        />
+        {/* Ocultamos el carrusel "destacadas" cuando hay filtros activos.
+            initialCarouselItems es el snapshot del mount: no se refresca
+            con filtros y dejarlo mostraría ofertas que no coinciden con
+            la búsqueda actual, confundiendo al usuario. */}
+        {!debouncedSearch && (category === 'all') && !promotionFilter && initialCarouselItems.length > 0 ? (
+          <PublicOffersCarousel
+            initialItems={initialCarouselItems}
+            showCart={canUseCart}
+            onAddToCart={
+              canUseCart
+                ? ((productLike: CatalogCartProduct) => {
+                    addToCart(productLike, 1);
+                    const price = Number(productLike.offer_price ?? productLike.sale_price ?? 0);
+                    setAriaLive(`Producto agregado: ${productLike.name} - ${formatCurrency(price)}`);
+                  })
+                : undefined
+            }
+            onViewDetails={(item) => {
+              setSelectedItem(item);
+              setDetailOpen(true);
+            }}
+          />
+        ) : null}
 
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">

@@ -302,7 +302,10 @@ export default function CatalogClientOptimized({
       try {
         const response = await fetch(target, {
           method: 'GET',
-          cache: 'no-store',
+          // 'default' respeta los headers Cache-Control que devuelva la
+          // API. Sin esto, cada cambio de filtro o página hacía un
+          // round-trip completo aun cuando los datos no cambiaron.
+          cache: 'default',
           signal: controller.signal,
         });
 

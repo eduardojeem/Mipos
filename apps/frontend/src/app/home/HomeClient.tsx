@@ -55,6 +55,23 @@ export default function HomeClient({ initialData }: HomeClientProps) {
   const offers = initialData.offers;
   const products = initialData.products;
 
+  // Si llegamos con un hash (#contacto, #ofertas, etc.) desde otra página
+  // vía router.push, scrolleamos al elemento en mount.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const hash = window.location.hash.replace('#', '');
+    if (!hash) return;
+    // Esperamos un frame a que se monte el DOM
+    const timer = window.setTimeout(() => {
+      const target = document.getElementById(hash);
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        setActiveSection(hash);
+      }
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   useEffect(() => {
     const ids = ['inicio', 'categorias', 'ofertas', 'productos', 'contacto'];
     const elements = ids
