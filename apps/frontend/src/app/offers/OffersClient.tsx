@@ -377,30 +377,6 @@ export default function OffersClient({
           </section>
         ) : null}
 
-        {/* Ocultamos el carrusel "destacadas" cuando hay filtros activos.
-            initialCarouselItems es el snapshot del mount: no se refresca
-            con filtros y dejarlo mostraría ofertas que no coinciden con
-            la búsqueda actual, confundiendo al usuario. */}
-        {!debouncedSearch && (category === 'all') && !promotionFilter && initialCarouselItems.length > 0 ? (
-          <PublicOffersCarousel
-            initialItems={initialCarouselItems}
-            showCart={canUseCart}
-            onAddToCart={
-              canUseCart
-                ? ((productLike: CatalogCartProduct) => {
-                    addToCart(productLike, 1);
-                    const price = Number(productLike.offer_price ?? productLike.sale_price ?? 0);
-                    setAriaLive(`Producto agregado: ${productLike.name} - ${formatCurrency(price)}`);
-                  })
-                : undefined
-            }
-            onViewDetails={(item) => {
-              setSelectedItem(item);
-              setDetailOpen(true);
-            }}
-          />
-        ) : null}
-
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="relative w-full lg:max-w-sm">
@@ -459,6 +435,30 @@ export default function OffersClient({
             </div>
           </div>
         </section>
+
+        {/* Carrusel "destacadas" después de los filtros: el user controla
+            primero (filtros), luego descubre (carrusel). Solo se muestra
+            cuando no hay filtros activos — initialCarouselItems es del
+            mount y no refleja la búsqueda actual. */}
+        {!debouncedSearch && (category === 'all') && !promotionFilter && initialCarouselItems.length > 0 ? (
+          <PublicOffersCarousel
+            initialItems={initialCarouselItems}
+            showCart={canUseCart}
+            onAddToCart={
+              canUseCart
+                ? ((productLike: CatalogCartProduct) => {
+                    addToCart(productLike, 1);
+                    const price = Number(productLike.offer_price ?? productLike.sale_price ?? 0);
+                    setAriaLive(`Producto agregado: ${productLike.name} - ${formatCurrency(price)}`);
+                  })
+                : undefined
+            }
+            onViewDetails={(item) => {
+              setSelectedItem(item);
+              setDetailOpen(true);
+            }}
+          />
+        ) : null}
 
         {error ? (
           <Alert variant="destructive">

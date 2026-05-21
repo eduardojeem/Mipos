@@ -118,6 +118,7 @@ export default function CatalogClientOptimized({
   const { config } = useBusinessConfig();
   const { tenantHref, tenantApiPath } = useTenantPublicRouting();
   const categories = initialCategories;
+  const brandPrimary = config.branding?.primaryColor || '#0f766e';
   const initialAdvancedFilters = useMemo(
     () => buildInitialFilters(initialQueryState, initialMaxPrice),
     [initialMaxPrice, initialQueryState]
@@ -497,8 +498,11 @@ export default function CatalogClientOptimized({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between gap-4 h-16">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-gradient-to-br from-primary/20 to-purple-500/20 rounded-xl">
-                <Sparkles className="w-5 h-5 text-primary" />
+              <div
+                className="p-2 rounded-xl"
+                style={{ backgroundColor: `${brandPrimary}1f` }}
+              >
+                <Sparkles className="w-5 h-5" style={{ color: brandPrimary }} />
               </div>
               <div>
                 <h1 className="font-bold text-foreground text-lg tracking-tight">Catalogo</h1>
@@ -511,7 +515,8 @@ export default function CatalogClientOptimized({
             <Button
               size="sm"
               disabled={cartItemsCount === 0}
-              className="relative h-10 px-6 rounded-xl bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-700 hover:to-blue-700 text-white shadow-lg shadow-blue-500/20 transition-all duration-300 hover:shadow-blue-500/30 hover:scale-105 active:scale-95 gap-2 border-0 disabled:opacity-60 disabled:hover:scale-100"
+              style={{ backgroundColor: brandPrimary }}
+              className="relative h-10 px-6 rounded-xl text-white shadow-lg shadow-black/10 transition-transform duration-200 hover:scale-105 active:scale-95 hover:brightness-110 gap-2 border-0 disabled:opacity-60 disabled:hover:scale-100"
               onClick={handleCheckout}
             >
               <ShoppingCart className="w-4 h-4" />

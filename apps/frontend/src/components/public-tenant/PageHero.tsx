@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowRight, ShieldCheck, Star, Truck } from 'lucide-react';
+import { ArrowRight, Truck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { hexToRgba } from '@/lib/color-utils';
 import { getTenantHeroImage } from '@/lib/public-site/tenant-public-config';
@@ -21,6 +21,11 @@ type HeroMetric = {
   helpText?: string;
 };
 
+type HeroTrustBadge = {
+  icon: typeof Truck;
+  label: string;
+};
+
 interface PageHeroProps {
   config: BusinessConfig;
   badge?: string;
@@ -28,13 +33,14 @@ interface PageHeroProps {
   description: string;
   actions?: HeroAction[];
   metrics?: HeroMetric[];
+  /**
+   * Trust badges para mostrar bajo el contenido. Si no se pasan, no se
+   * muestran. Antes había 3 hardcoded ("Envío rápido", "Compra segura",
+   * "Productos originales") que mentían en tenants que no ofrecen esos
+   * servicios.
+   */
+  trustBadges?: HeroTrustBadge[];
 }
-
-const TRUST_BADGES = [
-  { icon: Truck, label: 'Envío rápido' },
-  { icon: ShieldCheck, label: 'Compra segura' },
-  { icon: Star, label: 'Productos originales' },
-];
 
 export function PageHero({
   config,
@@ -43,6 +49,7 @@ export function PageHero({
   description,
   actions = [],
   metrics = [],
+  trustBadges = [],
 }: PageHeroProps) {
   const { tenantHref } = useTenantPublicRouting();
   const primary = config.branding?.primaryColor || '#0f766e';
@@ -53,8 +60,11 @@ export function PageHero({
 
   return (
     <section className="relative overflow-hidden rounded-2xl bg-white border border-slate-200 dark:border-slate-800 dark:bg-slate-900">
-      {/* Layout: text left, image right */}
-      <div className="grid min-h-[420px] lg:grid-cols-2">
+      {/* Layout: text left, image right.
+          min-h-[420px] solo en desktop donde la imagen aparece —
+          en mobile la imagen es hidden y forzar 420px desperdiciaba
+          medio viewport antes del contenido real. */}
+      <div className="grid lg:min-h-[420px] lg:grid-cols-2">
 
         {/* Left — content */}
         <div className="relative z-10 flex flex-col justify-center gap-6 px-7 py-10 sm:px-10 lg:py-14">
@@ -122,15 +132,17 @@ export function PageHero({
             </div>
           ) : null}
 
-          {/* Trust badges */}
-          <div className="flex flex-wrap gap-4">
-            {TRUST_BADGES.map(({ icon: Icon, label }) => (
-              <div key={label} className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-                <Icon className="h-3.5 w-3.5" style={{ color: primary }} />
-                {label}
-              </div>
-            ))}
-          </div>
+          {/* Trust badges — opt-in via prop */}
+          {trustBadges.length > 0 ? (
+            <div className="flex flex-wrap gap-4">
+              {trustBadges.map(({ icon: Icon, label }) => (
+                <div key={label} className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                  <Icon className="h-3.5 w-3.5" style={{ color: primary }} />
+                  {label}
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         {/* Right — image */}
