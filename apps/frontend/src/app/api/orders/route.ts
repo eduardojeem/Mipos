@@ -10,6 +10,10 @@ import {
   isSchemaMissingError,
 } from "@/lib/public-site/order-products";
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const MAX_NOTES_LENGTH = 500;
+const MAX_SHIPPING_REGION_LENGTH = 80;
+
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   maxRequests: 100,
@@ -328,6 +332,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validación de formato de email server-side. Antes solo se chequeaba
+    // presencia y el cliente podía mandar "hola" como email.
+    if (!EMAIL_REGEX.test(String(customerInfo.email).trim())) {
+      return NextResponse.json(
+        { error: "Email invalido" },
+        { status: 400 },
+      );
+    }
+
     if (!["CASH", "CARD", "TRANSFER"].includes(paymentMethod)) {
       return NextResponse.json(
         { error: "Metodo de pago invalido" },
@@ -345,6 +358,14 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
+
+    // Truncate notes y shippingRegion para evitar payload bombing
+    const safeNotes =
+      typeof notes === "string" ? notes.trim().slice(0, MAX_NOTES_LENGTH) : "";
+    const safeShippingRegion =
+      typeof shippingRegion === "string"
+        ? shippingRegion.trim().slice(0, MAX_SHIPPING_REGION_LENGTH) || "General"
+        : "General";
 
     const normalizedItems = items.map((item) => ({
       productId: String(item.productId || "").trim(),
@@ -495,12 +516,25 @@ export async function POST(request: NextRequest) {
       }
 
       if (Math.abs(validatedPrice - item.unitPrice) > 0.01) {
-        console.warn("Price tampering attempt detected:", {
+        // Antes solo se warn-eaba y se aceptaba con validatedPrice.
+        // Ahora rechazamos: el cliente debe re-validar el carrito y
+        // confirmar el nuevo precio antes de crear el pedido. Evita
+        // que un atacante itere price-tampering sin consecuencias y
+        // protege al usuario honesto de un cobro distinto al esperado.
+        console.warn("Price tampering rejected:", {
           productId: item.productId,
           clientPrice: item.unitPrice,
           serverPrice: validatedPrice,
-          difference: Math.abs(validatedPrice - item.unitPrice),
         });
+        return NextResponse.json(
+          {
+            error: `El precio de ${product.name} cambió. Por favor refrescá el carrito.`,
+            code: "PRICE_MISMATCH",
+            productId: item.productId,
+            serverPrice: validatedPrice,
+          },
+          { status: 409 },
+        );
       }
 
       validatedItems.push({
@@ -514,12 +548,35 @@ export async function POST(request: NextRequest) {
     }
 
     const total = subtotal + normalizedShippingCost;
-    const orderNumber = `ORD-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
+    // Date.now().slice(-6) + random*1000 podía colisionar bajo carga.
+    // UUID v4 da 8 hex de unicidad criptográfica.
+    const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}-${crypto
+      .randomUUID()
+      .slice(0, 4)
+      .toUpperCase()}`;
+
+    // Buscar customer existente por email para vincularlo al pedido.
+    // Antes customer_id quedaba siempre null — todos eran "guest".
+    let resolvedCustomerId: string | null = null;
+    try {
+      const { data: existingCustomer } = await supabase
+        .from("customers")
+        .select("id")
+        .eq("organization_id", orgId)
+        .eq("email", String(customerInfo.email).trim().toLowerCase())
+        .maybeSingle();
+      resolvedCustomerId = (existingCustomer as { id?: string } | null)?.id || null;
+    } catch (customerLookupError) {
+      // No bloquear: si la tabla customers no existe o falla la query,
+      // el pedido se crea como guest (comportamiento anterior).
+      console.warn("Customer lookup failed:", customerLookupError);
+    }
 
     const { data: order, error: orderError } = await supabase
       .from("sales")
       .insert({
         order_number: orderNumber,
+        customer_id: resolvedCustomerId,
         customer_name: customerInfo.name,
         customer_email: customerInfo.email,
         customer_phone: customerInfo.phone,
@@ -527,9 +584,9 @@ export async function POST(request: NextRequest) {
         payment_method: paymentMethod,
         subtotal,
         shipping_cost: normalizedShippingCost,
-        shipping_region: shippingRegion,
+        shipping_region: safeShippingRegion,
         total,
-        notes: notes?.trim() || null,
+        notes: safeNotes || null,
         status: "PENDING",
         order_source: "WEB",
         organization_id: orgId,

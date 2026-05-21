@@ -1,10 +1,12 @@
 'use client';
 
 import React from 'react';
-import { CheckCircle, Copy, CreditCard, Package, User } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { CheckCircle, Copy, CreditCard, MessageCircle, Package, Search, User } from 'lucide-react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { useBusinessConfig } from '@/contexts/BusinessConfigContext';
 import { useToast } from '@/components/ui/use-toast';
+import { useTenantPublicRouting } from '@/hooks/useTenantPublicRouting';
 import { formatPrice } from '@/utils/formatters';
 
 interface OrderConfirmationModalProps {
@@ -38,6 +40,16 @@ export default function OrderConfirmationModal({
 }: OrderConfirmationModalProps) {
   const { config } = useBusinessConfig();
   const { toast } = useToast();
+  const router = useRouter();
+  const { tenantHref } = useTenantPublicRouting();
+  const brandPrimary = config.branding?.primaryColor || '#0f766e';
+
+  const businessWhatsApp = (config?.contact?.whatsapp || config?.contact?.phone || '').replace(/\D/g, '');
+  const whatsappHref = businessWhatsApp
+    ? `https://wa.me/${businessWhatsApp}?text=${encodeURIComponent(
+        `Hola, mi pedido es ${orderId}. Total: ${formatPrice(total, config)}.`,
+      )}`
+    : null;
 
   const handleCopyOrderId = async () => {
     try {
@@ -46,6 +58,11 @@ export default function OrderConfirmationModal({
     } catch {
       toast({ title: 'No se pudo copiar', description: orderId, variant: 'destructive' });
     }
+  };
+
+  const handleTrackOrder = () => {
+    onClose();
+    router.push(tenantHref(`/orders/track?orderNumber=${encodeURIComponent(orderId)}`));
   };
 
   return (
@@ -106,9 +123,37 @@ export default function OrderConfirmationModal({
             Guarda este numero para seguir el pedido. El negocio puede usarlo para confirmar pago, entrega y estado.
           </div>
 
-          <button type="button" onClick={onClose} className="w-full rounded-full bg-gradient-to-r from-sky-600 to-blue-600 px-4 py-3 text-sm font-medium text-white">
-            Seguir comprando
-          </button>
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={handleTrackOrder}
+              className="flex w-full items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-medium text-white transition-transform hover:brightness-110"
+              style={{ backgroundColor: brandPrimary }}
+            >
+              <Search className="h-4 w-4" />
+              Ver estado del pedido
+            </button>
+
+            {whatsappHref ? (
+              <a
+                href={whatsappHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex w-full items-center justify-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 hover:bg-emerald-100 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
+              >
+                <MessageCircle className="h-4 w-4" />
+                Contactar por WhatsApp
+              </a>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full rounded-full border border-slate-200 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              Seguir comprando
+            </button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

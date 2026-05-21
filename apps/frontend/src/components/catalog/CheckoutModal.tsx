@@ -25,6 +25,9 @@ import { getFreeShippingThreshold } from '@/lib/pos/calculations';
 import { formatPrice } from '@/utils/formatters';
 import { useToast } from '@/components/ui/use-toast';
 
+const NOTES_MAX_LENGTH = 500;
+const CUSTOMER_INFO_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 días
+
 interface CartItem {
   id: string;
   name: string;
@@ -87,6 +90,12 @@ export default function CheckoutModal({
   const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState<Partial<CustomerInfo>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // Discrepancia de total entre cliente y server. Si aparece, el user
+  // debe confirmar el nuevo precio antes de continuar.
+  const [pendingTotalConfirmation, setPendingTotalConfirmation] = useState<{
+    clientTotal: number;
+    serverTotal: number;
+  } | null>(null);
   const storageKey =
     tenantStorageScope === 'default' ? 'customer_info' : `customer_info_${tenantStorageScope}`;
 
@@ -112,10 +121,23 @@ export default function CheckoutModal({
       return;
     }
 
+    // TTL de 30 días en datos del cliente. Antes se guardaban sin
+    // expiración → en PC compartida el próximo visitante veía tu info.
     const savedCustomer = localStorage.getItem(storageKey);
     if (savedCustomer) {
       try {
-        setCustomerInfo(JSON.parse(savedCustomer));
+        const parsed = JSON.parse(savedCustomer) as { data?: CustomerInfo; savedAt?: number } | CustomerInfo;
+        if (parsed && typeof parsed === 'object' && 'data' in parsed && 'savedAt' in parsed) {
+          const age = Date.now() - Number(parsed.savedAt || 0);
+          if (age <= CUSTOMER_INFO_TTL_MS && parsed.data) {
+            setCustomerInfo(parsed.data as CustomerInfo);
+          } else {
+            localStorage.removeItem(storageKey);
+          }
+        } else {
+          // Formato legacy sin TTL → migrar usando ahora como savedAt
+          setCustomerInfo(parsed as CustomerInfo);
+        }
       } catch {
         setCustomerInfo(EMPTY_CUSTOMER_INFO);
       }
@@ -154,7 +176,10 @@ export default function CheckoutModal({
     setSubmitError(null);
 
     try {
-      localStorage.setItem(storageKey, JSON.stringify(customerInfo));
+      localStorage.setItem(
+        storageKey,
+        JSON.stringify({ data: customerInfo, savedAt: Date.now() })
+      );
     } catch {}
 
     try {
@@ -185,6 +210,18 @@ export default function CheckoutModal({
       const validatedShipping = validatedFreeShipping ? 0 : appliedShipping;
       const validatedTotal = validatedSubtotal + validatedShipping;
 
+      // Si el server validó un total distinto al que el user ve, pedimos
+      // confirmación explícita antes de crear el pedido. Evita que el
+      // cliente sea cobrado un total que no aprobó.
+      if (
+        !pendingTotalConfirmation &&
+        Math.abs(validatedTotal - total) > 0.01
+      ) {
+        setPendingTotalConfirmation({ clientTotal: total, serverTotal: validatedTotal });
+        setIsLoading(false);
+        return;
+      }
+
       const orderResponse = await fetch(tenantApiPath('/api/orders'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -204,6 +241,16 @@ export default function CheckoutModal({
       const result = await orderResponse.json().catch(() => null);
 
       if (!orderResponse.ok) {
+        // El server retorna 409 PRICE_MISMATCH si el cliente mandó un
+        // precio que no coincide con el del DB. Pedimos al user que
+        // refresque el carrito.
+        if (orderResponse.status === 409 && result?.code === 'PRICE_MISMATCH') {
+          const msg = result?.error || 'El precio de un producto cambió. Por favor refrescá el carrito.';
+          setSubmitError(msg);
+          toast({ title: 'Precio actualizado', description: msg, variant: 'destructive' });
+          setIsLoading(false);
+          return;
+        }
         throw new Error(result?.error || 'Error al procesar la orden');
       }
 
@@ -211,25 +258,8 @@ export default function CheckoutModal({
       const orderNumber = String(order?.orderNumber || '').trim();
       if (!orderNumber) throw new Error('El pedido se creo sin numero de seguimiento.');
 
-      const businessWhatsApp = (config?.contact?.whatsapp || config?.contact?.phone || '').replace(/\D/g, '');
-      if (businessWhatsApp) {
-        const message =
-          `Hola, quiero continuar con el pedido ${orderNumber}.\n\n` +
-          cartItems.map((item) => `- ${item.name} x${item.quantity}`).join('\n') +
-          `\n\nTotal registrado: ${formatPrice(Number(order?.total ?? validatedTotal), config)}`;
-        const whatsappWindow = window.open(
-          `https://wa.me/${businessWhatsApp}?text=${encodeURIComponent(message)}`,
-          '_blank',
-          'noopener,noreferrer'
-        );
-        if (!whatsappWindow) {
-          toast({
-            title: 'Pedido registrado',
-            description: `Guarda el numero ${orderNumber} para continuar por WhatsApp.`,
-          });
-        }
-      }
-
+      // WhatsApp ya NO se abre automáticamente: la OrderConfirmationModal
+      // muestra un botón opt-in para contactar al negocio.
       onOrderSuccess({
         orderId: orderNumber,
         customerName: customerInfo.name,
@@ -247,19 +277,23 @@ export default function CheckoutModal({
     }
   };
 
+  const brandPrimary = config.branding?.primaryColor || '#0f766e';
   const inputClass =
     'w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 focus:border-blue-500 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100';
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open && !isLoading) onClose(); }}>
       <DialogContent className="max-w-5xl gap-0 overflow-hidden p-0 bg-white dark:bg-slate-950">
-        <div className="border-b border-slate-200 bg-gradient-to-r from-sky-600 to-blue-700 px-6 py-5 text-white dark:border-slate-800">
+        <div
+          className="border-b border-slate-200 px-6 py-5 text-white dark:border-slate-800"
+          style={{ backgroundColor: brandPrimary }}
+        >
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="rounded-2xl bg-white/15 p-3"><ShoppingBag className="h-5 w-5" /></div>
               <div>
                 <h2 className="text-lg font-semibold">Finalizar compra</h2>
-                <p className="text-sm text-blue-100">{cartItems.length} productos en el carrito</p>
+                <p className="text-sm text-white/80">{cartItems.length} productos en el carrito</p>
               </div>
             </div>
             <p className="text-2xl font-semibold">{formatPrice(total, config)}</p>
@@ -269,12 +303,64 @@ export default function CheckoutModal({
         <div className="grid lg:grid-cols-[1.15fr_0.85fr]">
           <div className="space-y-6 p-6 sm:p-8">
             <div className="flex items-center gap-3 text-sm font-medium text-slate-700 dark:text-slate-300">
-              <div className={`flex h-9 w-9 items-center justify-center rounded-full ${step === 1 ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-900'}`}>1</div>
+              <button
+                type="button"
+                onClick={() => setStep(1)}
+                className={`flex h-9 w-9 items-center justify-center rounded-full transition-transform hover:scale-105 ${
+                  step === 1 ? 'text-white' : 'bg-slate-100 dark:bg-slate-900'
+                }`}
+                style={step === 1 ? { backgroundColor: brandPrimary } : undefined}
+                aria-label="Ir al paso 1"
+              >
+                1
+              </button>
               <span>Tus datos</span>
               <div className="h-px flex-1 bg-slate-200 dark:bg-slate-800" />
-              <div className={`flex h-9 w-9 items-center justify-center rounded-full ${step === 2 ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-900'}`}>2</div>
+              <button
+                type="button"
+                onClick={() => { if (validateCustomerInfo()) setStep(2); }}
+                className={`flex h-9 w-9 items-center justify-center rounded-full transition-transform hover:scale-105 ${
+                  step === 2 ? 'text-white' : 'bg-slate-100 dark:bg-slate-900'
+                }`}
+                style={step === 2 ? { backgroundColor: brandPrimary } : undefined}
+                aria-label="Ir al paso 2"
+              >
+                2
+              </button>
               <span>Pago y envio</span>
             </div>
+
+            {/* Banner de confirmación cuando el server validó un total distinto */}
+            {pendingTotalConfirmation ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900/40 dark:bg-amber-950/20">
+                <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                  El total del pedido cambió
+                </p>
+                <p className="mt-1 text-sm text-amber-800 dark:text-amber-200">
+                  Mostrabas <strong>{formatPrice(pendingTotalConfirmation.clientTotal, config)}</strong>,
+                  pero el server confirmó <strong>{formatPrice(pendingTotalConfirmation.serverTotal, config)}</strong>.
+                  Esto puede deberse a un cambio de precio o de oferta.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setPendingTotalConfirmation(null); handleSubmit(); }}
+                    disabled={isLoading}
+                    className="rounded-full px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                    style={{ backgroundColor: brandPrimary }}
+                  >
+                    Aceptar y continuar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPendingTotalConfirmation(null)}
+                    className="rounded-full border border-slate-200 px-4 py-2 text-sm font-medium dark:border-slate-700"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            ) : null}
 
             {step === 1 ? (
               <div className="grid gap-5 md:grid-cols-2">
@@ -317,7 +403,19 @@ export default function CheckoutModal({
                     <input type="number" min="0" step="0.01" value={shippingCost} onChange={(e) => setShippingCost(Math.max(0, Number(e.target.value || 0)))} className={inputClass} />
                   </div>
                 </div>
-                <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={4} className={inputClass} placeholder="Notas del pedido" />
+                <div>
+                  <textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value.slice(0, NOTES_MAX_LENGTH))}
+                    rows={4}
+                    maxLength={NOTES_MAX_LENGTH}
+                    className={inputClass}
+                    placeholder="Notas del pedido (opcional)"
+                  />
+                  <p className="mt-1 text-right text-xs text-slate-400 dark:text-slate-500">
+                    {notes.length}/{NOTES_MAX_LENGTH}
+                  </p>
+                </div>
                 <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-100">
                   {threshold > 0
                     ? isFreeShipping
@@ -380,11 +478,22 @@ export default function CheckoutModal({
               {step === 1 ? <><X className="h-4 w-4" />Cancelar</> : <><ArrowLeft className="h-4 w-4" />Volver</>}
             </button>
             {step === 1 ? (
-              <button type="button" onClick={() => { if (validateCustomerInfo()) setStep(2); }} className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-sky-600 to-blue-600 px-6 py-3 text-sm font-medium text-white">
+              <button
+                type="button"
+                onClick={() => { if (validateCustomerInfo()) setStep(2); }}
+                className="inline-flex items-center gap-2 rounded-full px-6 py-3 text-sm font-medium text-white transition-transform hover:brightness-110"
+                style={{ backgroundColor: brandPrimary }}
+              >
                 Continuar <ArrowRight className="h-4 w-4" />
               </button>
             ) : (
-              <button type="button" onClick={handleSubmit} disabled={isLoading} className="inline-flex min-w-[180px] items-center justify-center gap-2 rounded-full bg-gradient-to-r from-sky-600 to-blue-600 px-6 py-3 text-sm font-medium text-white disabled:opacity-60">
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={isLoading || Boolean(pendingTotalConfirmation)}
+                className="inline-flex min-w-[180px] items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-medium text-white transition-transform hover:brightness-110 disabled:opacity-60"
+                style={{ backgroundColor: brandPrimary }}
+              >
                 {isLoading ? 'Procesando...' : <><CheckCircle2 className="h-4 w-4" />Confirmar pedido</>}
               </button>
             )}

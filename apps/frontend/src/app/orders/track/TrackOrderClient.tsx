@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { AlertCircle, Calendar, CheckCircle, Clock, CreditCard, Loader2, Mail, MapPin, Package, Phone, Search, Truck, User } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -62,7 +63,9 @@ const PAYMENT_METHODS: Record<string, string> = {
 };
 
 export default function TrackOrderClient() {
-  const [searchTerm, setSearchTerm] = useState('');
+  const searchParams = useSearchParams();
+  const initialOrderNumber = searchParams?.get('orderNumber') || '';
+  const [searchTerm, setSearchTerm] = useState(initialOrderNumber);
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
@@ -71,6 +74,7 @@ export default function TrackOrderClient() {
   const { toast } = useToast();
   const router = useRouter();
   const { tenantApiPath, tenantHref } = useTenantPublicRouting();
+  const autoSearchedRef = useRef(false);
 
   const searchOrder = async () => {
     if (!searchTerm.trim()) {
@@ -94,6 +98,16 @@ export default function TrackOrderClient() {
       setLoading(false);
     }
   };
+
+  // Si llegamos con ?orderNumber=ORD-... desde el checkout, auto-buscar
+  // una sola vez. autoSearchedRef evita re-disparar al re-render.
+  useEffect(() => {
+    if (autoSearchedRef.current) return;
+    if (!initialOrderNumber) return;
+    autoSearchedRef.current = true;
+    void searchOrder();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialOrderNumber]);
 
   const currentProgress = (status: string) => {
     const orderFlow = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SHIPPED', 'DELIVERED'];
