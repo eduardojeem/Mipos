@@ -8,6 +8,7 @@ import { useBusinessConfig } from '@/contexts/BusinessConfigContext';
 import { useToast } from '@/components/ui/use-toast';
 import { useTenantPublicRouting } from '@/hooks/useTenantPublicRouting';
 import { formatPrice } from '@/utils/formatters';
+import { formatPaymentMethod } from '@/lib/orders/payment-methods';
 
 interface OrderConfirmationModalProps {
   isOpen: boolean;
@@ -18,14 +19,6 @@ interface OrderConfirmationModalProps {
   total: number;
   paymentMethod: string;
   orderDate: string;
-}
-
-function formatPaymentMethod(method: string) {
-  return {
-    CASH: 'Efectivo',
-    CARD: 'Tarjeta',
-    TRANSFER: 'Transferencia',
-  }[method] || method;
 }
 
 export default function OrderConfirmationModal({

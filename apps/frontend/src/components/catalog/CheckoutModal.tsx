@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -24,6 +24,11 @@ import { useTenantPublicRouting } from '@/hooks/useTenantPublicRouting';
 import { getFreeShippingThreshold } from '@/lib/pos/calculations';
 import { formatPrice } from '@/utils/formatters';
 import { useToast } from '@/components/ui/use-toast';
+import {
+  formatPaymentMethod,
+  getEnabledPaymentMethods,
+  type PaymentMethodCode,
+} from '@/lib/orders/payment-methods';
 
 const NOTES_MAX_LENGTH = 500;
 const CUSTOMER_INFO_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 días
@@ -64,10 +69,6 @@ interface CheckoutModalProps {
 
 const EMPTY_CUSTOMER_INFO: CustomerInfo = { name: '', email: '', phone: '', address: '' };
 
-function formatPaymentMethod(method: 'CASH' | 'CARD' | 'TRANSFER') {
-  return { CASH: 'Efectivo', CARD: 'Tarjeta', TRANSFER: 'Transferencia' }[method] || method;
-}
-
 export default function CheckoutModal({
   isOpen,
   onClose,
@@ -81,10 +82,11 @@ export default function CheckoutModal({
   const { tenantApiPath, tenantStorageScope } = useTenantPublicRouting();
   const { toast } = useToast();
   const firstInputRef = useRef<HTMLInputElement>(null);
+  const enabledPaymentMethods = useMemo(() => getEnabledPaymentMethods(config), [config]);
   const [step, setStep] = useState<1 | 2>(1);
   const [isLoading, setIsLoading] = useState(false);
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo>(EMPTY_CUSTOMER_INFO);
-  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD' | 'TRANSFER'>('CASH');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodCode>(enabledPaymentMethods[0] || 'CASH');
   const [shippingRegion, setShippingRegion] = useState('General');
   const [shippingCost, setShippingCost] = useState(0);
   const [notes, setNotes] = useState('');
@@ -112,12 +114,13 @@ export default function CheckoutModal({
       setStep(1);
       setIsLoading(false);
       setCustomerInfo(EMPTY_CUSTOMER_INFO);
-      setPaymentMethod('CASH');
+      setPaymentMethod(enabledPaymentMethods[0] || 'CASH');
       setShippingRegion('General');
       setShippingCost(0);
       setNotes('');
       setErrors({});
       setSubmitError(null);
+      setPendingTotalConfirmation(null);
       return;
     }
 
@@ -386,12 +389,29 @@ export default function CheckoutModal({
               </div>
             ) : (
               <div className="space-y-5">
-                <div className="grid gap-3 sm:grid-cols-3">
-                  {(['CASH', 'CARD', 'TRANSFER'] as const).map((method) => (
-                    <button key={method} type="button" onClick={() => setPaymentMethod(method)} className={`rounded-2xl border p-4 text-left ${paymentMethod === method ? 'border-blue-600 bg-blue-50 text-blue-900 dark:bg-blue-950/30 dark:text-blue-100' : 'border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200'}`}>
-                      <p className="font-medium">{formatPaymentMethod(method)}</p>
-                    </button>
-                  ))}
+                {/* Solo se muestran los métodos que el tenant acepta en
+                    storeSettings (acceptsCash / acceptsCreditCards /
+                    acceptsDebitCards / acceptsBankTransfer). Si no
+                    están seteados, default a todos por backwards compat. */}
+                <div className={`grid gap-3 ${enabledPaymentMethods.length === 1 ? '' : enabledPaymentMethods.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
+                  {enabledPaymentMethods.map((method) => {
+                    const selected = paymentMethod === method;
+                    return (
+                      <button
+                        key={method}
+                        type="button"
+                        onClick={() => setPaymentMethod(method)}
+                        className="rounded-2xl border p-4 text-left transition-colors"
+                        style={selected ? {
+                          borderColor: brandPrimary,
+                          backgroundColor: `${brandPrimary}14`,
+                          color: brandPrimary,
+                        } : undefined}
+                      >
+                        <p className="font-medium">{formatPaymentMethod(method)}</p>
+                      </button>
+                    );
+                  })}
                 </div>
                 <div className="grid gap-5 md:grid-cols-2">
                   <div>

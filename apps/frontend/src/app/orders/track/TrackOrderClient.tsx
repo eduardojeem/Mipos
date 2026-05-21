@@ -12,6 +12,7 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { useBusinessConfig } from '@/contexts/BusinessConfigContext';
 import { formatPrice } from '@/utils/formatters';
+import { formatPaymentMethod } from '@/lib/orders/payment-methods';
 import { NavBar } from '@/app/home/components/NavBar';
 import { Footer } from '@/app/home/components/Footer';
 import { useTenantPublicRouting } from '@/hooks/useTenantPublicRouting';
@@ -55,10 +56,9 @@ const ORDER_STATUSES = {
   CANCELLED: { label: 'Cancelado', icon: AlertCircle, description: 'Este pedido fue cancelado.' },
 } as const;
 
-const PAYMENT_METHODS: Record<string, string> = {
-  CASH: 'Efectivo',
-  CARD: 'Tarjeta',
-  TRANSFER: 'Transferencia',
+// DIGITAL_WALLET no es un PaymentMethodCode estándar; lo dejamos como
+// fallback aquí para mostrar pedidos legacy correctamente.
+const EXTRA_PAYMENT_LABELS: Record<string, string> = {
   DIGITAL_WALLET: 'Billetera digital',
 };
 
@@ -180,7 +180,7 @@ export default function TrackOrderClient() {
                     {order.customer_address ? <p className="flex items-center gap-2"><MapPin className="h-4 w-4 text-slate-400 dark:text-slate-500" />{order.customer_address}</p> : null}
                   </div>
                   <div className="space-y-2.5 rounded-xl bg-slate-50 p-4 dark:bg-slate-800">
-                    <p className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400"><CreditCard className="h-4 w-4 text-slate-400 dark:text-slate-500" />{PAYMENT_METHODS[order.payment_method] || order.payment_method}</p>
+                    <p className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400"><CreditCard className="h-4 w-4 text-slate-400 dark:text-slate-500" />{EXTRA_PAYMENT_LABELS[order.payment_method] || formatPaymentMethod(order.payment_method)}</p>
                     {order.estimated_delivery_date ? <p className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400"><Truck className="h-4 w-4 text-slate-400 dark:text-slate-500" />Entrega estimada: {format(new Date(order.estimated_delivery_date), 'PPP', { locale: es })}</p> : null}
                     <p className="text-[11px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">Total</p>
                     <p className="text-2xl font-semibold text-slate-900 dark:text-slate-50">{formatPrice(order.total, config)}</p>
