@@ -59,9 +59,28 @@ export type OrderStatusKey = keyof typeof ORDER_STATUSES;
 
 export const PAYMENT_METHODS: Record<string, string> = {
   CASH: 'Efectivo',
-  CARD: 'Tarjeta',
+  CARD: 'Tarjeta de debito',
   TRANSFER: 'Transferencia',
   DIGITAL_WALLET: 'Billetera digital',
+};
+
+export const PAYMENT_STATUSES: Record<string, { label: string; className: string }> = {
+  PENDING: {
+    label: 'Pago pendiente',
+    className: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300',
+  },
+  PAID: {
+    label: 'Pago confirmado',
+    className: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300',
+  },
+  FAILED: {
+    label: 'Pago rechazado',
+    className: 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900/50 dark:bg-rose-950/30 dark:text-rose-300',
+  },
+  REFUNDED: {
+    label: 'Reembolsado',
+    className: 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300',
+  },
 };
 
 /** Estados considerados "terminales" que requieren confirmación para cambiar. */

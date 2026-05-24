@@ -67,7 +67,10 @@ export const CartItemDetailModal: React.FC<CartItemDetailModalProps> = ({ item, 
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className={cn('max-w-3xl p-0 animate-in fade-in-50 zoom-in-95 duration-200')}> 
+      <DialogContent
+        aria-describedby={undefined}
+        className={cn('max-w-3xl p-0 animate-in fade-in-50 zoom-in-95 duration-200')}
+      > 
         <DialogHeader>
           <DialogTitle className="sr-only">Detalles del artículo en el carrito</DialogTitle>
         </DialogHeader>

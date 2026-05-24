@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import Image from 'next/image';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { hexToRgba } from '@/lib/color-utils';
+import { shouldBypassNextImageOptimizer } from '@/lib/images/next-image';
 import { cn } from '@/lib/utils';
 
 export interface CarouselImage {
@@ -249,6 +250,7 @@ export function Carousel({
                 className="object-cover"
                 placeholder="blur"
                 blurDataURL={blurDataURL}
+                unoptimized={shouldBypassNextImageOptimizer(img.url)}
               />
 
               {/* Enhanced gradient overlay */}

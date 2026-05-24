@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -8,13 +8,37 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useToast } from '@/components/ui/use-toast'
-import { ArrowLeft, Eye, EyeOff, Shield, CheckCircle, XCircle } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff, Shield, CheckCircle, XCircle, RefreshCw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 
 interface PasswordStrength {
   score: number
   feedback: string[]
   color: string
+}
+
+const LOWERCASE = 'abcdefghijklmnopqrstuvwxyz'
+const UPPERCASE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+const NUMBERS = '0123456789'
+const SPECIAL = '!@#$%^&*()_+-=[]{}|;:,.<>?'
+
+function generateSecurePassword(length = 12): string {
+  let password = ''
+  let allChars = LOWERCASE + UPPERCASE + NUMBERS + SPECIAL
+  
+  // Asegurarse de incluir al menos un caracter de cada tipo
+  password += LOWERCASE[Math.floor(Math.random() * LOWERCASE.length)]
+  password += UPPERCASE[Math.floor(Math.random() * UPPERCASE.length)]
+  password += NUMBERS[Math.floor(Math.random() * NUMBERS.length)]
+  password += SPECIAL[Math.floor(Math.random() * SPECIAL.length)]
+  
+  // Completar el resto de la longitud
+  for (let i = password.length; i < length; i++) {
+    password += allChars[Math.floor(Math.random() * allChars.length)]
+  }
+  
+  // Mezclar los caracteres
+  return password.split('').sort(() => 0.5 - Math.random()).join('')
 }
 
 export default function ChangePasswordPage() {
@@ -35,6 +59,19 @@ export default function ChangePasswordPage() {
   
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [isLoading, setIsLoading] = useState(false)
+
+  const handleGeneratePassword = useCallback(() => {
+    const newPass = generateSecurePassword(14)
+    setFormData(prev => ({
+      ...prev,
+      newPassword: newPass,
+      confirmPassword: newPass
+    }))
+    toast({
+      title: "Contraseña generada",
+      description: "Se generó una contraseña segura automáticamente"
+    })
+  }, [toast])
 
   // Validación de fortaleza de contraseña
   const checkPasswordStrength = (password: string): PasswordStrength => {
@@ -234,7 +271,19 @@ export default function ChangePasswordPage() {
 
             {/* Nueva Contraseña */}
             <div className="space-y-2">
-              <Label htmlFor="newPassword">Nueva Contraseña</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="newPassword">Nueva Contraseña</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGeneratePassword}
+                  className="gap-1 text-xs"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  Generar
+                </Button>
+              </div>
               <div className="relative">
                 <Input
                   id="newPassword"
@@ -244,21 +293,23 @@ export default function ChangePasswordPage() {
                     ...prev,
                     newPassword: e.target.value
                   }))}
-                  className={errors.newPassword ? 'border-red-500' : ''}
+                  className={errors.newPassword ? 'border-red-500 pr-20' : 'pr-20'}
                 />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                  onClick={() => togglePasswordVisibility('new')}
-                >
-                  {showPasswords.new ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </Button>
+                <div className="absolute right-0 top-0 flex h-full">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-full px-3 py-2 hover:bg-transparent"
+                    onClick={() => togglePasswordVisibility('new')}
+                  >
+                    {showPasswords.new ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
               </div>
               
               {/* Indicador de fortaleza */}

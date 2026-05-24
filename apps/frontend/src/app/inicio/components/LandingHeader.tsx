@@ -233,7 +233,7 @@ export function LandingHeader() {
               </DropdownMenu>
             ) : (
               <>
-                <Link href="/auth/signin">
+                <Link href="/auth/signin?type=business-owner&returnUrl=/dashboard">
                   <Button
                     variant="ghost"
                     className="rounded-full px-4 text-slate-300 hover:bg-white/5 hover:text-white"
@@ -343,7 +343,7 @@ export function LandingHeader() {
                   </div>
                 ) : (
                   <div className="grid gap-2">
-                    <Link href="/auth/signin" onClick={() => setMobileMenuOpen(false)}>
+                    <Link href="/auth/signin?type=business-owner&returnUrl=/dashboard" onClick={() => setMobileMenuOpen(false)}>
                       <Button
                         variant="outline"
                         className="w-full rounded-xl border-white/10 bg-transparent text-white hover:bg-white/5"

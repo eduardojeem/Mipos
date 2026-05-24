@@ -11,6 +11,7 @@ export interface Order {
   customer_address?: string;
   subtotal: number;
   shipping_cost: number;
+  fulfillment_type?: 'DELIVERY' | 'PICKUP';
   total: number;
   payment_method: string;
   payment_status?: string;
@@ -53,6 +54,8 @@ export interface OrderListParams {
   dateRange?: 'today' | 'week' | 'month' | 'year' | 'all';
   sortBy?: 'created_at' | 'total' | 'status';
   sortOrder?: 'asc' | 'desc';
+  paymentMethod?: string;
+  paymentStatus?: string;
 }
 
 export interface OrderStats {
@@ -60,6 +63,7 @@ export interface OrderStats {
   pending: number;
   confirmed: number;
   preparing: number;
+  ready: number;
   shipped: number;
   delivered: number;
   cancelled: number;
@@ -171,6 +175,8 @@ function normalizeOrderListParams(params: OrderListParams): Required<OrderListPa
     dateRange: params.dateRange || 'all',
     sortBy: params.sortBy || 'created_at',
     sortOrder: params.sortOrder || 'desc',
+    paymentMethod: params.paymentMethod || 'ALL',
+    paymentStatus: params.paymentStatus || 'ALL',
   };
 }
 
@@ -216,6 +222,10 @@ function normalizeOrder(order: Partial<Order>): Order {
     customer_address: order.customer_address ? String(order.customer_address) : '',
     subtotal: Number(order.subtotal || 0),
     shipping_cost: Number(order.shipping_cost || 0),
+    fulfillment_type:
+      order.fulfillment_type === 'PICKUP' || (!order.customer_address && !Number(order.shipping_cost || 0))
+        ? 'PICKUP'
+        : 'DELIVERY',
     total: Number(order.total || 0),
     payment_method: String(order.payment_method || 'CASH'),
     payment_status: String(order.payment_status || 'PENDING'),
@@ -258,6 +268,12 @@ export function useOptimizedOrders(params: OrderListParams = {}) {
 
       if (memoizedParams.search.trim()) {
         searchParams.set('search', memoizedParams.search.trim());
+      }
+      if (memoizedParams.paymentMethod !== 'ALL') {
+        searchParams.set('paymentMethod', memoizedParams.paymentMethod);
+      }
+      if (memoizedParams.paymentStatus !== 'ALL') {
+        searchParams.set('paymentStatus', memoizedParams.paymentStatus);
       }
 
       const data = await fetchOrderData<{
@@ -348,6 +364,63 @@ export function useUpdateOrderStatus() {
       return parseJsonResponse<{ order: Order }>(
         response,
         'No se pudo actualizar el estado del pedido'
+      );
+    },
+    onSuccess: ({ order }, { orderId }) => {
+      queryClient.setQueryData(
+        orderKeys.detail(organizationId, orderId),
+        (currentOrder: Order | undefined) =>
+          currentOrder
+            ? normalizeOrder({
+                ...currentOrder,
+                ...order,
+                order_items: currentOrder.order_items,
+                order_status_history: currentOrder.order_status_history,
+              })
+            : currentOrder
+      );
+      queryClient.invalidateQueries({ queryKey: orderKeys.detail(organizationId, orderId) });
+      queryClient.invalidateQueries({ queryKey: orderKeys.lists(organizationId) });
+      queryClient.invalidateQueries({ queryKey: orderKeys.stats(organizationId) });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-optimized-summary'] });
+    },
+  });
+}
+
+export function useUpdateOrderPaymentStatus() {
+  const organizationId = useCurrentOrganizationId();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      orderId,
+      paymentStatus,
+      status,
+      notes,
+    }: {
+      orderId: string;
+      paymentStatus: 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED';
+      status?: string;
+      notes?: string;
+    }) => {
+      if (!organizationId) {
+        throw new Error('No se encontro una organizacion activa');
+      }
+
+      const response = await fetch(`/api/orders/${orderId}`, {
+        method: 'PATCH',
+        headers: buildHeaders(organizationId, undefined, true),
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          payment_status: paymentStatus,
+          status,
+          notes,
+        }),
+      });
+
+      return parseJsonResponse<{ order: Order }>(
+        response,
+        'No se pudo actualizar el estado de pago'
       );
     },
     onSuccess: ({ order }, { orderId }) => {

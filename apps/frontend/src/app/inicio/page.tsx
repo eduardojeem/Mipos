@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { usePlans } from '@/hooks/use-plans';
 import { buildPublicRegistrationPath } from '@/lib/public-plan-utils';
 import './landing.css';
-import { Footer, HeroSection, HowItWorksSection, LandingHeader } from './components';
+import { Footer, HeroSection, HowItWorksSection, LandingHeader, LoginSection } from './components';
 
 const benefits = [
   {
@@ -153,6 +153,8 @@ export default function InicioPage() {
             </div>
           </div>
         </section>
+
+        <LoginSection />
       </main>
 
       <Footer />

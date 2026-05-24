@@ -86,6 +86,7 @@ async function fetchTrackedOrder(
     customer_address: normalizeOptionalText(orderRow.customer_address),
     subtotal: normalizeAmount(orderRow.subtotal),
     shipping_cost: normalizeAmount(orderRow.shipping_cost),
+    fulfillment_type: String(orderRow.fulfillment_type || (normalizeAmount(orderRow.shipping_cost) > 0 || normalizeOptionalText(orderRow.customer_address) ? 'DELIVERY' : 'PICKUP')),
     total: normalizeAmount(orderRow.total),
     payment_method: String(orderRow.payment_method || ''),
     status: String(orderRow.status || 'PENDING'),

@@ -19,20 +19,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
-import { buildTenantPublicBaseUrl } from '@/lib/domain/host-context';
+import { buildTenantPublicBaseUrl, normalizeHostname } from '@/lib/domain/host-context';
 import type { Organization } from '@/hooks/use-user-organizations';
+import type { BusinessConfig } from '@/types/business-config';
+
+// Regex de dominio — misma regla que el backend para feedback inmediato
+const CUSTOM_DOMAIN_REGEX = /^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$/;
 
 interface DomainSettingsFormProps {
   selectedOrganization: Organization | null;
   allowCustomDomain?: boolean;
   onUpdate?: () => void;
   planName?: string;
-}
-
-function normalizeHostLabel(host: string): string {
-  return String(host || '')
-    .replace(/^https?:\/\//i, '')
-    .replace(/\/.*$/, '');
+  config?: BusinessConfig | null;
 }
 
 export function DomainSettingsForm({
@@ -40,17 +39,20 @@ export function DomainSettingsForm({
   allowCustomDomain = false,
   onUpdate,
   planName = 'Starter',
+  config,
 }: DomainSettingsFormProps) {
   const { toast } = useToast();
 
   const [identifier, setIdentifier] = useState(selectedOrganization?.subdomain || selectedOrganization?.slug || '');
   const [customDomain, setCustomDomain] = useState(selectedOrganization?.custom_domain || '');
+  const [customDomainError, setCustomDomainError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
 
   useEffect(() => {
     setIdentifier(selectedOrganization?.subdomain || selectedOrganization?.slug || '');
     setCustomDomain(selectedOrganization?.custom_domain || '');
+    setCustomDomainError(null);
     setCopiedUrl(null);
   }, [
     selectedOrganization?.id,
@@ -60,11 +62,10 @@ export function DomainSettingsForm({
   ]);
 
   const baseHostLabel = useMemo(() => {
-    if (typeof window !== 'undefined') {
-      return normalizeHostLabel(window.location.host || process.env.NEXT_PUBLIC_BASE_DOMAIN || 'miposparaguay.vercel.app');
-    }
-
-    return normalizeHostLabel(process.env.NEXT_PUBLIC_BASE_DOMAIN || 'miposparaguay.vercel.app');
+    const rawHost = typeof window !== 'undefined'
+      ? window.location.host
+      : (process.env.NEXT_PUBLIC_BASE_DOMAIN || 'miposparaguay.vercel.app');
+    return normalizeHostname(rawHost);
   }, []);
 
   const publicBaseUrl = useMemo(() => {
@@ -87,13 +88,21 @@ export function DomainSettingsForm({
     );
   }, [customDomain, identifier, selectedOrganization?.slug, selectedOrganization?.subdomain]);
 
+  const sections = config?.publicSite?.sections;
   const publicRoutes = useMemo(
     () =>
-      ['/home', '/catalog', '/offers'].map((path) => ({
-        path,
-        url: publicBaseUrl ? `${publicBaseUrl}${path}` : path,
-      })),
-    [publicBaseUrl]
+      [
+        { path: '/home', always: true },
+        { path: '/catalog', always: false, flag: sections?.showCatalog },
+        { path: '/offers', always: false, flag: sections?.showOffers },
+      ]
+        .filter((r) => r.always || r.flag)
+        .map(({ path }) => ({
+          path,
+          url: publicBaseUrl ? `${publicBaseUrl}${path}` : path,
+        })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [publicBaseUrl, sections?.showCatalog, sections?.showOffers]
   );
 
   const handleSave = async () => {
@@ -136,6 +145,19 @@ export function DomainSettingsForm({
       });
       return;
     }
+
+    // Validación client-side del formato del dominio personalizado
+    if (normalizedCustomDomain && !CUSTOM_DOMAIN_REGEX.test(normalizedCustomDomain)) {
+      setCustomDomainError('Formato inválido. Usa: www.miempresa.com o miempresa.com');
+      toast({
+        title: 'Dominio inválido',
+        description: 'Revisá el formato del dominio personalizado.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setCustomDomainError(null);
 
     setSaving(true);
 
@@ -334,11 +356,17 @@ export function DomainSettingsForm({
               <Input
                 id="custom_domain"
                 value={customDomain}
-                onChange={(event) => setCustomDomain(event.target.value.toLowerCase())}
+                onChange={(event) => {
+                  setCustomDomain(event.target.value.toLowerCase());
+                  setCustomDomainError(null);
+                }}
                 placeholder="www.miempresa.com"
-                className="font-mono"
+                className={`font-mono ${customDomainError ? 'border-red-500' : ''}`}
                 disabled={!allowCustomDomain}
               />
+              {customDomainError && (
+                <p className="text-sm text-red-500">{customDomainError}</p>
+              )}
             </div>
 
             {allowCustomDomain ? (
@@ -349,10 +377,10 @@ export function DomainSettingsForm({
                 </AlertDescription>
               </Alert>
             ) : (
-              <Alert>
+              <Alert className="border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  Tu plan actual opera con ruta publica y dominio principal compartido. El dominio personalizado se habilita en Professional.
+                  Tu plan actual ({planName}) opera con ruta publica compartida. El dominio personalizado se habilita en Professional.
                 </AlertDescription>
               </Alert>
             )}

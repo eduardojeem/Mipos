@@ -16,6 +16,9 @@ export function validateBusinessConfig(cfg: BusinessConfig): { ok: true } | { ok
   }
   
   // Contact validation
+  if (!cfg.contact?.phone?.trim()) {
+    errors['contact.phone'] = 'Completa el telefono publico del negocio antes de guardar'
+  }
   if (cfg.contact.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cfg.contact.email)) {
     errors['contact.email'] = 'Email inválido'
   }
@@ -31,6 +34,21 @@ export function validateBusinessConfig(cfg: BusinessConfig): { ok: true } | { ok
     if (cfg.storeSettings.lowStockThreshold !== undefined && cfg.storeSettings.lowStockThreshold < 0) {
       errors['storeSettings.lowStockThreshold'] = 'El umbral de stock bajo debe ser positivo'
     }
+    if (cfg.storeSettings.shippingCost !== undefined && cfg.storeSettings.shippingCost < 0) {
+      errors['storeSettings.shippingCost'] = 'El costo de envio debe ser positivo'
+    }
+    const zones = cfg.storeSettings.freeShippingRegions || []
+    zones.forEach((zone, index) => {
+      if (!zone.name?.trim()) {
+        errors[`storeSettings.freeShippingRegions.${index}.name`] = 'La zona debe tener nombre'
+      }
+      if (zone.threshold !== undefined && zone.threshold < 0) {
+        errors[`storeSettings.freeShippingRegions.${index}.threshold`] = 'El monto de envio gratis debe ser positivo'
+      }
+      if (zone.shippingCost !== undefined && zone.shippingCost < 0) {
+        errors[`storeSettings.freeShippingRegions.${index}.shippingCost`] = 'El costo de envio debe ser positivo'
+      }
+    })
   }
 
   // System settings validation

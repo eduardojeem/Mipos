@@ -36,6 +36,16 @@ const nextConfig = {
       },
       {
         protocol: 'https',
+        hostname: 'dummyimage.com',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'via.placeholder.com',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
         hostname: '*.trae.ai',
         pathname: '/**',
       },

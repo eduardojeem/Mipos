@@ -45,6 +45,59 @@ type SettingsValueRow = {
   updated_at?: string | null
 }
 
+const PUBLIC_PLACEHOLDER_VALUES = new Set([
+  '+595 21 123-456',
+  '+595 981 123-456',
+  '+595 21 654-321',
+  'info@minegocio.com.py',
+  'https://minegocio.com.py',
+  'av. mariscal lopez 1234',
+  'villa morra',
+  'asuncion',
+  'central',
+  '1209',
+  'cerca del shopping del sol',
+])
+
+function cleanPublicString(value: unknown, fallback = '') {
+  const raw = typeof value === 'string' ? value : fallback
+  const trimmed = raw.trim()
+  return PUBLIC_PLACEHOLDER_VALUES.has(trimmed) || PUBLIC_PLACEHOLDER_VALUES.has(trimmed.toLowerCase())
+    ? ''
+    : trimmed
+}
+
+function sanitizePublicPlaceholders(config: BusinessConfig): BusinessConfig {
+  return {
+    ...config,
+    contact: {
+      ...config.contact,
+      phone: cleanPublicString(config.contact?.phone),
+      email: cleanPublicString(config.contact?.email),
+      whatsapp: cleanPublicString(config.contact?.whatsapp),
+      website: cleanPublicString(config.contact?.website),
+      landline: cleanPublicString(config.contact?.landline),
+    },
+    address: {
+      ...config.address,
+      street: cleanPublicString(config.address?.street),
+      neighborhood: cleanPublicString(config.address?.neighborhood),
+      city: cleanPublicString(config.address?.city),
+      department: cleanPublicString(config.address?.department),
+      zipCode: cleanPublicString(config.address?.zipCode),
+      reference: cleanPublicString(config.address?.reference),
+    },
+    socialMedia: {
+      ...config.socialMedia,
+      facebook: cleanPublicString(config.socialMedia?.facebook),
+      instagram: cleanPublicString(config.socialMedia?.instagram),
+      twitter: cleanPublicString(config.socialMedia?.twitter),
+      tiktok: cleanPublicString(config.socialMedia?.tiktok),
+      linkedin: cleanPublicString(config.socialMedia?.linkedin),
+    },
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const access = await requireBusinessConfigAccess(request)
@@ -59,9 +112,10 @@ export async function GET(request: NextRequest) {
 
     const cached = getCachedConfig(organizationId)
     if (cached) {
+      const sanitizedCached = sanitizePublicPlaceholders(cached)
       return NextResponse.json({
         success: true,
-        config: sanitizeBusinessConfigForAccess(cached, access.context.isSuperAdmin),
+        config: sanitizeBusinessConfigForAccess(sanitizedCached, access.context.isSuperAdmin),
       })
     }
 
@@ -78,7 +132,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Error al obtener configuracion' }, { status: 500 })
     }
 
-    const config = ((data as SettingsValueRow | null)?.value || defaultBusinessConfig) as BusinessConfig
+    const config = sanitizePublicPlaceholders(((data as SettingsValueRow | null)?.value || defaultBusinessConfig) as BusinessConfig)
     setCachedConfig(organizationId, config)
 
     return NextResponse.json({
@@ -165,20 +219,20 @@ export async function PUT(request: NextRequest) {
         privacyUrl: s(raw?.legalDocuments?.privacyUrl),
       },
       contact: {
-        phone: s(raw?.contact?.phone, defaultBusinessConfig.contact.phone),
-        email: s(raw?.contact?.email, defaultBusinessConfig.contact.email),
-        whatsapp: s(raw?.contact?.whatsapp),
-        website: s(raw?.contact?.website),
-        landline: s(raw?.contact?.landline),
+        phone: cleanPublicString(raw?.contact?.phone),
+        email: cleanPublicString(raw?.contact?.email),
+        whatsapp: cleanPublicString(raw?.contact?.whatsapp),
+        website: cleanPublicString(raw?.contact?.website),
+        landline: cleanPublicString(raw?.contact?.landline),
       },
       address: {
-        street: s(raw?.address?.street, defaultBusinessConfig.address.street),
-        neighborhood: s(raw?.address?.neighborhood, defaultBusinessConfig.address.neighborhood),
-        city: s(raw?.address?.city, defaultBusinessConfig.address.city),
-        department: s(raw?.address?.department, defaultBusinessConfig.address.department),
-        zipCode: s(raw?.address?.zipCode, defaultBusinessConfig.address.zipCode),
+        street: cleanPublicString(raw?.address?.street),
+        neighborhood: cleanPublicString(raw?.address?.neighborhood),
+        city: cleanPublicString(raw?.address?.city),
+        department: cleanPublicString(raw?.address?.department),
+        zipCode: cleanPublicString(raw?.address?.zipCode),
         country: s(raw?.address?.country, defaultBusinessConfig.address.country),
-        reference: s(raw?.address?.reference),
+        reference: cleanPublicString(raw?.address?.reference),
         mapUrl: s(raw?.address?.mapUrl),
         latitude: Number.isFinite(Number(raw?.address?.latitude)) ? Number(raw?.address?.latitude) : undefined,
         longitude: Number.isFinite(Number(raw?.address?.longitude)) ? Number(raw?.address?.longitude) : undefined,
@@ -211,10 +265,11 @@ export async function PUT(request: NextRequest) {
         taxEnabled: b(raw?.storeSettings?.taxEnabled, defaultBusinessConfig.storeSettings.taxEnabled),
         taxIncludedInPrices: b(raw?.storeSettings?.taxIncludedInPrices, defaultBusinessConfig.storeSettings.taxIncludedInPrices),
         freeShippingThreshold: n(raw?.storeSettings?.freeShippingThreshold, defaultBusinessConfig.storeSettings.freeShippingThreshold),
+        shippingCost: Math.max(0, n(raw?.storeSettings?.shippingCost, defaultBusinessConfig.storeSettings.shippingCost || 0)),
         freeShippingEnabled: b(raw?.storeSettings?.freeShippingEnabled, !!defaultBusinessConfig.storeSettings.freeShippingEnabled),
         freeShippingMessage: s(raw?.storeSettings?.freeShippingMessage, defaultBusinessConfig.storeSettings.freeShippingMessage || ''),
         freeShippingRegions: Array.isArray(raw?.storeSettings?.freeShippingRegions)
-          ? raw.storeSettings.freeShippingRegions.map((r: any) => ({ id: s(r?.id), name: s(r?.name), threshold: n(r?.threshold, 0) }))
+          ? raw.storeSettings.freeShippingRegions.map((r: any) => ({ id: s(r?.id), name: s(r?.name), threshold: n(r?.threshold, 0), shippingCost: Math.max(0, n(r?.shippingCost, 0)) }))
           : [],
         minimumOrderAmount: n(raw?.storeSettings?.minimumOrderAmount, defaultBusinessConfig.storeSettings.minimumOrderAmount || 0),
         acceptsCreditCards: b(raw?.storeSettings?.acceptsCreditCards, defaultBusinessConfig.storeSettings.acceptsCreditCards),
@@ -348,7 +403,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'La configuracion se guardo pero no se pudo verificar' }, { status: 500 })
     }
 
-    const persistedConfig = (((persistedRow as SettingsValueRow | null)?.value) || body) as BusinessConfig
+    const persistedConfig = sanitizePublicPlaceholders((((persistedRow as SettingsValueRow | null)?.value) || body) as BusinessConfig)
     setCachedConfig(organizationId, persistedConfig)
     revalidateBusinessConfigConsumers()
 

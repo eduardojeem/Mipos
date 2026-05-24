@@ -43,6 +43,7 @@
     "**/*.spec.ts",
     "**/*.spec.tsx",
     "src/lib/test-utils/**",
-    "src/app/**/testing/**"
+    "src/app/**/testing/**",
+    "vitest.config.ts"
   ]
 }

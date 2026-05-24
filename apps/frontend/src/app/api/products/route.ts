@@ -21,6 +21,7 @@ const productSchema = z.object({
   supplier_id: z.string().uuid().optional(),
   barcode: z.string().optional(),
   image_url: z.string().optional(),
+  images: z.array(z.string()).optional(),
   is_active: z.boolean().default(true)
 });
 

@@ -16,6 +16,48 @@ type CategoryWithProductCount = CategoryRow & {
   products: Array<{ count: number }>
 }
 
+const MAX_PAGE_SIZE = 500
+const PRODUCT_COUNT_PAGE_SIZE = 1000
+
+async function getProductCountMap(
+  adminSupabase: Awaited<ReturnType<typeof createAdminClient>>,
+  orgId: string,
+  categoryIds: string[]
+) {
+  const productCountMap = new Map<string, number>()
+
+  if (categoryIds.length === 0) return productCountMap
+
+  let from = 0
+  let hasMore = true
+
+  while (hasMore) {
+    const { data: productCounts, error: productCountsError } = await (adminSupabase as any)
+      .from('products')
+      .select('category_id')
+      .eq('organization_id', orgId)
+      .in('category_id', categoryIds)
+      .range(from, from + PRODUCT_COUNT_PAGE_SIZE - 1)
+
+    if (productCountsError) {
+      console.warn('Error fetching category product counts:', productCountsError)
+      break
+    }
+
+    const rows = (productCounts || []) as Array<{ category_id?: string | null }>
+    for (const row of rows) {
+      const categoryId = typeof row.category_id === 'string' ? row.category_id : null
+      if (!categoryId) continue
+      productCountMap.set(categoryId, (productCountMap.get(categoryId) || 0) + 1)
+    }
+
+    hasMore = rows.length === PRODUCT_COUNT_PAGE_SIZE
+    from += PRODUCT_COUNT_PAGE_SIZE
+  }
+
+  return productCountMap
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -35,7 +77,7 @@ export async function GET(request: NextRequest) {
     const search = (searchParams.get('search') || '').trim()
     const status = (searchParams.get('status') || '').trim().toLowerCase()
     const page = Math.max(1, Number.parseInt(searchParams.get('page') || '1', 10))
-    const limit = Math.min(100, Math.max(1, Number.parseInt(searchParams.get('limit') || '50', 10)))
+    const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, Number.parseInt(searchParams.get('limit') || '50', 10)))
     const from = (page - 1) * limit
     const to = from + limit - 1
 
@@ -68,25 +110,7 @@ export async function GET(request: NextRequest) {
 
     const baseCategories = (categories || []) as CategoryRow[]
     const categoryIds = baseCategories.map((category) => category.id).filter(Boolean)
-    const productCountMap = new Map<string, number>()
-
-    if (categoryIds.length > 0) {
-      const { data: productCounts, error: productCountsError } = await (adminSupabase as any)
-        .from('products')
-        .select('category_id')
-        .eq('organization_id', orgId)
-        .in('category_id', categoryIds)
-
-      if (productCountsError) {
-        console.warn('Error fetching category product counts:', productCountsError)
-      } else {
-        for (const row of (productCounts || []) as Array<{ category_id?: string | null }>) {
-          const categoryId = typeof row.category_id === 'string' ? row.category_id : null
-          if (!categoryId) continue
-          productCountMap.set(categoryId, (productCountMap.get(categoryId) || 0) + 1)
-        }
-      }
-    }
+    const productCountMap = await getProductCountMap(adminSupabase, orgId, categoryIds)
 
     const categoriesWithCounts: CategoryWithProductCount[] = baseCategories.map((category) => ({
       ...category,

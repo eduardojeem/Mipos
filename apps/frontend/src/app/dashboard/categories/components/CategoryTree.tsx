@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronRight, Edit, Trash2 } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Switch } from '@/components/ui/switch';
 import type { CategoryWithCount, StatusFilter } from '../hooks/useCategoryManagement';
 import { buildCategoryTree, flattenCategoryTree, getVisibleIdsForTreeSearch } from '../utils/categoryTree';
@@ -47,7 +47,7 @@ export function CategoryTree({
   }, [autoExpandedIds, search]);
 
   const visibleCategories = useMemo(() => {
-    return categories.filter((c) => visibleIds.has(c.id));
+    return categories.filter((category) => visibleIds.has(category.id));
   }, [categories, visibleIds]);
 
   const rows = useMemo(() => {
@@ -65,7 +65,7 @@ export function CategoryTree({
   };
 
   return (
-    <Card className="border-border/50 shadow-sm overflow-hidden">
+    <Card className="border-border shadow-sm overflow-hidden">
       <CardContent className="p-0">
         <div className="max-h-[560px] overflow-auto">
           {rows.length === 0 ? (
@@ -77,12 +77,13 @@ export function CategoryTree({
               {rows.map(({ node, level }) => {
                 const hasChildren = node.children.length > 0;
                 const isExpanded = expanded.has(node.id);
-                const canDelete = (node._count?.products || 0) === 0 && !hasChildren;
+                const productCount = node._count?.products || 0;
+                const canDelete = productCount === 0 && !hasChildren;
 
                 return (
                   <div
                     key={node.id}
-                    className="flex items-center gap-2 py-2.5 pr-3 hover:bg-muted/20 transition-colors"
+                    className="flex min-w-[680px] items-center gap-2 py-2.5 pr-3 hover:bg-muted/20 transition-colors"
                     style={{ paddingLeft: 12 + level * 16 }}
                   >
                     <div className="w-7 flex items-center justify-center">
@@ -96,26 +97,23 @@ export function CategoryTree({
                           aria-label={isExpanded ? 'Colapsar' : 'Expandir'}
                           aria-expanded={isExpanded}
                         >
-                          <ChevronRight
-                            className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-                          />
+                          <ChevronRight className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
                         </Button>
                       ) : null}
                     </div>
 
                     <Checkbox
                       checked={selectedCategories.has(node.id)}
-                      onCheckedChange={(checked) => onSelectCategory(node.id, checked as boolean)}
+                      onCheckedChange={(checked) => onSelectCategory(node.id, checked === true)}
+                      aria-label={`Seleccionar ${node.name}`}
                     />
 
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="font-medium truncate">{node.name}</span>
-                        <Badge
-                          variant="secondary"
-                          className="bg-purple-50 text-purple-700 dark:bg-purple-950/30 dark:text-purple-300"
-                        >
-                          {node._count?.products || 0}
+                        <Badge variant="secondary">{productCount}</Badge>
+                        <Badge variant={node.is_active ? 'default' : 'secondary'}>
+                          {node.is_active ? 'Activa' : 'Inactiva'}
                         </Badge>
                       </div>
                       {node.description ? (
@@ -127,6 +125,7 @@ export function CategoryTree({
                       <Switch
                         checked={node.is_active}
                         onCheckedChange={() => onToggleStatus(node.id, node.is_active)}
+                        aria-label={node.is_active ? 'Desactivar categoría' : 'Activar categoría'}
                       />
                       <Button
                         type="button"

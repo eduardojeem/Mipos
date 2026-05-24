@@ -25,8 +25,6 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 
 import { OptimizedImage } from './OptimizedImage';
-import { SupabaseDiagnostic } from './SupabaseDiagnostic';
-import { createClient } from '@/lib/supabase';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
 
@@ -69,6 +67,9 @@ interface ImageUploaderProps {
   compressQuality?: number;
   maxWidth?: number;
   maxHeight?: number;
+  uploadBucket?: string;
+  uploadPurpose?: string;
+  uploadPrefix?: string;
 }
 
 interface CompressionSettings {
@@ -81,10 +82,10 @@ interface CompressionSettings {
 
 const DEFAULT_SETTINGS: CompressionSettings = {
   enabled: true,
-  quality: 0.8,
-  maxWidth: 1920,
-  maxHeight: 1080,
-  format: 'jpeg'
+  quality: 0.72,
+  maxWidth: 1200,
+  maxHeight: 800,
+  format: 'webp'
 };
 
 // Presets de optimización para diferentes necesidades
@@ -94,7 +95,7 @@ const COMPRESSION_PRESETS = {
     quality: 0.6,
     maxWidth: 800,
     maxHeight: 600,
-    format: 'jpeg' as const,
+    format: 'webp' as const,
     description: 'Máximo ahorro (60% calidad, 800x600px)'
   },
   'light': {
@@ -102,7 +103,7 @@ const COMPRESSION_PRESETS = {
     quality: 0.7,
     maxWidth: 1200,
     maxHeight: 800,
-    format: 'jpeg' as const,
+    format: 'webp' as const,
     description: 'Ahorro alto (70% calidad, 1200x800px)'
   },
   'balanced': {
@@ -110,7 +111,7 @@ const COMPRESSION_PRESETS = {
     quality: 0.8,
     maxWidth: 1920,
     maxHeight: 1080,
-    format: 'jpeg' as const,
+    format: 'webp' as const,
     description: 'Equilibrado (80% calidad, Full HD)'
   },
   'quality': {
@@ -131,7 +132,7 @@ const COMPRESSION_PRESETS = {
   }
 };
 
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_FILE_SIZE_MB = 10;
 
 export function ImageUploader({
@@ -141,7 +142,10 @@ export function ImageUploader({
   maxFiles = 10,
   maxFileSize = MAX_FILE_SIZE_MB,
   allowedTypes = ALLOWED_TYPES,
-  autoCompress = true
+  autoCompress = true,
+  uploadBucket,
+  uploadPurpose = 'business-image',
+  uploadPrefix
 }: ImageUploaderProps) {
   const { toast } = useToast();
   const [files, setFiles] = useState<FileWithPreview[]>([]);
@@ -151,87 +155,11 @@ export function ImageUploader({
   const [settings, setSettings] = useState<CompressionSettings>(DEFAULT_SETTINGS);
   const [showSettings, setShowSettings] = useState(false);
   const [previewFile, setPreviewFile] = useState<FileWithPreview | null>(null);
-  const [showDiagnostic, setShowDiagnostic] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dropZoneRef = useRef<HTMLDivElement>(null);
-  const supabase = createClient();
-  const bucket = process.env.NEXT_PUBLIC_SUPABASE_BUCKET_CAROUSEL || 'carousel';
+  const bucket = uploadBucket || process.env.NEXT_PUBLIC_SUPABASE_BUCKET_BUSINESS_ASSETS || 'business-assets';
 
-  // Función de diagnóstico para verificar configuración
-  const diagnoseSupabaseConfig = useCallback(async () => {
-    console.log('🔍 Diagnosticando configuración de Supabase...');
-    
-    try {
-      // Verificar cliente
-      if (!supabase) {
-        console.error('❌ Cliente de Supabase no inicializado');
-        return false;
-      }
-
-      // Verificar bucket
-      console.log('📦 Bucket configurado:', bucket);
-      
-      // Verificar autenticación
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (authError) {
-        console.error('❌ Error de autenticación:', authError);
-        return false;
-      }
-      
-      if (!user) {
-        console.warn('⚠️ Usuario no autenticado');
-        return false;
-      }
-      
-      console.log('✅ Usuario autenticado:', user.email);
-      
-      // Verificar acceso al bucket usando API
-      const response = await fetch('/api/storage/buckets');
-      if (!response.ok) {
-        console.error('❌ Error consultando buckets:', response.statusText);
-        return false;
-      }
-      
-      const { buckets, error: bucketsError } = await response.json();
-      if (bucketsError) {
-        console.error('❌ Error en respuesta de buckets:', bucketsError);
-        return false;
-      }
-      
-      const bucketExists = buckets?.some((b: any) => b.name === bucket);
-      if (!bucketExists) {
-        console.error('❌ Bucket no encontrado:', bucket);
-        console.log('📋 Buckets disponibles:', buckets?.map((b: any) => b.name));
-        return false;
-      }
-      
-      console.log('✅ Bucket encontrado:', bucket);
-      
-      // Verificar permisos de escritura (test con archivo pequeño)
-      const testFileName = `test-${Date.now()}.txt`;
-      const testFile = new Blob(['test'], { type: 'text/plain' });
-      
-      const { error: uploadError } = await supabase.storage
-        .from(bucket)
-        .upload(testFileName, testFile);
-      
-      if (uploadError) {
-        console.error('❌ Error de permisos de escritura:', uploadError);
-        return false;
-      }
-      
-      // Limpiar archivo de test
-      await supabase.storage.from(bucket).remove([testFileName]);
-      
-      console.log('✅ Permisos de escritura confirmados');
-      return true;
-      
-    } catch (error) {
-      console.error('💥 Error en diagnóstico:', error);
-      return false;
-    }
-  }, [supabase, bucket]);
 
   // Generar ID único para archivos
   const generateId = () => `file-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -373,7 +301,9 @@ export function ImageUploader({
               
               if (blob) {
                 try {
-                  const compressedFile = new File([blob], file.name, { 
+                  const outputExt = outputType === 'image/webp' ? 'webp' : outputType === 'image/jpeg' ? 'jpg' : file.name.split('.').pop() || 'img';
+                  const outputName = `${file.name.replace(/\.[^.]+$/, '')}.${outputExt}`;
+                  const compressedFile = new File([blob], outputName, { 
                     type: outputType,
                     lastModified: Date.now()
                   });
@@ -564,49 +494,36 @@ export function ImageUploader({
         f.id === file.id ? { ...f, status: 'uploading' as const } : f
       ));
       
-      // Generar nombre único para el archivo
-      const ext = fileToUpload.name.split('.').pop()?.toLowerCase() || 'jpg';
-      const timestamp = Date.now();
-      const randomId = Math.random().toString(36).slice(2);
-      const fileName = `carousel/${timestamp}-${randomId}.${ext}`;
-      
-      console.log('📁 Subiendo a:', fileName);
-      
-      // Verificar que el cliente de Supabase esté configurado
-      if (!supabase) {
-        throw new Error('Cliente de Supabase no inicializado');
+      const uploadFile =
+        fileToUpload instanceof File
+          ? fileToUpload
+          : new File([await fileToUpload.arrayBuffer()], fileToUpload.name, {
+              type: fileToUpload.type,
+              lastModified: fileToUpload.lastModified,
+            });
+
+      const formData = new FormData();
+      formData.append('bucket', bucket);
+      formData.append('purpose', uploadPurpose);
+      formData.append('public', 'true');
+      formData.append('prefix', uploadPrefix || uploadPurpose);
+      formData.append('maxSize', String(maxFileSize * 1024 * 1024));
+      formData.append('file', uploadFile);
+
+      const response = await fetch('/api/assets/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error || 'No se pudo subir la imagen');
       }
 
-      // Intentar subir el archivo
-      const { data, error } = await supabase.storage
-        .from(bucket)
-        .upload(fileName, fileToUpload, {
-          cacheControl: '3600',
-          upsert: false, // Cambiar a false para evitar sobrescribir
-          contentType: fileToUpload.type
-        });
-      
-      if (error) {
-        console.error('❌ Error de Supabase Storage:', error);
-        throw new Error(`Error de Supabase: ${error.message}`);
-      }
-
-      if (!data) {
-        throw new Error('No se recibieron datos de la subida');
-      }
-
-      console.log('✅ Archivo subido exitosamente:', data);
-      
-      // Obtener URL pública
-      const { data: { publicUrl } } = supabase.storage
-        .from(bucket)
-        .getPublicUrl(data.path);
-      
+      const publicUrl = result.files?.[0]?.url;
       if (!publicUrl) {
-        throw new Error('No se pudo generar URL pública');
+        throw new Error('No se pudo generar URL publica');
       }
-
-      console.log('🔗 URL pública generada:', publicUrl);
       
       setFiles(prev => prev.map(f => 
         f.id === file.id 
@@ -658,7 +575,7 @@ export function ImageUploader({
       
       return null;
     }
-  }, [supabase, bucket, toast]);
+  }, [bucket, maxFileSize, toast, uploadPrefix, uploadPurpose]);
 
   // Subir todos los archivos
   const uploadAllFiles = useCallback(async () => {
@@ -769,12 +686,6 @@ export function ImageUploader({
     }
   }, [processFiles]);
 
-  // Diagnóstico automático al abrir
-  useEffect(() => {
-    if (isOpen) {
-      diagnoseSupabaseConfig();
-    }
-  }, [isOpen, diagnoseSupabaseConfig]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -801,7 +712,7 @@ export function ImageUploader({
               <div>
                 <CardTitle>Subir Imágenes</CardTitle>
                 <p className="text-sm text-slate-500">
-                  Arrastra archivos o haz clic para seleccionar
+                  Arrastra archivos o selecciona imagenes; se optimizan antes de subir
                 </p>
               </div>
             </div>
@@ -815,15 +726,6 @@ export function ImageUploader({
               >
                 <Settings className="h-4 w-4" />
                 Configuración
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowDiagnostic(true)}
-                className="gap-2 text-blue-600 border-blue-600 hover:bg-blue-50"
-              >
-                <Info className="h-4 w-4" />
-                Diagnóstico
               </Button>
               <Button
                 variant="ghost"
@@ -1354,13 +1256,6 @@ export function ImageUploader({
         </div>
       )}
       
-      {/* Diagnóstico de Supabase */}
-      {showDiagnostic && (
-        <SupabaseDiagnostic
-          bucket={bucket}
-          onClose={() => setShowDiagnostic(false)}
-        />
-      )}
     </div>
   );
 }

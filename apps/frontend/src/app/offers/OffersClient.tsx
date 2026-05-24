@@ -1,19 +1,26 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, Suspense } from 'react';
+import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   AlertCircle,
+  ArrowDown,
+  ArrowUp,
+  Calendar,
+  CheckCircle2,
   Clock,
   Info,
   Package,
+  Percent,
   RefreshCw,
   Search,
   ShoppingCart,
   Sparkles,
   Tag,
+  TrendingUp,
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -26,7 +33,7 @@ import { NavBar } from '@/app/home/components/NavBar';
 import { Footer } from '@/app/home/components/Footer';
 import { useCatalogCart } from '@/hooks/useCatalogCart';
 import { useTenantPublicRouting } from '@/hooks/useTenantPublicRouting';
-import PageHero from '@/components/public-tenant/PageHero';
+import Breadcrumbs from '@/components/ui/breadcrumbs';
 import Pagination from '@/components/catalog/Pagination';
 import { getTenantPublicContent, getTenantPublicSections } from '@/lib/public-site/tenant-public-config';
 import PublicOffersCarousel from './components/PublicOffersCarousel';
@@ -40,6 +47,46 @@ import {
 } from './offers-query';
 import type { OfferCategory, OfferItem, OfferPagination, OfferProduct } from './offers-types';
 import { formatTimeRemaining, validatePromotion } from '@/lib/offers';
+
+type OrderConfirmationData = {
+  orderId: string;
+  customerName: string;
+  customerEmail: string;
+  total: number;
+  paymentMethod: string;
+  orderDate: string;
+};
+
+type CheckoutModalProps = {
+  isOpen: boolean;
+  onClose: () => void;
+  cartItems: { id: string; name: string; price: number; quantity: number; image?: string }[];
+  cartTotal?: number;
+  onRemoveItem?: (productId: string) => void;
+  onUpdateItemQuantity?: (productId: string, quantity: number) => void;
+  onOrderSuccess: (orderData: OrderConfirmationData) => void;
+};
+
+type OrderConfirmationModalProps = {
+  isOpen: boolean;
+  onClose: () => void;
+  orderId: string;
+  customerName: string;
+  customerEmail: string;
+  total: number;
+  paymentMethod: string;
+  orderDate: string;
+};
+
+const CheckoutModal = dynamic<CheckoutModalProps>(
+  () => import('@/components/catalog/CheckoutModal').then((module) => module.default),
+  { loading: () => null }
+);
+
+const OrderConfirmationModal = dynamic<OrderConfirmationModalProps>(
+  () => import('@/components/catalog/OrderConfirmationModal').then((module) => module.default),
+  { loading: () => null }
+);
 
 interface OffersClientProps {
   initialOffers: OfferItem[];
@@ -102,10 +149,12 @@ export default function OffersClient({
   const content = getTenantPublicContent(config);
   const formatCurrency = useCurrencyFormatter();
   const router = useRouter();
-  const { addToCart } = useCatalogCart();
+  const { addToCart, cart, removeFromCart, updateQuantity, clearCart, cartItemsCount, cartTotal: computedCartTotal } = useCatalogCart();
   const { tenantApiPath, tenantHref } = useTenantPublicRouting();
   const canUseCart = sections.showCart;
   type CatalogCartProduct = Parameters<typeof addToCart>[0];
+
+  const brandPrimary = config.branding.primaryColor || '#e11d48';
 
   const [offers, setOffers] = useState<OfferItem[]>(initialOffers);
   const [categories, setCategories] = useState<OfferCategory[]>(initialCategories);
@@ -124,7 +173,21 @@ export default function OffersClient({
   const [selectedItem, setSelectedItem] = useState<OfferItem | null>(null);
   const [ariaLive, setAriaLive] = useState('');
   const [retryNonce, setRetryNonce] = useState(0);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [orderConfirmation, setOrderConfirmation] = useState<OrderConfirmationData | null>(null);
   const skipInitialFetchRef = useRef(true);
+
+  const handleCheckout = useCallback(() => setCheckoutOpen(true), []);
+
+  const handleOrderSuccess = useCallback((orderData: OrderConfirmationData) => {
+    setCheckoutOpen(false);
+    setOrderConfirmation(orderData);
+  }, []);
+
+  const handleOrderConfirmationClose = useCallback(() => {
+    setOrderConfirmation(null);
+    clearCart();
+  }, [clearCart]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -294,37 +357,57 @@ export default function OffersClient({
         onNavigate={(sectionId) => router.push(tenantHref(`/home#${sectionId}`))}
       />
 
-      <main className="mx-auto max-w-7xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
+      <header className="sticky top-[var(--public-nav-height,4rem)] z-40 border-b border-slate-200/50 dark:border-white/5 bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl transition-all duration-300">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between gap-4 h-16">
+            <div className="flex items-center gap-3">
+              <div
+                className="p-2 rounded-xl"
+                style={{ backgroundColor: `${brandPrimary}1f` }}
+              >
+                <Sparkles className="w-5 h-5" style={{ color: brandPrimary }} />
+              </div>
+              <div>
+                <h1 className="font-bold text-foreground text-lg tracking-tight">
+                  {content.offersTitle || 'Ofertas'}
+                </h1>
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground/70 font-semibold hidden sm:block">
+                  {content.offersDescription || config.businessName}
+                </p>
+              </div>
+            </div>
+
+            {canUseCart ? (
+              <Button
+                size="icon"
+                disabled={cartItemsCount === 0}
+                style={{ backgroundColor: brandPrimary }}
+                className="relative h-10 w-10 rounded-xl text-white shadow-lg shadow-black/10 transition-transform duration-200 hover:scale-105 active:scale-95 hover:brightness-110 border-0 disabled:opacity-60 disabled:hover:scale-100"
+                onClick={handleCheckout}
+              >
+                <ShoppingCart className="w-5 h-5" />
+                {cartItemsCount > 0 && (
+                  <Badge className="absolute -top-1 -right-1 h-5 min-w-[20px] px-1.5 flex items-center justify-center text-[10px] font-bold bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-2 border-white dark:border-slate-900 rounded-full animate-bounce">
+                    {cartItemsCount}
+                  </Badge>
+                )}
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </header>
+
+      <main id="main-content" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 scroll-mt-32">
         <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
           {ariaLive}
         </div>
 
-        <PageHero
-          config={config}
-          badge={content.heroBadge || 'Promociones'}
-          title={content.offersTitle || 'Ofertas activas del negocio'}
-          description={
-            content.offersDescription ||
-            'Descubre promociones reales, filtra por categoria y prioriza los productos con mejor ahorro.'
-          }
-          actions={[
-            { href: '/offers', label: 'Explorar ofertas', variant: 'primary' },
-            ...(sections.showCatalog
-              ? [{ href: '/catalog', label: 'Ir al catalogo', variant: 'secondary' as const }]
-              : []),
+        <Breadcrumbs
+          items={[
+            { label: 'Inicio', href: tenantHref('/home') },
+            { label: 'Ofertas', href: tenantHref('/offers') },
           ]}
-          metrics={[
-            {
-              label: 'Ofertas activas',
-              value: pagination.total,
-              helpText: 'Resultados disponibles con tus filtros actuales.',
-            },
-            {
-              label: 'Categorias',
-              value: categories.length,
-              helpText: 'Segmentos de productos con promociones visibles.',
-            },
-          ]}
+          className="mb-6"
         />
 
         {promotionFilter ? (
@@ -394,9 +477,18 @@ export default function OffersClient({
                   <SelectValue placeholder="Estado" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="active">Activas</SelectItem>
-                  <SelectItem value="upcoming">Proximas</SelectItem>
-                  <SelectItem value="ended">Finalizadas</SelectItem>
+                  <SelectItem value="active">
+                    <CheckCircle2 className="mr-2 h-4 w-4 text-emerald-500" />
+                    Activas
+                  </SelectItem>
+                  <SelectItem value="upcoming">
+                    <Calendar className="mr-2 h-4 w-4 text-blue-500" />
+                    Proximas
+                  </SelectItem>
+                  <SelectItem value="ended">
+                    <Clock className="mr-2 h-4 w-4 text-slate-500" />
+                    Finalizadas
+                  </SelectItem>
                 </SelectContent>
               </Select>
 
@@ -405,9 +497,13 @@ export default function OffersClient({
                   <SelectValue placeholder="Categoria" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todas las categorias</SelectItem>
+                  <SelectItem value="all">
+                    <Package className="mr-2 h-4 w-4" />
+                    Todas las categorias
+                  </SelectItem>
                   {categories.map((item) => (
                     <SelectItem key={item.id} value={item.id}>
+                      <Tag className="mr-2 h-4 w-4" />
                       {item.name}
                     </SelectItem>
                   ))}
@@ -419,11 +515,26 @@ export default function OffersClient({
                   <SelectValue placeholder="Ordenar" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="best_savings">Mayor ahorro</SelectItem>
-                  <SelectItem value="highest_discount">% descuento</SelectItem>
-                  <SelectItem value="price_low_high">Precio menor</SelectItem>
-                  <SelectItem value="price_high_low">Precio mayor</SelectItem>
-                  <SelectItem value="ending_soon">Termina pronto</SelectItem>
+                  <SelectItem value="best_savings">
+                    <TrendingUp className="mr-2 h-4 w-4 text-emerald-500" />
+                    Mayor ahorro
+                  </SelectItem>
+                  <SelectItem value="highest_discount">
+                    <Percent className="mr-2 h-4 w-4 text-rose-500" />
+                    % descuento
+                  </SelectItem>
+                  <SelectItem value="price_low_high">
+                    <ArrowUp className="mr-2 h-4 w-4" />
+                    Precio menor
+                  </SelectItem>
+                  <SelectItem value="price_high_low">
+                    <ArrowDown className="mr-2 h-4 w-4" />
+                    Precio mayor
+                  </SelectItem>
+                  <SelectItem value="ending_soon">
+                    <Clock className="mr-2 h-4 w-4 text-amber-500" />
+                    Termina pronto
+                  </SelectItem>
                 </SelectContent>
               </Select>
 
@@ -526,7 +637,8 @@ export default function OffersClient({
                         alt={item.product.name}
                         fill
                         className="object-cover transition-transform duration-300 hover:scale-105"
-                        sizes="(max-width: 1280px) 50vw, 33vw"
+                        sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
+                        loading="lazy"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-slate-950/65 to-transparent" />
                       <div className="absolute left-4 top-4 flex flex-wrap gap-2">
@@ -652,6 +764,37 @@ export default function OffersClient({
         allowAddToCart={canUseCart}
         allowViewProduct={sections.showCatalog}
       />
+
+      {canUseCart ? (
+        <Suspense fallback={null}>
+          <CheckoutModal
+            isOpen={checkoutOpen}
+            onClose={() => setCheckoutOpen(false)}
+            cartItems={cart.map((item) => ({
+              id: item.product.id,
+              name: item.product.name,
+              price: Number(item.product.offer_price ?? item.product.sale_price ?? 0),
+              quantity: item.quantity,
+              image: item.product.image_url,
+            }))}
+            cartTotal={computedCartTotal}
+            onRemoveItem={removeFromCart}
+            onUpdateItemQuantity={updateQuantity}
+            onOrderSuccess={handleOrderSuccess}
+          />
+
+          <OrderConfirmationModal
+            isOpen={Boolean(orderConfirmation)}
+            onClose={handleOrderConfirmationClose}
+            orderId={orderConfirmation?.orderId || ''}
+            customerName={orderConfirmation?.customerName || ''}
+            customerEmail={orderConfirmation?.customerEmail || ''}
+            total={orderConfirmation?.total || 0}
+            paymentMethod={orderConfirmation?.paymentMethod || ''}
+            orderDate={orderConfirmation?.orderDate || ''}
+          />
+        </Suspense>
+      ) : null}
     </div>
   );
 }

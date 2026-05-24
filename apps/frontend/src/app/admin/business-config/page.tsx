@@ -3,6 +3,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertCircle,
+  AlertTriangle,
   Building2,
   CheckCircle,
   Copy,
@@ -27,6 +28,14 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { useToast } from '@/components/ui/use-toast'
 import { useBusinessConfig } from '@/contexts/BusinessConfigContext'
 import type { BusinessConfig } from '@/types/business-config'
@@ -108,12 +117,13 @@ function mergeConfig(base: BusinessConfig, updates: Partial<BusinessConfig>): Bu
   for (const key of Object.keys(updates) as (keyof BusinessConfig)[]) {
     const value = updates[key]
     if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-      ;(merged as any)[key] = {
-        ...((base as any)[key] || {}),
-        ...(value as object),
+      const baseValue = base[key]
+      ;(merged as Record<string, unknown>)[key] = {
+        ...(typeof baseValue === 'object' && baseValue !== null ? baseValue : {}),
+        ...value,
       }
     } else {
-      ;(merged as any)[key] = value
+      ;(merged as Record<string, unknown>)[key] = value
     }
   }
 
@@ -174,6 +184,7 @@ export default function BusinessConfigPage() {
   const [saving, setSaving] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [localChanges, setLocalChanges] = useState<Partial<BusinessConfig>>({})
+  const [showResetDialog, setShowResetDialog] = useState(false)
   const previousOrganizationId = useRef<string | null>(null)
   const accessQuery = useCompanyAccess({
     permission: COMPANY_PERMISSIONS.MANAGE_COMPANY,
@@ -395,16 +406,13 @@ export default function BusinessConfigPage() {
     })
   }, [hasUnsavedChanges, toast])
 
-  const handleReset = useCallback(async () => {
-    if (!window.confirm('Se restaurara la configuracion por defecto. Esta accion no se puede deshacer.')) {
-      return
-    }
-
+  const confirmReset = useCallback(async () => {
     try {
       setSaving(true)
       await resetConfig()
       setLocalChanges({})
       setHasUnsavedChanges(false)
+      setShowResetDialog(false)
       toast({
         title: 'Configuracion restablecida',
         description: 'La configuracion publica volvio a los valores predeterminados.',
@@ -419,6 +427,10 @@ export default function BusinessConfigPage() {
       setSaving(false)
     }
   }, [resetConfig, toast])
+
+  const handleReset = useCallback(() => {
+    setShowResetDialog(true)
+  }, [])
 
   const buildPublicUrl = useCallback((path: string) => {
     if (!publicBaseUrl) return path
@@ -845,6 +857,34 @@ export default function BusinessConfigPage() {
           </Card>
         </div>
       </div>
+
+      <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Restablecer configuración
+            </DialogTitle>
+            <DialogDescription>
+              Esta acción restaurará la configuración pública del negocio a sus valores predeterminados. No se puede deshacer.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-2 rounded-lg border border-destructive/20 bg-destructive/5 p-3">
+            <p className="text-sm text-destructive">
+              Se perderán todos los cambios personalizados en contenido, marca, contacto y otras secciones.
+            </p>
+          </div>
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setShowResetDialog(false)} disabled={saving}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={confirmReset} disabled={saving} className="gap-2">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {saving ? 'Restableciendo...' : 'Restablecer'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

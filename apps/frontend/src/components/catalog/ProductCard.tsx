@@ -1,12 +1,13 @@
 "use client";
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Sparkles, Heart, Eye, Share2, Star, ShoppingCart } from 'lucide-react';
+import { Heart, Eye, Share2, Star, ShoppingCart } from 'lucide-react';
 import { formatPrice } from '@/utils/formatters';
+import { ProductImagePlaceholder } from '@/components/products/ProductImagePlaceholder';
 import type { Product } from '@/types';
 
 interface Props {
@@ -29,13 +30,14 @@ const ProductCard = memo(function ProductCard({
   config
 }: Props) {
   const reviewCount: number | null = (product as any)?.reviewCount ?? (product as any)?.reviews_count ?? null;
+  const [imageError, setImageError] = useState(false);
   const isFavorite = favorites.includes(product.id);
   const isOutOfStock = product.stock_quantity <= 0;
 
   return (
     <Card className="group overflow-hidden border bg-card rounded-xl transition-all duration-300 hover:-translate-y-0.5 hover:shadow-primary/10 readable-section">
       <div className="relative">
-        {product.image_url ? (
+        {product.image_url && !imageError ? (
           <Link href={`/catalog/${product.id}`}>
             <Image
               src={product.image_url}
@@ -47,6 +49,7 @@ const ProductCard = memo(function ProductCard({
               quality={85}
               placeholder="blur"
               blurDataURL="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAwIiBoZWlnaHQ9IjYwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iODAwIiBoZWlnaHQ9IjYwMCIgZmlsbD0iI2YwZjBmMCIvPjwvc3ZnPg=="
+              onError={() => setImageError(true)}
               className={`w-full object-cover transform-gpu will-change-transform transition-transform duration-500 ease-out group-hover:scale-[1.07] group-hover:brightness-[0.98] ${viewMode === 'list' ? 'h-32' : viewMode === 'compact' ? 'h-36' : 'h-48'
                 }`}
             />
@@ -54,10 +57,11 @@ const ProductCard = memo(function ProductCard({
           </Link>
         ) : (
           <Link href={`/catalog/${product.id}`}>
-            <div className={`w-full bg-gradient-to-r from-indigo-100 via-pink-100 to-blue-100 dark:from-indigo-950 dark:via-purple-950 dark:to-blue-950 flex items-center justify-center ${viewMode === 'list' ? 'h-32' : viewMode === 'compact' ? 'h-36' : 'h-48'
-              }`}>
-              <Sparkles className="w-12 h-12 text-muted-foreground" />
-            </div>
+            <ProductImagePlaceholder
+              productName={product.name}
+              compact={viewMode !== 'grid'}
+              className={`w-full rounded-none border-0 ${viewMode === 'list' ? 'h-32' : viewMode === 'compact' ? 'h-36' : 'h-48'}`}
+            />
           </Link>
         )}
 

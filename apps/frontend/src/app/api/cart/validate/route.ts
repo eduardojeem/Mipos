@@ -6,6 +6,7 @@ import {
   getEffectiveOrderProductPrice,
   isSchemaMissingError,
 } from '@/lib/public-site/order-products';
+import { enrichPublicCatalogProductsWithOffers } from '@/lib/public-site/catalog-data';
 
 interface CartItemToValidate {
   id: string;
@@ -70,7 +71,8 @@ export async function POST(request: NextRequest) {
 
     let products;
     try {
-      products = await fetchOrderProductsForOrganization(supabase, organizationId, productIds);
+      const rawProducts = await fetchOrderProductsForOrganization(supabase, organizationId, productIds);
+      products = await enrichPublicCatalogProductsWithOffers(organizationId, rawProducts as any[]) as unknown as typeof rawProducts;
     } catch (error) {
       if (isSchemaMissingError(error)) {
         return NextResponse.json(

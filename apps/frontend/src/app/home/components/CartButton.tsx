@@ -34,7 +34,6 @@ export function CartButton() {
   const [confirmationData, setConfirmationData] = useState<OrderConfirmationData | null>(null);
 
   const primary = config.branding?.primaryColor || '#0f766e';
-  const secondary = config.branding?.secondaryColor || '#1d4ed8';
 
   const totalsLabel = useMemo(
     () =>
@@ -52,19 +51,16 @@ export function CartButton() {
   return (
     <>
       <Button
-        className="relative h-11 rounded-full px-4 text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
+        size="icon"
+        className="relative h-10 w-10 rounded-xl text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
         aria-label={totalsLabel}
         disabled={cartItemsCount === 0}
         onClick={() => setShowCheckout(true)}
-        style={{
-          background: `linear-gradient(90deg, ${primary}, ${secondary})`,
-        }}
+        style={{ backgroundColor: primary }}
       >
-        <ShoppingBag className="mr-2 h-4 w-4" />
-        <span className="hidden sm:inline">Carrito</span>
-        <span className="ml-2 text-sm font-semibold">{formatPrice(cartTotal || 0, config)}</span>
+        <ShoppingBag className="h-5 w-5" />
         {cartItemsCount > 0 ? (
-          <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-white px-1 text-[10px] font-bold text-slate-950">
+          <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-slate-900 dark:bg-white px-1 text-[10px] font-bold text-white dark:text-slate-900 border-2 border-white dark:border-slate-900">
             {cartItemsCount > 9 ? '9+' : cartItemsCount}
           </span>
         ) : null}

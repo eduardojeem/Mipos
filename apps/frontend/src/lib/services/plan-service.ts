@@ -5,6 +5,9 @@ export interface CompanyProfile {
   name: string;
   rfc?: string;
   industry: string;
+  marketplace_category_id?: string | null;
+  marketplace_category_slug?: string | null;
+  marketplace_category_name?: string | null;
   size: 'micro' | 'small' | 'medium' | 'large';
   tagline?: string;
   phone?: string;

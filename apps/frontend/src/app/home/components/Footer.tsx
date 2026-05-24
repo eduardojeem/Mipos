@@ -114,6 +114,9 @@ function FooterComponent({ config, onNavigate }: FooterProps) {
                 Seguimiento
               </Link>
             ) : null}
+            <Link href={tenantHref('/account')} className="transition-colors hover:text-white">
+              Mi cuenta
+            </Link>
             {(sections.showContactInfo || sections.showLocation) ? (
               <button onClick={() => onNavigate('contacto')} className="text-left transition-colors hover:text-white">
                 Contacto

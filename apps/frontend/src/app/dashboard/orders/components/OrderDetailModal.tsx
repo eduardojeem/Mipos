@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { formatPrice } from '@/utils/formatters';
 import { useBusinessConfig } from '@/contexts/BusinessConfigContext';
 import type { Order } from '@/hooks/useOptimizedOrders';
-import { ORDER_STATUSES, PAYMENT_METHODS, STATUS_FLOW } from '@/lib/orders/constants';
+import { ORDER_STATUSES, PAYMENT_METHODS, PAYMENT_STATUSES, STATUS_FLOW } from '@/lib/orders/constants';
 import { getOrderStatusSelectOptions } from '@/lib/orders/status-transitions';
 import Image from 'next/image';
 import {
@@ -24,6 +24,7 @@ import {
   Phone,
   RefreshCw,
   ShoppingBag,
+  Truck,
   User,
   XCircle,
 } from 'lucide-react';
@@ -33,6 +34,7 @@ interface OrderDetailModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onStatusChange?: (orderId: string, status: string) => void;
+  onPaymentStatusChange?: (order: Order) => void;
   isUpdating?: boolean;
   loading?: boolean;
 }
@@ -99,6 +101,44 @@ function InfoRow({ icon: Icon, label, value }: { icon: React.ElementType; label:
   );
 }
 
+function isManualPaymentPending(order: Order) {
+  return ['CASH', 'TRANSFER'].includes(order.payment_method) && (order.payment_status || 'PENDING') === 'PENDING';
+}
+
+function getPaymentCompletionLabel(order: Order) {
+  if (order.payment_method === 'CASH' && order.fulfillment_type === 'PICKUP' && order.status === 'READY') {
+    return 'Cobrar y marcar retirado';
+  }
+
+  if (order.payment_method === 'CASH' && order.fulfillment_type !== 'PICKUP' && order.status === 'SHIPPED') {
+    return 'Cobrar y marcar entregado';
+  }
+
+  return order.payment_method === 'CASH' ? 'Confirmar efectivo' : 'Confirmar transferencia';
+}
+
+function getTransferProofWhatsAppHref(phone: string, orderNumber: string, total: number, config: Parameters<typeof formatPrice>[1]) {
+  const digits = phone.replace(/\D/g, '');
+  if (!digits) return null;
+  const message = `Hola, estamos revisando tu pedido ${orderNumber}. Para confirmar la transferencia de ${formatPrice(total, config)}, por favor envianos el comprobante por este chat.`;
+  return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
+}
+
+function getTransferConfirmedWhatsAppHref(phone: string, orderNumber: string) {
+  const digits = phone.replace(/\D/g, '');
+  if (!digits) return null;
+  const message = `Hola, ya confirmamos la transferencia de tu pedido ${orderNumber}. Vamos a continuar con la preparacion.`;
+  return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
+}
+
+function hasPaymentCompletionAction(order: Order) {
+  return (
+    order.payment_method === 'CASH' &&
+    ((order.fulfillment_type === 'PICKUP' && order.status === 'READY') ||
+      (order.fulfillment_type !== 'PICKUP' && order.status === 'SHIPPED'))
+  );
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -132,6 +172,7 @@ export function OrderDetailModal({
   open,
   onOpenChange,
   onStatusChange,
+  onPaymentStatusChange,
   isUpdating,
   loading = false,
 }: OrderDetailModalProps) {
@@ -159,8 +200,26 @@ export function OrderDetailModal({
   const StatusIcon = meta.icon;
   const createdDate = new Date(order.created_at);
   const updatedDate = order.updated_at ? new Date(order.updated_at) : null;
-  const statusOptions = getOrderStatusSelectOptions(order.status);
-  const shippingAddress = order.customer_address || 'Sin direccion registrada';
+  const isPickup = order.fulfillment_type === 'PICKUP';
+  const isPaymentPending = isManualPaymentPending(order);
+  const isTransferPending = order.payment_method === 'TRANSFER' && (order.payment_status || 'PENDING') === 'PENDING';
+  const paymentCompletionAction = hasPaymentCompletionAction(order);
+  const paymentStatusMeta = PAYMENT_STATUSES[String(order.payment_status || 'PENDING').toUpperCase()] || PAYMENT_STATUSES.PENDING;
+  const statusOptions = isPickup && order.status === 'READY'
+    ? getOrderStatusSelectOptions(order.status).filter((status) => status !== 'SHIPPED')
+    : getOrderStatusSelectOptions(order.status);
+  const shippingAddress = isPickup ? 'Retiro en local' : order.customer_address || 'Sin direccion registrada';
+  const pickupWhatsAppHref =
+    isPickup && order.status === 'READY' && order.customer_phone
+      ? `https://wa.me/${order.customer_phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Tu pedido ${order.order_number} esta listo para retirar.`)}`
+      : null;
+  const transferProofHref = isTransferPending
+    ? getTransferProofWhatsAppHref(order.customer_phone, order.order_number, order.total, config)
+    : null;
+  const transferConfirmedHref =
+    order.payment_method === 'TRANSFER' && (order.payment_status || 'PENDING') === 'PAID'
+      ? getTransferConfirmedWhatsAppHref(order.customer_phone, order.order_number)
+      : null;
 
   const handleCopyOrderNumber = () => {
     void navigator.clipboard.writeText(order.order_number);
@@ -366,7 +425,7 @@ export function OrderDetailModal({
                 <InfoRow icon={User} label="Nombre" value={order.customer_name} />
                 <InfoRow icon={Mail} label="Email" value={order.customer_email} />
                 <InfoRow icon={Phone} label="Telefono" value={order.customer_phone} />
-                <InfoRow icon={MapPin} label="Direccion" value={order.customer_address || 'Sin direccion registrada'} />
+                <InfoRow icon={MapPin} label={isPickup ? 'Retiro' : 'Direccion'} value={shippingAddress} />
               </div>
             </div>
 
@@ -377,10 +436,20 @@ export function OrderDetailModal({
               </h3>
               <div className="space-y-0">
                 <InfoRow icon={Hash} label="Origen" value={order.order_source || 'MANUAL'} />
+                <InfoRow icon={Truck} label="Tipo de pedido" value={isPickup ? 'Retiro en local' : 'Delivery'} />
                 <InfoRow
                   icon={CreditCard}
                   label="Metodo de pago"
                   value={PAYMENT_METHODS[order.payment_method] || order.payment_method}
+                />
+                <InfoRow
+                  icon={CreditCard}
+                  label="Estado de pago"
+                  value={
+                    <Badge variant="outline" className={`border ${paymentStatusMeta.className}`}>
+                      {paymentStatusMeta.label}
+                    </Badge>
+                  }
                 />
                 <InfoRow
                   icon={Clock}
@@ -486,8 +555,8 @@ export function OrderDetailModal({
                 <span>{formatPrice(order.subtotal, config)}</span>
               </div>
               <div className="flex items-center justify-between text-muted-foreground">
-                <span>Envio</span>
-                <span>{order.shipping_cost > 0 ? formatPrice(order.shipping_cost, config) : 'Gratis'}</span>
+                <span>{isPickup ? 'Retiro' : 'Envio'}</span>
+                <span>{isPickup ? 'Sin costo' : order.shipping_cost > 0 ? formatPrice(order.shipping_cost, config) : 'Gratis'}</span>
               </div>
               <Separator />
               <div className="flex items-center justify-between pt-1 text-lg font-semibold">
@@ -504,10 +573,53 @@ export function OrderDetailModal({
                 <Package className="mr-2 h-4 w-4" />
                 Imprimir
               </Button>
-              <Button variant="outline" size="sm" onClick={handlePrintShippingInfo}>
-                <MapPin className="mr-2 h-4 w-4" />
-                Imprimir envio
-              </Button>
+              {isPickup ? (
+                pickupWhatsAppHref ? (
+                  <Button variant="outline" size="sm" asChild>
+                    <a href={pickupWhatsAppHref} target="_blank" rel="noreferrer">
+                      <Phone className="mr-2 h-4 w-4" />
+                      Avisar retiro
+                    </a>
+                  </Button>
+                ) : null
+              ) : (
+                <Button variant="outline" size="sm" onClick={handlePrintShippingInfo}>
+                  <MapPin className="mr-2 h-4 w-4" />
+                  Imprimir envio
+                </Button>
+              )}
+              {isPaymentPending && onPaymentStatusChange ? (
+                <Button
+                  variant={paymentCompletionAction ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => onPaymentStatusChange(order)}
+                  disabled={isUpdating}
+                  className={
+                    paymentCompletionAction
+                      ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                      : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-900/60 dark:text-emerald-300 dark:hover:bg-emerald-950/30'
+                  }
+                >
+                  <CreditCard className="mr-2 h-4 w-4" />
+                  {getPaymentCompletionLabel(order)}
+                </Button>
+              ) : null}
+              {transferProofHref ? (
+                <Button variant="outline" size="sm" asChild>
+                  <a href={transferProofHref} target="_blank" rel="noreferrer">
+                    <Phone className="mr-2 h-4 w-4" />
+                    Pedir comprobante
+                  </a>
+                </Button>
+              ) : null}
+              {transferConfirmedHref ? (
+                <Button variant="outline" size="sm" asChild>
+                  <a href={transferConfirmedHref} target="_blank" rel="noreferrer">
+                    <Phone className="mr-2 h-4 w-4" />
+                    Avisar pago
+                  </a>
+                </Button>
+              ) : null}
             </div>
             {onStatusChange && statusOptions.length > 1 && (
               <div className="flex items-center gap-2">

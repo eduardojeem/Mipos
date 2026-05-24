@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowLeft, ArrowRight, Building2, Tag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { ProductImagePlaceholder } from '@/components/products/ProductImagePlaceholder';
 import type { GlobalProductCard } from '@/lib/public-site/data';
 import {
   formatMarketplaceCurrency,
@@ -24,6 +25,11 @@ type SlideTone = 'sale' | 'rated' | 'new' | 'stock' | 'default';
 
 function hasOffer(product: GlobalProductCard) {
   return Boolean(product.offerPrice && product.offerPrice < product.basePrice);
+}
+
+function hasProductImage(image?: string | null) {
+  const src = String(image || '').trim();
+  return Boolean(src) && !src.startsWith('/api/placeholder/');
 }
 
 function isRecent(product: GlobalProductCard) {
@@ -136,7 +142,7 @@ export function GlobalCatalogHeroCarousel({
   const detailHref = buildProductDetailHref(active);
   const organizationHref = normalizeMarketplaceHref(active.organizationHref);
   const currentPrice = hasOffer(active) ? active.offerPrice || active.basePrice : active.basePrice;
-  const imageSrc = imageError.has(active.id) ? '/api/placeholder/480/360' : active.image;
+  const showActiveImage = hasProductImage(active.image) && !imageError.has(active.id);
 
   return (
     <section
@@ -159,15 +165,19 @@ export function GlobalCatalogHeroCarousel({
           transition={{ duration: 0.7, ease: 'easeInOut' }}
           className="absolute inset-0"
         >
-          <Image
-            src={imageSrc}
-            alt={active.name}
-            fill
-            priority
-            className="object-cover"
-            sizes="100vw"
-            onError={() => setImageError((prev) => new Set(prev).add(active.id))}
-          />
+          {showActiveImage ? (
+            <Image
+              src={active.image}
+              alt={active.name}
+              fill
+              priority
+              className="object-cover"
+              sizes="100vw"
+              onError={() => setImageError((prev) => new Set(prev).add(active.id))}
+            />
+          ) : (
+            <ProductImagePlaceholder productName={active.name} className="absolute inset-0 rounded-none border-0" />
+          )}
         </motion.div>
       </AnimatePresence>
 
@@ -301,7 +311,7 @@ export function GlobalCatalogHeroCarousel({
       {slides.length > 1 && (
         <div className="absolute bottom-6 right-6 top-6 hidden w-[72px] flex-col gap-2 lg:flex">
           {slides.map((slide, index) => {
-            const src = imageError.has(slide.id) ? '/api/placeholder/480/360' : slide.image;
+            const showThumbImage = hasProductImage(slide.image) && !imageError.has(slide.id);
             return (
               <button
                 key={slide.id}
@@ -314,13 +324,18 @@ export function GlobalCatalogHeroCarousel({
                     : 'opacity-35 hover:opacity-65'
                 }`}
               >
-                <Image
-                  src={src || '/api/placeholder/480/360'}
-                  alt={slide.name}
-                  fill
-                  className="object-cover"
-                  sizes="72px"
-                />
+                {showThumbImage ? (
+                  <Image
+                    src={slide.image}
+                    alt={slide.name}
+                    fill
+                    className="object-cover"
+                    sizes="72px"
+                    onError={() => setImageError((prev) => new Set(prev).add(slide.id))}
+                  />
+                ) : (
+                  <ProductImagePlaceholder productName={slide.name} compact showLabel={false} className="absolute inset-0 rounded-none border-0" />
+                )}
               </button>
             );
           })}

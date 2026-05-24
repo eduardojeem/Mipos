@@ -41,7 +41,6 @@ import {
 import { BusinessConfig } from '@/types/business-config';
 import { useConfigValidation } from '../hooks/useConfigValidation';
 import { cn } from '@/lib/utils';
-import { createClient } from '@/lib/supabase';
 import { toast } from '@/lib/toast';
 import { ImageGallery } from './ImageGallery';
 
@@ -58,8 +57,11 @@ const ASPECT_RATIOS = [
   { label: '1:1', value: 1, description: 'Cuadrado' },
 ];
 
-const MAX_FILE_SIZE_MB = 5;
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const MAX_FILE_SIZE_MB = 2;
+const MAX_CAROUSEL_IMAGES = 10;
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const CAROUSEL_MAX_WIDTH = 1600;
+const CAROUSEL_QUALITY = 0.76;
 
 
 
@@ -76,15 +78,32 @@ export function CarouselEditor({ config, onUpdate, onSave }: CarouselEditorProps
   const [showGallery, setShowGallery] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  const supabase = createClient();
-  const bucket = process.env.NEXT_PUBLIC_SUPABASE_BUCKET_CAROUSEL || 'carousel';
+  const bucket = process.env.NEXT_PUBLIC_SUPABASE_BUCKET_BUSINESS_ASSETS || 'business-assets';
+  const carouselImageCount = config.carousel.images.length;
+  const remainingImageSlots = Math.max(0, MAX_CAROUSEL_IMAGES - carouselImageCount);
+  const canAddImages = remainingImageSlots > 0;
+  const missingAltCount = config.carousel.images.filter((image) => image.url && !image.alt?.trim()).length;
+  const hasCarouselImages = carouselImageCount > 0;
+
+  const buildAltFromFileName = (fileName: string) =>
+    fileName
+      .replace(/\.[^.]+$/, '')
+      .replace(/[-_]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 80) || 'Imagen del carrusel';
 
   // Función para agregar imagen desde galería al carrusel
   const addGalleryImageToCarousel = (imageUrl: string) => {
+    if (!canAddImages) {
+      toast.error(`Maximo ${MAX_CAROUSEL_IMAGES} imagenes en el carrusel`);
+      return;
+    }
+
     const newImage = {
       id: `img-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       url: imageUrl,
-      alt: '',
+      alt: 'Imagen del carrusel',
       link: ''
     };
     handleCarouselChange('images', [...config.carousel.images, newImage]);
@@ -121,7 +140,7 @@ export function CarouselEditor({ config, onUpdate, onSave }: CarouselEditorProps
 
   const validateFile = (file: File): string | null => {
     if (!ALLOWED_TYPES.includes(file.type)) {
-      return `Tipo de archivo no permitido. Use: JPG, PNG, WebP o GIF`;
+      return `Tipo de archivo no permitido. Use: JPG, PNG o WebP`;
     }
     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
       return `El archivo es muy grande. Máximo ${MAX_FILE_SIZE_MB}MB`;
@@ -129,10 +148,16 @@ export function CarouselEditor({ config, onUpdate, onSave }: CarouselEditorProps
     return null;
   };
 
-  const compressImage = async (file: File, maxWidth = 1920): Promise<File> => {
+  const compressImage = async (file: File, maxWidth = CAROUSEL_MAX_WIDTH): Promise<File> => {
     return new Promise((resolve) => {
+      const objectUrl = URL.createObjectURL(file);
       const img = new Image();
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        resolve(file);
+      };
       img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
         const canvas = document.createElement('canvas');
         let width = img.width;
         let height = img.height;
@@ -151,47 +176,45 @@ export function CarouselEditor({ config, onUpdate, onSave }: CarouselEditorProps
         canvas.toBlob(
           (blob) => {
             if (blob) {
-              resolve(new File([blob], file.name, { type: 'image/jpeg' }));
+              const safeName = file.name.replace(/\.[^.]+$/, '') || 'carousel';
+              resolve(new File([blob], `${safeName}.webp`, { type: 'image/webp', lastModified: Date.now() }));
             } else {
               resolve(file);
             }
           },
-          'image/jpeg',
-          0.85
+          'image/webp',
+          CAROUSEL_QUALITY
         );
       };
-      img.src = URL.createObjectURL(file);
+      img.src = objectUrl;
     });
   };
 
   const uploadFile = async (file: File): Promise<string | null> => {
     try {
-      let processedFile = file;
-      
-      if (file.size > 1024 * 1024 && (file.type === 'image/jpeg' || file.type === 'image/png')) {
-        processedFile = await compressImage(file);
+      const processedFile = await compressImage(file);
+      if (processedFile.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+        throw new Error(`La imagen optimizada supera ${MAX_FILE_SIZE_MB}MB`);
       }
-      
-      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
-      const path = `carousel-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      
-      const { data, error } = await supabase.storage
-        .from(bucket)
-        .upload(path, processedFile, { 
-          upsert: true, 
-          contentType: processedFile.type 
-        });
-      
-      if (error) {
-        console.error('Upload error:', error);
-        throw error;
+
+      const formData = new FormData();
+      formData.append('bucket', bucket);
+      formData.append('purpose', 'business-carousel');
+      formData.append('public', 'true');
+      formData.append('prefix', 'carousel');
+      formData.append('maxSize', String(MAX_FILE_SIZE_MB * 1024 * 1024));
+      formData.append('file', processedFile);
+
+      const response = await fetch('/api/assets/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error || 'Error al subir imagen');
       }
-      
-      const { data: { publicUrl } } = supabase.storage
-        .from(bucket)
-        .getPublicUrl(data.path);
-      
-      return publicUrl;
+
+      return result.files?.[0]?.url || null;
     } catch (error) {
       console.error('Error uploading file:', error);
       return null;
@@ -201,11 +224,20 @@ export function CarouselEditor({ config, onUpdate, onSave }: CarouselEditorProps
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
+
+    if (!canAddImages) {
+      toast.error(`Maximo ${MAX_CAROUSEL_IMAGES} imagenes en el carrusel`);
+      event.target.value = '';
+      return;
+    }
     
     setUploading(true);
     setUploadProgress(0);
     
-    const filesToUpload = Array.from(files);
+    const filesToUpload = Array.from(files).slice(0, remainingImageSlots);
+    if (files.length > remainingImageSlots) {
+      toast.error(`Solo quedan ${remainingImageSlots} espacio(s) disponible(s)`);
+    }
     const uploadedUrls: string[] = [];
     let errors: string[] = [];
     
@@ -231,10 +263,10 @@ export function CarouselEditor({ config, onUpdate, onSave }: CarouselEditorProps
     setUploadProgress(100);
     
     if (uploadedUrls.length > 0) {
-      const newImages = uploadedUrls.map(url => ({
+      const newImages = uploadedUrls.map((url, index) => ({
         id: `img-${Date.now()}-${Math.random().toString(36).slice(2)}`,
         url,
-        alt: '',
+        alt: buildAltFromFileName(filesToUpload[index]?.name || 'Imagen del carrusel'),
         link: ''
       }));
       
@@ -257,10 +289,15 @@ export function CarouselEditor({ config, onUpdate, onSave }: CarouselEditorProps
   };
 
   const addCarouselImageByUrl = () => {
+    if (!canAddImages) {
+      toast.error(`Maximo ${MAX_CAROUSEL_IMAGES} imagenes en el carrusel`);
+      return;
+    }
+
     const newImage = {
       id: `img-${Date.now()}`,
       url: '',
-      alt: '',
+      alt: 'Imagen del carrusel',
       link: ''
     };
     handleCarouselChange('images', [...config.carousel.images, newImage]);
@@ -467,24 +504,43 @@ export function CarouselEditor({ config, onUpdate, onSave }: CarouselEditorProps
             </div>
 
             {/* Images Section */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-semibold text-lg">Imágenes del Carrusel</h4>
-                  <p className="text-sm text-slate-500">
-                    {config.carousel.images.length} imagen{config.carousel.images.length !== 1 ? 'es' : ''} configurada{config.carousel.images.length !== 1 ? 's' : ''}
-                  </p>
+            <div className="space-y-5 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900/40">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="space-y-3">
+                  <div>
+                    <h4 className="font-semibold text-lg">Imagenes del carrusel</h4>
+                    <p className="text-sm text-slate-500">
+                      Se publican en el hero de la web. JPG, PNG o WebP hasta {MAX_FILE_SIZE_MB}MB; se guarda optimizado en WebP.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline" className="bg-slate-50 dark:bg-slate-900">
+                      {carouselImageCount}/{MAX_CAROUSEL_IMAGES} imagenes
+                    </Badge>
+                    <Badge variant="outline" className="bg-slate-50 dark:bg-slate-900">
+                      {remainingImageSlots} espacios libres
+                    </Badge>
+                    <Badge variant="outline" className="bg-slate-50 dark:bg-slate-900">
+                      WebP automatico
+                    </Badge>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center lg:justify-end">
+                  {missingAltCount > 0 && (
+                    <Badge variant="outline" className="gap-1 border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                      <AlertCircle className="h-3 w-3" />
+                      {missingAltCount} sin SEO
+                    </Badge>
+                  )}
                   <Button
                     variant="outline"
                     onClick={() => setShowGallery(true)}
+                    disabled={!canAddImages}
                     className="gap-2"
                   >
                     <FolderOpen className="h-4 w-4" />
-                    Galería Avanzada
+                    Galeria
                   </Button>
-                  <Separator orientation="vertical" className="h-6" />
                   <div className="flex rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
                     <button
                       onClick={() => setUploadMode('file')}
@@ -515,8 +571,8 @@ export function CarouselEditor({ config, onUpdate, onSave }: CarouselEditorProps
                   {uploadMode === 'file' ? (
                     <label className="cursor-pointer">
                       <Button
-                        className="gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
-                        disabled={uploading}
+                        className="gap-2 bg-cyan-600 hover:bg-cyan-700"
+                        disabled={uploading || !canAddImages}
                         asChild
                       >
                         <span>
@@ -528,7 +584,7 @@ export function CarouselEditor({ config, onUpdate, onSave }: CarouselEditorProps
                           ) : (
                             <>
                               <Upload className="h-4 w-4" />
-                              Subir Imágenes
+                              Subir imagenes
                             </>
                           )}
                         </span>
@@ -536,17 +592,18 @@ export function CarouselEditor({ config, onUpdate, onSave }: CarouselEditorProps
                       <input
                         ref={fileInputRef}
                         type="file"
-                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        accept="image/jpeg,image/png,image/webp"
                         multiple
                         onChange={handleFileUpload}
                         className="hidden"
-                        disabled={uploading}
+                        disabled={uploading || !canAddImages}
                       />
                     </label>
                   ) : (
                     <Button
                       onClick={addCarouselImageByUrl}
-                      className="gap-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700"
+                      disabled={!canAddImages}
+                      className="gap-2 bg-cyan-600 hover:bg-cyan-700"
                     >
                       <ImagePlus className="h-4 w-4" />
                       Agregar por URL
@@ -575,45 +632,60 @@ export function CarouselEditor({ config, onUpdate, onSave }: CarouselEditorProps
                 multiSelect={false}
               />
 
-              {config.carousel.images.length === 0 ? (
-                <div className="text-center py-12 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/30">
-                  <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-4">
+              {missingAltCount > 0 && (
+                <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
+                  <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                  <p>Hay imagenes con texto alternativo vacio. Completar ese campo mejora SEO y accesibilidad en la pagina publica.</p>
+                </div>
+              )}
+
+              {!canAddImages && (
+                <div className="flex items-start gap-3 rounded-lg border border-cyan-200 bg-cyan-50 p-3 text-sm text-cyan-800 dark:border-cyan-800 dark:bg-cyan-950/20 dark:text-cyan-200">
+                  <CheckCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                  <p>Alcanzaste el maximo de {MAX_CAROUSEL_IMAGES} imagenes. Quita una imagen antes de agregar otra.</p>
+                </div>
+              )}
+
+              {!hasCarouselImages ? (
+                <div className="rounded-2xl border-2 border-dashed border-cyan-200 bg-cyan-50/50 px-5 py-10 text-center dark:border-cyan-900/60 dark:bg-cyan-950/10">
+                  <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-cyan-600 shadow-sm dark:bg-slate-900">
                     <ImageIcon className="h-8 w-8 text-slate-400" />
                   </div>
-                  <p className="text-lg font-medium text-slate-600 dark:text-slate-400">No hay imágenes</p>
-                  <p className="text-sm text-slate-500 mt-1 mb-4">Sube imágenes o agrega URLs para mostrar en el carrusel</p>
-                  <div className="flex justify-center gap-3">
+                  <p className="text-lg font-semibold text-slate-800 dark:text-slate-100">Aun no hay imagenes</p>
+                  <p className="mx-auto mt-1 mb-5 max-w-md text-sm text-slate-500">Sube entre 1 y 5 imagenes principales para que el hero publico tenga buena presencia visual.</p>
+                  <div className="flex flex-col justify-center gap-3 sm:flex-row">
                     <label className="cursor-pointer">
-                      <Button variant="default" className="gap-2" asChild>
+                      <Button variant="default" disabled={!canAddImages} className="gap-2 bg-cyan-600 hover:bg-cyan-700" asChild>
                         <span>
                           <Upload className="h-4 w-4" />
-                          Subir Imágenes
+                          Subir imagenes
                         </span>
                       </Button>
                       <input
                         type="file"
-                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        accept="image/jpeg,image/png,image/webp"
                         multiple
                         onChange={handleFileUpload}
                         className="hidden"
+                        disabled={!canAddImages}
                       />
                     </label>
-                    <Button variant="outline" onClick={addCarouselImageByUrl} className="gap-2">
+                    <Button variant="outline" disabled={!canAddImages} onClick={addCarouselImageByUrl} className="gap-2">
                       <LinkIcon className="h-4 w-4" />
                       Agregar por URL
                     </Button>
                   </div>
                 </div>
               ) : (
-                <div className="grid gap-4">
+                <div className="grid gap-3">
                   {config.carousel.images.map((image, index) => (
                     <div 
                       key={image.id} 
-                      className="group relative p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 hover:border-cyan-300 dark:hover:border-cyan-700 transition-all"
+                      className="group relative rounded-2xl border border-slate-200 bg-slate-50/60 p-3 transition-all hover:border-cyan-300 dark:border-slate-800 dark:bg-slate-950/30 dark:hover:border-cyan-800"
                     >
-                      <div className="flex gap-4">
+                      <div className="grid gap-3 md:grid-cols-[160px_minmax(0,1fr)_auto] md:items-start">
                         {/* Image Preview */}
-                        <div className="relative w-40 h-24 rounded-lg bg-slate-100 dark:bg-slate-800 overflow-hidden flex-shrink-0 group/preview">
+                        <div className="relative aspect-[16/9] w-full overflow-hidden rounded-xl bg-slate-100 md:w-40 dark:bg-slate-800 group/preview">
                           {image.url ? (
                             <>
                               <img
@@ -634,7 +706,7 @@ export function CarouselEditor({ config, onUpdate, onSave }: CarouselEditorProps
                                   </Button>
                                   <input
                                     type="file"
-                                    accept="image/jpeg,image/png,image/webp,image/gif"
+                                    accept="image/jpeg,image/png,image/webp"
                                     onChange={async (e) => {
                                       const file = e.target.files?.[0];
                                       if (!file) return;
@@ -666,7 +738,7 @@ export function CarouselEditor({ config, onUpdate, onSave }: CarouselEditorProps
                                 <span className="text-xs text-cyan-600 hover:underline">Subir imagen</span>
                                 <input
                                   type="file"
-                                  accept="image/jpeg,image/png,image/webp,image/gif"
+                                  accept="image/jpeg,image/png,image/webp"
                                   onChange={async (e) => {
                                     const file = e.target.files?.[0];
                                     if (!file) return;
@@ -720,13 +792,14 @@ export function CarouselEditor({ config, onUpdate, onSave }: CarouselEditorProps
                         </div>
 
                         {/* Actions */}
-                        <div className="flex flex-col gap-1">
+                        <div className="flex items-center justify-end gap-1 md:flex-col">
                           <Button
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8"
                             onClick={() => moveImage(index, 'up')}
                             disabled={index === 0}
+                            aria-label="Subir imagen"
                           >
                             <ArrowUp className="h-4 w-4" />
                           </Button>
@@ -736,6 +809,7 @@ export function CarouselEditor({ config, onUpdate, onSave }: CarouselEditorProps
                             className="h-8 w-8"
                             onClick={() => moveImage(index, 'down')}
                             disabled={index === config.carousel.images.length - 1}
+                            aria-label="Bajar imagen"
                           >
                             <ArrowDown className="h-4 w-4" />
                           </Button>
@@ -744,6 +818,7 @@ export function CarouselEditor({ config, onUpdate, onSave }: CarouselEditorProps
                             size="icon"
                             className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
                             onClick={() => removeCarouselImage(index)}
+                            aria-label="Eliminar imagen"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>

@@ -2,9 +2,10 @@
 
 import React, { memo, useState } from 'react';
 import Image from 'next/image';
-import { Package, Edit, Trash2, Eye, Tag } from 'lucide-react';
+import { Edit, Trash2, Eye, Tag } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { ProductImagePlaceholder } from '@/components/products/ProductImagePlaceholder';
 import { cn } from '@/lib/utils';
 import type { Product } from '@/types';
 
@@ -30,11 +31,12 @@ export const SimpleProductCard = memo(function SimpleProductCard({
   const price = `Gs ${(product.sale_price || 0).toLocaleString('es-PY')}`;
 
   const imageUrl =
-    Array.isArray(product.images) && product.images.length > 0
+    product.image_url ||
+    (Array.isArray(product.images) && product.images.length > 0
       ? typeof product.images[0] === 'string'
         ? product.images[0]
         : (product.images[0] as { url?: string })?.url || null
-      : product.image_url || null;
+      : null);
 
   const categoryName =
     typeof product.category === 'object' && product.category?.name
@@ -69,9 +71,7 @@ export const SimpleProductCard = memo(function SimpleProductCard({
             priority={priority}
           />
         ) : (
-          <div className="flex h-full items-center justify-center">
-            <Package className="h-10 w-10 text-muted-foreground/30 transition-transform duration-300 group-hover:scale-110" />
-          </div>
+          <ProductImagePlaceholder productName={product.name} className="border-0 rounded-none" />
         )}
 
         {/* Stock badge — bottom left */}

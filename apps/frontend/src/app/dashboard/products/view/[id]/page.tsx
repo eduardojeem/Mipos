@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, use } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { useToast } from '@/components/ui/use-toast';
@@ -51,6 +51,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
 import { LazyImage } from '@/components/ui/optimized-components';
+import { ProductImagePlaceholder } from '@/components/products/ProductImagePlaceholder';
 import { toast } from '@/lib/toast';
 import { productService } from '@/services/productService';
 import { useBusinessConfigData } from '@/contexts/BusinessConfigContext';
@@ -115,9 +116,9 @@ const StatCard = ({ title, value, icon: Icon, trend, trendValue, color = "primar
 
 const logger = createLogger('ProductViewPage');
 
-export default function ProductViewPage({ params }: { params: { id: string } }) {
+export default function ProductViewPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
-  const productId = (params?.id ?? '') as string;
+  const { id: productId } = use(params);
 
   const [product, setProduct] = useState<Product | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -455,11 +456,16 @@ export default function ProductViewPage({ params }: { params: { id: string } }) 
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="aspect-video w-full rounded-lg overflow-hidden bg-muted/30 border flex items-center justify-center relative group">
-                  <LazyImage
-                    src={product.image_url || 'https://via.placeholder.com/800x400?text=Sin+Imagen'}
-                    alt={product.name}
-                    className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-105"
-                  />
+                  {product.image_url ? (
+                    <LazyImage
+                      src={product.image_url}
+                      alt={product.name}
+                      className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-105"
+                      fallback={<ProductImagePlaceholder productName={product.name} className="rounded-none border-0" />}
+                    />
+                  ) : (
+                    <ProductImagePlaceholder productName={product.name} className="rounded-none border-0" />
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

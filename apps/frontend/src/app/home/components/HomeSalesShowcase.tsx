@@ -18,6 +18,7 @@ import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { hexToRgba } from '@/lib/color-utils';
+import { shouldBypassNextImageOptimizer } from '@/lib/images/next-image';
 import { getTenantHeroImage, getTenantPublicContent } from '@/lib/public-site/tenant-public-config';
 import { useCurrencyFormatter } from '@/contexts/BusinessConfigContext';
 import type { BusinessConfig } from '@/types/business-config';
@@ -70,7 +71,7 @@ export default function HomeSalesShowcase({
   const content = getTenantPublicContent(config);
   const heroImage = getTenantHeroImage(config);
   const formatCurrency = useCurrencyFormatter();
-  const carouselImages = Array.isArray(config.carousel?.images) && config.carousel.images.length > 0
+  const carouselImages = config.carousel?.enabled !== false && Array.isArray(config.carousel?.images) && config.carousel.images.length > 0
     ? config.carousel.images
     : [{ id: 'hero-fallback', url: heroImage, alt: config.businessName || 'Catalogo' }];
   const slides = carouselImages.slice(0, 5);
@@ -110,7 +111,11 @@ export default function HomeSalesShowcase({
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
     const diff = touchStartX.current - e.changedTouches[0].clientX;
     if (Math.abs(diff) > 50) {
-      diff > 0 ? goNext() : goPrev();
+      if (diff > 0) {
+        goNext();
+      } else {
+        goPrev();
+      }
     }
   }, [goNext, goPrev]);
 
@@ -171,40 +176,42 @@ export default function HomeSalesShowcase({
                 </p>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-3">
-                {[
-                  {
-                    label: 'Productos activos',
-                    value: stats.products,
-                    help: 'Catalogo listo para vender',
-                  },
-                  {
-                    label: 'Categorias visibles',
-                    value: stats.categories,
-                    help: 'Navegacion ordenada',
-                  },
-                  {
-                    label: 'Promociones',
-                    value: stats.offers,
-                    help: 'Campanas publicas activas',
-                  },
-                ].map((item) => (
-                  <div
-                    key={item.label}
-                    className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/70"
-                  >
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-                      {item.label}
-                    </p>
-                    <p className="mt-2 text-2xl font-bold text-slate-950 dark:text-slate-50">
-                      {item.value}
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
-                      {item.help}
-                    </p>
-                  </div>
-                ))}
-              </div>
+              {config.publicSite?.sections?.showHeroStats !== false ? (
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {[
+                    {
+                      label: 'Productos activos',
+                      value: stats.products,
+                      help: 'Catalogo listo para vender',
+                    },
+                    {
+                      label: 'Categorias visibles',
+                      value: stats.categories,
+                      help: 'Navegacion ordenada',
+                    },
+                    {
+                      label: 'Promociones',
+                      value: stats.offers,
+                      help: 'Campanas publicas activas',
+                    },
+                  ].map((item) => (
+                    <div
+                      key={item.label}
+                      className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 backdrop-blur-sm dark:border-slate-800 dark:bg-slate-900/70"
+                    >
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                        {item.label}
+                      </p>
+                      <p className="mt-2 text-2xl font-bold text-slate-950 dark:text-slate-50">
+                        {item.value}
+                      </p>
+                      <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                        {item.help}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
 
               <div className="flex flex-wrap gap-3">
                 {primaryAction ? (
@@ -296,6 +303,7 @@ export default function HomeSalesShowcase({
                   className="object-cover"
                   sizes="(max-width: 1280px) 100vw, 48vw"
                   priority={index === 0}
+                  unoptimized={shouldBypassNextImageOptimizer(slide.url)}
                 />
                 <div className="absolute inset-0 bg-gradient-to-b from-slate-950/20 via-slate-950/30 to-slate-950/75" />
               </div>

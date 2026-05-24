@@ -41,7 +41,7 @@ type TenantContext =
 const PUBLIC_ORGANIZATION_STATUSES = ['ACTIVE', 'TRIAL'];
 const ORGANIZATION_SELECT = 'id,name,slug,subdomain,custom_domain';
 const ORGANIZATION_SELECT_FALLBACK = 'id,name,slug';
-const PUBLIC_PATHS = ['/home', '/inicio', '/onboarding', '/offers', '/catalog', '/orders/track', '/'];
+const PUBLIC_PATHS = ['/home', '/inicio', '/onboarding', '/offers', '/catalog', '/orders/track', '/account', '/'];
 const PUBLIC_API_PATHS = [
   '/api/offers',
   '/api/catalog',
@@ -375,7 +375,7 @@ export async function middleware(request: NextRequest) {
   const shouldBypassLegacyPublicRedirect =
     isRedirectResponse(sessionResponse) &&
     pathTenantSlug &&
-    (isPublicPath(effectivePath) || isPublicApiPath(effectivePath)) &&
+    (isPublicPath(effectivePath) || isPublicApiPath(effectivePath) || effectivePath.startsWith('/auth')) &&
     sessionResponse.headers.get('location')?.includes('/auth/signin');
 
   if (isRedirectResponse(sessionResponse) && !shouldBypassLegacyPublicRedirect) {

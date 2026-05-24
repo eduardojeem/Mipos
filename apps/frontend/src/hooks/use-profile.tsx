@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect, useCallback } from 'react';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { toast } from '@/lib/toast';
 import { createClient } from '@/lib/supabase';
 
@@ -39,7 +40,7 @@ interface UseProfileReturn {
   updateProfile: (data: Partial<UserProfile>) => Promise<boolean>;
   updateAvatar: (file: File) => Promise<boolean>;
   updateAvatarUrl: (avatarUrl: string) => Promise<boolean>;
-  refreshProfile: () => Promise<void>;
+  refreshProfile: () => Promise<unknown>;
 }
 
 function mapProfileData(data: ProfileApiData): UserProfile {
@@ -76,104 +77,69 @@ function getMockProfile() {
 }
 
 export function useProfile(): UseProfileReturn {
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
   const supabase = createClient();
 
-  const loadProfile = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-
+  const fetchProfile = useCallback(async (): Promise<UserProfile | null> => {
+    let isMockAuth = false;
     try {
-      let isMockAuth = false;
-      try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        isMockAuth = !session || !!sessionError || typeof (supabase as any).from !== 'function';
-      } catch {
-        isMockAuth = true;
-      }
-
-      if (isMockAuth) {
-        setProfile((prev) => prev ?? getMockProfile());
-        return;
-      }
-
-      const response = await fetch('/api/auth/profile', { cache: 'no-store' });
-      const json = await response.json().catch(() => ({}));
-
-      if (!response.ok || !json?.data) {
-        throw new Error(json?.error || 'No se pudo cargar el perfil');
-      }
-
-      setProfile(mapProfileData(json.data as ProfileApiData));
-    } catch (primaryErr) {
-      console.warn('Primary profile fetch failed, using auth fallback:', primaryErr);
-
-      try {
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        if (authError) throw new Error(`Error de autenticacion: ${authError.message}`);
-        if (!user) throw new Error('Usuario no autenticado');
-
-        const metadata = (user.user_metadata || {}) as Record<string, unknown>;
-        const fallbackProfile: UserProfile = {
-          id: user.id,
-          name: String(metadata.full_name || metadata.name || user.email?.split('@')[0] || 'Usuario'),
-          email: user.email || '',
-          phone: typeof metadata.phone === 'string' ? metadata.phone : undefined,
-          bio: typeof metadata.bio === 'string' ? metadata.bio : undefined,
-          location: typeof metadata.location === 'string' ? metadata.location : undefined,
-          avatar: typeof metadata.avatar_url === 'string'
-            ? metadata.avatar_url
-            : `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}`,
-          role: String(metadata.role || 'USER'),
-          createdAt: user.created_at || new Date().toISOString(),
-          updatedAt: typeof user.updated_at === 'string' ? user.updated_at : undefined,
-          lastLogin: typeof user.last_sign_in_at === 'string' ? user.last_sign_in_at : undefined,
-        };
-
-        setProfile(fallbackProfile);
-      } catch (fallbackErr) {
-        const errorMessage = fallbackErr instanceof Error ? fallbackErr.message : 'Error desconocido';
-        setError(errorMessage);
-        console.error('Error loading profile:', fallbackErr);
-        toast.error(errorMessage);
-      }
-    } finally {
-      setIsLoading(false);
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      const supabaseObj = supabase as unknown as { from?: unknown };
+      isMockAuth = !session || !!sessionError || typeof supabaseObj.from !== 'function';
+    } catch {
+      isMockAuth = true;
     }
+
+    if (isMockAuth) {
+      return getMockProfile();
+    }
+
+    const response = await fetch('/api/auth/profile', { cache: 'no-store' });
+    const json = await response.json().catch(() => ({}));
+
+    if (!response.ok || !json?.data) {
+      throw new Error(json?.error || 'No se pudo cargar el perfil');
+    }
+
+    return mapProfileData(json.data as ProfileApiData);
   }, [supabase]);
 
-  const updateProfile = useCallback(async (updates: Partial<UserProfile>): Promise<boolean> => {
-    if (!profile) {
-      toast.error('No hay perfil cargado para actualizar');
-      return false;
-    }
+  const { data: profile, isLoading, error, refetch: refreshProfile } = useQuery({
+    queryKey: ['profile'],
+    queryFn: fetchProfile,
+    staleTime: 60_000,
+    refetchOnWindowFocus: true,
+    refetchInterval: 5 * 60 * 1000,
+  });
 
-    try {
-      setIsLoading(true);
-      setError(null);
+  const safeProfile = profile ?? null;
+  const safeError = error instanceof Error ? error.message : (error ? String(error) : null);
+
+  const updateProfileMutation = useMutation({
+    mutationFn: async (updates: Partial<UserProfile>) => {
+      if (!profile) {
+        throw new Error('No hay perfil cargado para actualizar');
+      }
 
       let isMockAuth = false;
       try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        isMockAuth = !session || !!sessionError || typeof (supabase as any).from !== 'function';
+        const supabaseObj = supabase as unknown as { from?: unknown };
+        isMockAuth = !session || !!sessionError || typeof supabaseObj.from !== 'function';
       } catch {
         isMockAuth = true;
       }
 
       if (isMockAuth) {
-        setProfile((prev) => prev ? {
-          ...prev,
-          name: updates.name ?? prev.name,
-          phone: updates.phone ?? prev.phone,
-          avatar: updates.avatar ?? prev.avatar,
-          bio: updates.bio ?? prev.bio,
-          location: updates.location ?? prev.location,
+        return { mock: true, profile: profile ? {
+          ...profile,
+          name: updates.name ?? profile.name,
+          phone: updates.phone ?? profile.phone,
+          avatar: updates.avatar ?? profile.avatar,
+          bio: updates.bio ?? profile.bio,
+          location: updates.location ?? profile.location,
           updatedAt: new Date().toISOString(),
-        } : prev);
-        toast.info('Modo mock: perfil actualizado localmente');
-        return true;
+        } : profile };
       }
 
       const payload: Record<string, unknown> = {};
@@ -195,18 +161,32 @@ export function useProfile(): UseProfileReturn {
         throw new Error(json?.error || 'Error al actualizar perfil');
       }
 
-      setProfile(mapProfileData(json.data as ProfileApiData));
-      toast.success('Perfil actualizado correctamente');
-      return true;
-    } catch (err) {
+      return { mock: false, profile: mapProfileData(json.data as ProfileApiData) };
+    },
+    onSuccess: (result) => {
+      if (result.mock) {
+        toast.info('Modo mock: perfil actualizado localmente');
+        queryClient.setQueryData(['profile'], result.profile);
+      } else {
+        toast.success('Perfil actualizado correctamente');
+        queryClient.setQueryData(['profile'], result.profile);
+      }
+      broadcastUpdate();
+    },
+    onError: (err) => {
       const errorMessage = err instanceof Error ? err.message : 'Error al actualizar perfil';
-      setError(errorMessage);
       toast.error(errorMessage);
+    },
+  });
+
+  const updateProfile = useCallback(async (updates: Partial<UserProfile>): Promise<boolean> => {
+    try {
+      await updateProfileMutation.mutateAsync(updates);
+      return true;
+    } catch {
       return false;
-    } finally {
-      setIsLoading(false);
     }
-  }, [profile, supabase]);
+  }, [updateProfileMutation]);
 
   const updateAvatarUrl = useCallback(async (avatarUrl: string): Promise<boolean> => {
     if (!profile) {
@@ -224,15 +204,13 @@ export function useProfile(): UseProfileReturn {
     }
 
     try {
-      setIsLoading(true);
-      setError(null);
-
       const { data: { user }, error: authError } = await supabase.auth.getUser();
       if (authError || !user) {
         throw new Error('Usuario no autenticado');
       }
 
-      if (!(supabase as any).storage) {
+      const supabaseObj = supabase as unknown as { storage?: unknown };
+      if (!supabaseObj.storage) {
         throw new Error('Supabase Storage no configurado');
       }
 
@@ -258,31 +236,10 @@ export function useProfile(): UseProfileReturn {
       return updateProfile({ avatar: publicUrl });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Error al actualizar avatar';
-      setError(errorMessage);
       toast.error(errorMessage);
       return false;
-    } finally {
-      setIsLoading(false);
     }
   }, [profile, supabase, updateProfile]);
-
-  const refreshProfile = useCallback(async () => {
-    await loadProfile();
-  }, [loadProfile]);
-
-  useEffect(() => {
-    loadProfile();
-  }, [loadProfile]);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (!isLoading) {
-        refreshProfile();
-      }
-    }, 5 * 60 * 1000);
-
-    return () => clearInterval(interval);
-  }, [isLoading, refreshProfile]);
 
   useEffect(() => {
     const handleStorageChange = (event: StorageEvent) => {
@@ -300,37 +257,13 @@ export function useProfile(): UseProfileReturn {
     localStorage.removeItem('profile-updated');
   }, []);
 
-  const enhancedUpdateProfile = useCallback(async (data: Partial<UserProfile>): Promise<boolean> => {
-    const success = await updateProfile(data);
-    if (success) {
-      broadcastUpdate();
-    }
-    return success;
-  }, [updateProfile, broadcastUpdate]);
-
-  const enhancedUpdateAvatar = useCallback(async (file: File): Promise<boolean> => {
-    const success = await updateAvatar(file);
-    if (success) {
-      broadcastUpdate();
-    }
-    return success;
-  }, [updateAvatar, broadcastUpdate]);
-
-  const enhancedUpdateAvatarUrl = useCallback(async (avatarUrl: string): Promise<boolean> => {
-    const success = await updateAvatarUrl(avatarUrl);
-    if (success) {
-      broadcastUpdate();
-    }
-    return success;
-  }, [updateAvatarUrl, broadcastUpdate]);
-
   return {
-    profile,
+    profile: safeProfile,
     isLoading,
-    error,
-    updateProfile: enhancedUpdateProfile,
-    updateAvatar: enhancedUpdateAvatar,
-    updateAvatarUrl: enhancedUpdateAvatarUrl,
+    error: safeError,
+    updateProfile,
+    updateAvatar,
+    updateAvatarUrl,
     refreshProfile,
   };
 }

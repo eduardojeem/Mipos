@@ -16,27 +16,43 @@ export type SortField = 'name' | 'created_at' | 'products' | 'is_active';
 export type SortDirection = 'asc' | 'desc';
 export type StatusFilter = 'all' | 'active' | 'inactive';
 
-// Helper types for Supabase results to avoid 'any'
 interface SupabaseProductCount {
   count: number;
 }
+
 interface SupabaseCategoryRow extends Category {
   products?: SupabaseProductCount[] | { count: number };
+}
+
+const PAGE_SIZE = 500;
+
+function normalizeCategory(row: SupabaseCategoryRow): CategoryWithCount {
+  let count = 0;
+
+  if (Array.isArray(row.products) && row.products.length > 0) {
+    count = row.products[0].count;
+  } else if (row.products && !Array.isArray(row.products) && typeof row.products.count === 'number') {
+    count = row.products.count;
+  }
+
+  return {
+    ...row,
+    _count: { products: count },
+  };
 }
 
 export function useCategoryManagement() {
   const { toast } = useToast();
   const { organizationId } = useOrganizationContext();
-  
-  // State
+
   const [categories, setCategories] = useState<CategoryWithCount[]>([]);
   const [loading, setLoading] = useState(true);
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
 
-  // Fallback orgId getter exactly as in products just in case context is missing
   const getOrgId = useCallback(() => {
     if (organizationId) return organizationId;
     if (typeof window === 'undefined') return null;
+
     try {
       const raw = window.localStorage.getItem('selected_organization');
       if (!raw) return null;
@@ -47,9 +63,9 @@ export function useCategoryManagement() {
     }
   }, [organizationId]);
 
-  const loadCategories = useCallback(async () => {
+  const loadCategories = useCallback(async (options?: { silent?: boolean }) => {
     try {
-      setLoading(true);
+      if (!options?.silent) setLoading(true);
       const orgId = getOrgId();
 
       if (!orgId) {
@@ -62,30 +78,25 @@ export function useCategoryManagement() {
         return;
       }
 
-      const res = await api.get('/categories', { params: { page: 1, limit: 1000 } });
-      const rawData = ((res.data?.categories || res.data?.data || []) as unknown) as SupabaseCategoryRow[];
-      
-      const transformed = rawData.map(c => {
-        let count = 0;
-        if (Array.isArray(c.products) && c.products.length > 0) {
-          count = c.products[0].count;
-        } else if (c.products && !Array.isArray(c.products) && typeof c.products.count === 'number') {
-          count = c.products.count;
-        }
+      const loaded: SupabaseCategoryRow[] = [];
+      let page = 1;
+      let totalPages = 1;
 
-        return {
-          ...c,
-          _count: { products: count }
-        };
-      });
+      do {
+        const res = await api.get('/categories', { params: { page, limit: PAGE_SIZE } });
+        const rawData = ((res.data?.categories || res.data?.data || []) as unknown) as SupabaseCategoryRow[];
+        loaded.push(...rawData);
+        totalPages = Number(res.data?.pagination?.totalPages || 1);
+        page += 1;
+      } while (page <= totalPages);
 
-      setCategories(transformed);
+      setCategories(loaded.map(normalizeCategory));
     } catch (error) {
       console.error('Error loading categories:', error && typeof error === 'object' ? JSON.stringify(error) : error, getErrorMessage(error));
       toast({
         title: 'Error',
         description: 'No se pudieron cargar las categorías',
-        variant: 'destructive'
+        variant: 'destructive',
       });
     } finally {
       setLoading(false);
@@ -112,7 +123,7 @@ export function useCategoryManagement() {
           filter: `organization_id=eq.${orgId}`,
         },
         (payload) => {
-          loadCategories();
+          loadCategories({ silent: true });
           if (payload.eventType === 'INSERT') {
             toast({ title: 'Nueva categoría creada' });
           } else if (payload.eventType === 'DELETE') {
@@ -133,21 +144,23 @@ export function useCategoryManagement() {
     sortField: SortField,
     sortDirection: SortDirection
   ) => {
-    const filtered = categories.filter(category => {
-      const matchesSearch = category.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        category.description?.toLowerCase().includes(searchQuery.toLowerCase());
-      
+    const query = searchQuery.trim().toLowerCase();
+    const filtered = categories.filter((category) => {
+      const matchesSearch = !query ||
+        category.name.toLowerCase().includes(query) ||
+        category.description?.toLowerCase().includes(query);
+
       const matchesStatus = statusFilter === 'all' ||
         (statusFilter === 'active' && category.is_active) ||
         (statusFilter === 'inactive' && !category.is_active);
-      
+
       return matchesSearch && matchesStatus;
     });
-    
+
     filtered.sort((a, b) => {
-      let aValue: string | number | Date = 0;
-      let bValue: string | number | Date = 0;
-      
+      let aValue: string | number = 0;
+      let bValue: string | number = 0;
+
       switch (sortField) {
         case 'name':
           aValue = a.name.toLowerCase();
@@ -166,27 +179,26 @@ export function useCategoryManagement() {
           bValue = b.is_active ? 1 : 0;
           break;
       }
-      
+
       if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
       if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
+      return a.name.localeCompare(b.name);
     });
-    
+
     return filtered;
   }, [categories]);
 
   const toggleStatus = async (categoryId: string, currentStatus: boolean) => {
     try {
       const orgId = getOrgId();
-      
       if (!orgId) throw new Error('No organization selected');
 
       const res = await api.put(`/categories/${categoryId}`, { is_active: !currentStatus });
       if (!res.data?.success) {
         throw new Error(res.data?.error || 'No se pudo actualizar la categoría');
       }
-      
-      setCategories(prev => prev.map(c => c.id === categoryId ? { ...c, is_active: !currentStatus } : c));
+
+      setCategories((prev) => prev.map((c) => c.id === categoryId ? { ...c, is_active: !currentStatus } : c));
       toast({ title: `Categoría ${!currentStatus ? 'activada' : 'desactivada'}` });
     } catch (error) {
       toast({ title: 'Error', description: getErrorMessage(error), variant: 'destructive' });
@@ -194,25 +206,24 @@ export function useCategoryManagement() {
   };
 
   const deleteCategory = async (categoryId: string) => {
-    const category = categories.find(c => c.id === categoryId);
+    const category = categories.find((c) => c.id === categoryId);
     const productCount = category?._count?.products || 0;
-    
+
     if (productCount > 0) {
       toast({ title: 'No se puede eliminar', description: `Tiene ${productCount} productos asociados`, variant: 'destructive' });
       return false;
     }
-    
+
     try {
       const orgId = getOrgId();
-      
       if (!orgId) throw new Error('No organization selected');
 
       const res = await api.delete(`/categories/${categoryId}`);
       if (!res.data?.success) {
         throw new Error(res.data?.error || 'No se pudo eliminar la categoría');
       }
-      
-      setCategories(prev => prev.filter(c => c.id !== categoryId));
+
+      setCategories((prev) => prev.filter((c) => c.id !== categoryId));
       toast({ title: 'Categoría eliminada' });
       return true;
     } catch (error: unknown) {
@@ -226,19 +237,19 @@ export function useCategoryManagement() {
     const selectedArray = Array.from(selectedIds);
 
     if (action === 'delete') {
-      const categoriesWithProducts = selectedArray.filter(id => {
-        const category = categories.find(c => c.id === id);
+      const categoriesWithProducts = selectedArray.filter((id) => {
+        const category = categories.find((c) => c.id === id);
         return (category?._count?.products || 0) > 0;
       });
-      
+
       if (categoriesWithProducts.length > 0) {
         toast({ title: 'No se puede eliminar', description: `${categoriesWithProducts.length} categoría(s) con productos`, variant: 'destructive' });
         return false;
       }
     }
-    
+
     setBulkActionLoading(true);
-    
+
     try {
       const res = await api.post('/categories/bulk', { ids: selectedArray, action });
       if (!res.data?.success) {
@@ -246,12 +257,12 @@ export function useCategoryManagement() {
       }
 
       if (action === 'delete') {
-        setCategories(prev => prev.filter(c => !selectedArray.includes(c.id)));
+        setCategories((prev) => prev.filter((c) => !selectedArray.includes(c.id)));
       } else {
         const isActive = action === 'activate';
-        setCategories(prev => prev.map(c => selectedArray.includes(c.id) ? { ...c, is_active: isActive } : c));
+        setCategories((prev) => prev.map((c) => selectedArray.includes(c.id) ? { ...c, is_active: isActive } : c));
       }
-      
+
       toast({ title: `${selectedArray.length} categoría(s) procesadas` });
       return true;
     } catch (error) {
@@ -271,6 +282,6 @@ export function useCategoryManagement() {
     getFilteredAndSorted,
     toggleStatus,
     deleteCategory,
-    bulkAction
+    bulkAction,
   };
 }

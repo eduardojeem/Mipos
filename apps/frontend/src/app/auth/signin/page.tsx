@@ -17,6 +17,9 @@ import {
   AlertCircle,
   ArrowRight,
   Briefcase,
+  ShieldCheck,
+  UsersRound,
+  UserRound,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,6 +32,7 @@ import { cn } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
 import { LandingHeader } from '@/app/inicio/components/LandingHeader';
 import { Footer } from '@/app/inicio/components/Footer';
+import { isValidTenantPathSegment } from '@/lib/domain/tenant-public-paths';
 import '@/app/inicio/landing.css';
 
 const signInSchema = z.object({
@@ -39,6 +43,57 @@ const signInSchema = z.object({
 
 type SignInFormData = z.infer<typeof signInSchema>;
 
+type LoginType = 'saas-admin' | 'business-owner' | 'employee' | 'customer';
+
+const LOGIN_TYPE_CONTENT: Record<LoginType, {
+  title: string;
+  description: string;
+  badge: string;
+  emailPlaceholder: string;
+  passwordLabel: string;
+  submitLabel: string;
+}> = {
+  'saas-admin': {
+    title: 'Acceso Admin SaaS',
+    description: 'Gestiona empresas, planes, soporte y configuracion global.',
+    badge: 'Control global',
+    emailPlaceholder: 'admin@mipos.com',
+    passwordLabel: 'Contrasena segura',
+    submitLabel: 'Entrar al SaaS',
+  },
+  'business-owner': {
+    title: 'Acceso del negocio',
+    description: 'Entra al panel para inventario, ventas, pedidos, empleados y sucursales.',
+    badge: 'Dueno o administrador',
+    emailPlaceholder: 'dueno@empresa.com',
+    passwordLabel: 'Contrasena',
+    submitLabel: 'Entrar al panel',
+  },
+  employee: {
+    title: 'Acceso de empleado',
+    description: 'Usa tu cuenta asignada para operar segun tus permisos y sucursal.',
+    badge: 'Rol operativo',
+    emailPlaceholder: 'empleado@empresa.com',
+    passwordLabel: 'Contrasena o PIN asignado',
+    submitLabel: 'Entrar a trabajar',
+  },
+  customer: {
+    title: 'Acceso de cliente',
+    description: 'Consulta historial, estado de pedidos y recompra con tus datos guardados.',
+    badge: 'Cliente final',
+    emailPlaceholder: 'cliente@email.com',
+    passwordLabel: 'Contrasena',
+    submitLabel: 'Entrar como cliente',
+  },
+};
+
+function normalizeLoginType(value: string | null): LoginType {
+  if (value === 'saas-admin' || value === 'business-owner' || value === 'employee' || value === 'customer') {
+    return value;
+  }
+  return 'business-owner';
+}
+
 interface Organization {
   id: string;
   name: string;
@@ -47,7 +102,7 @@ interface Organization {
   subscription_status: string;
 }
 
-const PUBLIC_RETURN_URL_PREFIXES = ['/inicio', '/empresas', '/home', '/offers', '/catalog', '/orders/track'];
+const PUBLIC_RETURN_URL_PREFIXES = ['/inicio', '/empresas', '/home', '/offers', '/catalog', '/orders/track', '/account'];
 
 function isSafeReturnUrl(value: string | null): value is string {
   return typeof value === 'string' && value.startsWith('/') && !value.startsWith('//');
@@ -61,16 +116,26 @@ function getReturnUrlPath(value: string | null): string {
 
 function isPublicReturnUrl(value: string | null): boolean {
   const path = getReturnUrlPath(value);
+  const segments = path.split('/').filter(Boolean);
+  const publicPath = isValidTenantPathSegment(segments[0])
+    ? `/${segments.slice(1).join('/')}`
+    : path;
 
-  if (path === '/') {
+  if (publicPath === '/' || publicPath === '') {
     return true;
   }
 
-  return PUBLIC_RETURN_URL_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
+  return PUBLIC_RETURN_URL_PREFIXES.some((prefix) => publicPath === prefix || publicPath.startsWith(`${prefix}/`));
 }
 
 function shouldRouteToOnboarding(returnUrl: string): boolean {
   return getReturnUrlPath(returnUrl) === '/dashboard';
+}
+
+function getTenantAuthPrefix(returnUrl: string): string {
+  const path = getReturnUrlPath(returnUrl);
+  const firstSegment = path.split('/').filter(Boolean)[0];
+  return isValidTenantPathSegment(firstSegment) ? `/${firstSegment}` : '';
 }
 
 function writeSelectedOrganizationCookies(org: Organization) {
@@ -98,11 +163,17 @@ export default function SignInPage() {
   const { toast } = useToast();
   const { signIn, resetPassword } = useAuth();
   const supabase = createClient();
+  const loginType = normalizeLoginType(searchParams.get('type'));
+  const loginContent = LOGIN_TYPE_CONTENT[loginType];
 
   const getReturnUrl = () => {
     const requested = searchParams.get('returnUrl');
     return isSafeReturnUrl(requested) ? requested : '/dashboard';
   };
+  const returnUrlForLinks = getReturnUrl();
+  const signupHref = loginType === 'customer'
+    ? `${getTenantAuthPrefix(returnUrlForLinks)}/auth/signup?type=customer&returnUrl=${encodeURIComponent(returnUrlForLinks)}`
+    : '/inicio';
 
   const {
     register,
@@ -387,6 +458,7 @@ export default function SignInPage() {
           />
         ) : (
           <LoginSection
+            content={loginContent}
             onSubmit={handleSubmit(onSubmit)}
             register={register}
             errors={errors}
@@ -397,6 +469,8 @@ export default function SignInPage() {
             showPassword={showPassword}
             setShowPassword={setShowPassword}
             onForgotPassword={() => setShowForgotPassword(true)}
+            signupHref={signupHref}
+            signupLabel={loginType === 'customer' ? 'Crear cuenta de cliente' : 'Ver planes y crear cuenta'}
           />
         )}
       </main>
@@ -406,6 +480,7 @@ export default function SignInPage() {
 }
 
 interface LoginSectionProps {
+  content: (typeof LOGIN_TYPE_CONTENT)[LoginType];
   onSubmit: () => void;
   register: UseFormRegister<SignInFormData>;
   errors: FieldErrors<SignInFormData>;
@@ -416,9 +491,12 @@ interface LoginSectionProps {
   showPassword: boolean;
   setShowPassword: Dispatch<SetStateAction<boolean>>;
   onForgotPassword: () => void;
+  signupHref: string;
+  signupLabel: string;
 }
 
 function LoginSection({
+  content,
   onSubmit,
   register,
   errors,
@@ -429,6 +507,8 @@ function LoginSection({
   showPassword,
   setShowPassword,
   onForgotPassword,
+  signupHref,
+  signupLabel,
 }: LoginSectionProps) {
   return (
     <section className="relative overflow-hidden py-20 lg:py-32">
@@ -440,11 +520,23 @@ function LoginSection({
       <div className="container relative z-10 mx-auto px-4">
         <div className="mx-auto max-w-md">
           <div className="mb-6 text-center md:mb-8">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-300">
+              {content.badge === 'Control global' ? (
+                <ShieldCheck className="h-3.5 w-3.5 text-violet-300" />
+              ) : content.badge === 'Rol operativo' ? (
+                <UsersRound className="h-3.5 w-3.5 text-sky-300" />
+              ) : content.badge === 'Cliente final' ? (
+                <UserRound className="h-3.5 w-3.5 text-amber-300" />
+              ) : (
+                <Building2 className="h-3.5 w-3.5 text-emerald-300" />
+              )}
+              {content.badge}
+            </div>
 
             <h2 className="mb-3 text-2xl font-bold text-white md:mb-4 md:text-3xl">
-              Iniciar <span className="gradient-text">Sesion</span>
+              {content.title}
             </h2>
-            <p className="text-sm text-gray-400 md:text-base">Accede a tu panel de control</p>
+            <p className="text-sm text-gray-400 md:text-base">{content.description}</p>
           </div>
 
           <div className="landing-panel rounded-2xl p-6 md:p-8">
@@ -458,7 +550,7 @@ function LoginSection({
                   id="email"
                   type="email"
                   autoComplete="email"
-                  placeholder="tu@empresa.com"
+                  placeholder={content.emailPlaceholder}
                   className={cn(
                     'border-white/10 bg-white/5 text-white placeholder:text-gray-500',
                     'focus:border-emerald-500 focus:ring-emerald-500/20',
@@ -477,7 +569,7 @@ function LoginSection({
               <div className="space-y-2">
                 <Label htmlFor="password" className="flex items-center gap-2 text-white">
                   <Lock className="h-4 w-4 text-emerald-400" />
-                  Contrasena
+                  {content.passwordLabel}
                 </Label>
                 <div className="relative">
                   <Input
@@ -547,7 +639,7 @@ function LoginSection({
                   </>
                 ) : (
                   <>
-                    Iniciar Sesion
+                    {content.submitLabel}
                     <ArrowRight className="ml-2 h-5 w-5" />
                   </>
                 )}
@@ -559,13 +651,13 @@ function LoginSection({
                 <div className="flex-1 border-t border-white/10" />
               </div>
 
-              <Link href="/inicio">
+              <Link href={signupHref}>
                 <Button
                   type="button"
                   variant="outline"
                   className="glass-card w-full border-white/10 text-white hover:border-emerald-500/50 hover:bg-white/5"
                 >
-                  Ver planes y crear cuenta
+                  {signupLabel}
                 </Button>
               </Link>
             </form>

@@ -1,25 +1,38 @@
 "use client";
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
+  ChevronDown,
   Home,
+  LogIn,
+  LogOut,
   Menu,
   MessageCircle,
   Package,
   Search,
   ShoppingBag,
   Tag,
+  UserPlus,
+  UserRound,
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { BusinessConfig } from '@/types/business-config';
 import { SimpleThemeToggle } from '@/components/ui/theme-toggle';
 import { useTenantPublicRouting } from '@/hooks/useTenantPublicRouting';
+import { useAuth } from '@/hooks/use-auth';
 import {
-  buildWhatsAppHref,
   getTenantAnnouncement,
   getTenantPublicSections,
 } from '@/lib/public-site/tenant-public-config';
@@ -31,6 +44,7 @@ interface NavBarProps {
   activeSection: string;
   onNavigate: (sectionId: string) => void;
   showCartButton?: boolean;
+  skipTargetId?: string;
 }
 
 type NavItem = {
@@ -46,10 +60,13 @@ function NavBarComponent({
   activeSection,
   onNavigate,
   showCartButton = true,
+  skipTargetId = 'inicio',
 }: NavBarProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const headerRef = useRef<HTMLElement | null>(null);
   const { tenantHref } = useTenantPublicRouting();
+  const { user, loading: authLoading, signOut } = useAuth();
   const pathname = usePathname() || '';
   const router = useRouter();
   // Detecta si el usuario está físicamente en la home del tenant
@@ -59,8 +76,39 @@ function NavBarComponent({
 
   const sections = getTenantPublicSections(config);
   const announcement = getTenantAnnouncement(config);
-  const whatsappHref = buildWhatsAppHref(config, 'Hola, quiero consultar por su tienda.');
   const primary = config?.branding?.primaryColor || '#0f766e';
+  const customerAccountUrl = tenantHref('/account');
+  const customerReturnUrl = tenantHref('/orders/track');
+  const customerLoginHref = tenantHref(`/auth/signin?type=customer&returnUrl=${encodeURIComponent(customerAccountUrl)}`);
+  const customerSignupHref = tenantHref(`/auth/signup?type=customer&returnUrl=${encodeURIComponent(customerAccountUrl)}`);
+  const profileName = user?.name || user?.full_name || user?.email || 'Cliente';
+  const profileInitial = profileName.charAt(0).toUpperCase();
+
+  const handleCustomerSignOut = async () => {
+    await signOut();
+    setIsMenuOpen(false);
+    router.replace(tenantHref('/home'));
+  };
+
+  useEffect(() => {
+    const header = headerRef.current;
+    if (!header) return;
+
+    const updateHeaderHeight = () => {
+      document.documentElement.style.setProperty('--public-nav-height', `${Math.ceil(header.getBoundingClientRect().height)}px`);
+    };
+
+    updateHeaderHeight();
+    const observer = new ResizeObserver(updateHeaderHeight);
+    observer.observe(header);
+    window.addEventListener('resize', updateHeaderHeight);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateHeaderHeight);
+      document.documentElement.style.removeProperty('--public-nav-height');
+    };
+  }, [announcement, isMenuOpen, isSearchOpen]);
 
   const handleNavigate = (id: string) => {
     // En home: deja que el padre haga scroll + actualice activeSection.
@@ -122,7 +170,7 @@ function NavBarComponent({
   );
 
   return (
-    <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/95 backdrop-blur-md dark:border-slate-800/80 dark:bg-slate-950/95">
+    <header ref={headerRef} className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/95 backdrop-blur-md dark:border-slate-800/80 dark:bg-slate-950/95">
       {announcement ? (
         <div className="border-b border-slate-100 bg-slate-50 px-4 py-2 text-center text-xs font-medium text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
           {announcement}
@@ -130,7 +178,7 @@ function NavBarComponent({
       ) : null}
 
       <a
-        href="#inicio"
+        href={`#${skipTargetId}`}
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[60] focus:rounded-full focus:bg-slate-950 focus:px-4 focus:py-2 focus:text-white dark:focus:bg-white dark:focus:text-slate-950"
       >
         Saltar al contenido
@@ -183,14 +231,58 @@ function NavBarComponent({
             ) : null}
             {showCartButton ? <CartButton /> : null}
             <SimpleThemeToggle />
-            {whatsappHref ? (
-              <Button asChild size="sm" className="rounded-lg px-4 text-white shadow-none" style={{ backgroundColor: primary }}>
-                <a href={whatsappHref} target="_blank" rel="noopener noreferrer">
-                  <MessageCircle className="mr-1.5 h-3.5 w-3.5" />
-                  Consultar
-                </a>
-              </Button>
-            ) : null}
+            {user ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="rounded-lg px-2.5 shadow-none dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold text-white" style={{ backgroundColor: primary }}>
+                      {profileInitial}
+                    </span>
+                    <span className="max-w-28 truncate">{profileName}</span>
+                    <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  <DropdownMenuLabel>
+                    <span className="block truncate text-sm">{profileName}</span>
+                    {user.email ? <span className="block truncate text-xs font-normal text-muted-foreground">{user.email}</span> : null}
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link href={customerAccountUrl}>
+                      <UserRound className="mr-2 h-4 w-4" />
+                      Mi cuenta
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href={customerReturnUrl}>
+                      <Package className="mr-2 h-4 w-4" />
+                      Mis pedidos
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={handleCustomerSignOut}>
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Cerrar sesion
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <>
+                <Button asChild variant="outline" size="sm" className="rounded-lg px-4 shadow-none dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800" disabled={authLoading}>
+                  <Link href={customerLoginHref}>
+                    <LogIn className="mr-1.5 h-3.5 w-3.5" />
+                    Cliente
+                  </Link>
+                </Button>
+                <Button asChild size="sm" className="rounded-lg px-4 shadow-none" style={{ backgroundColor: primary }}>
+                  <Link href={customerSignupHref}>
+                    <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+                    Registrarse
+                  </Link>
+                </Button>
+              </>
+            )}
           </div>
 
           {/* Mobile actions */}
@@ -244,12 +336,62 @@ function NavBarComponent({
                   </button>
                 );
               })}
-              {whatsappHref ? (
-                <a href={whatsappHref} target="_blank" rel="noopener noreferrer" className="mt-2 flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium text-white" style={{ backgroundColor: primary }}>
-                  <MessageCircle className="h-4 w-4" />
-                  Escribir por WhatsApp
-                </a>
-              ) : null}
+              {user ? (
+                <div className="mt-2 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
+                  <div className="mb-2 flex items-center gap-3">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full text-sm font-semibold text-white" style={{ backgroundColor: primary }}>
+                      {profileInitial}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{profileName}</p>
+                      {user.email ? <p className="truncate text-xs text-slate-500 dark:text-slate-400">{user.email}</p> : null}
+                    </div>
+                  </div>
+                  <Link
+                    href={customerAccountUrl}
+                    onClick={() => setIsMenuOpen(false)}
+                    className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-slate-100"
+                  >
+                    <UserRound className="h-4 w-4 shrink-0" />
+                    Mi cuenta
+                  </Link>
+                  <Link
+                    href={customerReturnUrl}
+                    onClick={() => setIsMenuOpen(false)}
+                    className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-slate-100"
+                  >
+                    <Package className="h-4 w-4 shrink-0" />
+                    Mis pedidos
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={handleCustomerSignOut}
+                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-slate-100"
+                  >
+                    <LogOut className="h-4 w-4 shrink-0" />
+                    Cerrar sesion
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <Link
+                    href={customerLoginHref}
+                    onClick={() => setIsMenuOpen(false)}
+                    className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-slate-100"
+                  >
+                    <LogIn className="h-4 w-4 shrink-0" />
+                    Entrar como cliente
+                  </Link>
+                  <Link
+                    href={customerSignupHref}
+                    onClick={() => setIsMenuOpen(false)}
+                    className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-slate-100"
+                  >
+                    <UserPlus className="h-4 w-4 shrink-0" />
+                    Crear cuenta de cliente
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         ) : null}

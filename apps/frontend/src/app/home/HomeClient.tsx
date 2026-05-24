@@ -18,8 +18,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useBusinessConfig, useCurrencyFormatter } from '@/contexts/BusinessConfigContext';
 import { hexToRgba } from '@/lib/color-utils';
+import { shouldBypassNextImageOptimizer } from '@/lib/images/next-image';
 import { useBrandingColors } from '@/hooks/useBrandingColors';
 import { useCatalogCart } from '@/hooks/useCatalogCart';
+import { useAuth } from '@/hooks/use-auth';
 import { useTenantPublicRouting } from '@/hooks/useTenantPublicRouting';
 import {
   buildWhatsAppHref,
@@ -29,6 +31,7 @@ import {
 import { NavBar } from './components/NavBar';
 import { Footer } from './components/Footer';
 import HomeSalesShowcase from './components/HomeSalesShowcase';
+import { LoginAccessSection } from '@/components/auth/LoginAccessSection';
 import type { TenantHomeSnapshot } from './home-types';
 import type { Product } from '@/types';
 
@@ -39,6 +42,7 @@ interface HomeClientProps {
 export default function HomeClient({ initialData }: HomeClientProps) {
   const { config, persisted } = useBusinessConfig();
   const { addToCart } = useCatalogCart();
+  const { user, loading: authLoading } = useAuth();
   const { tenantHref } = useTenantPublicRouting();
   const formatCurrency = useCurrencyFormatter();
   const sections = getTenantPublicSections(config);
@@ -113,7 +117,7 @@ export default function HomeClient({ initialData }: HomeClientProps) {
     const next: Array<{ href: string; label: string; variant: 'primary' | 'secondary' }> = [];
     if (sections.showCatalog) {
       next.push({
-        href: tenantHref('/catalog'),
+        href: '/catalog',
         label: content.heroPrimaryCtaLabel || 'Ver catalogo',
         variant: 'primary',
       });
@@ -121,12 +125,12 @@ export default function HomeClient({ initialData }: HomeClientProps) {
 
     if (sections.showOffers) {
       next.push({
-        href: tenantHref('/offers'),
+        href: '/offers',
         label: content.heroSecondaryCtaLabel || 'Ver ofertas',
         variant: 'secondary',
       });
     } else if (sections.showOrderTracking) {
-      next.push({ href: tenantHref('/orders/track'), label: 'Seguir pedido', variant: 'secondary' });
+      next.push({ href: '/orders/track', label: 'Seguir pedido', variant: 'secondary' });
     }
 
     return next;
@@ -136,7 +140,6 @@ export default function HomeClient({ initialData }: HomeClientProps) {
     sections.showCatalog,
     sections.showOffers,
     sections.showOrderTracking,
-    tenantHref,
   ]);
 
   const addPreviewToCart = (product: {
@@ -185,7 +188,7 @@ export default function HomeClient({ initialData }: HomeClientProps) {
       ) : null}
 
       <main className="mx-auto max-w-7xl space-y-16 px-4 py-8 sm:px-6 lg:px-8">
-        <div id="inicio" className="scroll-mt-20">
+        <div id="inicio" className="scroll-mt-[calc(var(--public-nav-height,4rem)+1rem)]">
           <HomeSalesShowcase
             config={config}
             stats={stats}
@@ -202,7 +205,7 @@ export default function HomeClient({ initialData }: HomeClientProps) {
         </div>
 
         {sections.showCategories && categories.length > 0 ? (
-          <section id="categorias" className="scroll-mt-24 space-y-5">
+          <section id="categorias" className="scroll-mt-[calc(var(--public-nav-height,4rem)+1rem)] space-y-5">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">
@@ -266,7 +269,7 @@ export default function HomeClient({ initialData }: HomeClientProps) {
         ) : null}
 
         {sections.showOffers && offers.length > 0 ? (
-          <section id="ofertas" className="scroll-mt-24 space-y-5">
+          <section id="ofertas" className="scroll-mt-[calc(var(--public-nav-height,4rem)+1rem)] space-y-5">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">
@@ -306,6 +309,7 @@ export default function HomeClient({ initialData }: HomeClientProps) {
                       fill
                       className="object-cover transition-transform duration-300 hover:scale-105"
                       sizes="33vw"
+                      unoptimized={shouldBypassNextImageOptimizer(offer.image)}
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-slate-950/75 to-transparent" />
                     <div className="absolute left-4 top-4 flex flex-wrap gap-2">
@@ -376,7 +380,7 @@ export default function HomeClient({ initialData }: HomeClientProps) {
         ) : null}
 
         {sections.showFeaturedProducts && products.length > 0 ? (
-          <section id="productos" className="scroll-mt-24 space-y-5">
+          <section id="productos" className="scroll-mt-[calc(var(--public-nav-height,4rem)+1rem)] space-y-5">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">
@@ -424,6 +428,7 @@ export default function HomeClient({ initialData }: HomeClientProps) {
                           fill
                           className="object-cover transition-transform duration-300 hover:scale-105"
                           sizes="25vw"
+                          unoptimized={shouldBypassNextImageOptimizer(product.image)}
                         />
                         <div className="absolute left-3 top-3 flex flex-wrap gap-2">
                           {hasOffer ? (
@@ -507,7 +512,7 @@ export default function HomeClient({ initialData }: HomeClientProps) {
         ) : null}
 
         {(sections.showContactInfo || sections.showLocation || sections.showBusinessHours) ? (
-          <section id="contacto" className="scroll-mt-24 space-y-6">
+          <section id="contacto" className="scroll-mt-[calc(var(--public-nav-height,4rem)+1rem)] space-y-6">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
                 Atencion al cliente
@@ -685,6 +690,17 @@ export default function HomeClient({ initialData }: HomeClientProps) {
               </div>
             </div>
           </section>
+        ) : null}
+
+        {!authLoading && !user?.id ? (
+          <LoginAccessSection
+            title="Acceso para clientes de esta tienda"
+            description="Puedes comprar como invitado, iniciar sesion para editar tu cuenta y recomprar, o usar el seguimiento publico si ya tienes un numero de pedido."
+            types={['customer', 'guest-order']}
+            returnUrl={tenantHref('/account')}
+            compact
+            className="rounded-none bg-transparent"
+          />
         ) : null}
       </main>
 

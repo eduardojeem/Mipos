@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { User, RefreshCw, Shield, Lock, Save, X, Eye, Sparkles, Check, ArrowRight, Activity, Calendar, CreditCard } from 'lucide-react';
+import { User, RefreshCw, Shield, Lock, Save, X, Eye, Sparkles, Check, ArrowRight, Activity, Calendar, CreditCard, AlertTriangle, EyeOff, ShoppingBag, Package } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/lib/toast';
 import { formatDate, formatCurrency } from '@/lib/utils';
@@ -18,6 +18,7 @@ import api from '@/lib/api';
 import { ProfileSkeleton } from '@/components/profile/profile-skeleton';
 import { ProfilePreview } from '@/components/profile/profile-preview';
 import { ProfileHeader } from '@/components/profile/profile-header';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import '../../../styles/animations.css';
 
 interface EditableProfile {
@@ -44,6 +45,37 @@ interface OrganizationInfo {
   isOwner?: boolean;
 }
 
+interface PlanFeature {
+  name: string;
+  included: boolean;
+}
+
+interface Plan {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  price_monthly: number;
+  limits?: {
+    maxUsers: number;
+    maxProducts: number;
+  };
+  features: Array<string | PlanFeature>;
+}
+
+interface PurchaseSummary {
+  id: string;
+  orderNumber: string;
+  sellerName: string;
+  sellerSlug: string;
+  total: number;
+  status: string;
+  paymentMethod: string;
+  createdAt: string;
+  buyerType: string;
+  buyerOrganizationName?: string | null;
+}
+
 const EMPTY_FORM = { name: '', phone: '', bio: '', location: '' };
 
 export default function ProfilePage() {
@@ -58,6 +90,10 @@ export default function ProfilePage() {
   const [organizationInfo, setOrganizationInfo] = useState<OrganizationInfo | null>(null);
   const [editForm, setEditForm] = useState(EMPTY_FORM);
   const [formErrors, setFormErrors] = useState({ name: '', phone: '', bio: '', location: '' });
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const [passwordConfirm, setPasswordConfirm] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isVerifyingPassword, setIsVerifyingPassword] = useState(false);
 
   const syncEditForm = useCallback((nextProfile: EditableProfile | null) => {
     if (!nextProfile) return setEditForm(EMPTY_FORM);
@@ -136,10 +172,41 @@ export default function ProfilePage() {
       syncEditForm(profile ?? null);
       setFormErrors({ name: '', phone: '', bio: '', location: '' });
       setShowPreview(false);
+      setPageError(null);
+      setIsEditing(false);
+    } else {
+      setPasswordConfirm('');
+      setShowPasswordDialog(true);
     }
-    setPageError(null);
-    setIsEditing((prev) => !prev);
   }, [isEditing, profile, syncEditForm]);
+
+  const handleConfirmPassword = useCallback(async () => {
+    if (!passwordConfirm.trim()) {
+      toast.error('Por favor ingresa tu contraseña actual');
+      return;
+    }
+
+    setIsVerifyingPassword(true);
+    try {
+      const response = await fetch('/api/auth/verify-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: passwordConfirm })
+      });
+
+      if (response.ok) {
+        setShowPasswordDialog(false);
+        setIsEditing(true);
+        toast.success('Contraseña verificada correctamente');
+      } else {
+          toast.error('Contraseña incorrecta');
+      }
+    } catch {
+      toast.error('Error al verificar la contraseña');
+    } finally {
+      setIsVerifyingPassword(false);
+    }
+  }, [passwordConfirm]);
 
   const handleCancelEdit = useCallback(() => {
     syncEditForm(profile ?? null);
@@ -213,8 +280,9 @@ export default function ProfilePage() {
       <ProfileHeader profile={profile} isRefreshing={isRefreshing} isUploading={isUploading} isEditing={isEditing} onRefresh={handleRefresh} onToggleEdit={handleToggleEdit} onChangePassword={() => router.push('/dashboard/profile/change-password')} onAvatarUpload={handleAvatarUpload} />
       <Tabs defaultValue="overview" className="space-y-6">
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <TabsList className={`grid h-auto w-full p-1 sm:w-auto ${isAdmin ? 'grid-cols-3' : 'grid-cols-2'} rounded-lg bg-muted/50 animate-slide-in-left`}>
+          <TabsList className={`grid h-auto w-full p-1 sm:w-auto ${isAdmin ? 'grid-cols-4' : 'grid-cols-3'} rounded-lg bg-muted/50 animate-slide-in-left`}>
             <TabsTrigger value="overview" className="flex items-center gap-2 px-4 py-2"><User className="h-4 w-4" /><span>Informacion personal</span></TabsTrigger>
+            <TabsTrigger value="purchases" className="flex items-center gap-2 px-4 py-2"><ShoppingBag className="h-4 w-4" /><span>Mis compras</span></TabsTrigger>
             <TabsTrigger value="security" className="flex items-center gap-2 px-4 py-2"><Shield className="h-4 w-4" /><span>Seguridad</span></TabsTrigger>
             {isAdmin && <TabsTrigger value="plan" className="flex items-center gap-2 px-4 py-2"><Sparkles className="h-4 w-4" /><span>Plan</span></TabsTrigger>}
           </TabsList>
@@ -223,6 +291,9 @@ export default function ProfilePage() {
         <TabsContent value="overview" className="space-y-6 tab-content-enter">
           <OverviewTab profile={profile} editForm={editForm} formErrors={formErrors} isEditing={isEditing} isSaving={isSaving} isFormValid={isFormValid} organizationInfo={organizationInfo} onChange={handleFormChange} onSave={handleSaveProfile} onCancel={handleCancelEdit} />
         </TabsContent>
+        <TabsContent value="purchases" className="space-y-6 tab-content-enter">
+          <PurchasesTab />
+        </TabsContent>
         <TabsContent value="security" className="space-y-6 tab-content-enter">
           <SecurityTab onChangePassword={() => router.push('/dashboard/profile/change-password')} onOpenTwoFactor={() => router.push('/dashboard/profile/two-factor')} onOpenSessions={() => router.push('/dashboard/profile/sessions')} />
         </TabsContent>
@@ -230,6 +301,74 @@ export default function ProfilePage() {
       </Tabs>
       <RecentActivitySection userId={profile.id} />
       <ProfilePreview formData={editForm} currentData={{ name: profile.name || '', phone: profile.phone || '', location: profile.location || '', bio: profile.bio || '', avatar: profile.avatar || '', email: profile.email || '', role: profile.role || '', joinDate: profile.createdAt ? formatDate(profile.createdAt) : '' }} onConfirm={handleConfirmSave} onCancel={() => setShowPreview(false)} isVisible={showPreview} />
+      
+      <Dialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Verificar contraseña
+            </DialogTitle>
+            <DialogDescription>
+              Por favor ingresa tu contraseña actual para poder editar tu perfil.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="password-confirm">Contraseña actual</Label>
+              <div className="relative">
+                <Input
+                  id="password-confirm"
+                  type={showPassword ? "text" : "password"}
+                  value={passwordConfirm}
+                  onChange={(e) => setPasswordConfirm(e.target.value)}
+                  placeholder="••••••••"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      void handleConfirmPassword();
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowPasswordDialog(false)}
+              disabled={isVerifyingPassword}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConfirmPassword}
+              disabled={isVerifyingPassword || !passwordConfirm.trim()}
+            >
+              {isVerifyingPassword ? (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  Verificando...
+                </>
+              ) : (
+                'Confirmar'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -424,6 +563,105 @@ function SecurityActionCard({ title, description, icon, actionLabel, onClick }: 
   );
 }
 
+function PurchasesTab() {
+  const [purchases, setPurchases] = useState<PurchaseSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadPurchases = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await fetch('/api/profile/purchases?limit=30', { cache: 'no-store' });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data?.success === false) {
+        throw new Error(data?.error || 'No se pudieron cargar tus compras');
+      }
+      setPurchases(Array.isArray(data?.purchases) ? data.purchases : []);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'No se pudieron cargar tus compras');
+      setPurchases([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadPurchases();
+  }, [loadPurchases]);
+
+  if (loading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><ShoppingBag className="h-5 w-5" />Mis compras</CardTitle>
+          <CardDescription>Pedidos hechos en tiendas del marketplace.</CardDescription>
+        </CardHeader>
+        <CardContent><div className="space-y-3">{[1, 2, 3].map((item) => <div key={item} className="h-20 animate-pulse rounded-lg bg-muted" />)}</div></CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><ShoppingBag className="h-5 w-5" />Mis compras</CardTitle>
+          <CardDescription>No pudimos cargar tu historial de compras.</CardDescription>
+        </CardHeader>
+        <CardContent><Button variant="outline" onClick={() => void loadPurchases()}><RefreshCw className="mr-2 h-4 w-4" />Reintentar</Button></CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="hover-lift smooth-transition">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><ShoppingBag className="h-5 w-5 text-emerald-600" />Mis compras</CardTitle>
+        <CardDescription>Pedidos donde figuras como comprador, sea como persona o como empresa.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {purchases.length === 0 ? (
+          <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
+            <Package className="mx-auto mb-3 h-10 w-10 opacity-50" />
+            <p>Aun no hay compras asociadas a tu usuario.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {purchases.map((purchase) => {
+              const trackHref = purchase.sellerSlug
+                ? `/${purchase.sellerSlug}/orders/track?orderNumber=${encodeURIComponent(purchase.orderNumber)}`
+                : `/orders/track?orderNumber=${encodeURIComponent(purchase.orderNumber)}`;
+              return (
+                <div key={purchase.id} className="flex flex-col gap-4 rounded-lg border p-4 transition-colors hover:bg-slate-50 dark:hover:bg-slate-900 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold">Pedido {purchase.orderNumber || purchase.id.slice(0, 8)}</p>
+                      <Badge variant="outline">{purchase.status}</Badge>
+                      <Badge variant={purchase.buyerType === 'business' ? 'default' : 'secondary'}>
+                        {purchase.buyerType === 'business' ? `Empresa${purchase.buyerOrganizationName ? `: ${purchase.buyerOrganizationName}` : ''}` : 'Persona'}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {purchase.sellerName} / {purchase.createdAt ? formatDate(purchase.createdAt) : 'Sin fecha'} / {purchase.paymentMethod || 'Pago no definido'}
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 sm:justify-end">
+                    <p className="text-lg font-bold">{formatCurrency(purchase.total)}</p>
+                    <Button asChild variant="outline" size="sm">
+                      <a href={trackHref}>Ver seguimiento</a>
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function RecentActivitySection({ userId }: { userId: string }) {
   const [activities, setActivities] = useState<Array<{ id: string; total_amount: number; created_at: string; status: string; customer_name?: string | null }>>([]);
   const [loading, setLoading] = useState(true);
@@ -504,8 +742,8 @@ function RecentActivitySection({ userId }: { userId: string }) {
 }
 
 function PlanSection() {
-  const [currentPlan, setCurrentPlan] = useState<any>(null);
-  const [availablePlans, setAvailablePlans] = useState<any[]>([]);
+  const [currentPlan, setCurrentPlan] = useState<Plan | null>(null);
+  const [availablePlans, setAvailablePlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
   const [requesting, setRequesting] = useState(false);
 
@@ -581,7 +819,7 @@ function PlanSection() {
               </div>
               <div className="space-y-2">
                 <div className="mb-2 text-sm font-semibold">Caracteristicas incluidas</div>
-                {Array.isArray(currentPlan.features) && currentPlan.features.map((feature: any, index: number) => {
+                {Array.isArray(currentPlan.features) && currentPlan.features.map((feature: string | PlanFeature, index: number) => {
                   const featureName = typeof feature === 'string' ? feature : feature.name;
                   const included = typeof feature === 'string' ? true : feature.included;
                   return included ? <div key={index} className="flex items-center gap-2 text-sm"><Check className="h-4 w-4 text-green-600" /><span>{featureName}</span></div> : null;

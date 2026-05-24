@@ -16,6 +16,38 @@ function stringFromRecord(record: Record<string, unknown>, key: string, fallback
   return typeof value === 'string' ? value : fallback;
 }
 
+const PUBLIC_PLACEHOLDER_VALUES = new Set([
+  '+595 21 123-456',
+  '+595 981 123-456',
+  '+595 21 654-321',
+  'info@minegocio.com.py',
+  'https://minegocio.com.py',
+  'av. mariscal lopez 1234',
+  'villa morra',
+  'asuncion',
+  'central',
+  '1209',
+  'cerca del shopping del sol',
+]);
+
+function cleanPublicString(value: unknown, fallback = ''): string {
+  const raw = typeof value === 'string' ? value : fallback;
+  const trimmed = raw.trim();
+  return PUBLIC_PLACEHOLDER_VALUES.has(trimmed.toLowerCase()) || PUBLIC_PLACEHOLDER_VALUES.has(trimmed)
+    ? ''
+    : trimmed;
+}
+
+function publicStringFromRecord(record: Record<string, unknown>, key: string, fallback = ''): string {
+  return cleanPublicString(record[key], fallback);
+}
+
+function cleanPublicRecord(record: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(record).map(([key, value]) => [key, cleanPublicString(value)])
+  );
+}
+
 async function syncOrganizationSettings(
   client: Awaited<ReturnType<typeof createClient>>,
   userId: string,
@@ -24,6 +56,9 @@ async function syncOrganizationSettings(
     primary_color?: string | null;
     rfc?: string | null;
     industry?: string | null;
+    marketplace_category_id?: string | null;
+    marketplace_category_slug?: string | null;
+    marketplace_category_name?: string | null;
     size?: string | null;
     tagline?: string | null;
     phone?: string | null;
@@ -42,8 +77,11 @@ async function syncOrganizationSettings(
 
   const now = new Date().toISOString();
   const primaryColor = companyData.primary_color || defaultBusinessConfig.branding.primaryColor;
+  const marketplaceCategoryId = cleanPublicString(companyData.marketplace_category_id);
+  const marketplaceCategorySlug = cleanPublicString(companyData.marketplace_category_slug);
+  const marketplaceCategoryName = cleanPublicString(companyData.marketplace_category_name);
 
-  await client
+  const { error: businessConfigError } = await client
     .from('business_config')
     .upsert(
       {
@@ -53,6 +91,10 @@ async function syncOrganizationSettings(
       },
       { onConflict: 'organization_id' }
     );
+
+  if (businessConfigError) {
+    throw new Error(`No se pudo sincronizar business_config: ${businessConfigError.message}`);
+  }
 
   const { data: existingConfig } = await client
     .from('settings')
@@ -65,6 +107,8 @@ async function syncOrganizationSettings(
   const currentValue = typedExistingConfig?.value && typeof typedExistingConfig.value === 'object'
     ? typedExistingConfig.value
     : {};
+  const currentContact = cleanPublicRecord((currentValue as { contact?: Record<string, unknown> }).contact || {});
+  const currentAddress = cleanPublicRecord((currentValue as { address?: Record<string, unknown> }).address || {});
 
   const mergedConfig = {
     ...defaultBusinessConfig,
@@ -84,6 +128,7 @@ async function syncOrganizationSettings(
             ''
         ),
       economicActivity:
+        marketplaceCategoryName ||
         companyData.industry ||
         String(
           ((currentValue as { legalInfo?: Record<string, unknown> }).legalInfo || {}).economicActivity ||
@@ -92,52 +137,48 @@ async function syncOrganizationSettings(
     },
     contact: {
       ...defaultBusinessConfig.contact,
-      ...((currentValue as { contact?: Record<string, unknown> }).contact || {}),
+      ...currentContact,
       phone:
         companyData.phone ??
-        String(
-          ((currentValue as { contact?: Record<string, unknown> }).contact || {}).phone ||
-            defaultBusinessConfig.contact.phone
-        ),
+        publicStringFromRecord(currentContact, 'phone'),
       email:
         companyData.email ??
-        String(
-          ((currentValue as { contact?: Record<string, unknown> }).contact || {}).email ||
-            defaultBusinessConfig.contact.email
-        ),
+        publicStringFromRecord(currentContact, 'email'),
       website:
         companyData.website ??
-        String(
-          ((currentValue as { contact?: Record<string, unknown> }).contact || {}).website ||
-            defaultBusinessConfig.contact.website ||
-            ''
-        ),
+        publicStringFromRecord(currentContact, 'website'),
     },
     address: {
       ...defaultBusinessConfig.address,
-      ...((currentValue as { address?: Record<string, unknown> }).address || {}),
+      ...currentAddress,
       city:
         companyData.city ??
-        String(
-          ((currentValue as { address?: Record<string, unknown> }).address || {}).city ||
-            defaultBusinessConfig.address.city
-        ),
+        publicStringFromRecord(currentAddress, 'city'),
       department:
         companyData.department ??
-        String(
-          ((currentValue as { address?: Record<string, unknown> }).address || {}).department ||
-            defaultBusinessConfig.address.department
-        ),
+        publicStringFromRecord(currentAddress, 'department'),
     },
     branding: {
       ...defaultBusinessConfig.branding,
       ...((currentValue as { branding?: Record<string, unknown> }).branding || {}),
       primaryColor,
     },
+    onboarding: {
+      ...((currentValue as { onboarding?: Record<string, unknown> }).onboarding || {}),
+      completed: true,
+      completedAt: now,
+      completedBy: userId,
+      marketplaceCategoryId,
+      marketplaceCategorySlug,
+      marketplaceCategoryName,
+    },
+    onboardingCompleted: true,
+    onboardingCompletedAt: now,
+    profileCompleted: true,
     updatedAt: now,
   };
 
-  await client
+  const { error: settingsError } = await client
     .from('settings')
     .upsert(
       {
@@ -148,6 +189,96 @@ async function syncOrganizationSettings(
       },
       { onConflict: 'organization_id,key' }
     );
+
+  if (settingsError) {
+    throw new Error(`No se pudo sincronizar settings.business_config: ${settingsError.message}`);
+  }
+
+  const { data: organization } = await client
+    .from('organizations')
+    .select('settings')
+    .eq('id', organizationId)
+    .maybeSingle();
+  const currentOrgSettings = isRecord(organization?.settings) ? organization.settings : {};
+  const organizationUpdate: Record<string, unknown> = {
+    settings: {
+      ...currentOrgSettings,
+      rfc: companyData.rfc || '',
+      industry: marketplaceCategorySlug || companyData.industry || '',
+      marketplace_category_id: marketplaceCategoryId || null,
+      marketplace_category_slug: marketplaceCategorySlug || '',
+      marketplace_category_name: marketplaceCategoryName || '',
+      size: companyData.size || '',
+      phone: companyData.phone || '',
+      email: companyData.email || '',
+      website: companyData.website || '',
+      city: companyData.city || '',
+      department: companyData.department || '',
+      tagline: companyData.tagline || '',
+      contact: {
+        ...(isRecord(currentOrgSettings.contact) ? currentOrgSettings.contact : {}),
+        phone: companyData.phone || '',
+        email: companyData.email || '',
+        website: companyData.website || '',
+      },
+    },
+    updated_at: now,
+  };
+  if (marketplaceCategoryId) {
+    organizationUpdate.marketplace_category_id = marketplaceCategoryId;
+  }
+
+  const { error: organizationSyncError } = await client
+    .from('organizations')
+    .update(organizationUpdate)
+    .eq('id', organizationId);
+
+  if (organizationSyncError) {
+    throw new Error(`No se pudo sincronizar organizations: ${organizationSyncError.message}`);
+  }
+}
+
+async function markOrganizationOnboardingComplete(
+  client: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  organizationIdOverride?: string | null
+) {
+  const organizationId = organizationIdOverride || await getUserOrganizationId(userId);
+
+  if (!organizationId) {
+    return;
+  }
+
+  const { data: organization, error: organizationLookupError } = await client
+    .from('organizations')
+    .select('settings')
+    .eq('id', organizationId)
+    .maybeSingle();
+
+  if (organizationLookupError) {
+    throw new Error(`No se pudo leer la organizacion para onboarding: ${organizationLookupError.message}`);
+  }
+
+  const currentSettings = isRecord(organization?.settings) ? organization.settings : {};
+  const completedAt = new Date().toISOString();
+
+  const { error: organizationUpdateError } = await client
+    .from('organizations')
+    .update({
+      settings: {
+        ...currentSettings,
+        onboardingCompleted: true,
+        onboardingCompletedAt: completedAt,
+        onboardingCompletedBy: userId,
+        profileCompleted: true,
+      },
+      updated_at: completedAt,
+    })
+    .eq('id', organizationId);
+
+  if (organizationUpdateError) {
+    throw new Error(`No se pudo marcar onboarding completo: ${organizationUpdateError.message}`);
+  }
 }
 
 function getRequestedOrganizationId(request: NextRequest): string | null {
@@ -176,9 +307,65 @@ async function validateOrganizationMembership(
   return Boolean(data?.organization_id);
 }
 
+async function resolveMarketplaceCategory(
+  admin: Awaited<ReturnType<typeof createAdminClient>> | null,
+  input: {
+    marketplace_category_id?: unknown;
+    marketplace_category_slug?: unknown;
+    industry?: unknown;
+  }
+): Promise<{ id: string; slug: string; name: string } | null> {
+  if (!admin) return null;
+
+  const rawCandidates = [
+    input.marketplace_category_id,
+    input.marketplace_category_slug,
+    input.industry,
+  ]
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    .map((value) => value.trim());
+
+  if (rawCandidates.length === 0) return null;
+
+  const uuidCandidate = rawCandidates.find((value) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+  );
+
+  let data: any = null;
+  if (uuidCandidate) {
+    const result = await (admin as any)
+      .from('marketplace_categories')
+      .select('id,name,slug')
+      .eq('id', uuidCandidate)
+      .eq('is_active', true)
+      .maybeSingle();
+    data = result.data;
+  }
+
+  if (!data) {
+    const slugCandidates = rawCandidates.map((value) => value.toLowerCase());
+    const result = await (admin as any)
+      .from('marketplace_categories')
+      .select('id,name,slug')
+      .in('slug', slugCandidates)
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle();
+    data = result.data;
+  }
+
+  if (!data?.id) return null;
+  return {
+    id: String(data.id),
+    slug: String(data.slug || ''),
+    name: String(data.name || ''),
+  };
+}
+
 type OrganizationProfileRow = {
   id: string;
   name: string;
+  marketplace_category_id?: string | null;
   subscription_plan?: string | null;
   settings?: Record<string, unknown> | null;
   branding?: Record<string, unknown> | null;
@@ -206,23 +393,31 @@ function organizationToCompanyProfile(
   const contact = nestedRecord(businessConfig, 'contact');
   const address = nestedRecord(businessConfig, 'address');
   const configBranding = nestedRecord(businessConfig, 'branding');
+  const onboarding = nestedRecord(businessConfig, 'onboarding');
 
   return {
     id: organization.id,
     name: organization.name,
-    rfc: stringFromRecord(legalInfo, 'ruc', stringFromRecord(settings, 'rfc')),
+    rfc: publicStringFromRecord(legalInfo, 'ruc', stringFromRecord(settings, 'rfc')),
     industry: stringFromRecord(
       settings,
       'industry',
       stringFromRecord(legalInfo, 'economicActivity', 'retail')
     ),
+    marketplace_category_id: stringFromRecord(
+      settings,
+      'marketplace_category_id',
+      stringFromRecord(onboarding, 'marketplaceCategoryId', organization.marketplace_category_id || '')
+    ),
+    marketplace_category_slug: stringFromRecord(settings, 'marketplace_category_slug', stringFromRecord(onboarding, 'marketplaceCategorySlug')),
+    marketplace_category_name: stringFromRecord(settings, 'marketplace_category_name', stringFromRecord(onboarding, 'marketplaceCategoryName')),
     size: stringFromRecord(settings, 'size', 'micro'),
     tagline: stringFromRecord(businessConfig, 'tagline'),
-    phone: stringFromRecord(contact, 'phone'),
-    email: stringFromRecord(contact, 'email'),
-    website: stringFromRecord(contact, 'website'),
-    city: stringFromRecord(address, 'city'),
-    department: stringFromRecord(address, 'department'),
+    phone: publicStringFromRecord(contact, 'phone'),
+    email: publicStringFromRecord(contact, 'email'),
+    website: publicStringFromRecord(contact, 'website'),
+    city: publicStringFromRecord(address, 'city'),
+    department: publicStringFromRecord(address, 'department'),
     logo_url: stringFromRecord(configBranding, 'logo', stringFromRecord(branding, 'logo')),
     primary_color: stringFromRecord(
       configBranding,
@@ -303,7 +498,7 @@ export async function GET(request: NextRequest) {
 
     if (!companyId) {
       return NextResponse.json(
-        { success: false, error: 'No se encontró empresa asociada' },
+        { success: false, error: 'No se encontrÃ³ empresa asociada' },
         { status: 404 }
       );
     }
@@ -320,7 +515,7 @@ export async function GET(request: NextRequest) {
     if (companyError || !company) {
       const { data: organization, error: organizationError } = await supabaseAdmin
         .from('organizations')
-        .select('id,name,subscription_plan,subscription_status,settings,branding')
+        .select('id,name,subscription_plan,subscription_status,settings,branding,marketplace_category_id')
         .eq('id', companyId)
         .maybeSingle();
 
@@ -354,17 +549,24 @@ export async function GET(request: NextRequest) {
       data: {
         ...company,
         tagline: stringFromRecord(businessConfigValue || {}, 'tagline'),
-        phone: stringFromRecord(
+        marketplace_category_id: stringFromRecord(
+          nestedRecord(businessConfigValue || {}, 'onboarding'),
+          'marketplaceCategoryId',
+          String((company as Record<string, unknown>).marketplace_category_id || '')
+        ),
+        marketplace_category_slug: stringFromRecord(nestedRecord(businessConfigValue || {}, 'onboarding'), 'marketplaceCategorySlug'),
+        marketplace_category_name: stringFromRecord(nestedRecord(businessConfigValue || {}, 'onboarding'), 'marketplaceCategoryName'),
+        phone: publicStringFromRecord(
           nestedRecord(businessConfigValue || {}, 'contact'),
           'phone',
           String((company as Record<string, unknown>).phone || '')
         ),
-        email: stringFromRecord(
+        email: publicStringFromRecord(
           nestedRecord(businessConfigValue || {}, 'contact'),
           'email',
           String((company as Record<string, unknown>).email || '')
         ),
-        website: stringFromRecord(
+        website: publicStringFromRecord(
           nestedRecord(businessConfigValue || {}, 'contact'),
           'website',
           String((company as Record<string, unknown>).website || '')
@@ -413,12 +615,31 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, rfc, industry, size, primary_color, tagline, phone, email, website, city, department } = body;
+    const { name, rfc, size, primary_color, tagline, phone, email, website, city, department } = body;
+    const marketplaceCategory = await resolveMarketplaceCategory(supabaseAdmin, body);
+    const marketplace_category_id = marketplaceCategory?.id || cleanPublicString(body?.marketplace_category_id);
+    const marketplace_category_slug = marketplaceCategory?.slug || cleanPublicString(body?.marketplace_category_slug);
+    const marketplace_category_name = marketplaceCategory?.name || cleanPublicString(body?.marketplace_category_name);
+    const industry = marketplace_category_slug || cleanPublicString(body?.industry);
 
     // Validate required fields
-    if (!name || !industry || !size) {
+    if (!name || !marketplace_category_id || !industry || !size) {
       return NextResponse.json(
-        { success: false, error: 'Nombre, industria y tamaño son obligatorios' },
+        { success: false, error: 'Nombre, rubro principal y tamaño son obligatorios' },
+        { status: 400 }
+      );
+    }
+
+    if (supabaseAdmin && !marketplaceCategory) {
+      return NextResponse.json(
+        { success: false, error: 'Selecciona un rubro activo del marketplace' },
+        { status: 400 }
+      );
+    }
+
+    if (!cleanPublicString(phone)) {
+      return NextResponse.json(
+        { success: false, error: 'El telefono publico de la empresa es obligatorio' },
         { status: 400 }
       );
     }
@@ -450,7 +671,7 @@ export async function PUT(request: NextRequest) {
     if (!companyId) {
       if (!hasServiceRole) {
         return NextResponse.json(
-          { success: false, error: 'No se encontró empresa asociada y falta Service Role para crearla' },
+          { success: false, error: 'No se encontrÃ³ empresa asociada y falta Service Role para crearla' },
           { status: 403 }
         );
       }
@@ -493,7 +714,20 @@ export async function PUT(request: NextRequest) {
       await syncOrganizationSettings(clientForWrite, user.id, {
         name: newCompany.name,
         primary_color: newCompany.primary_color,
+        rfc,
+        industry,
+        marketplace_category_id,
+        marketplace_category_slug,
+        marketplace_category_name,
+        size,
+        tagline,
+        phone,
+        email,
+        website,
+        city,
+        department,
       });
+      await markOrganizationOnboardingComplete(clientForWrite, user.id);
 
       return NextResponse.json({
         success: true,
@@ -521,7 +755,7 @@ export async function PUT(request: NextRequest) {
     if (updateError || !updatedCompany) {
       const { data: existingOrganization } = await clientForUpdate
         .from('organizations')
-        .select('id,name,subscription_plan,subscription_status,settings,branding')
+        .select('id,name,subscription_plan,subscription_status,settings,branding,marketplace_category_id')
         .eq('id', companyId)
         .maybeSingle();
 
@@ -537,10 +771,14 @@ export async function PUT(request: NextRequest) {
           .from('organizations')
           .update({
             name,
+            marketplace_category_id,
           settings: {
             ...currentSettings,
             rfc,
             industry,
+        marketplace_category_id,
+        marketplace_category_slug,
+        marketplace_category_name,
             size,
             phone,
             email,
@@ -556,7 +794,7 @@ export async function PUT(request: NextRequest) {
             updated_at: new Date().toISOString(),
           })
           .eq('id', companyId)
-          .select('id,name,subscription_plan,subscription_status,settings,branding')
+          .select('id,name,subscription_plan,subscription_status,settings,branding,marketplace_category_id')
           .single();
 
         if (!organizationUpdateError && updatedOrganization) {
@@ -569,6 +807,9 @@ export async function PUT(request: NextRequest) {
             primary_color: stringFromRecord(updatedBranding, 'primaryColor', primary_color || '#2563EB'),
             rfc,
             industry,
+        marketplace_category_id,
+        marketplace_category_slug,
+        marketplace_category_name,
             size,
             tagline,
             phone,
@@ -577,6 +818,7 @@ export async function PUT(request: NextRequest) {
             city,
             department,
           }, companyId);
+          await markOrganizationOnboardingComplete(clientForUpdate, user.id, companyId);
 
           return NextResponse.json({
             success: true,
@@ -604,6 +846,9 @@ export async function PUT(request: NextRequest) {
       primary_color: updatedCompany.primary_color,
       rfc,
       industry,
+        marketplace_category_id,
+        marketplace_category_slug,
+        marketplace_category_name,
       size,
       tagline,
       phone,
@@ -612,12 +857,16 @@ export async function PUT(request: NextRequest) {
       city,
       department,
     }, organizationIdForSettings);
+    await markOrganizationOnboardingComplete(clientForUpdate, user.id, organizationIdForSettings);
 
     return NextResponse.json({
       success: true,
       data: {
         ...updatedCompany,
         tagline,
+        marketplace_category_id,
+        marketplace_category_slug,
+        marketplace_category_name,
         phone,
         email,
         website,

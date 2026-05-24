@@ -8,9 +8,9 @@ import type { PublicOrganization } from '@/lib/domain/request-tenant';
 
 const PUBLIC_ORGANIZATION_STATUSES = ['ACTIVE', 'TRIAL'];
 const MARKETPLACE_ORGANIZATION_SELECT =
-  'id,name,slug,subscription_status,created_at';
+  'id,name,slug,subscription_status,created_at,marketplace_category_id';
 const MARKETPLACE_ORGANIZATION_SELECT_FALLBACK =
-  'id,name,slug,subscription_status,created_at';
+  'id,name,slug,subscription_status,created_at,marketplace_category_id';
 const PRODUCT_BASE_COLUMNS = ['id', 'name', 'sale_price', 'organization_id'];
 const PRODUCT_OPTIONAL_COLUMNS = [
   'description',
@@ -418,32 +418,14 @@ async function getGlobalMarketplaceHomeDataUncached(
     break;
   }
 
-  const categoryIds = Array.from(
-    new Set(
-      productRows
-        .map((product) => product.category_id)
-        .filter((categoryId): categoryId is string => typeof categoryId === 'string' && categoryId.length > 0)
-    )
-  );
-
-  let categoryRows: CategoryRow[] = [];
-
-  if (categoryIds.length > 0) {
-    const categoryResult = await adminClient
-      .from('categories')
-      .select(CATEGORY_BASE_COLUMNS.join(','))
-      .in('id', categoryIds);
-
-    if (categoryResult.error) {
-      throw categoryResult.error;
-    }
-
-    categoryRows = (categoryResult.data || []) as unknown as CategoryRow[];
-  }
+  const { data: mktCats } = await adminClient
+    .from('marketplace_categories')
+    .select('id,name,slug,color,icon,is_featured')
+    .eq('is_active', true);
+  const mktCatMap = new Map((mktCats || []).map((c) => [c.id, c]));
 
   const configMap = buildConfigMap((settingsResult.data || []) as SettingsRow[]);
   const organizationMap = new Map(organizationRows.map((organization) => [organization.id, organization]));
-  const categoryMap = new Map(categoryRows.map((category) => [category.id, category]));
 
   const featuredOrganizations = organizationRows
     .map((organization) => {
@@ -478,12 +460,17 @@ async function getGlobalMarketplaceHomeDataUncached(
   >();
 
   productRows.forEach((product) => {
-    const category = product.category_id ? categoryMap.get(product.category_id) : null;
-    const categoryName = normalizeDisplayText(category?.name, 'Sin categoria');
+    const org = product.organization_id ? organizationMap.get(product.organization_id) : null;
+    const mktCatId = org ? (org as any).marketplace_category_id : null;
+    const mktCat = mktCatId ? mktCatMap.get(mktCatId) : null;
+
+    const categoryName = mktCat ? mktCat.name : 'Otros';
+    const categoryId = mktCat ? mktCat.id : 'otros';
     const accumulatorKey = categoryName.toLowerCase();
+
     const current =
       categoryAccumulator.get(accumulatorKey) || {
-        id: category?.id || accumulatorKey,
+        id: categoryId,
         name: categoryName,
         productIds: new Set<string>(),
         organizationIds: new Set<string>(),
@@ -516,7 +503,11 @@ async function getGlobalMarketplaceHomeDataUncached(
         return null;
       }
 
-      const category = product.category_id ? categoryMap.get(product.category_id) : null;
+      const org = product.organization_id ? organizationMap.get(product.organization_id) : null;
+      const mktCatId = org ? (org as any).marketplace_category_id : null;
+      const mktCat = mktCatId ? mktCatMap.get(mktCatId) : null;
+      const categoryName = mktCat ? mktCat.name : 'Otros';
+
       const basePrice = Number(product.sale_price || 0);
       const offerPrice = normalizePositiveNumber(product.offer_price);
       const discountPercentage =
@@ -533,7 +524,7 @@ async function getGlobalMarketplaceHomeDataUncached(
           'Producto publico disponible en el marketplace.'
         ),
         image: extractPrimaryImage(product.images, product.image_url),
-        categoryName: normalizeDisplayText(category?.name, 'Sin categoria'),
+        categoryName,
         brand: normalizeDisplayText(product.brand, '') || undefined,
         basePrice,
         offerPrice: offerPrice || undefined,

@@ -1,4 +1,8 @@
+'use client';
+
+import { useState } from 'react';
 import Image from 'next/image';
+import { ProductImagePlaceholder } from '@/components/products/ProductImagePlaceholder';
 import { cn } from '@/lib/utils';
 
 interface ResponsiveProductImageProps {
@@ -6,23 +10,9 @@ interface ResponsiveProductImageProps {
   alt: string;
   priority?: boolean;
   className?: string;
-  /**
-   * Índice del producto en la lista
-   * Los primeros 6 productos se cargan con priority
-   */
   index?: number;
 }
 
-/**
- * ResponsiveProductImage - Imagen optimizada para productos
- * 
- * Características:
- * - Carga lazy automática
- * - Srcset para diferentes densidades de pantalla
- * - Placeholder blur mientras carga
- * - Optimización automática de Next.js
- * - Fallback para imágenes faltantes
- */
 export function ResponsiveProductImage({
   src,
   alt,
@@ -30,12 +20,17 @@ export function ResponsiveProductImage({
   className,
   index = 0,
 }: ResponsiveProductImageProps) {
-  // Placeholder para productos sin imagen
-  const placeholderSrc = '/images/product-placeholder.png';
-  const imageSrc = src || placeholderSrc;
-
-  // Los primeros 6 productos se cargan con priority (above the fold)
+  const [hasError, setHasError] = useState(false);
+  const imageSrc = src?.trim();
   const shouldPrioritize = priority || index < 6;
+
+  if (!imageSrc || hasError) {
+    return (
+      <div className={cn('relative aspect-square overflow-hidden rounded-lg bg-muted', className)}>
+        <ProductImagePlaceholder productName={alt} className="rounded-lg" />
+      </div>
+    );
+  }
 
   return (
     <div className={cn('relative aspect-square overflow-hidden rounded-lg bg-muted', className)}>
@@ -48,11 +43,7 @@ export function ResponsiveProductImage({
         className="object-cover transition-transform hover:scale-105"
         placeholder="blur"
         blurDataURL="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mN8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=="
-        onError={(e) => {
-          // Fallback si la imagen falla
-          const target = e.target as HTMLImageElement;
-          target.src = placeholderSrc;
-        }}
+        onError={() => setHasError(true)}
       />
     </div>
   );

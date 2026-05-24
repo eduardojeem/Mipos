@@ -51,8 +51,20 @@ export function buildWhatsAppHref(
   const raw = String(config?.contact?.whatsapp || config?.contact?.phone || '').replace(/\D/g, '');
   if (!raw) return null;
 
+  const normalized = raw.startsWith('00')
+    ? raw.slice(2)
+    : raw.startsWith('595')
+      ? raw
+      : raw.startsWith('0') && raw.length >= 9
+        ? `595${raw.slice(1)}`
+        : raw.length <= 9
+          ? `595${raw}`
+          : raw;
+
+  if (normalized.length < 10) return null;
+
   const suffix = message ? `?text=${encodeURIComponent(message)}` : '';
-  return `https://wa.me/${raw}${suffix}`;
+  return `https://wa.me/${normalized}${suffix}`;
 }
 
 export function hasTenantContactInfo(config?: Partial<BusinessConfig> | null): boolean {

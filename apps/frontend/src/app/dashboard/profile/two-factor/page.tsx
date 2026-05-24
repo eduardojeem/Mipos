@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -23,6 +23,16 @@ import {
   Download
 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { 
+  AlertDialog, 
+  AlertDialogAction, 
+  AlertDialogCancel, 
+  AlertDialogContent, 
+  AlertDialogDescription, 
+  AlertDialogFooter, 
+  AlertDialogHeader, 
+  AlertDialogTitle 
+} from '@/components/ui/alert-dialog'
 
 interface TwoFactorStatus {
   enabled: boolean
@@ -51,12 +61,9 @@ export default function TwoFactorPage() {
   const [qrCodeUrl, setQrCodeUrl] = useState('')
   const [secretKey, setSecretKey] = useState('')
   const [showSetup, setShowSetup] = useState(false)
+  const [showDisableConfirm, setShowDisableConfirm] = useState(false)
 
-  useEffect(() => {
-    loadTwoFactorStatus()
-  }, [])
-
-  const loadTwoFactorStatus = async () => {
+  const loadTwoFactorStatus = useCallback(async () => {
     try {
       setIsLoading(true);
       
@@ -88,7 +95,11 @@ export default function TwoFactorPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [toast])
+
+  useEffect(() => {
+    loadTwoFactorStatus()
+  }, [loadTwoFactorStatus]);
 
   const generateQRCode = async () => {
     try {
@@ -191,7 +202,11 @@ export default function TwoFactorPage() {
     }
   };
 
-  const disableTwoFactor = async () => {
+  const disableTwoFactor = () => {
+    setShowDisableConfirm(true);
+  };
+
+  const confirmDisableTwoFactor = async () => {
     try {
       setIsDisabling(true);
       
@@ -219,6 +234,7 @@ export default function TwoFactorPage() {
           title: "2FA Desactivado",
           description: result.message || "La autenticación de dos factores ha sido desactivada",
         });
+        setShowDisableConfirm(false);
       } else {
         throw new Error(result.error || 'Error desconocido');
       }
@@ -579,6 +595,47 @@ export default function TwoFactorPage() {
           </Card>
         </div>
       )}
+      
+      <AlertDialog open={showDisableConfirm} onOpenChange={setShowDisableConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-red-600 flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" />
+              Deshabilitar autenticación de dos factores
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Esto reducirá significativamente la seguridad de tu cuenta. Si pierdes tu contraseña, tu cuenta estará más expuesta a accesos no autorizados.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950/20">
+            <p className="text-sm text-red-800 dark:text-red-200">
+              <strong>Advertencia:</strong> No recomendamos deshabilitar la 2FA. Asegúrate de tener una contraseña muy segura si decides continuar.
+            </p>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDisabling}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void confirmDisableTwoFactor();
+              }}
+              disabled={isDisabling}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {isDisabling ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deshabilitando...
+                </>
+              ) : (
+                'Sí, deshabilitar 2FA'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

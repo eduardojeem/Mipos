@@ -9,6 +9,25 @@ import { useAuth } from '@/hooks/use-auth'
 import { useUserOrganizations } from '@/hooks/use-user-organizations'
 import { formatCurrency } from '@/lib/utils'
 
+const PUBLIC_PLACEHOLDER_VALUES = new Set([
+  '+595 21 123-456',
+  '+595 981 123-456',
+  '+595 21 654-321',
+  'info@minegocio.com.py',
+  'https://minegocio.com.py',
+  'av. mariscal lopez 1234',
+  'villa morra',
+  'asuncion',
+  'central',
+  '1209',
+  'cerca del shopping del sol',
+])
+
+function cleanPublicString(value?: string | null) {
+  const trimmed = (value || '').trim()
+  return PUBLIC_PLACEHOLDER_VALUES.has(trimmed) || PUBLIC_PLACEHOLDER_VALUES.has(trimmed.toLowerCase()) ? '' : trimmed
+}
+
 // Normaliza el esquema de BusinessConfig para compatibilidad del carrusel
 function normalizeBusinessConfig(input: BusinessConfig): BusinessConfig {
   const cfg: BusinessConfig = { ...defaultBusinessConfig, ...input };
@@ -59,6 +78,31 @@ function normalizeBusinessConfig(input: BusinessConfig): BusinessConfig {
   };
   cfg.homeOffersCarousel = fixedHoc;
   cfg.storeSettings = { ...(defaultBusinessConfig.storeSettings), ...(cfg.storeSettings || {}) };
+  cfg.contact = {
+    ...(cfg.contact || defaultBusinessConfig.contact),
+    phone: cleanPublicString(cfg.contact?.phone),
+    email: cleanPublicString(cfg.contact?.email),
+    whatsapp: cleanPublicString(cfg.contact?.whatsapp),
+    website: cleanPublicString(cfg.contact?.website),
+    landline: cleanPublicString(cfg.contact?.landline),
+  };
+  cfg.address = {
+    ...(cfg.address || defaultBusinessConfig.address),
+    street: cleanPublicString(cfg.address?.street),
+    neighborhood: cleanPublicString(cfg.address?.neighborhood),
+    city: cleanPublicString(cfg.address?.city),
+    department: cleanPublicString(cfg.address?.department),
+    zipCode: cleanPublicString(cfg.address?.zipCode),
+    reference: cleanPublicString(cfg.address?.reference),
+  };
+  cfg.socialMedia = {
+    ...(cfg.socialMedia || defaultBusinessConfig.socialMedia),
+    facebook: cleanPublicString(cfg.socialMedia?.facebook),
+    instagram: cleanPublicString(cfg.socialMedia?.instagram),
+    twitter: cleanPublicString(cfg.socialMedia?.twitter),
+    tiktok: cleanPublicString(cfg.socialMedia?.tiktok),
+    linkedin: cleanPublicString(cfg.socialMedia?.linkedin),
+  };
   cfg.publicSite = {
     sections: {
       ...defaultBusinessConfig.publicSite!.sections,
@@ -74,7 +118,7 @@ function normalizeBusinessConfig(input: BusinessConfig): BusinessConfig {
 
 interface BusinessConfigContextType {
   config: BusinessConfig;
-  updateConfig: (updates: BusinessConfigUpdate) => Promise<{ persisted: boolean }>;
+  updateConfig: (updates: BusinessConfigUpdate) => Promise<{ persisted: boolean; status?: 'success' | 'queued' | 'validation' | 'error'; message?: string }>;
   loading: boolean;
   error: string | null;
   resetConfig: () => Promise<void>;
@@ -174,7 +218,7 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
     })
   }, [getQueue, saveQueue, organizationId]);
   
-  const tryPersistToApi = useCallback(async (cfg: BusinessConfig): Promise<{ ok: boolean; status: 'success' | 'error'; message?: string }> => {
+  const tryPersistToApi = useCallback(async (cfg: BusinessConfig): Promise<{ ok: boolean; status: 'success' | 'validation' | 'error'; message?: string }> => {
     if (!organizationId) {
       return { ok: false, status: 'error', message: 'No organization selected' }
     }
@@ -195,12 +239,15 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
         return { ok: true, status: 'success' }
       } else {
         const data = await response.json().catch(() => null)
-        const msg = data?.error || 'Error al guardar la configuraciÃ³n'
+        const validationMessage = data?.errors && typeof data.errors === 'object'
+          ? Object.values(data.errors).filter(Boolean).join('. ')
+          : ''
+        const msg = validationMessage || data?.error || 'Error al guardar la configuracion'
         syncLogger.warn('Fallo al persistir BusinessConfig en API', { 
           organizationId,
           message: msg 
         })
-        return { ok: false, status: 'error', message: msg }
+        return { ok: false, status: response.status === 400 ? 'validation' : 'error', message: msg }
       }
     } catch (apiErr: any) {
       syncLogger.error('Error de red al persistir BusinessConfig en API', undefined, apiErr)
@@ -565,7 +612,9 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
   }, [config?.branding, hexToHslTriple]);
 
 
-  const updateConfig = async (updates: BusinessConfigUpdate) => {
+  const updateConfig = async (
+    updates: BusinessConfigUpdate
+  ): Promise<{ persisted: boolean; status: 'success' | 'queued' | 'validation' | 'error'; message?: string }> => {
     if (!organizationId) {
       setError('No hay organizaciÃ³n seleccionada');
       return { persisted: false, status: 'error', message: 'No organization selected' }
@@ -602,7 +651,7 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
         persisted = true
         localStorage.setItem(getStorageKey('businessConfigPersisted'), 'true')
         setPersisted(true)
-      } else {
+      } else if (apiRes.status !== 'validation') {
         // Encolar para persistencia cuando vuelva conexiÃ³n / permisos
         enqueueUpdate(normalizedUpdated)
       }
@@ -612,11 +661,11 @@ export function BusinessConfigProvider({ children }: BusinessConfigProviderProps
         organizationName,
         persisted 
       })
-      if (!apiRes.ok) {
+      if (!apiRes.ok && apiRes.status !== 'validation') {
         setError(apiRes.message || 'No se pudo guardar en Supabase. El cambio quedo en cola local.')
       }
 
-      return { persisted, status: apiRes.ok ? 'success' : 'queued', message: apiRes.message }
+      return { persisted, status: apiRes.ok ? 'success' : apiRes.status === 'validation' ? 'validation' : 'queued', message: apiRes.message }
 
     } catch (err) {
       console.error('Error updating business config:', err);

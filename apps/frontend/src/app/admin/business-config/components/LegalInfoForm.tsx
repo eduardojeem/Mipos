@@ -40,7 +40,7 @@ export function LegalInfoForm({ config, onUpdate }: LegalInfoFormProps) {
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="ruc">RUC</Label>
+              <Label htmlFor="ruc">RUC <span className="text-xs text-muted-foreground">(opcional)</span></Label>
               <Input
                 id="ruc"
                 value={config.legalInfo.ruc || ''}
@@ -50,6 +50,11 @@ export function LegalInfoForm({ config, onUpdate }: LegalInfoFormProps) {
               />
               {getFieldError('legalInfo.ruc') && (
                 <p className="text-sm text-red-500">{getFieldError('legalInfo.ruc')}</p>
+              )}
+              {!config.legalInfo.ruc?.trim() && (
+                <p className="text-xs text-muted-foreground">
+                  Si no lo cargas, queda pendiente y no se guarda ningun RUC generico.
+                </p>
               )}
             </div>
 

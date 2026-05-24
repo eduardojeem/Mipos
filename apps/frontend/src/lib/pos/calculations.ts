@@ -219,3 +219,32 @@ export function getFreeShippingThreshold(config: BusinessConfig | undefined, reg
   }
   return base;
 }
+
+export function getConfiguredShippingCost(
+  config: BusinessConfig | undefined,
+  subtotal: number,
+  region?: string
+): number {
+  const threshold = getFreeShippingThreshold(config, region);
+  if (threshold > 0 && subtotal >= threshold) {
+    return 0;
+  }
+
+  const baseCost = Number(config?.storeSettings?.shippingCost || 0);
+  const list = config?.storeSettings?.freeShippingRegions || [];
+
+  if (region) {
+    const key = String(region).toLowerCase();
+    const match = list.find((r) => {
+      const a = String(r?.id || '').toLowerCase();
+      const b = String(r?.name || '').toLowerCase();
+      return a === key || b === key;
+    });
+    const regionCost = Number(match?.shippingCost);
+    if (Number.isFinite(regionCost) && regionCost >= 0) {
+      return regionCost;
+    }
+  }
+
+  return Number.isFinite(baseCost) && baseCost >= 0 ? baseCost : 0;
+}

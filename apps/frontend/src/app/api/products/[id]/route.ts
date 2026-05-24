@@ -187,6 +187,11 @@ export async function PUT(
     if (body.category_id !== undefined) updateData.category_id = normalizeOptionalString(body.category_id);
     if (body.supplier_id !== undefined) updateData.supplier_id = normalizeOptionalString(body.supplier_id);
     if (body.image_url !== undefined) updateData.image_url = normalizeOptionalString(body.image_url);
+    if (body.images !== undefined) {
+      updateData.images = Array.isArray(body.images)
+        ? body.images.filter((url: unknown) => typeof url === 'string' && url.trim()).map((url: string) => url.trim())
+        : [];
+    }
     if (body.discount_percentage !== undefined) {
       updateData.discount_percentage = normalizeOptionalNumber(body.discount_percentage);
     }

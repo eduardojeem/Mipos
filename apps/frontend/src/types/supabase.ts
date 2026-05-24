@@ -207,6 +207,10 @@ export interface Sale {
   customer_phone?: string | null;
   customer_address?: string | null;
   organization_id?: string | null;
+  buyer_type?: "guest" | "customer" | "business";
+  buyer_user_id?: string | null;
+  buyer_organization_id?: string | null;
+  buyer_organization_name?: string | null;
   subtotal?: number;
   total_amount: number;
   total?: number;
@@ -241,6 +245,7 @@ export interface Sale {
   };
   shipping_cost?: number;
   shipping_region?: string | null;
+  fulfillment_type?: "DELIVERY" | "PICKUP" | null;
   branch_id?: string | null;
   pos_id?: string | null;
   status:
@@ -446,12 +451,14 @@ export interface CreateCategoryData {
   name: string;
   description?: string;
   is_active?: boolean;
+  parent_id?: string | null;
 }
 
 export interface UpdateCategoryData {
   name?: string;
   description?: string;
   is_active?: boolean;
+  parent_id?: string | null;
 }
 
 export interface CreateProductData {

@@ -1,6 +1,6 @@
 'use client'
 
-import { LayoutTemplate, Megaphone, SlidersHorizontal } from 'lucide-react'
+import { AlertCircle, LayoutTemplate, Megaphone, SlidersHorizontal } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -58,6 +58,22 @@ export function PublicExperienceForm({ config, onUpdate }: PublicExperienceFormP
   const content = {
     ...defaultBusinessConfig.publicSite!.content,
     ...(config.publicSite?.content || {}),
+  }
+  const hasAddress = Boolean(config.address?.street || config.address?.city || config.address?.department)
+  const hasSocialLinks = Object.values(config.socialMedia || {}).some(Boolean)
+  const moduleWarnings: Partial<Record<keyof PublicSections, string>> = {
+    showContactInfo: !config.contact?.phone?.trim()
+      ? 'Activo, pero falta telefono publico en Contacto y legal.'
+      : undefined,
+    showLocation: !hasAddress
+      ? 'Activo, pero falta direccion publica en Contacto y legal.'
+      : undefined,
+    showBusinessHours: !config.businessHours?.some((hour) => hour.trim())
+      ? 'Activo, pero no hay horarios cargados.'
+      : undefined,
+    showSocialLinks: !hasSocialLinks
+      ? 'Activo, pero no hay redes publicas cargadas.'
+      : undefined,
   }
 
   const updateSections = (key: keyof PublicSections, value: boolean) => {
@@ -176,7 +192,8 @@ export function PublicExperienceForm({ config, onUpdate }: PublicExperienceFormP
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2">
           {MODULE_FIELDS.map((item) => (
-            <div key={item.key} className="flex items-center justify-between rounded-2xl border px-4 py-3">
+            <div key={item.key} className="rounded-2xl border px-4 py-3">
+              <div className="flex items-center justify-between">
               <div className="pr-4">
                 <p className="text-sm font-medium">{item.label}</p>
                 <p className="text-xs text-muted-foreground">{item.description}</p>
@@ -185,6 +202,13 @@ export function PublicExperienceForm({ config, onUpdate }: PublicExperienceFormP
                 checked={Boolean(sections[item.key])}
                 onCheckedChange={(checked) => updateSections(item.key, checked)}
               />
+              </div>
+              {sections[item.key] && moduleWarnings[item.key] ? (
+                <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
+                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+                  <span>{moduleWarnings[item.key]}</span>
+                </div>
+              ) : null}
             </div>
           ))}
         </CardContent>

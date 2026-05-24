@@ -11,11 +11,11 @@ import {
     ShoppingCart,
     Star,
     Check,
-    Sparkles,
     Zap
 } from 'lucide-react';
 import { formatPrice } from '@/utils/formatters';
 import { getProductPricing } from '@/lib/public-site/product-pricing';
+import { ProductImagePlaceholder } from '@/components/products/ProductImagePlaceholder';
 import type { Product } from '@/types';
 
 interface ProductCardProps {
@@ -43,6 +43,7 @@ const ProductCard = memo(function ProductCard({
 }: ProductCardProps) {
     const [isAdding, setIsAdding] = useState(false);
     const [imageLoaded, setImageLoaded] = useState(false);
+    const [imageError, setImageError] = useState(false);
     const pricing = getProductPricing(product);
 
     const isOutOfStock = product.stock_quantity <= 0;
@@ -78,7 +79,7 @@ const ProductCard = memo(function ProductCard({
                 <div className="flex relative z-10">
                     {/* Image */}
                     <div className="relative w-32 sm:w-40 flex-shrink-0 overflow-hidden rounded-l-2xl">
-                        {product.image_url ? (
+                        {product.image_url && !imageError ? (
                             <div className="relative h-full min-h-[120px]">
                                 <Image
                                     src={product.image_url}
@@ -89,15 +90,14 @@ const ProductCard = memo(function ProductCard({
                                     sizes="160px"
                                     loading={priority ? 'eager' : 'lazy'}
                                     onLoad={() => setImageLoaded(true)}
+                                    onError={() => setImageError(true)}
                                 />
                                 {!imageLoaded && (
                                     <div className="absolute inset-0 bg-gradient-to-br from-slate-100 via-slate-200 to-slate-100 dark:from-slate-800 dark:via-slate-700 dark:to-slate-800 animate-pulse" />
                                 )}
                             </div>
                         ) : (
-                            <div className="h-full min-h-[120px] bg-slate-100 dark:bg-slate-950/50 flex items-center justify-center">
-                                <Sparkles className="w-8 h-8 text-muted-foreground/30 animate-pulse" />
-                            </div>
+                            <ProductImagePlaceholder productName={product.name} compact className="h-full min-h-[120px] rounded-none border-0" />
                         )}
 
                         {/* Badges */}
@@ -173,7 +173,7 @@ const ProductCard = memo(function ProductCard({
             {/* Image Container */}
             <div className="relative overflow-hidden bg-slate-100 dark:bg-slate-950/50">
                 <div className={`relative ${viewMode === 'compact' ? 'aspect-square' : 'aspect-[4/3]'}`}>
-                    {product.image_url ? (
+                    {product.image_url && !imageError ? (
                         <>
                             <Image
                                 src={product.image_url}
@@ -184,6 +184,7 @@ const ProductCard = memo(function ProductCard({
                                 sizes={viewMode === 'compact' ? '(max-width: 640px) 50vw, 25vw' : '(max-width: 640px) 100vw, 33vw'}
                                 loading={priority ? 'eager' : 'lazy'}
                                 onLoad={() => setImageLoaded(true)}
+                                onError={() => setImageError(true)}
                             />
                             {!imageLoaded && (
                                 <div className="absolute inset-0 bg-gradient-to-br from-slate-100 via-slate-200 to-slate-100 dark:from-slate-800 dark:via-slate-700 dark:to-slate-800 animate-pulse">
@@ -192,9 +193,7 @@ const ProductCard = memo(function ProductCard({
                             )}
                         </>
                     ) : (
-                        <div className="absolute inset-0 bg-gradient-to-br from-slate-100 via-slate-200 to-slate-100 dark:from-slate-800 dark:via-slate-700 dark:to-slate-800 flex items-center justify-center">
-                            <Sparkles className="w-12 h-12 text-muted-foreground/30 animate-pulse" />
-                        </div>
+                        <ProductImagePlaceholder productName={product.name} className="absolute inset-0 rounded-none border-0" />
                     )}
 
                     {/* Overlay gradient with better effect */}

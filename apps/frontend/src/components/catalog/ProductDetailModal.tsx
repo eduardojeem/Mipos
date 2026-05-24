@@ -82,7 +82,7 @@ export const ProductDetailModal = memo(({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className={cn(
+      <DialogContent aria-describedby={undefined} className={cn(
         "max-w-4xl p-0 gap-0 overflow-hidden bg-gradient-to-br from-white to-gray-50/50 dark:from-gray-900 dark:to-gray-800/50",
         className
       )}>

@@ -98,29 +98,46 @@ function getOrgId(): string | null {
   }
 }
 
-/** Redimensiona y comprime una imagen usando un canvas. Máx 800×800, calidad 80%. */
+const PRODUCT_IMAGE_MAX_DIMENSION = 900;
+const PRODUCT_IMAGE_QUALITY = 0.72;
+const PRODUCT_IMAGE_MAX_UPLOAD_BYTES = 1.5 * 1024 * 1024;
+const PRODUCT_IMAGE_TYPES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
+
+/** Redimensiona, quita metadata y comprime la imagen antes de subirla. */
 function compressImage(file: File): Promise<File> {
   return new Promise((resolve) => {
-    const MAX = 800;
+    const objectUrl = URL.createObjectURL(file);
     const img = new Image();
-    img.onerror = () => resolve(file);
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(file);
+    };
     img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
       let { width, height } = img;
-      if (width > MAX || height > MAX) {
-        if (width > height) { height = Math.round((height * MAX) / width); width = MAX; }
-        else { width = Math.round((width * MAX) / height); height = MAX; }
+      if (width > PRODUCT_IMAGE_MAX_DIMENSION || height > PRODUCT_IMAGE_MAX_DIMENSION) {
+        if (width > height) {
+          height = Math.round((height * PRODUCT_IMAGE_MAX_DIMENSION) / width);
+          width = PRODUCT_IMAGE_MAX_DIMENSION;
+        } else {
+          width = Math.round((width * PRODUCT_IMAGE_MAX_DIMENSION) / height);
+          height = PRODUCT_IMAGE_MAX_DIMENSION;
+        }
       }
       const canvas = document.createElement('canvas');
       canvas.width = width;
       canvas.height = height;
       canvas.getContext('2d')?.drawImage(img, 0, 0, width, height);
       canvas.toBlob(
-        (blob) => resolve(blob ? new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() }) : file),
-        'image/jpeg',
-        0.8
+        (blob) => {
+          const safeName = file.name.replace(/\.[^.]+$/, '') || 'product';
+          resolve(blob ? new File([blob], `${safeName}.webp`, { type: 'image/webp', lastModified: Date.now() }) : file);
+        },
+        'image/webp',
+        PRODUCT_IMAGE_QUALITY
       );
     };
-    img.src = URL.createObjectURL(file);
+    img.src = objectUrl;
   });
 }
 
@@ -472,11 +489,21 @@ export const ProductEditModal = memo(function ProductEditModal({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (!PRODUCT_IMAGE_TYPES.has(file.type)) {
+      toast.error('Formato no permitido. Usa JPG, PNG o WebP.');
+      e.target.value = '';
+      return;
+    }
+
     // Revoke previous blob
     if (imageBlobUrl) URL.revokeObjectURL(imageBlobUrl);
 
-    // Compress
-    const compressed = file.size > 500_000 ? await compressImage(file) : file;
+    const compressed = await compressImage(file);
+    if (compressed.size > PRODUCT_IMAGE_MAX_UPLOAD_BYTES) {
+      toast.error('La imagen sigue siendo muy pesada. Usa una imagen menor a 1.5 MB.');
+      e.target.value = '';
+      return;
+    }
 
     // Show local preview immediately
     const blobUrl = URL.createObjectURL(compressed);
@@ -492,37 +519,42 @@ export const ProductEditModal = memo(function ProductEditModal({
     if (!pendingFile) return null;
     setUploading(true);
     setUploadProgress(0);
+    let ticker: ReturnType<typeof setInterval> | null = null;
     try {
-      const ext = pendingFile.name.split('.').pop()?.toLowerCase() || 'jpg';
-      const path = `product-${product?.id || Date.now()}-${Date.now()}.${ext}`;
-
-      // Simulate progress
-      const ticker = setInterval(() => {
+      ticker = setInterval(() => {
         setUploadProgress((p) => p < 85 ? p + 8 : p);
       }, 200);
 
-      const { data, error } = await supabase.storage
-        .from(BUCKET)
-        .upload(path, pendingFile, { upsert: true, contentType: pendingFile.type });
+      const formData = new FormData();
+      formData.append('bucket', BUCKET);
+      formData.append('purpose', 'product');
+      formData.append('public', 'true');
+      formData.append('prefix', `products/${getOrgId() || 'default'}`);
+      formData.append('maxSize', String(PRODUCT_IMAGE_MAX_UPLOAD_BYTES));
+      formData.append('file', pendingFile);
 
-      clearInterval(ticker);
+      const response = await fetch('/api/assets/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      const result = await response.json().catch(() => null);
 
-      if (error) {
-        // Fallback: keep base64 if storage fails (bucket may not exist yet)
-        toast.warning('No se pudo subir a Storage, la imagen quedará como referencia local');
-        return null;
+      if (!response.ok || !result?.success) {
+        throw new Error(result?.error || 'No se pudo subir la imagen del producto');
       }
 
       setUploadProgress(100);
-      const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(data.path);
-      return pub?.publicUrl || null;
-    } catch {
-      return null;
+      return result.files?.[0]?.url || null;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo subir la imagen';
+      toast.error(message);
+      throw error;
     } finally {
+      if (ticker) clearInterval(ticker);
       setUploading(false);
       setTimeout(() => setUploadProgress(0), 800);
     }
-  }, [pendingFile, product?.id, supabase]);
+  }, [pendingFile]);
 
   const clearImage = useCallback(() => {
     if (imageBlobUrl) URL.revokeObjectURL(imageBlobUrl);
@@ -641,7 +673,7 @@ export const ProductEditModal = memo(function ProductEditModal({
     setLoading(true);
     try {
       // Upload image to Supabase Storage if pending
-      let finalImageUrl = imagePreview && !imageBlobUrl ? imagePreview : undefined;
+      let finalImageUrl = imagePreview && !imageBlobUrl ? imagePreview : '';
       if (pendingFile) {
         const storageUrl = await uploadPendingFile();
         if (storageUrl) {
@@ -668,9 +700,17 @@ export const ProductEditModal = memo(function ProductEditModal({
         supplier_id: data.supplier_id === 'none' ? undefined : data.supplier_id,
         barcode: data.barcode?.trim() || undefined,
         image_url: finalImageUrl,
+        images: finalImageUrl ? [finalImageUrl] : [],
       };
 
       await onSave(productData);
+      if (product?.image_url && finalImageUrl && product.image_url !== finalImageUrl) {
+        fetch('/api/assets/delete', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bucket: BUCKET, url: product.image_url, public: true }),
+        }).catch(() => undefined);
+      }
       toast.success(product ? 'Producto actualizado' : 'Producto creado');
       onOpenChange(false);
     } catch (err) {
@@ -685,7 +725,10 @@ export const ProductEditModal = memo(function ProductEditModal({
   // ── Render ───────────────────────────────────────────────────────────────
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[92vh] max-w-4xl flex-col gap-0 overflow-hidden p-0">
+      <DialogContent
+        aria-describedby={undefined}
+        className="flex max-h-[92vh] max-w-4xl flex-col gap-0 overflow-hidden p-0"
+      >
         {/* ── Header ── */}
         <DialogHeader className="flex-shrink-0 border-b border-border/50 bg-gradient-to-r from-card via-card to-primary/5 px-6 py-4">
           <div className="flex items-center justify-between">

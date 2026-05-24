@@ -19,11 +19,14 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import Breadcrumbs from '@/components/ui/breadcrumbs';
 import Pagination from '@/components/catalog/Pagination';
+import { LoginAccessSection } from '@/components/auth/LoginAccessSection';
 import { useCatalogCart } from '@/hooks/useCatalogCart';
 import { useFavorites } from '@/hooks/useFavorites';
+import { useAuth } from '@/hooks/use-auth';
 import { useTenantPublicRouting } from '@/hooks/useTenantPublicRouting';
 import { useCatalogAudit } from '@/hooks/useCatalogAudit';
 import { useBusinessConfig } from '@/contexts/BusinessConfigContext';
+import { getTenantPublicContent } from '@/lib/public-site/tenant-public-config';
 import {
   AlertCircle,
   Loader2,
@@ -116,6 +119,7 @@ export default function CatalogClientOptimized({
 }: CatalogClientOptimizedProps) {
   const router = useRouter();
   const { config } = useBusinessConfig();
+  const content = getTenantPublicContent(config);
   const { tenantHref, tenantApiPath } = useTenantPublicRouting();
   const categories = initialCategories;
   const brandPrimary = config.branding?.primaryColor || '#0f766e';
@@ -138,6 +142,8 @@ export default function CatalogClientOptimized({
     favorites,
     toggleFavorite,
   } = useFavorites();
+  
+  const { user } = useAuth();
 
   const {
     logPageView,
@@ -489,12 +495,13 @@ export default function CatalogClientOptimized({
 
       <NavBar
         config={config}
-        activeSection="explorar"
+        activeSection="catalogo"
         onNavigate={(section) => router.push(tenantHref(`/home#${section}`))}
         showCartButton={false}
+        skipTargetId="main-content"
       />
 
-      <header className="sticky top-16 z-40 border-b border-slate-200/50 dark:border-white/5 bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl transition-all duration-300">
+      <header className="sticky top-[var(--public-nav-height,4rem)] z-40 border-b border-slate-200/50 dark:border-white/5 bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl transition-all duration-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between gap-4 h-16">
             <div className="flex items-center gap-3">
@@ -505,9 +512,11 @@ export default function CatalogClientOptimized({
                 <Sparkles className="w-5 h-5" style={{ color: brandPrimary }} />
               </div>
               <div>
-                <h1 className="font-bold text-foreground text-lg tracking-tight">Catalogo</h1>
+                <h1 className="font-bold text-foreground text-lg tracking-tight">
+                  {content.catalogTitle || 'Catalogo'}
+                </h1>
                 <p className="text-[10px] uppercase tracking-widest text-muted-foreground/70 font-semibold hidden sm:block">
-                  {config.businessName}
+                  {content.catalogDescription || config.businessName}
                 </p>
               </div>
             </div>
@@ -531,7 +540,7 @@ export default function CatalogClientOptimized({
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main id="main-content" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 scroll-mt-32">
         <Breadcrumbs
           items={[
             { label: 'Inicio', href: tenantHref('/home') },
@@ -624,6 +633,17 @@ export default function CatalogClientOptimized({
             showInfo
             maxVisiblePages={7}
           />
+
+          {!user && (
+            <LoginAccessSection
+              title="Opciones para comprar"
+              description="El catalogo permite pedido invitado para reducir friccion, y tambien acceso de cliente para historial, seguimiento y recompra."
+              types={['customer', 'guest-order']}
+              returnUrl={tenantHref('/catalog')}
+              compact
+              className="mt-10 bg-transparent"
+            />
+          )}
         </div>
       </main>
 

@@ -45,10 +45,7 @@ export function useConfigValidation() {
     if (!config.contact?.phone?.trim()) {
       newErrors.push({ field: 'contact.phone', message: 'El teléfono es requerido' });
     }
-
-    if (!config.contact?.email?.trim()) {
-      newErrors.push({ field: 'contact.email', message: 'El email es requerido' });
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(config.contact.email)) {
+    if (config.contact?.email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(config.contact.email)) {
       newErrors.push({ field: 'contact.email', message: 'El email no tiene un formato válido' });
     }
 
@@ -94,6 +91,10 @@ export function useConfigValidation() {
 
     if (!config.storeSettings?.currency?.trim()) {
       newErrors.push({ field: 'storeSettings.currency', message: 'La moneda es requerida' });
+    }
+
+    if (!config.storeSettings?.currencySymbol?.trim()) {
+      newErrors.push({ field: 'storeSettings.currencySymbol', message: 'El símbolo de moneda es requerido' });
     }
 
     if (config.storeSettings?.taxRate !== undefined && (config.storeSettings.taxRate < 0 || config.storeSettings.taxRate > 1)) {

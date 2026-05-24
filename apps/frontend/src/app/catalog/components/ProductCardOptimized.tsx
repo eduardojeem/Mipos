@@ -10,12 +10,12 @@ import {
   Eye,
   Heart,
   ShoppingCart,
-  Sparkles,
   Star,
   Zap,
 } from 'lucide-react';
 import { formatPrice } from '@/utils/formatters';
 import { getProductPricing } from '@/lib/public-site/product-pricing';
+import { ProductImagePlaceholder } from '@/components/products/ProductImagePlaceholder';
 import type { BusinessConfig } from '@/types/business-config';
 import type { Product } from '@/types';
 
@@ -42,6 +42,7 @@ const ProductCardOptimized = memo(function ProductCardOptimized({
 }: ProductCardOptimizedProps) {
   const [isAdding, setIsAdding] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageError, setImageError] = useState(false);
   const pricing = getProductPricing(product);
 
   const isOutOfStock = Number(product.stock_quantity ?? 0) <= 0;
@@ -92,7 +93,7 @@ const ProductCardOptimized = memo(function ProductCardOptimized({
       >
         <div className="flex">
           <div className="relative w-32 flex-shrink-0 sm:w-40">
-            {imageUrl ? (
+            {imageUrl && !imageError ? (
               <div className="relative h-full min-h-[132px]">
                 <Image
                   src={imageUrl}
@@ -104,15 +105,14 @@ const ProductCardOptimized = memo(function ProductCardOptimized({
                   sizes="160px"
                   loading={priority ? 'eager' : 'lazy'}
                   onLoad={() => setImageLoaded(true)}
+                  onError={() => setImageError(true)}
                 />
                 {!imageLoaded && (
                   <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700" />
                 )}
               </div>
             ) : (
-              <div className="flex h-full min-h-[132px] items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700">
-                <Sparkles className="h-8 w-8 text-muted-foreground/30" />
-              </div>
+              <ProductImagePlaceholder productName={product.name} compact className="h-full min-h-[132px] rounded-none border-0" />
             )}
 
             <div className="absolute left-2 top-2 flex flex-col gap-1">
@@ -241,7 +241,7 @@ const ProductCardOptimized = memo(function ProductCardOptimized({
           }`}
         >
           <div className={`relative overflow-hidden ${viewMode === 'compact' ? 'aspect-square' : 'aspect-[4/3]'}`}>
-            {imageUrl ? (
+            {imageUrl && !imageError ? (
               <>
                 <Image
                   src={imageUrl}
@@ -257,6 +257,7 @@ const ProductCardOptimized = memo(function ProductCardOptimized({
                   }
                   loading={priority ? 'eager' : 'lazy'}
                   onLoad={() => setImageLoaded(true)}
+                  onError={() => setImageError(true)}
                 />
                 {!imageLoaded && (
                   <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-slate-100 via-slate-200 to-slate-100 dark:from-slate-800 dark:via-slate-700 dark:to-slate-800">
@@ -265,9 +266,7 @@ const ProductCardOptimized = memo(function ProductCardOptimized({
                 )}
               </>
             ) : (
-              <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-100 via-slate-200 to-slate-100 dark:from-slate-800 dark:via-slate-700 dark:to-slate-800">
-                <Sparkles className="h-12 w-12 animate-pulse text-muted-foreground/30" />
-              </div>
+              <ProductImagePlaceholder productName={product.name} className="absolute inset-0 rounded-none border-0" />
             )}
 
             <div

@@ -7,22 +7,32 @@ async function getActor() {
     const supabase = await createClient();
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) return { user: null, role: null };
-    const { data: profile } = await supabase.from('users').select('role').eq('id', user.id).single();
-    const role = (profile as any)?.role ?? (user.user_metadata as any)?.role;
-    return { user, role };
+    const [{ data: profile }, { data: roleRows }] = await Promise.all([
+      supabase.from('users').select('role').eq('id', user.id).maybeSingle(),
+      supabase
+        .from('user_roles')
+        .select('role:roles(name)')
+        .eq('user_id', user.id)
+        .eq('is_active', true),
+    ]);
+    const profileRole = (profile as any)?.role ?? (user.user_metadata as any)?.role;
+    const assignedRole = Array.isArray(roleRows)
+      ? (roleRows[0] as any)?.role?.name
+      : null;
+    return { user, role: profileRole || assignedRole };
   } catch {
     return { user: null, role: null };
   }
 }
 
-function isAdminRole(role?: string | null) {
+function canManageAssets(role?: string | null) {
   const r = (role || '').toUpperCase();
-  return r === 'ADMIN' || r === 'SUPER_ADMIN';
+  return r === 'OWNER' || r === 'ADMIN' || r === 'SUPER_ADMIN' || r === 'MANAGER';
 }
 
 export async function DELETE(request: NextRequest) {
   const { user, role } = await getActor();
-  if (!user || !isAdminRole(role)) {
+  if (!user || !canManageAssets(role)) {
     return NextResponse.json({ error: 'Acceso denegado' }, { status: !user ? 401 : 403 });
   }
 

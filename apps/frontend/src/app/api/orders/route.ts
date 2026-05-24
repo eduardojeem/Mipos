@@ -9,10 +9,15 @@ import {
   getEffectiveOrderProductPrice,
   isSchemaMissingError,
 } from "@/lib/public-site/order-products";
+import { enrichPublicCatalogProductsWithOffers } from "@/lib/public-site/catalog-data";
+import { getConfiguredShippingCost } from "@/lib/pos/calculations";
+import { defaultBusinessConfig, type BusinessConfig } from "@/types/business-config";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const MAX_NOTES_LENGTH = 500;
 const MAX_SHIPPING_REGION_LENGTH = 80;
+const FULFILLMENT_TYPES = ["DELIVERY", "PICKUP"] as const;
+type FulfillmentType = (typeof FULFILLMENT_TYPES)[number];
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -53,6 +58,7 @@ const ORDER_LIST_SELECT = `
   shipping_cost,
   total,
   payment_method,
+  payment_status,
   status,
   notes,
   order_source,
@@ -70,6 +76,7 @@ const ORDER_LIST_SELECT = `
     )
   )
 `;
+const ORDER_LIST_SELECT_LEGACY = ORDER_LIST_SELECT.replace(/\s+payment_status,\n/, "\n");
 
 interface OrderItem {
   productId: string;
@@ -90,15 +97,45 @@ interface CreateOrderRequest {
   notes?: string;
   shippingCost?: number;
   shippingRegion?: string;
+  fulfillmentType?: FulfillmentType;
+  buyerContext?: {
+    buyerType?: "guest" | "customer" | "business";
+    buyerUserId?: string | null;
+    buyerOrganizationId?: string | null;
+    buyerOrganizationName?: string | null;
+  };
 }
 
-function isMissingRpcFunctionError(error: unknown): boolean {
-  const message = String(
-    (error as { message?: string })?.message || "",
-  ).toLowerCase();
+function isMissingBuyerColumnsError(error: unknown): boolean {
+  const code = String((error as { code?: string })?.code || "");
+  const message = String((error as { message?: string })?.message || "").toLowerCase();
   return (
-    (error as { code?: string })?.code === "42883" ||
-    message.includes("function")
+    code === "PGRST204" ||
+    code === "42703" ||
+    message.includes("buyer_") ||
+    message.includes("schema cache")
+  );
+}
+
+function isMissingFulfillmentColumnError(error: unknown): boolean {
+  const code = String((error as { code?: string })?.code || "");
+  const message = String((error as { message?: string })?.message || "").toLowerCase();
+  return (
+    code === "PGRST204" ||
+    code === "42703" ||
+    message.includes("fulfillment_type") ||
+    message.includes("schema cache")
+  );
+}
+
+function isMissingPaymentStatusColumnError(error: unknown): boolean {
+  const code = String((error as { code?: string })?.code || "");
+  const message = String((error as { message?: string })?.message || "").toLowerCase();
+  return (
+    code === "PGRST204" ||
+    code === "42703" ||
+    message.includes("payment_status") ||
+    message.includes("schema cache")
   );
 }
 
@@ -108,6 +145,121 @@ async function rollbackCreatedOrder(
 ) {
   await supabase.from("sale_items").delete().eq("sale_id", orderId);
   await supabase.from("sales").delete().eq("id", orderId);
+}
+
+async function restoreReservedStock(
+  supabase: Awaited<ReturnType<typeof createAdminClient>>,
+  organizationId: string,
+  reservations: Array<{ productId: string; quantity: number }>,
+) {
+  for (const reservation of reservations) {
+    const { data: product, error: readError } = await supabase
+      .from("products")
+      .select("stock_quantity")
+      .eq("id", reservation.productId)
+      .eq("organization_id", organizationId)
+      .maybeSingle();
+
+    if (readError || !product) {
+      console.error("[orders] failed to read product while restoring stock", {
+        productId: reservation.productId,
+        error: readError,
+      });
+      continue;
+    }
+
+    const nextStock =
+      Number((product as { stock_quantity?: number | null }).stock_quantity || 0) +
+      reservation.quantity;
+    const { error: restoreError } = await supabase
+      .from("products")
+      .update({ stock_quantity: nextStock })
+      .eq("id", reservation.productId)
+      .eq("organization_id", organizationId);
+
+    if (restoreError) {
+      console.error("[orders] failed to restore stock", {
+        productId: reservation.productId,
+        error: restoreError,
+      });
+    }
+  }
+}
+
+async function resolveSellerUserId(
+  supabase: Awaited<ReturnType<typeof createAdminClient>>,
+  organizationId: string,
+): Promise<string | null> {
+  const { data: ownerMember, error: ownerError } = await supabase
+    .from("organization_members")
+    .select("user_id")
+    .eq("organization_id", organizationId)
+    .eq("is_owner", true)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (!ownerError && ownerMember?.user_id) {
+    return String(ownerMember.user_id);
+  }
+
+  const { data: memberRows, error: memberError } = await supabase
+    .from("organization_members")
+    .select("user_id")
+    .eq("organization_id", organizationId)
+    .order("created_at", { ascending: true })
+    .limit(1);
+
+  if (!memberError && memberRows?.[0]?.user_id) {
+    return String(memberRows[0].user_id);
+  }
+
+  const { data: userRow, error: userError } = await supabase
+    .from("users")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (!userError && userRow?.id) {
+    return String(userRow.id);
+  }
+
+  console.error("[orders] no seller user found for organization", {
+    organizationId,
+    ownerError,
+    memberError,
+    userError,
+  });
+  return null;
+}
+
+async function getOrderBusinessConfig(
+  supabase: Awaited<ReturnType<typeof createAdminClient>>,
+  organizationId: string,
+): Promise<BusinessConfig> {
+  const { data, error } = await (supabase as any)
+    .from("settings")
+    .select("value")
+    .eq("key", "business_config")
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+
+  if (error) {
+    console.warn("[orders] failed to load business config for shipping; using defaults", error);
+    return defaultBusinessConfig;
+  }
+
+  const value = (data as { value?: Partial<BusinessConfig> } | null)?.value || {};
+  return {
+    ...defaultBusinessConfig,
+    ...value,
+    storeSettings: {
+      ...defaultBusinessConfig.storeSettings,
+      ...(value.storeSettings || {}),
+    },
+  };
 }
 
 function getOrderStartDate(dateRange: string | null): string | null {
@@ -187,6 +339,8 @@ export async function GET(request: NextRequest) {
     const status = ORDER_FILTER_STATUS_SET.has(statusParam as OrderFilterStatus)
       ? (statusParam as OrderFilterStatus)
       : "";
+    const paymentMethod = (url.searchParams.get("paymentMethod") || "").trim().toUpperCase();
+    const paymentStatus = (url.searchParams.get("paymentStatus") || "").trim().toUpperCase();
     const customerEmail = (url.searchParams.get("customerEmail") || "").trim();
     const search = sanitizeOrderSearchTerm(url.searchParams.get("search"));
     const dateRange = url.searchParams.get("dateRange");
@@ -203,33 +357,61 @@ export async function GET(request: NextRequest) {
     const offset = (page - 1) * limit;
     const supabase = await createAdminClient();
 
-    let query = supabase
-      .from("sales")
-      .select(ORDER_LIST_SELECT, { count: "exact" })
-      .eq("organization_id", orgId)
-      .is("deleted_at", null)
-      .order(sortBy, { ascending: sortOrder === "asc" })
-      .range(offset, offset + limit - 1);
+    const buildOrdersQuery = (selectClause: string, includePaymentStatusFilter: boolean) => {
+      let ordersQuery = supabase
+        .from("sales")
+        .select(selectClause, { count: "exact" })
+        .eq("organization_id", orgId)
+        .is("deleted_at", null)
+        .order(sortBy, { ascending: sortOrder === "asc" })
+        .range(offset, offset + limit - 1);
 
-    if (status) {
-      query = query.eq("status", status);
+      if (status) {
+        ordersQuery = ordersQuery.eq("status", status);
+      }
+
+      const allowedPaymentMethods = ["CASH", "CARD", "TRANSFER", "DIGITAL_WALLET"] as const;
+      const paymentMethodFilter = allowedPaymentMethods.find((method) => method === paymentMethod);
+      if (paymentMethod === "MANUAL") {
+        ordersQuery = ordersQuery.in("payment_method", ["CASH", "TRANSFER"]);
+      } else if (paymentMethodFilter) {
+        ordersQuery = ordersQuery.eq("payment_method", paymentMethodFilter);
+      }
+
+      if (includePaymentStatusFilter) {
+        if (paymentStatus === "PENDING") {
+          ordersQuery = ordersQuery.or("payment_status.eq.PENDING,payment_status.is.null");
+        } else if (["PAID", "FAILED", "REFUNDED"].includes(paymentStatus)) {
+          ordersQuery = ordersQuery.eq("payment_status", paymentStatus);
+        }
+      }
+
+      if (customerEmail) {
+        ordersQuery = ordersQuery.eq("customer_email", customerEmail);
+      }
+
+      if (startDate) {
+        ordersQuery = ordersQuery.gte("created_at", startDate);
+      }
+
+      if (search) {
+        ordersQuery = ordersQuery.or(
+          `customer_name.ilike.%${search}%,order_number.ilike.%${search}%,customer_email.ilike.%${search}%,notes.ilike.%${search}%`,
+        );
+      }
+
+      return ordersQuery;
+    };
+
+    let { data: orders, count, error } = await buildOrdersQuery(ORDER_LIST_SELECT, true);
+
+    if (error && isMissingPaymentStatusColumnError(error)) {
+      console.warn("[orders] payment_status column missing; loading orders with legacy payment defaults");
+      const legacyResult = await buildOrdersQuery(ORDER_LIST_SELECT_LEGACY, false);
+      orders = legacyResult.data;
+      count = legacyResult.count;
+      error = legacyResult.error;
     }
-
-    if (customerEmail) {
-      query = query.eq("customer_email", customerEmail);
-    }
-
-    if (startDate) {
-      query = query.gte("created_at", startDate);
-    }
-
-    if (search) {
-      query = query.or(
-        `customer_name.ilike.%${search}%,order_number.ilike.%${search}%,customer_email.ilike.%${search}%,notes.ilike.%${search}%`,
-      );
-    }
-
-    const { data: orders, count, error } = await query;
 
     if (error) {
       console.error("Error fetching orders:", error);
@@ -239,7 +421,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const normalizedOrders = (orders || []).map(
+    const orderRows = (Array.isArray(orders) ? orders : []) as unknown as Array<Record<string, unknown>>;
+    const normalizedOrders = orderRows.map(
       (order: Record<string, unknown>) => ({
         ...order,
         payment_status:
@@ -319,15 +502,32 @@ export async function POST(request: NextRequest) {
       notes,
       shippingCost = 0,
       shippingRegion = "General",
+      fulfillmentType = "DELIVERY",
+      buyerContext,
     } = body;
+    const safeFulfillmentType: FulfillmentType = FULFILLMENT_TYPES.includes(
+      fulfillmentType as FulfillmentType,
+    )
+      ? (fulfillmentType as FulfillmentType)
+      : "DELIVERY";
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: "Items requeridos" }, { status: 400 });
     }
 
-    if (!customerInfo?.name || !customerInfo?.email || !customerInfo?.phone) {
+    if (
+      !customerInfo?.name?.trim() ||
+      !customerInfo?.email?.trim() ||
+      !customerInfo?.phone?.trim() ||
+      (safeFulfillmentType === "DELIVERY" && !customerInfo?.address?.trim())
+    ) {
       return NextResponse.json(
-        { error: "Informacion del cliente incompleta" },
+        {
+          error:
+            safeFulfillmentType === "DELIVERY"
+              ? "Nombre, email, telefono y direccion de entrega son requeridos"
+              : "Nombre, email y telefono son requeridos",
+        },
         { status: 400 },
       );
     }
@@ -363,9 +563,11 @@ export async function POST(request: NextRequest) {
     const safeNotes =
       typeof notes === "string" ? notes.trim().slice(0, MAX_NOTES_LENGTH) : "";
     const safeShippingRegion =
-      typeof shippingRegion === "string"
-        ? shippingRegion.trim().slice(0, MAX_SHIPPING_REGION_LENGTH) || "General"
-        : "General";
+      safeFulfillmentType === "PICKUP"
+        ? "Retiro en local"
+        : typeof shippingRegion === "string"
+          ? shippingRegion.trim().slice(0, MAX_SHIPPING_REGION_LENGTH) || "General"
+          : "General";
 
     const normalizedItems = items.map((item) => ({
       productId: String(item.productId || "").trim(),
@@ -440,18 +642,77 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = await createAdminClient();
+    const businessConfig = await getOrderBusinessConfig(supabase, orgId);
     const authClient = await createClient();
     const {
       data: { user },
     } = await authClient.auth.getUser();
+    const requestedBuyerType = buyerContext?.buyerType === "business"
+      ? "business"
+      : user?.id
+        ? "customer"
+        : "guest";
+    let resolvedBuyerUserId: string | null = null;
+    let resolvedBuyerOrganizationId: string | null = null;
+    let resolvedBuyerOrganizationName: string | null = null;
+
+    if (user?.id) {
+      const { data: userRow } = await supabase
+        .from("users")
+        .select("id")
+        .eq("id", user.id)
+        .maybeSingle();
+      resolvedBuyerUserId = (userRow as { id?: string } | null)?.id || null;
+    }
+
+    if (requestedBuyerType === "business" && resolvedBuyerUserId && buyerContext?.buyerOrganizationId) {
+      const requestedBuyerOrgId = String(buyerContext.buyerOrganizationId).trim();
+      const { data: membership } = await supabase
+        .from("organization_members")
+        .select("organization_id")
+        .eq("user_id", resolvedBuyerUserId)
+        .eq("organization_id", requestedBuyerOrgId)
+        .maybeSingle();
+
+      if (membership) {
+        const { data: buyerOrg } = await supabase
+          .from("organizations")
+          .select("name")
+          .eq("id", requestedBuyerOrgId)
+          .maybeSingle();
+
+        resolvedBuyerOrganizationId = requestedBuyerOrgId;
+        resolvedBuyerOrganizationName =
+          typeof (buyerOrg as { name?: string } | null)?.name === "string"
+            ? (buyerOrg as { name: string }).name
+            : typeof buyerContext.buyerOrganizationName === "string"
+              ? buyerContext.buyerOrganizationName.trim().slice(0, 160)
+              : null;
+      }
+    }
+
+    const resolvedBuyerType: "guest" | "customer" | "business" =
+      resolvedBuyerOrganizationId ? "business" : resolvedBuyerUserId ? "customer" : "guest";
+    const sellerUserId = await resolveSellerUserId(supabase, orgId);
+
+    if (!sellerUserId) {
+      return NextResponse.json(
+        {
+          error:
+            "La empresa no tiene un usuario vendedor configurado para recibir pedidos.",
+        },
+        { status: 409 },
+      );
+    }
 
     let products;
     try {
-      products = await fetchOrderProductsForOrganization(
+      const rawProducts = await fetchOrderProductsForOrganization(
         supabase,
         orgId,
         normalizedItems.map((item) => item.productId),
       );
+      products = await enrichPublicCatalogProductsWithOffers(orgId, rawProducts as any[]) as unknown as typeof rawProducts;
     } catch (error) {
       if (isSchemaMissingError(error)) {
         return NextResponse.json(
@@ -547,7 +808,23 @@ export async function POST(request: NextRequest) {
       subtotal += validatedPrice * item.quantity;
     }
 
-    const total = subtotal + normalizedShippingCost;
+    const serverShippingCost =
+      safeFulfillmentType === "PICKUP"
+        ? 0
+        : getConfiguredShippingCost(
+            businessConfig,
+            subtotal,
+            safeShippingRegion,
+          );
+    if (Math.abs(serverShippingCost - normalizedShippingCost) > 0.01) {
+      console.warn("[orders] client shipping cost adjusted from business config", {
+        clientShippingCost: normalizedShippingCost,
+        serverShippingCost,
+        orgId,
+        shippingRegion: safeShippingRegion,
+      });
+    }
+    const total = subtotal + serverShippingCost;
     // Date.now().slice(-6) + random*1000 podía colisionar bajo carga.
     // UUID v4 da 8 hex de unicidad criptográfica.
     const orderNumber = `ORD-${Date.now().toString(36).toUpperCase()}-${crypto
@@ -572,34 +849,151 @@ export async function POST(request: NextRequest) {
       console.warn("Customer lookup failed:", customerLookupError);
     }
 
-    const { data: order, error: orderError } = await supabase
+    const baseOrderPayload = {
+      order_number: orderNumber,
+      customer_id: resolvedCustomerId,
+      customer_name: customerInfo.name,
+      customer_email: customerInfo.email,
+      customer_phone: customerInfo.phone,
+      customer_address: customerInfo.address?.trim() || null,
+      payment_method: paymentMethod,
+      payment_status: "PENDING",
+      subtotal,
+      shipping_cost: serverShippingCost,
+      shipping_region: safeShippingRegion,
+      fulfillment_type: safeFulfillmentType,
+      total,
+      notes: safeNotes || null,
+      status: "PENDING" as const,
+      order_source: "WEB",
+      organization_id: orgId,
+      user_id: sellerUserId,
+      date: new Date().toISOString(),
+    };
+    const buyerOrderPayload = {
+      ...baseOrderPayload,
+      buyer_type: resolvedBuyerType,
+      buyer_user_id: resolvedBuyerUserId,
+      buyer_organization_id: resolvedBuyerOrganizationId,
+      buyer_organization_name: resolvedBuyerOrganizationName,
+    };
+    const { fulfillment_type: _fulfillmentType, ...baseOrderPayloadWithoutFulfillment } =
+      baseOrderPayload;
+    const { payment_status: _paymentStatus, ...baseOrderPayloadWithoutPayment } =
+      baseOrderPayload;
+    const {
+      fulfillment_type: _baseNoFulfillment,
+      payment_status: _baseNoPayment,
+      ...baseOrderPayloadLegacy
+    } = baseOrderPayload;
+    const {
+      fulfillment_type: _buyerFulfillmentType,
+      ...buyerOrderPayloadWithoutFulfillment
+    } = buyerOrderPayload;
+    const {
+      payment_status: _buyerPaymentStatus,
+      ...buyerOrderPayloadWithoutPayment
+    } = buyerOrderPayload;
+    const {
+      fulfillment_type: _buyerNoFulfillment,
+      payment_status: _buyerNoPayment,
+      ...buyerOrderPayloadLegacy
+    } = buyerOrderPayload;
+
+    let { data: order, error: orderError } = await supabase
       .from("sales")
-      .insert({
-        order_number: orderNumber,
-        customer_id: resolvedCustomerId,
-        customer_name: customerInfo.name,
-        customer_email: customerInfo.email,
-        customer_phone: customerInfo.phone,
-        customer_address: customerInfo.address || null,
-        payment_method: paymentMethod,
-        subtotal,
-        shipping_cost: normalizedShippingCost,
-        shipping_region: safeShippingRegion,
-        total,
-        notes: safeNotes || null,
-        status: "PENDING",
-        order_source: "WEB",
-        organization_id: orgId,
-        user_id: user?.id || null,
-        date: new Date().toISOString(),
-      })
+      .insert(buyerOrderPayload as any)
       .select()
       .single();
+
+    if (orderError && isMissingPaymentStatusColumnError(orderError)) {
+      console.warn("[orders] payment_status column missing; creating order without payment metadata");
+      const fallbackResult = await supabase
+        .from("sales")
+        .insert(buyerOrderPayloadWithoutPayment as any)
+        .select()
+        .single();
+      order = fallbackResult.data;
+      orderError = fallbackResult.error;
+    }
+
+    if (orderError && isMissingFulfillmentColumnError(orderError)) {
+      console.warn("[orders] fulfillment_type column missing; creating order without fulfillment metadata");
+      const fallbackResult = await supabase
+        .from("sales")
+        .insert(buyerOrderPayloadWithoutFulfillment as any)
+        .select()
+        .single();
+      order = fallbackResult.data;
+      orderError = fallbackResult.error;
+    }
+
+    if (orderError && isMissingPaymentStatusColumnError(orderError)) {
+      console.warn("[orders] payment_status and fulfillment fallback required; creating order without optional payment metadata");
+      const fallbackResult = await supabase
+        .from("sales")
+        .insert(buyerOrderPayloadLegacy as any)
+        .select()
+        .single();
+      order = fallbackResult.data;
+      orderError = fallbackResult.error;
+    }
+
+    if (orderError && isMissingBuyerColumnsError(orderError)) {
+      console.warn("[orders] buyer columns missing; creating order without buyer metadata");
+      const fallbackResult = await supabase
+        .from("sales")
+        .insert(baseOrderPayload as any)
+        .select()
+        .single();
+      order = fallbackResult.data;
+      orderError = fallbackResult.error;
+    }
+
+    if (orderError && isMissingPaymentStatusColumnError(orderError)) {
+      console.warn("[orders] buyer and payment fallback required; creating order without optional payment metadata");
+      const fallbackResult = await supabase
+        .from("sales")
+        .insert(baseOrderPayloadWithoutPayment as any)
+        .select()
+        .single();
+      order = fallbackResult.data;
+      orderError = fallbackResult.error;
+    }
+
+    if (orderError && isMissingFulfillmentColumnError(orderError)) {
+      console.warn("[orders] buyer and fulfillment fallback required; creating order without optional metadata");
+      const fallbackResult = await supabase
+        .from("sales")
+        .insert(baseOrderPayloadWithoutFulfillment as any)
+        .select()
+        .single();
+      order = fallbackResult.data;
+      orderError = fallbackResult.error;
+    }
+
+    if (orderError && (isMissingPaymentStatusColumnError(orderError) || isMissingFulfillmentColumnError(orderError))) {
+      console.warn("[orders] final legacy fallback required; creating order without optional payment/fulfillment metadata");
+      const fallbackResult = await supabase
+        .from("sales")
+        .insert(baseOrderPayloadLegacy as any)
+        .select()
+        .single();
+      order = fallbackResult.data;
+      orderError = fallbackResult.error;
+    }
 
     if (orderError) {
       console.error("Error creating order:", orderError);
       return NextResponse.json(
         { error: "Error al crear pedido" },
+        { status: 500 },
+      );
+    }
+
+    if (!order) {
+      return NextResponse.json(
+        { error: "El pedido no devolvio datos al crearse" },
         { status: 500 },
       );
     }
@@ -625,51 +1019,65 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const stockReservations = new Map<
+      string,
+      { productId: string; productName: string; quantity: number; stockQuantity: number }
+    >();
+
     for (const item of validatedItems) {
+      const existing = stockReservations.get(item.productId);
+      if (existing) {
+        existing.quantity += item.quantity;
+        continue;
+      }
+
       const product = products.find((current) => current.id === item.productId);
       if (!product) {
         continue;
       }
 
-      const { error: stockError } = await supabase.rpc(
-        "decrement_product_stock",
-        {
-          product_id: item.productId,
-          quantity_to_subtract: item.quantity,
-        },
+      stockReservations.set(item.productId, {
+        productId: item.productId,
+        productName: product.name,
+        quantity: item.quantity,
+        stockQuantity: Number(product.stock_quantity || 0),
+      });
+    }
+
+    const reservedStock: Array<{ productId: string; quantity: number }> = [];
+    for (const reservation of stockReservations.values()) {
+      const nextStock = Math.max(
+        0,
+        reservation.stockQuantity - reservation.quantity,
       );
+      const { data: updatedRows, error: updateError } = await supabase
+        .from("products")
+        .update({ stock_quantity: nextStock })
+        .eq("id", reservation.productId)
+        .eq("organization_id", orgId)
+        .gte("stock_quantity", reservation.quantity)
+        .select("id");
 
-      if (stockError && isMissingRpcFunctionError(stockError)) {
-        const nextStock = Math.max(
-          0,
-          Number(product.stock_quantity ?? 0) - item.quantity,
-        );
-        const { data: updatedRows, error: updateError } = await supabase
-          .from("products")
-          .update({ stock_quantity: nextStock })
-          .eq("id", item.productId)
-          .eq("organization_id", orgId)
-          .gte("stock_quantity", item.quantity)
-          .select("id");
-
-        if (updateError || !updatedRows || updatedRows.length === 0) {
-          console.error("Error updating stock:", updateError);
-          await rollbackCreatedOrder(supabase, order.id);
-          return NextResponse.json(
-            {
-              error: `No se pudo reservar stock para ${product.name}. Revisa el carrito e intenta de nuevo.`,
-            },
-            { status: 409 },
-          );
-        }
-      } else if (stockError) {
-        console.error("Error in stock RPC:", stockError);
+      if (updateError || !updatedRows || updatedRows.length === 0) {
+        console.error("Error updating stock:", {
+          productId: reservation.productId,
+          updateError,
+          updatedRows,
+        });
+        await restoreReservedStock(supabase, orgId, reservedStock);
         await rollbackCreatedOrder(supabase, order.id);
         return NextResponse.json(
-          { error: "Error al actualizar stock" },
-          { status: 500 },
+          {
+            error: `No se pudo reservar stock para ${reservation.productName}. Revisa el carrito e intenta de nuevo.`,
+          },
+          { status: 409 },
         );
       }
+
+      reservedStock.push({
+        productId: reservation.productId,
+        quantity: reservation.quantity,
+      });
     }
 
     try {
@@ -691,6 +1099,9 @@ export async function POST(request: NextRequest) {
             total,
             status: "PENDING",
             items_count: normalizedItems.length,
+            buyer_type: resolvedBuyerType,
+            buyer_user_id: resolvedBuyerUserId,
+            buyer_organization_id: resolvedBuyerOrganizationId,
           },
           organization_id: orgId,
         },
@@ -709,6 +1120,9 @@ export async function POST(request: NextRequest) {
           status: order.status,
           total: order.total,
           createdAt: order.created_at,
+          buyerType: resolvedBuyerType,
+          buyerOrganizationId: resolvedBuyerOrganizationId,
+          buyerOrganizationName: resolvedBuyerOrganizationName,
         },
       },
     });

@@ -1,6 +1,6 @@
 'use client'
 
-import { Globe, MapPin, Phone } from 'lucide-react'
+import { AlertCircle, Globe, MapPin, Phone } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -57,6 +57,12 @@ export function ContactForm({ config, onUpdate }: ContactFormProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {!config.contact.phone?.trim() && (
+            <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-300">
+              <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+              <p>El telefono publico es obligatorio para que la pagina de la empresa tenga un canal real de contacto.</p>
+            </div>
+          )}
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="phone">Telefono principal *</Label>
@@ -85,7 +91,7 @@ export function ContactForm({ config, onUpdate }: ContactFormProps) {
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="email">Email publico *</Label>
+              <Label htmlFor="email">Email publico <span className="text-xs text-muted-foreground">(opcional)</span></Label>
               <Input
                 id="email"
                 type="email"
@@ -96,6 +102,11 @@ export function ContactForm({ config, onUpdate }: ContactFormProps) {
               />
               {getFieldError('contact.email') && (
                 <p className="text-sm text-red-500">{getFieldError('contact.email')}</p>
+              )}
+              {!config.contact.email?.trim() && (
+                <p className="text-xs text-muted-foreground">
+                  Recomendado para consultas y comprobantes. Si no lo cargas, no se publicara ningun email generico.
+                </p>
               )}
             </div>
 

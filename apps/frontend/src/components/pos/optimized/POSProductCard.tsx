@@ -4,7 +4,7 @@ import React, { memo, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Package, ShoppingCart, Eye, Sparkles, TrendingDown, AlertCircle } from 'lucide-react';
+import { ShoppingCart, Eye, Sparkles, TrendingDown, AlertCircle } from 'lucide-react';
 import { useCurrencyFormatter } from '@/contexts/BusinessConfigContext';
 import { cn } from '@/lib/utils';
 import { ResponsiveProductImage } from '@/components/pos/ResponsiveProductImage';

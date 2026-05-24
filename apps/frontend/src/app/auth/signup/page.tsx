@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -26,11 +26,12 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
+import { isValidTenantPathSegment } from '@/lib/domain/tenant-public-paths';
 
 const signUpSchema = z.object({
   fullName: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
   email: z.string().email('Ingresa un email válido'),
-  organizationName: z.string().min(2, 'El nombre de la organización debe tener al menos 2 caracteres'),
+  organizationName: z.string().optional(),
   password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres')
     .regex(/[A-Z]/, 'Debe contener al menos una mayúscula')
     .regex(/[a-z]/, 'Debe contener al menos una minúscula')
@@ -43,13 +44,29 @@ const signUpSchema = z.object({
 
 type SignUpFormData = z.infer<typeof signUpSchema>;
 
+function getTenantAuthPrefix(returnUrl: string): string {
+  const [path] = returnUrl.split(/[?#]/, 1);
+  const firstSegment = (path || '').split('/').filter(Boolean)[0];
+  return isValidTenantPathSegment(firstSegment) ? `/${firstSegment}` : '';
+}
+
 export default function SignUpPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [signupSuccess, setSignupSuccess] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
+  const signupType = searchParams.get('type') === 'customer' ? 'customer' : 'business';
+  const isCustomerSignup = signupType === 'customer';
+  const requestedReturnUrl = searchParams.get('returnUrl');
+  const returnUrl = requestedReturnUrl && requestedReturnUrl.startsWith('/') && !requestedReturnUrl.startsWith('//')
+    ? requestedReturnUrl
+    : '/dashboard';
+  const signinHref = isCustomerSignup
+    ? `${getTenantAuthPrefix(returnUrl)}/auth/signin?type=customer&returnUrl=${encodeURIComponent(returnUrl)}`
+    : '/auth/signin?type=business-owner&returnUrl=/dashboard';
   const {
     register,
     handleSubmit,
@@ -83,17 +100,33 @@ export default function SignUpPage() {
   const onSubmit = async (data: SignUpFormData) => {
     setIsLoading(true);
     try {
-      // Llamar al endpoint de registro que crea usuario + organización + membresía
-      const response = await fetch('/api/auth/register', {
+      const organizationName = (data.organizationName || '').trim();
+
+      if (!isCustomerSignup && organizationName.length < 2) {
+        toast({
+          title: 'Falta el nombre de la organizacion',
+          description: 'Para crear una cuenta de negocio necesitamos el nombre de la empresa.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const response = await fetch(isCustomerSignup ? '/api/auth/customer-register' : '/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: data.email,
-          password: data.password,
-          name: data.fullName,
-          organizationName: data.organizationName,
-          planSlug: 'free',
-        }),
+        body: JSON.stringify(isCustomerSignup
+          ? {
+              email: data.email,
+              password: data.password,
+              name: data.fullName,
+            }
+          : {
+              email: data.email,
+              password: data.password,
+              name: data.fullName,
+              organizationName,
+              planSlug: 'free',
+            }),
       });
 
       const result = await response.json();
@@ -103,19 +136,23 @@ export default function SignUpPage() {
       }
 
       setSignupSuccess(true);
-      
+
       toast({
-        title: '¡Cuenta creada exitosamente!',
-        description: 'Revisa tu email para confirmar tu cuenta.',
+        title: 'Cuenta creada exitosamente',
+        description: result.linkedExistingUser
+          ? 'Creamos tu empresa y la vinculamos a tu cuenta existente.'
+          : isCustomerSignup
+          ? 'Ya puedes iniciar sesion como cliente.'
+          : 'Revisa tu email para confirmar tu cuenta.',
       });
-      
+
       setTimeout(() => {
-        router.push('/auth/signin');
+        router.push(result.linkedExistingUser ? '/dashboard' : signinHref);
       }, 2000);
     } catch (error: any) {
       toast({
         title: 'Error al crear cuenta',
-        description: error.message || 'Ocurrió un error inesperado',
+        description: error.message || 'Ocurrio un error inesperado',
         variant: 'destructive',
       });
       setSignupSuccess(false);
@@ -139,15 +176,15 @@ export default function SignUpPage() {
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 rounded-3xl mb-4 shadow-2xl ring-4 ring-blue-100/50 dark:ring-indigo-900/30 relative overflow-hidden group">
             <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-            <Building2 className="w-10 h-10 text-white relative z-10" />
+            {isCustomerSignup ? <User className="w-10 h-10 text-white relative z-10" /> : <Building2 className="w-10 h-10 text-white relative z-10" />}
             <Sparkles className="w-4 h-4 text-yellow-300 absolute top-2 right-2 animate-pulse" />
           </div>
           
           <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 bg-clip-text text-transparent mb-2">
-            Únete a MiPOS
+            {isCustomerSignup ? 'Cuenta de cliente' : 'Unete a MiPOS'}
           </h1>
           <p className="text-slate-600 dark:text-slate-400 font-medium text-lg">
-            Crea tu cuenta y comienza a gestionar tu negocio
+            {isCustomerSignup ? 'Guarda tus datos y consulta tus pedidos facilmente' : 'Crea tu cuenta y comienza a gestionar tu negocio'}
           </p>
         </div>
 
@@ -157,10 +194,10 @@ export default function SignUpPage() {
           <Card className="relative shadow-2xl border-slate-200/50 dark:border-slate-800/50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl">
             <CardHeader className="space-y-1 pb-6">
               <CardTitle className="text-2xl font-bold text-center bg-gradient-to-r from-slate-900 to-slate-700 dark:from-slate-100 dark:to-slate-300 bg-clip-text text-transparent">
-                Crear Cuenta
+                {isCustomerSignup ? 'Crear cuenta de cliente' : 'Crear Cuenta'}
               </CardTitle>
               <CardDescription className="text-center text-slate-600 dark:text-slate-400">
-                Completa los datos para comenzar
+                {isCustomerSignup ? 'Completa tus datos para comprar y seguir pedidos' : 'Completa los datos para comenzar'}
               </CardDescription>
             </CardHeader>
             
@@ -217,7 +254,7 @@ export default function SignUpPage() {
                   )}
                 </div>
 
-                {/* Organization Name */}
+                {!isCustomerSignup ? (
                 <div className="space-y-2">
                   <Label htmlFor="organizationName" className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
                     <Building2 className="w-4 h-4" />
@@ -241,6 +278,7 @@ export default function SignUpPage() {
                     </p>
                   )}
                 </div>
+                ) : null}
 
                 {/* Password */}
                 <div className="space-y-2">
@@ -341,7 +379,7 @@ export default function SignUpPage() {
                   {signupSuccess ? (
                     <>
                       <CheckCircle2 className="mr-2 h-5 w-5 animate-in zoom-in" />
-                      ¡Cuenta creada!
+                      Cuenta creada
                     </>
                   ) : isLoading ? (
                     <>
@@ -350,7 +388,7 @@ export default function SignUpPage() {
                     </>
                   ) : (
                     <>
-                      Crear Cuenta
+                      {isCustomerSignup ? 'Crear cuenta de cliente' : 'Crear Cuenta'}
                       <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
                     </>
                   )}
@@ -361,7 +399,7 @@ export default function SignUpPage() {
                   <p className="text-sm text-slate-600 dark:text-slate-400">
                     ¿Ya tienes cuenta?{' '}
                     <Link
-                      href="/auth/signin"
+                      href={signinHref}
                       className="font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 hover:underline transition-colors inline-flex items-center gap-1 group"
                     >
                       Iniciar sesión

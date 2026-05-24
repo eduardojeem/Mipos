@@ -64,7 +64,8 @@ export function AdminHeader({ compact = false }: { compact?: boolean }) {
 
   useEffect(() => {
     const down = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() === 'k' && (event.metaKey || event.ctrlKey)) {
+      const key = typeof event.key === 'string' ? event.key.toLowerCase() : ''
+      if (key === 'k' && (event.metaKey || event.ctrlKey)) {
         event.preventDefault()
         setSearchOpen((open) => !open)
       }

@@ -60,7 +60,10 @@ export default function OrderConfirmationModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-md gap-0 overflow-hidden p-0 bg-white dark:bg-slate-950">
+      <DialogContent
+        aria-describedby={undefined}
+        className="max-w-md gap-0 overflow-hidden p-0 bg-white dark:bg-slate-950"
+      >
         <div className="bg-gradient-to-r from-emerald-600 to-green-600 px-6 py-6 text-white">
           <div className="flex items-center gap-3">
             <div className="rounded-2xl bg-white/15 p-3">

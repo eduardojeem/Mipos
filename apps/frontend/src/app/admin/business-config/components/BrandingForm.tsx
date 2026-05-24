@@ -592,15 +592,15 @@ export function BrandingForm({ config, onUpdate }: BrandingFormProps) {
                   <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-400">
                     <li className="flex items-center gap-2">
                       <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                      <strong>Formato:</strong> PNG con fondo transparente
+                      <strong>Formato:</strong> PNG, JPG, WebP o SVG
                     </li>
                     <li className="flex items-center gap-2">
                       <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                      <strong>Dimensiones:</strong> 200x60px (máximo)
+                      <strong>Dimensiones:</strong> Horizontal, hasta 1200px de ancho
                     </li>
                     <li className="flex items-center gap-2">
                       <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                      <strong>Tamaño:</strong> Menos de 500KB
+                      <strong>Tamaño:</strong> Maximo 1MB; se optimiza al subir
                     </li>
                     <li className="flex items-center gap-2">
                       <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
@@ -733,7 +733,7 @@ export function BrandingForm({ config, onUpdate }: BrandingFormProps) {
                   <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-400">
                     <li className="flex items-center gap-2">
                       <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                      <strong>Formato:</strong> ICO, PNG o SVG
+                      <strong>Formato:</strong> ICO, PNG, WebP o SVG
                     </li>
                     <li className="flex items-center gap-2">
                       <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
@@ -741,7 +741,7 @@ export function BrandingForm({ config, onUpdate }: BrandingFormProps) {
                     </li>
                     <li className="flex items-center gap-2">
                       <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                      <strong>Tamaño:</strong> Menos de 100KB
+                      <strong>Tamaño:</strong> Maximo 512KB
                     </li>
                     <li className="flex items-center gap-2">
                       <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
@@ -775,9 +775,11 @@ export function BrandingForm({ config, onUpdate }: BrandingFormProps) {
         onClose={() => setShowLogoUploader(false)}
         onUploadComplete={handleLogoUpload}
         maxFiles={1}
-        maxFileSize={2}
-        allowedTypes={['image/png', 'image/jpeg', 'image/svg+xml']}
+        maxFileSize={1}
+        allowedTypes={['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']}
         autoCompress={true}
+        uploadPurpose="business-logo"
+        uploadPrefix="branding/logo"
       />
 
       <ImageUploader
@@ -785,9 +787,11 @@ export function BrandingForm({ config, onUpdate }: BrandingFormProps) {
         onClose={() => setShowFaviconUploader(false)}
         onUploadComplete={handleFaviconUpload}
         maxFiles={1}
-        maxFileSize={1}
-        allowedTypes={['image/png', 'image/x-icon', 'image/svg+xml']}
+        maxFileSize={0.5}
+        allowedTypes={['image/png', 'image/webp', 'image/x-icon', 'image/svg+xml']}
         autoCompress={true}
+        uploadPurpose="business-favicon"
+        uploadPrefix="branding/favicon"
       />
     </div>
   );

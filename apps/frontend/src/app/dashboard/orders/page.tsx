@@ -29,11 +29,12 @@ import {
   useOptimizedOrders,
   useOrderDetail,
   useOrderStats,
+  useUpdateOrderPaymentStatus,
   useUpdateOrderStatus,
 } from '@/hooks/useOptimizedOrders';
 import { CreateOrderModal } from './components/CreateOrderModal';
 import { OrderDetailModal } from './components/OrderDetailModal';
-import { ORDER_STATUSES, PAYMENT_METHODS, TERMINAL_STATUSES } from '@/lib/orders/constants';
+import { ORDER_STATUSES, PAYMENT_METHODS, PAYMENT_STATUSES, TERMINAL_STATUSES } from '@/lib/orders/constants';
 import {
   canTransitionOrderStatus,
   getAllowedOrderStatusTransitions,
@@ -45,6 +46,7 @@ import {
   ArrowUpDown,
   Building2,
   Calendar,
+  CheckCircle2,
   Copy,
   CreditCard,
   Download,
@@ -57,6 +59,7 @@ import {
   RefreshCw,
   Search,
   ShoppingBag,
+  Truck,
   User,
 } from 'lucide-react';
 
@@ -140,6 +143,155 @@ function exportOrdersCsv(orders: Order[]) {
   URL.revokeObjectURL(url);
 }
 
+const WORKFLOW_FILTERS: Array<{
+  value: string;
+  label: string;
+  description: string;
+  statKey?: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'shipped';
+}> = [
+  { value: 'PENDING', label: 'Por confirmar', description: 'Pedidos nuevos', statKey: 'pending' },
+  { value: 'CONFIRMED', label: 'Confirmados', description: 'Listos para preparar', statKey: 'confirmed' },
+  { value: 'PREPARING', label: 'Preparando', description: 'En armado', statKey: 'preparing' },
+  { value: 'READY', label: 'Listos', description: 'Para enviar o retirar', statKey: 'ready' },
+  { value: 'SHIPPED', label: 'En camino', description: 'Despachados', statKey: 'shipped' },
+  { value: 'ALL', label: 'Todos', description: 'Historial completo' },
+];
+
+function StatusWorkflowBar({
+  value,
+  stats,
+  onChange,
+}: {
+  value: string;
+  stats?: { pending?: number; confirmed?: number; preparing?: number; ready?: number; shipped?: number };
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="grid gap-2 md:grid-cols-3 xl:grid-cols-6">
+      {WORKFLOW_FILTERS.map((item) => {
+        const active = value === item.value;
+        const meta = ORDER_STATUSES[item.value as keyof typeof ORDER_STATUSES];
+        const Icon = meta?.icon || ShoppingBag;
+        const count = item.statKey ? Number(stats?.[item.statKey] || 0) : undefined;
+
+        return (
+          <button
+            key={item.value}
+            type="button"
+            onClick={() => onChange(item.value)}
+            className={`rounded-xl border px-4 py-3 text-left transition hover:border-blue-300 hover:bg-blue-50/60 dark:hover:border-blue-800 dark:hover:bg-blue-950/20 ${
+              active
+                ? 'border-blue-300 bg-blue-50 shadow-sm dark:border-blue-800 dark:bg-blue-950/30'
+                : 'border-border/60 bg-background'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <span className="flex items-center gap-2 text-sm font-semibold">
+                <Icon className={active ? 'h-4 w-4 text-blue-600' : 'h-4 w-4 text-muted-foreground'} />
+                {item.label}
+              </span>
+              {typeof count === 'number' ? (
+                <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                  active ? 'bg-blue-600 text-white' : 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300'
+                }`}>
+                  {count}
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">{item.description}</p>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function PaymentStatusBadge({ status }: { status?: string }) {
+  const key = String(status || 'PENDING').toUpperCase();
+  const meta = PAYMENT_STATUSES[key] || PAYMENT_STATUSES.PENDING;
+  return (
+    <Badge variant="outline" className={`gap-1 border ${meta.className}`}>
+      {meta.label}
+    </Badge>
+  );
+}
+
+function isManualPaymentPending(order: Order) {
+  return ['CASH', 'TRANSFER'].includes(order.payment_method) && (order.payment_status || 'PENDING') === 'PENDING';
+}
+
+function isTransferPaymentPending(order: Order) {
+  return order.payment_method === 'TRANSFER' && (order.payment_status || 'PENDING') === 'PENDING';
+}
+
+function getPaymentConfirmationLabel(order: Order) {
+  const completionStatus = getPaymentCompletionStatus(order);
+  if (order.payment_method === 'CASH' && completionStatus === 'DELIVERED') {
+    return order.fulfillment_type === 'PICKUP' ? 'Cobrar y marcar retirado' : 'Cobrar y marcar entregado';
+  }
+  if (order.payment_method === 'CASH') return 'Confirmar efectivo';
+  if (order.payment_method === 'TRANSFER') return 'Confirmar transferencia';
+  return 'Confirmar pago';
+}
+
+function getPaymentCompletionStatus(order: Order): OrderStatus | undefined {
+  if (!isManualPaymentPending(order)) return undefined;
+  if (order.payment_method !== 'CASH') return undefined;
+
+  if (order.fulfillment_type === 'PICKUP' && order.status === 'READY') {
+    return 'DELIVERED';
+  }
+
+  if (order.fulfillment_type !== 'PICKUP' && order.status === 'SHIPPED') {
+    return 'DELIVERED';
+  }
+
+  return undefined;
+}
+
+function getPrimaryNextStatus(status: string, isPickup = false): OrderStatus | null {
+  const transitions = getAllowedOrderStatusTransitions(status);
+  if (isPickup && status === 'READY' && transitions.includes('DELIVERED')) {
+    return 'DELIVERED';
+  }
+  return transitions.find((next) => next !== 'CANCELLED') || null;
+}
+
+function getStatusOptionsForOrder(status: string, isPickup: boolean): OrderStatus[] {
+  const options = getOrderStatusSelectOptions(status);
+  return isPickup && status === 'READY' ? options.filter((option) => option !== 'SHIPPED') : options;
+}
+
+function getPrimaryActionLabel(status: string, nextStatus: OrderStatus, isPickup: boolean) {
+  if (isPickup) {
+    if (nextStatus === 'READY') return 'Listo para retiro';
+    if (nextStatus === 'DELIVERED') return 'Marcar retirado';
+  }
+
+  if (nextStatus === 'SHIPPED') return 'Enviar pedido';
+  return ORDER_STATUSES[nextStatus].label;
+}
+
+function getWhatsAppHref(phone: string, orderNumber: string) {
+  const digits = phone.replace(/\D/g, '');
+  if (!digits) return null;
+  return `https://wa.me/${digits}?text=${encodeURIComponent(`Tu pedido ${orderNumber} esta listo para retirar.`)}`;
+}
+
+function getTransferProofWhatsAppHref(phone: string, orderNumber: string, total: number, config: Parameters<typeof formatPrice>[1]) {
+  const digits = phone.replace(/\D/g, '');
+  if (!digits) return null;
+  const message = `Hola, estamos revisando tu pedido ${orderNumber}. Para confirmar la transferencia de ${formatPrice(total, config)}, por favor envianos el comprobante por este chat.`;
+  return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
+}
+
+function getTransferConfirmedWhatsAppHref(phone: string, orderNumber: string) {
+  const digits = phone.replace(/\D/g, '');
+  if (!digits) return null;
+  const message = `Hola, ya confirmamos la transferencia de tu pedido ${orderNumber}. Vamos a continuar con la preparacion.`;
+  return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
+}
+
 // ---------------------------------------------------------------------------
 // OrderRow — componente extraído para evitar JSX de 800 chars en línea
 // ---------------------------------------------------------------------------
@@ -151,14 +303,31 @@ interface OrderRowProps {
   onSelect: (id: string) => void;
   onOpenDetail: (orderId: string) => void;
   onStatusChangeRequest: (orderId: string, status: string) => void;
+  onConfirmPayment: (order: Order) => void;
 }
 
-function OrderRow({ order, isSelected, isUpdating, onSelect, onOpenDetail, onStatusChangeRequest }: OrderRowProps) {
+function OrderRow({ order, isSelected, isUpdating, onSelect, onOpenDetail, onStatusChangeRequest, onConfirmPayment }: OrderRowProps) {
   const { config } = useBusinessConfig();
-  const statusOptions = getOrderStatusSelectOptions(order.status);
+  const isPickup = order.fulfillment_type === 'PICKUP';
+  const isPaymentPending = isManualPaymentPending(order);
+  const isTransferPending = isTransferPaymentPending(order);
+  const statusOptions = getStatusOptionsForOrder(order.status, isPickup);
+  const primaryNextStatus = getPrimaryNextStatus(order.status, isPickup);
+  const paymentCompletionStatus = getPaymentCompletionStatus(order);
+  const isMissingAddress = !isPickup && !order.customer_address?.trim();
+  const whatsappHref = isPickup ? getWhatsAppHref(order.customer_phone, order.order_number) : null;
+  const transferProofHref = isTransferPending
+    ? getTransferProofWhatsAppHref(order.customer_phone, order.order_number, order.total, config)
+    : null;
+  const transferConfirmedHref =
+    order.payment_method === 'TRANSFER' && (order.payment_status || 'PENDING') === 'PAID'
+      ? getTransferConfirmedWhatsAppHref(order.customer_phone, order.order_number)
+      : null;
 
   return (
-    <div className={`px-6 py-5 ${isSelected ? 'bg-blue-50/70 dark:bg-blue-950/10' : 'hover:bg-zinc-50 dark:hover:bg-zinc-900/40'}`}>
+    <div className={`border-l-4 px-6 py-5 transition-colors ${
+      isSelected ? 'border-blue-500 bg-blue-50/70 dark:bg-blue-950/10' : 'border-transparent hover:bg-zinc-50 dark:hover:bg-zinc-900/40'
+    }`}>
       <div className="grid gap-4 lg:grid-cols-[auto_1fr_auto]">
         <Checkbox
           checked={isSelected}
@@ -174,6 +343,9 @@ function OrderRow({ order, isSelected, isUpdating, onSelect, onOpenDetail, onSta
                 <Badge variant="outline" className="border-zinc-300 bg-zinc-100 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-400">
                   {order.order_source === 'MANUAL' ? 'Manual' : order.order_source === 'WEB' ? 'Web' : (order.order_source || 'Manual')}
                 </Badge>
+                <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-300">
+                  {isPickup ? 'Retiro en local' : 'Delivery'}
+                </Badge>
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
                 Creado el {format(new Date(order.created_at), 'PPp', { locale: es })}
@@ -187,8 +359,8 @@ function OrderRow({ order, isSelected, isUpdating, onSelect, onOpenDetail, onSta
             </div>
           </div>
 
-          <div className="grid gap-4 text-sm md:grid-cols-3">
-            <div className="space-y-1 rounded-lg bg-zinc-50/80 p-3 dark:bg-zinc-900/40">
+          <div className="grid gap-3 text-sm md:grid-cols-[1.1fr_0.8fr_1.2fr]">
+            <div className="space-y-1 rounded-lg border border-border/50 bg-white p-3 dark:bg-zinc-900/40">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Cliente</p>
               <div className="flex items-center gap-2">
                 <User className="h-4 w-4 text-muted-foreground" />
@@ -208,22 +380,51 @@ function OrderRow({ order, isSelected, isUpdating, onSelect, onOpenDetail, onSta
               ) : null}
             </div>
 
-            <div className="space-y-1 rounded-lg bg-zinc-50/80 p-3 dark:bg-zinc-900/40">
+            <div className="space-y-1 rounded-lg border border-border/50 bg-white p-3 dark:bg-zinc-900/40">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Pago</p>
               <div className="flex items-center gap-2">
                 <CreditCard className="h-4 w-4 text-muted-foreground" />
                 <span>{PAYMENT_METHODS[order.payment_method] || order.payment_method}</span>
               </div>
+              <PaymentStatusBadge status={order.payment_status} />
+              {isTransferPending ? (
+                <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                  Confirmar el dinero antes de preparar o entregar.
+                </p>
+              ) : isPaymentPending ? (
+                <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                  Marcar como cobrado cuando recibas el efectivo.
+                </p>
+              ) : null}
               <p className="text-muted-foreground">Subtotal: {formatPrice(order.subtotal, config)}</p>
-              <p className="text-muted-foreground">Envio: {formatPrice(order.shipping_cost, config)}</p>
+              <p className="text-muted-foreground">
+                {isPickup ? 'Retiro: sin costo' : `Envio: ${formatPrice(order.shipping_cost, config)}`}
+              </p>
             </div>
 
-            <div className="space-y-1 rounded-lg bg-zinc-50/80 p-3 dark:bg-zinc-900/40">
-              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Entrega</p>
+            <div className={`space-y-1 rounded-lg border p-3 ${
+              isMissingAddress
+                ? 'border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-100'
+                : 'border-border/50 bg-white dark:bg-zinc-900/40'
+            }`}>
+              <p className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <Truck className="h-3.5 w-3.5" />
+                {isPickup ? 'Retiro' : 'Entrega'}
+              </p>
               <div className="flex items-start gap-2 text-muted-foreground">
-                <MapPin className="mt-0.5 h-4 w-4" />
-                <span>{order.customer_address || 'Sin direccion registrada'}</span>
+                {isPickup ? <Package className="mt-0.5 h-4 w-4" /> : <MapPin className="mt-0.5 h-4 w-4" />}
+                <span>{isPickup ? 'Cliente retira en el local' : order.customer_address || 'Sin direccion registrada'}</span>
               </div>
+              {isPickup && order.status === 'READY' ? (
+                <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                  Avisar al cliente y marcar como retirado cuando se entregue.
+                </p>
+              ) : null}
+              {isMissingAddress ? (
+                <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
+                  Completa la direccion antes de despachar.
+                </p>
+              ) : null}
             </div>
           </div>
 
@@ -240,6 +441,59 @@ function OrderRow({ order, isSelected, isUpdating, onSelect, onOpenDetail, onSta
         </div>
 
         <div className="flex flex-col gap-2 lg:w-44">
+          {primaryNextStatus ? (
+            <Button
+              onClick={() => onStatusChangeRequest(order.id, primaryNextStatus)}
+              disabled={isUpdating || isTransferPending || (isPaymentPending && primaryNextStatus === 'DELIVERED')}
+              className="bg-blue-600 text-white hover:bg-blue-700"
+            >
+              {isUpdating ? (
+                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="mr-2 h-4 w-4" />
+              )}
+              {getPrimaryActionLabel(order.status, primaryNextStatus, isPickup)}
+            </Button>
+          ) : null}
+          {isPaymentPending ? (
+            <Button
+              variant={paymentCompletionStatus ? 'default' : 'outline'}
+              onClick={() => onConfirmPayment(order)}
+              disabled={isUpdating}
+              className={
+                paymentCompletionStatus
+                  ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                  : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-900/60 dark:text-emerald-300 dark:hover:bg-emerald-950/30'
+              }
+            >
+              <CheckCircle2 className="mr-2 h-4 w-4" />
+              {getPaymentConfirmationLabel(order)}
+            </Button>
+          ) : null}
+          {transferProofHref ? (
+            <Button variant="outline" asChild>
+              <a href={transferProofHref} target="_blank" rel="noreferrer">
+                <Phone className="mr-2 h-4 w-4" />
+                Pedir comprobante
+              </a>
+            </Button>
+          ) : null}
+          {transferConfirmedHref ? (
+            <Button variant="outline" asChild>
+              <a href={transferConfirmedHref} target="_blank" rel="noreferrer">
+                <Phone className="mr-2 h-4 w-4" />
+                Avisar pago
+              </a>
+            </Button>
+          ) : null}
+          {whatsappHref && order.status === 'READY' ? (
+            <Button variant="outline" asChild>
+              <a href={whatsappHref} target="_blank" rel="noreferrer">
+                <Phone className="mr-2 h-4 w-4" />
+                Avisar retiro
+              </a>
+            </Button>
+          ) : null}
           <Button variant="outline" onClick={() => onOpenDetail(order.id)}>
             <Eye className="mr-2 h-4 w-4" />
             Detalle
@@ -284,6 +538,7 @@ export default function OrdersAdminPage() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('PENDING');
+  const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'MANUAL_PENDING' | 'TRANSFER_PENDING' | 'CASH_PENDING'>('ALL');
   const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'year' | 'all'>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
@@ -310,14 +565,24 @@ export default function OrdersAdminPage() {
       dateRange,
       sortBy,
       sortOrder,
+      paymentMethod:
+        paymentFilter === 'MANUAL_PENDING'
+          ? 'MANUAL'
+          : paymentFilter === 'TRANSFER_PENDING'
+          ? 'TRANSFER'
+          : paymentFilter === 'CASH_PENDING'
+            ? 'CASH'
+            : 'ALL',
+      paymentStatus: paymentFilter === 'ALL' ? 'ALL' : 'PENDING',
     }),
-    [currentPage, statusFilter, debouncedSearchTerm, dateRange, sortBy, sortOrder]
+    [currentPage, statusFilter, debouncedSearchTerm, dateRange, sortBy, sortOrder, paymentFilter]
   );
 
   const { data: ordersData, isLoading: ordersLoading, refetch: refetchOrders } = useOptimizedOrders(queryParams);
   const { data: selectedOrder, isLoading: selectedOrderLoading } = useOrderDetail(selectedOrderId);
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useOrderStats();
   const updateStatusMutation = useUpdateOrderStatus();
+  const updatePaymentStatusMutation = useUpdateOrderPaymentStatus();
 
   const orders = useMemo(() => ordersData?.orders ?? [], [ordersData?.orders]);
   const totalPages = ordersData?.pagination.totalPages || 1;
@@ -348,6 +613,11 @@ export default function OrdersAdminPage() {
     [orders, selectedOrderId]
   );
   const resolvedSelectedOrder = selectedOrder || selectedOrderSummary;
+  const actionQueueCount =
+    Number(stats?.pending || 0) +
+    Number(stats?.confirmed || 0) +
+    Number(stats?.preparing || 0) +
+    Number(stats?.ready || 0);
 
   const markUpdating = useCallback((ids: string[], enabled: boolean) => {
     setUpdatingIds((current) =>
@@ -358,7 +628,7 @@ export default function OrdersAdminPage() {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearchTerm, statusFilter, dateRange, sortBy, sortOrder]);
+  }, [debouncedSearchTerm, statusFilter, paymentFilter, dateRange, sortBy, sortOrder]);
 
   // Deselect orders that are no longer visible
   useEffect(() => {
@@ -422,10 +692,69 @@ export default function OrdersAdminPage() {
     }
   };
 
+  const handleConfirmPayment = async (order: Order) => {
+    const completionStatus = getPaymentCompletionStatus(order);
+    try {
+      markUpdating([order.id], true);
+      await updatePaymentStatusMutation.mutateAsync({
+        orderId: order.id,
+        paymentStatus: 'PAID',
+        status:
+          completionStatus ||
+          (order.payment_method === 'TRANSFER' && order.status === 'PENDING' ? 'CONFIRMED' : undefined),
+      });
+      toast({
+        title: order.payment_method === 'CASH' ? 'Efectivo confirmado' : 'Transferencia confirmada',
+        description:
+          completionStatus === 'DELIVERED'
+            ? order.fulfillment_type === 'PICKUP'
+              ? 'El pago quedo confirmado y el pedido fue marcado como retirado.'
+              : 'El pago quedo confirmado y el pedido fue marcado como entregado.'
+            : order.payment_method === 'TRANSFER' && order.status === 'PENDING'
+            ? 'El pago quedo confirmado y el pedido paso a confirmado.'
+            : 'El pago del pedido quedo confirmado.',
+      });
+    } catch (error) {
+      toast({
+        title: 'No se pudo confirmar el pago',
+        description: error instanceof Error ? error.message : 'Intenta nuevamente.',
+        variant: 'destructive',
+      });
+    } finally {
+      markUpdating([order.id], false);
+    }
+  };
+
   // Intercepta el cambio de estado y muestra confirmación si es crítico
   const handleStatusChangeRequest = (orderId: string, status: string) => {
     const currentStatus = getCurrentOrderStatus(orderId);
     if (!currentStatus || currentStatus === status) {
+      return;
+    }
+
+    const currentOrder =
+      resolvedSelectedOrder?.id === orderId
+        ? resolvedSelectedOrder
+        : orders.find((order) => order.id === orderId);
+    const isPendingTransfer = currentOrder ? isTransferPaymentPending(currentOrder) : false;
+    const isManualPaymentFinalizationBlocked =
+      status === 'DELIVERED' && currentOrder ? isManualPaymentPending(currentOrder) : false;
+
+    if (isPendingTransfer && status !== 'CANCELLED') {
+      toast({
+        title: 'Transferencia pendiente',
+        description: 'Confirma el pago antes de avanzar el pedido.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (isManualPaymentFinalizationBlocked) {
+      toast({
+        title: 'Pago pendiente',
+        description: 'Para cerrar este pedido, usa la accion de cobro para confirmar el pago y marcarlo como entregado.',
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -502,6 +831,7 @@ export default function OrdersAdminPage() {
   const handleResetFilters = () => {
     setSearchTerm('');
     setStatusFilter('ALL');
+    setPaymentFilter('ALL');
     setDateRange('all');
     setSortBy('created_at');
     setSortOrder('desc');
@@ -556,6 +886,12 @@ export default function OrdersAdminPage() {
           </Card>
           <Card className="border-border/60 shadow-sm dark:bg-zinc-900/60">
             <CardContent className="p-5">
+              <p className="text-sm text-muted-foreground">Requieren accion</p>
+              <p className="mt-1 text-2xl font-semibold">{statsLoading && !stats ? '...' : actionQueueCount}</p>
+            </CardContent>
+          </Card>
+          <Card className="border-border/60 shadow-sm dark:bg-zinc-900/60">
+            <CardContent className="p-5">
               <p className="text-sm text-muted-foreground">Pedidos hoy</p>
               <p className="mt-1 text-2xl font-semibold">{statsLoading && !stats ? '...' : stats?.todayOrders || 0}</p>
             </CardContent>
@@ -568,20 +904,14 @@ export default function OrdersAdminPage() {
               </p>
             </CardContent>
           </Card>
-          <Card className="border-border/60 shadow-sm dark:bg-zinc-900/60">
-            <CardContent className="p-5">
-              <p className="text-sm text-muted-foreground">Ticket promedio</p>
-              <p className="mt-1 text-2xl font-semibold">
-                {statsLoading && !stats ? '...' : formatPrice(stats?.avgOrderValue || 0, config)}
-              </p>
-            </CardContent>
-          </Card>
         </div>
+
+        <StatusWorkflowBar value={statusFilter} stats={stats} onChange={setStatusFilter} />
 
         {/* Filtros */}
         <Card className="border-border/60 shadow-sm">
           <CardContent className="space-y-4 p-5">
-            <div className="grid gap-3 xl:grid-cols-[1.5fr_repeat(4,minmax(0,220px))]">
+            <div className="grid gap-3 xl:grid-cols-[1.5fr_repeat(5,minmax(0,190px))]">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -617,6 +947,17 @@ export default function OrdersAdminPage() {
                   ))}
                 </SelectContent>
               </Select>
+              <Select value={paymentFilter} onValueChange={(value) => setPaymentFilter(value as typeof paymentFilter)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Pago" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Todos los pagos</SelectItem>
+                  <SelectItem value="MANUAL_PENDING">Pagos manuales pendientes</SelectItem>
+                  <SelectItem value="CASH_PENDING">Efectivo pendiente</SelectItem>
+                  <SelectItem value="TRANSFER_PENDING">Transferencias pendientes</SelectItem>
+                </SelectContent>
+              </Select>
               <Select value={sortBy} onValueChange={(value) => setSortBy(value as typeof sortBy)}>
                 <SelectTrigger>
                   <SelectValue />
@@ -645,6 +986,15 @@ export default function OrdersAdminPage() {
                 {dateRange !== 'all' ? (
                   <Badge variant="outline" className="border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/30 dark:text-violet-300">
                     Periodo activo
+                  </Badge>
+                ) : null}
+                {paymentFilter !== 'ALL' ? (
+                  <Badge variant="outline" className="border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300">
+                    {paymentFilter === 'TRANSFER_PENDING'
+                      ? 'Transferencias pendientes'
+                      : paymentFilter === 'CASH_PENDING'
+                        ? 'Efectivo pendiente'
+                        : 'Pagos manuales pendientes'}
                   </Badge>
                 ) : null}
                 {debouncedSearchTerm ? (
@@ -751,6 +1101,7 @@ export default function OrdersAdminPage() {
                     }
                     onOpenDetail={setSelectedOrderId}
                     onStatusChangeRequest={handleStatusChangeRequest}
+                    onConfirmPayment={handleConfirmPayment}
                   />
                 ))}
               </div>
@@ -798,6 +1149,7 @@ export default function OrdersAdminPage() {
           open={Boolean(selectedOrderId)}
           onOpenChange={(open) => !open && setSelectedOrderId(null)}
           onStatusChange={handleStatusChangeRequest}
+          onPaymentStatusChange={handleConfirmPayment}
           isUpdating={selectedOrderId ? updatingIds.includes(selectedOrderId) : false}
           loading={Boolean(selectedOrderId) && selectedOrderLoading && !resolvedSelectedOrder}
         />

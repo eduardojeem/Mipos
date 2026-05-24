@@ -26,6 +26,7 @@ export interface PublicOrganization {
   subscription_status?: string | null;
   created_at?: string | null;
   branding?: Record<string, unknown> | null;
+  marketplace_category_id?: string | null;
 }
 
 export type ResolvedTenantContext =

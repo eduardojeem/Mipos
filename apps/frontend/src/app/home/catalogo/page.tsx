@@ -8,6 +8,7 @@ import {
   UtensilsCrossed, Layers3,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { CatalogFilterPersistence } from './components/CatalogFilterPersistence';
 import {
   CATALOG_DEFAULT_PAGE_SIZE,
   normalizeCatalogQuery,
@@ -126,6 +127,8 @@ export default async function CatalogPage({
 
   return (
     <MarketplaceLayout searchQuery={queryState.search}>
+      <CatalogFilterPersistence initialQueryState={queryState} maxPrice={snapshot.maxPrice} />
+      
       <header className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <GlobalCatalogHeroCarousel
           products={snapshot.heroProducts}

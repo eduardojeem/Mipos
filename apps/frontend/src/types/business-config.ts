@@ -82,9 +82,10 @@ export interface BusinessConfig {
     taxEnabled: boolean; // Toggle global para habilitar/deshabilitar IVA
     taxIncludedInPrices: boolean; // Si los precios ya incluyen IVA
     freeShippingThreshold: number;
+    shippingCost?: number;
     freeShippingEnabled?: boolean;
     freeShippingMessage?: string;
-    freeShippingRegions?: Array<{ id?: string; name: string; threshold: number }>;
+    freeShippingRegions?: Array<{ id?: string; name: string; threshold: number; shippingCost?: number }>;
     minimumOrderAmount?: number;
     acceptsCreditCards: boolean;
     acceptsDebitCards: boolean;
@@ -238,32 +239,32 @@ export const defaultBusinessConfig: BusinessConfig = {
   },
 
   contact: {
-    phone: "+595 21 123-456",
-    email: "info@minegocio.com.py",
-    whatsapp: "+595 981 123-456",
-    website: "https://minegocio.com.py",
-    landline: "+595 21 654-321"
+    phone: "",
+    email: "",
+    whatsapp: "",
+    website: "",
+    landline: ""
   },
 
   address: {
-    street: "Av. Mariscal Lopez 1234",
-    neighborhood: "Villa Morra",
-    city: "Asuncion",
-    department: "Central",
-    zipCode: "1209",
+    street: "",
+    neighborhood: "",
+    city: "",
+    department: "",
+    zipCode: "",
     country: "Paraguay",
-    reference: "Cerca del Shopping del Sol",
+    reference: "",
     mapUrl: "",
     mapEmbedEnabled: false,
     mapEmbedUrl: ""
   },
 
   socialMedia: {
-    facebook: "https://facebook.com/minegocio",
-    instagram: "https://instagram.com/minegocio",
-    twitter: "https://twitter.com/minegocio",
-    tiktok: "https://tiktok.com/@minegocio",
-    linkedin: "https://linkedin.com/company/minegocio"
+    facebook: "",
+    instagram: "",
+    twitter: "",
+    tiktok: "",
+    linkedin: ""
   },
 
   businessHours: [
@@ -291,11 +292,12 @@ export const defaultBusinessConfig: BusinessConfig = {
     taxEnabled: true, // IVA habilitado por defecto
     taxIncludedInPrices: true,
     freeShippingThreshold: 150000, // 150,000 guaranies
+    shippingCost: 0,
     freeShippingEnabled: true,
     freeShippingMessage: "Envio gratis a partir de {amount}",
     freeShippingRegions: [],
     minimumOrderAmount: 50000, // 50,000 guaranies
-    acceptsCreditCards: true,
+    acceptsCreditCards: false,
     acceptsDebitCards: true,
     acceptsCash: true,
     acceptsBankTransfer: true,

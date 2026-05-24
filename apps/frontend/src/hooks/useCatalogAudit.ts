@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useRef } from 'react';
-import { createClient } from '@/lib/supabase/client';
+
+let catalogAuditUnavailable = false;
 
 export type CatalogEventType =
   | 'PAGE_VIEW'
@@ -39,87 +40,71 @@ interface UseCatalogAuditOptions {
   flushInterval?: number;
 }
 
+function isAuditTableUnavailable(error: unknown): boolean {
+  const code = String((error as any)?.code || '');
+  const message = String((error as any)?.message || '').toLowerCase();
+  const details = String((error as any)?.details || '').toLowerCase();
+
+  return (
+    code === '42P01' ||
+    code === 'PGRST205' ||
+    message.includes('does not exist') ||
+    message.includes('could not find the table') ||
+    details.includes('does not exist') ||
+    details.includes('could not find the table')
+  );
+}
+
 export function useCatalogAudit(options: UseCatalogAuditOptions = {}) {
   const { enabled = true, batchSize = 10, flushInterval = 5000 } = options;
   
-  const supabase = createClient();
   const eventQueue = useRef<CatalogAuditEvent[]>([]);
   const flushTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const sessionId = useRef<string>(generateSessionId());
 
   const flushEvents = useCallback(async () => {
-    if (!enabled || eventQueue.current.length === 0) return;
+    if (!enabled || catalogAuditUnavailable || eventQueue.current.length === 0) return;
 
     const eventsToSend = [...eventQueue.current];
     eventQueue.current = [];
 
     try {
-      const { error } = await supabase
-        .from('catalog_audit_logs')
-        .insert(
-          eventsToSend.map(event => ({
-            event_type: event.eventType,
-            resource_type: event.resourceType,
-            resource_id: event.resourceId || null,
-            details: event.details || {},
-            session_id: event.sessionId || sessionId.current,
-            created_at: event.timestamp.toISOString(),
-          }))
-        );
+      const res = await fetch('/api/catalog/audit/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          events: eventsToSend.map(e => ({
+            eventType: e.eventType,
+            resourceType: e.resourceType,
+            resourceId: e.resourceId,
+            details: e.details || {},
+            sessionId: e.sessionId || sessionId.current,
+          })),
+        }),
+      });
 
-      if (error) {
-        // Silently fail if audit table doesn't exist or has permission issues
-        // This is non-critical functionality
-        if (process.env.NODE_ENV === 'development') {
-          const errInfo = {
-            message: (error as any)?.message,
-            code: (error as any)?.code,
-            details: (error as any)?.details,
-            hint: (error as any)?.hint,
-          };
-          console.warn('[CatalogAudit] Audit logging disabled:', errInfo);
-        }
-        
-        // Don't try fallback if table doesn't exist
-        if ((error as any)?.code === '42P01' || (error as any)?.message?.includes('does not exist')) {
+      if (!res.ok) {
+        let text = '';
+        try { text = await res.text(); } catch {}
+        if (isAuditTableUnavailable({ message: text })) {
+          catalogAuditUnavailable = true;
           return;
         }
-
-        try {
-          const res = await fetch('/api/catalog/audit/batch', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              events: eventsToSend.map(e => ({
-                eventType: e.eventType,
-                resourceType: e.resourceType,
-                resourceId: e.resourceId,
-                details: e.details || {},
-                sessionId: e.sessionId || sessionId.current,
-              })),
-            }),
-          });
-
-          if (!res.ok) {
-            let text = '';
-            try { text = await res.text(); } catch {}
-            console.error('[CatalogAudit] Fallback batch request failed:', { status: res.status, statusText: res.statusText, body: text?.slice(0, 200) });
-            eventQueue.current = [...eventsToSend, ...eventQueue.current];
-          }
-        } catch (fallbackErr) {
-          // Silently fail - audit is non-critical
-          if (process.env.NODE_ENV === 'development') {
-            console.warn('[CatalogAudit] Fallback failed, audit disabled');
-          }
-        }
+        console.error('[CatalogAudit] Batch request failed:', { status: res.status, statusText: res.statusText, body: text?.slice(0, 200) });
+        eventQueue.current = [...eventsToSend, ...eventQueue.current];
       }
     } catch (err) {
+      if (isAuditTableUnavailable(err)) {
+        catalogAuditUnavailable = true;
+        return;
+      }
+
       // Silently fail - audit is non-critical
       if (process.env.NODE_ENV === 'development') {
         console.warn('[CatalogAudit] Audit system unavailable');
       }
     }
-  }, [supabase, enabled]);
+  }, [enabled]);
 
   const scheduleFlush = useCallback(() => {
     if (flushTimeoutRef.current) {
@@ -129,7 +114,7 @@ export function useCatalogAudit(options: UseCatalogAuditOptions = {}) {
   }, [flushEvents, flushInterval]);
 
   const logEvent = useCallback((event: Omit<CatalogAuditEvent, 'timestamp' | 'sessionId'>) => {
-    if (!enabled) return;
+    if (!enabled || catalogAuditUnavailable) return;
 
     const fullEvent: CatalogAuditEvent = {
       ...event,

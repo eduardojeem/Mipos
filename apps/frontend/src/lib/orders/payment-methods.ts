@@ -4,7 +4,7 @@ export type PaymentMethodCode = 'CASH' | 'CARD' | 'TRANSFER';
 
 export const PAYMENT_METHOD_LABELS: Record<PaymentMethodCode, string> = {
   CASH: 'Efectivo',
-  CARD: 'Tarjeta',
+  CARD: 'Tarjeta de debito',
   TRANSFER: 'Transferencia',
 };
 
@@ -27,7 +27,7 @@ export function getEnabledPaymentMethods(config: BusinessConfig | undefined): Pa
   const store = config?.storeSettings;
   // Default: todos true si la config no los define
   const acceptsCash = store?.acceptsCash ?? true;
-  const acceptsCard = (store?.acceptsCreditCards ?? true) || (store?.acceptsDebitCards ?? true);
+  const acceptsCard = store?.acceptsDebitCards ?? true;
   const acceptsTransfer = store?.acceptsBankTransfer ?? true;
 
   const enabled: PaymentMethodCode[] = [];

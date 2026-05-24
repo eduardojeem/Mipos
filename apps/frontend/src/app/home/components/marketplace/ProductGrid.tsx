@@ -1,11 +1,13 @@
 "use client";
 
+import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Building2, MapPin, Tag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { ProductImagePlaceholder } from '@/components/products/ProductImagePlaceholder';
 import type { GlobalProductCard } from '@/lib/public-site/data';
 import { cn } from '@/lib/utils';
 import {
@@ -17,6 +19,38 @@ import {
 interface ProductGridProps {
   products: GlobalProductCard[];
   className?: string;
+}
+
+function hasProductImage(image?: string | null) {
+  const src = String(image || '').trim();
+  return Boolean(src) && !src.startsWith('/api/placeholder/');
+}
+
+function shouldBypassImageOptimizer(image?: string | null) {
+  const src = String(image || '');
+  return src.includes('images.unsplash.com');
+}
+
+function GlobalProductImage({ product }: { product: GlobalProductCard }) {
+  const [imageError, setImageError] = useState(false);
+  const showImage = hasProductImage(product.image) && !imageError;
+
+  if (!showImage) {
+    return <ProductImagePlaceholder productName={product.name} className="absolute inset-0 rounded-none border-0" />;
+  }
+
+  return (
+    <Image
+      src={product.image}
+      alt={product.name}
+      fill
+      className="object-cover transition-transform duration-500 group-hover:scale-105"
+      sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
+      loading="lazy"
+      unoptimized={shouldBypassImageOptimizer(product.image)}
+      onError={() => setImageError(true)}
+    />
+  );
 }
 
 export function ProductGrid({ products, className }: ProductGridProps) {
@@ -41,13 +75,7 @@ export function ProductGrid({ products, className }: ProductGridProps) {
             className="group overflow-hidden rounded-xl border border-slate-200/80 bg-white/95 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-slate-200/60 dark:border-slate-800/80 dark:bg-slate-950/80 dark:hover:shadow-slate-950/40"
           >
             <div className="relative aspect-[4/3] overflow-hidden bg-slate-100 dark:bg-slate-900">
-              <Image
-                src={product.image || '/api/placeholder/480/360'}
-                alt={product.name}
-                fill
-                className="object-cover transition-transform duration-500 group-hover:scale-105"
-                sizes="(max-width: 768px) 100vw, (max-width: 1280px) 50vw, 33vw"
-              />
+              <GlobalProductImage product={product} />
               <div className="absolute inset-0 bg-gradient-to-t from-slate-950/50 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
 
               <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">

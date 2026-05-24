@@ -62,74 +62,40 @@ interface FormState {
   primary_color: string;
 }
 
-// Rubros — solo negocios que el sistema soporta bien hoy: comercios con
-// inventario y venta directa de productos.
-//
-// EXCLUIDOS (no encajan con la arquitectura actual):
-// - Restaurantes / cafeterías / bares: necesitan gestión de mesas y comanda
-//   de cocina, no implementadas.
-// - Peluquerías / estética / spa: necesitan agenda de citas, no implementada.
-// - Veterinarias / consultorios médicos: necesitan historial clínico,
-//   prescripciones y reservas.
-// - Servicios profesionales facturados por hora: no hay billing por tiempo.
-//
-// Si en el futuro se agregan esos módulos, se vuelven a habilitar acá.
-const INDUSTRY_GROUPS: Array<{ label: string; options: Array<readonly [string, string]> }> = [
-  {
-    label: 'Comercio',
-    options: [
-      ['supermarket', 'Supermercado / Almacén'],
-      ['minimarket', 'Mini market / Despensa'],
-      ['retail', 'Tienda / Comercio general'],
-      ['wholesale', 'Mayorista / Distribuidora'],
-    ],
-  },
-  {
-    label: 'Alimentos (mostrador / take-away)',
-    options: [
-      ['bakery', 'Panadería / Repostería'],
-      ['butcher', 'Carnicería'],
-      ['greengrocer', 'Verdulería / Frutería'],
-      ['icecream', 'Heladería'],
-    ],
-  },
-  {
-    label: 'Moda y hogar',
-    options: [
-      ['fashion', 'Moda / Indumentaria'],
-      ['shoes', 'Calzado'],
-      ['home_decor', 'Decoración / Hogar'],
-    ],
-  },
-  {
-    label: 'Especializados',
-    options: [
-      ['pharmacy', 'Farmacia'],
-      ['cosmetics', 'Cosmética / Perfumería'],
-      ['electronics', 'Electrónica / Celulares'],
-      ['auto_parts', 'Repuestos / Automotriz'],
-      ['hardware', 'Ferretería'],
-      ['bookstore', 'Librería / Papelería'],
-      ['construction', 'Materiales de construcción'],
-      ['pet_shop', 'Pet shop'],
-    ],
-  },
-  {
-    label: 'Otros',
-    options: [
-      ['other', 'Otro'],
-    ],
-  },
+type MarketplaceCategoryOption = {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  is_featured?: boolean;
+  sort_order?: number;
+  org_count?: number;
+  product_count?: number;
+};
+
+const SIZE_OPTIONS: Array<{ value: CompanySize; label: string; hint: string; minUsers: number; minLocations: number; recommendedPlan: string }> = [
+  { value: 'micro', label: 'Micro', hint: '1-3 personas · Inicia o emprende', minUsers: 1, minLocations: 1, recommendedPlan: 'free' },
+  { value: 'small', label: 'Pequeña', hint: '4-10 personas · Tienda activa', minUsers: 4, minLocations: 1, recommendedPlan: 'starter' },
+  { value: 'medium', label: 'Mediana', hint: '11-50 personas · Multi-sucursal', minUsers: 11, minLocations: 3, recommendedPlan: 'professional' },
+  { value: 'large', label: 'Grande', hint: '51+ personas · Cadena', minUsers: 51, minLocations: 10, recommendedPlan: 'enterprise' },
 ];
-// Escala con hint operativo (perfil del negocio, no rango de empleados puro).
-// Ayuda al usuario a ubicarse según su realidad y nos sirve para inferir el
-// plan recomendado más adelante.
-const SIZE_OPTIONS: Array<{ value: CompanySize; label: string; hint: string }> = [
-  { value: 'micro', label: 'Micro', hint: '1-3 personas · Inicia o emprende' },
-  { value: 'small', label: 'Pequeña', hint: '4-10 personas · Tienda activa' },
-  { value: 'medium', label: 'Mediana', hint: '11-50 personas · Multi-sucursal' },
-  { value: 'large', label: 'Grande', hint: '51+ personas · Cadena' },
-];
+
+function getPlanLimit(planData: PlanData | null, featureType: string): number {
+  if (!planData) return 999999;
+  const limit = planData.limits.find(l => l.feature_type === featureType);
+  return limit ? (limit.is_unlimited ? 999999 : limit.limit_value) : 999999;
+}
+
+function isSizeAllowedForPlan(size: CompanySize, planData: PlanData | null): boolean {
+  const sizeOption = SIZE_OPTIONS.find(o => o.value === size);
+  if (!sizeOption || !planData) return true;
+  
+  const maxUsers = getPlanLimit(planData, 'users');
+  const maxLocations = getPlanLimit(planData, 'locations');
+  
+  return (maxUsers === 999999 || sizeOption.minUsers <= maxUsers) &&
+         (maxLocations === 999999 || sizeOption.minLocations <= maxLocations);
+}
 
 // Países disponibles. Hoy solo Paraguay; el campo queda preparado para
 // expandir a otros países sin cambiar el flujo.
@@ -233,7 +199,7 @@ const STEPS: Array<{ id: StepId; title: string; icon: typeof Briefcase }> = [
 const DEFAULT_FORM: FormState = {
   name: '',
   rfc: '',
-  industry: 'retail',
+  industry: '',
   size: 'micro',
   tagline: '',
   phone: '',
@@ -267,15 +233,52 @@ function normalizeWebsite(value: string) {
   return next.startsWith('http://') || next.startsWith('https://') ? next : `https://${next}`;
 }
 
-function buildForm(profile: CompanyProfile | null, email: string, organizationName: string | null): FormState {
+function resolveMarketplaceCategoryValue(profile: CompanyProfile | null, categories: MarketplaceCategoryOption[]) {
+  const candidates = [
+    profile?.marketplace_category_id,
+    profile?.marketplace_category_slug,
+    profile?.industry,
+  ]
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    .map((value) => value.trim().toLowerCase());
+
+  if (candidates.length === 0) return categories[0]?.id || '';
+
+  const match = categories.find((category) => {
+    const values = [category.id, category.slug, category.name].map((value) => value.toLowerCase());
+    return values.some((value) => candidates.includes(value));
+  });
+
+  return match?.id || categories[0]?.id || '';
+}
+
+async function fetchMarketplaceCategories(): Promise<MarketplaceCategoryOption[]> {
+  const response = await fetch('/api/marketplace/categories', { cache: 'no-store' });
+  if (!response.ok) throw new Error('No se pudieron cargar los rubros del marketplace');
+  const data = await response.json();
+  const categories = Array.isArray(data?.categories) ? data.categories : [];
+  return categories
+    .filter((category: MarketplaceCategoryOption) => category?.id && category?.name && category?.slug)
+    .sort((a: MarketplaceCategoryOption, b: MarketplaceCategoryOption) => {
+      const featuredDiff = Number(Boolean(b.is_featured)) - Number(Boolean(a.is_featured));
+      if (featuredDiff !== 0) return featuredDiff;
+      return (a.sort_order || 0) - (b.sort_order || 0) || a.name.localeCompare(b.name);
+    });
+}
+
+function buildForm(
+  profile: CompanyProfile | null,
+  organizationName: string | null,
+  marketplaceCategories: MarketplaceCategoryOption[]
+): FormState {
   return {
     name: profile?.name || organizationName || '',
     rfc: profile?.rfc || '',
-    industry: profile?.industry || 'retail',
+    industry: resolveMarketplaceCategoryValue(profile, marketplaceCategories),
     size: (profile?.size as CompanySize) || 'micro',
     tagline: profile?.tagline || '',
     phone: profile?.phone || '',
-    email: profile?.email || email,
+    email: profile?.email || '',
     website: profile?.website || '',
     country: 'PY', // Por ahora solo Paraguay; extensible cuando agreguemos otros países.
     city: profile?.city || '',
@@ -297,8 +300,8 @@ function validateStep(stepId: StepId, form: FormState): Record<string, string> {
   }
 
   if (stepId === 'contact') {
-    if (!form.phone.trim() && !form.email.trim()) {
-      errors.contact = 'Completá al menos teléfono o email para que tus clientes te contacten.';
+    if (!form.phone.trim()) {
+      errors.contact = 'Completa un telefono publico para que tus clientes te contacten.';
     }
     if (form.phone.trim() && !/^\+?[\d\s\-()]{7,}$/.test(form.phone.trim())) {
       errors.phone = 'El teléfono no parece válido. Ej: +595 981 000000';
@@ -471,6 +474,7 @@ export default function OnboardingPage() {
   // ---- Form state & data load ----
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
   const [planData, setPlanData] = useState<PlanData | null>(null);
+  const [marketplaceCategories, setMarketplaceCategories] = useState<MarketplaceCategoryOption[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -489,14 +493,17 @@ export default function OnboardingPage() {
       setLoadingData(true);
       setLoadError(null);
       try {
-        const [profile, limits] = await Promise.allSettled([
+        const [profile, limits, categories] = await Promise.allSettled([
           planService.getCompanyProfile(resolvedOrgId),
           planService.getPlanLimits(resolvedOrgId),
+          fetchMarketplaceCategories(),
         ]);
         if (cancelled) return;
         const profileData = profile.status === 'fulfilled' ? profile.value : null;
         const limitsData = limits.status === 'fulfilled' ? limits.value : null;
-        setForm(buildForm(profileData, user.email || '', resolvedOrgName));
+        const categoryData = categories.status === 'fulfilled' ? categories.value : [];
+        setMarketplaceCategories(categoryData);
+        setForm(buildForm(profileData, resolvedOrgName, categoryData));
         setPlanData(limitsData);
         const isNeeds = await planService.needsOnboarding(resolvedOrgId);
         if (!cancelled) setAlreadyCompleted(!isNeeds);
@@ -528,13 +535,30 @@ export default function OnboardingPage() {
   const isLastStep = stepIndex === STEPS.length - 1;
   const isFirstStep = stepIndex === 0;
 
+  const getFieldLabel = (field: string): string => {
+    const labels: Record<string, string> = {
+      name: 'Nombre del negocio',
+      industry: 'Rubro principal',
+      rfc: 'RUC',
+      phone: 'Teléfono',
+      email: 'Email',
+      website: 'Sitio web',
+      department: 'Departamento',
+      city: 'Ciudad',
+      primary_color: 'Color principal',
+      contact: 'Datos de contacto'
+    };
+    return labels[field] || field;
+  };
+
   const handleNext = () => {
     const errors = validateStep(currentStep.id, form);
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
+      const missingFields = Object.keys(errors).map(getFieldLabel).join(', ');
       toast({
         title: 'Faltan datos',
-        description: 'Completá los campos requeridos antes de continuar.',
+        description: `Completá: ${missingFields}`,
         variant: 'destructive',
       });
       return;
@@ -564,31 +588,50 @@ export default function OnboardingPage() {
 
     // Validate ALL steps before saving — jump back to first one with errors.
     const allErrors: Record<string, string> = {};
+    const errorsByStep: Record<number, string[]> = {};
     let firstStepWithErrors: number | null = null;
     STEPS.forEach((step, idx) => {
       const stepErrors = validateStep(step.id, form);
-      Object.assign(allErrors, stepErrors);
-      if (firstStepWithErrors === null && Object.keys(stepErrors).length > 0) {
-        firstStepWithErrors = idx;
+      const stepErrorFields = Object.keys(stepErrors);
+      if (stepErrorFields.length > 0) {
+        errorsByStep[idx] = stepErrorFields.map(getFieldLabel);
+        if (firstStepWithErrors === null) {
+          firstStepWithErrors = idx;
+        }
       }
+      Object.assign(allErrors, stepErrors);
     });
 
     if (Object.keys(allErrors).length > 0) {
       setFieldErrors(allErrors);
       if (firstStepWithErrors !== null) setStepIndex(firstStepWithErrors);
+      
+      // Build a detailed error message
+      const errorDetails = Object.entries(errorsByStep)
+        .map(([stepIdx, fields]) => {
+          const step = STEPS[parseInt(stepIdx)];
+          return `Paso ${parseInt(stepIdx) + 1} (${step.title}): ${fields.join(', ')}`;
+        })
+        .join(' · ');
+      
       toast({
         title: 'Faltan datos',
-        description: 'Revisá los pasos marcados antes de finalizar.',
+        description: errorDetails,
         variant: 'destructive',
+        duration: 5000,
       });
       return;
     }
 
     setSaving(true);
+    const selectedMarketplaceCategory = marketplaceCategories.find((category) => category.id === form.industry);
     const success = await planService.updateCompanyProfile({
       name: form.name.trim(),
       rfc: form.rfc.trim(),
-      industry: form.industry,
+      industry: selectedMarketplaceCategory?.slug || form.industry,
+      marketplace_category_id: selectedMarketplaceCategory?.id || form.industry,
+      marketplace_category_slug: selectedMarketplaceCategory?.slug || null,
+      marketplace_category_name: selectedMarketplaceCategory?.name || null,
       size: form.size,
       tagline: form.tagline.trim(),
       phone: form.phone.trim(),
@@ -709,7 +752,13 @@ export default function OnboardingPage() {
           </div>
 
           {currentStep.id === 'business' ? (
-            <BusinessStep form={form} errors={fieldErrors} onField={onField} />
+            <BusinessStep
+              form={form}
+              errors={fieldErrors}
+              onField={onField}
+              marketplaceCategories={marketplaceCategories}
+              planData={planData}
+            />
           ) : null}
           {currentStep.id === 'contact' ? (
             <ContactStep form={form} errors={fieldErrors} onField={onField} />
@@ -764,7 +813,17 @@ interface StepProps {
   onField: (field: keyof FormState, value: string) => void;
 }
 
-function BusinessStep({ form, errors, onField }: StepProps) {
+function BusinessStep({
+  form,
+  errors,
+  onField,
+  marketplaceCategories,
+  planData,
+}: StepProps & { marketplaceCategories: MarketplaceCategoryOption[]; planData: PlanData | null }) {
+  const selectedCategory = marketplaceCategories.find((category) => category.id === form.industry);
+  const selectedSizeOption = SIZE_OPTIONS.find(o => o.value === form.size);
+  const isAllowed = isSizeAllowedForPlan(form.size, planData);
+
   return (
     <div className="grid gap-5">
       <div className="space-y-2">
@@ -789,26 +848,29 @@ function BusinessStep({ form, errors, onField }: StepProps) {
           <Label className="text-slate-200">
             Rubro principal <span className="text-red-400">*</span>
           </Label>
-          <Select value={form.industry} onValueChange={(v) => onField('industry', v)}>
+          <Select
+            value={form.industry}
+            onValueChange={(v) => onField('industry', v)}
+            disabled={marketplaceCategories.length === 0}
+          >
             <SelectTrigger className={cn('border-white/10 bg-white/5 text-white', errors.industry && 'border-red-400')}>
-              <SelectValue placeholder="Seleccioná un rubro" />
+              <SelectValue placeholder={marketplaceCategories.length ? 'Selecciona un rubro' : 'Cargando rubros'} />
             </SelectTrigger>
             <SelectContent>
-              {INDUSTRY_GROUPS.map((group) => (
-                <div key={group.label}>
-                  <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                    {group.label}
-                  </div>
-                  {group.options.map(([value, label]) => (
-                    <SelectItem key={value} value={value}>{label}</SelectItem>
-                  ))}
-                </div>
+              {marketplaceCategories.map((category) => (
+                <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>
           <p className="text-[11px] text-slate-500">
-            MiPOS está optimizado para comercios con inventario. Aún no soportamos restaurantes con mesas, peluquerías con agenda ni servicios facturados por hora.
+            Este rubro sale de los rubros activos del marketplace y define donde aparecera tu empresa publicamente.
           </p>
+          {selectedCategory?.description ? (
+            <p className="text-[11px] text-emerald-300">{selectedCategory.description}</p>
+          ) : null}
+          {marketplaceCategories.length === 0 ? (
+            <p className="text-xs text-amber-300">No se pudieron cargar rubros del marketplace. Reintenta en unos segundos.</p>
+          ) : null}
           {errors.industry ? <p className="text-xs text-red-400">{errors.industry}</p> : null}
         </div>
 
@@ -835,6 +897,7 @@ function BusinessStep({ form, errors, onField }: StepProps) {
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           {SIZE_OPTIONS.map((option) => {
             const active = form.size === option.value;
+            const allowed = isSizeAllowedForPlan(option.value, planData);
             return (
               <button
                 key={option.value}
@@ -843,18 +906,42 @@ function BusinessStep({ form, errors, onField }: StepProps) {
                 className={cn(
                   'rounded-lg border px-3 py-3 text-left transition',
                   active
-                    ? 'border-emerald-400/50 bg-emerald-400/10 text-white'
-                    : 'border-white/10 bg-white/5 text-slate-300 hover:border-white/20'
+                    ? allowed
+                      ? 'border-emerald-400/50 bg-emerald-400/10 text-white'
+                      : 'border-amber-400/50 bg-amber-400/10 text-white'
+                    : allowed
+                      ? 'border-white/10 bg-white/5 text-slate-300 hover:border-white/20'
+                      : 'border-white/5 bg-white/2 text-slate-400 hover:border-white/10'
                 )}
               >
                 <div className="text-sm font-semibold">{option.label}</div>
-                <div className={cn('mt-1 text-xs', active ? 'text-emerald-300' : 'text-slate-500')}>
+                <div className={cn('mt-1 text-xs', active ? (allowed ? 'text-emerald-300' : 'text-amber-300') : 'text-slate-500')}>
                   {option.hint}
                 </div>
+                {!allowed && (
+                  <div className="mt-1 text-[10px] text-amber-400">
+                    Requiere {planService.getPlanDisplayName(option.recommendedPlan)}
+                  </div>
+                )}
               </button>
             );
           })}
         </div>
+        {!isAllowed && selectedSizeOption && (
+          <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+            <div className="flex items-start gap-2">
+              <Sparkles className="mt-0.5 h-4 w-4 text-amber-400" />
+              <div>
+                <p className="text-sm font-medium text-amber-200">
+                  Esta escala requiere el plan {planService.getPlanDisplayName(selectedSizeOption.recommendedPlan)}
+                </p>
+                <p className="mt-1 text-xs text-amber-300/80">
+                  Podés continuar con esta selección y luego actualizar tu plan en la configuración del negocio.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="space-y-2">
@@ -879,12 +966,12 @@ function ContactStep({ form, errors, onField }: StepProps) {
   return (
     <div className="grid gap-5">
       <p className="text-sm text-slate-400">
-        Necesitamos al menos un canal de contacto para que tus clientes puedan comunicarse.
+        Necesitamos un telefono publico del negocio. El email comercial es opcional y podes completarlo despues en Configuracion del negocio.
       </p>
 
       <div className="grid gap-5 md:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor="contact-phone" className="text-slate-200">Teléfono</Label>
+          <Label htmlFor="contact-phone" className="text-slate-200">Telefono <span className="text-red-300">*</span></Label>
           <div className="relative">
             <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
             <Input
@@ -902,7 +989,7 @@ function ContactStep({ form, errors, onField }: StepProps) {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="contact-email" className="text-slate-200">Email</Label>
+          <Label htmlFor="contact-email" className="text-slate-200">Email publico <span className="text-xs text-slate-500">(opcional)</span></Label>
           <div className="relative">
             <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
             <Input

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import type { GlobalMarketplaceHomeData } from '@/lib/public-site/data';
 import { buildPublicRegistrationPath } from '@/lib/public-plan-utils';
+import { LoginAccessSection } from '@/components/auth/LoginAccessSection';
 import { MarketplaceLayout } from './marketplace/MarketplaceLayout';
 import { ProductGrid } from './marketplace/ProductGrid';
 import { CategoryGrid } from './marketplace/CategoryGrid';
@@ -156,6 +157,14 @@ export function PublicMarketplaceHome({
           </div>
           <ProductGrid products={data.featuredProducts.slice(0, 3)} />
         </section>
+
+        <LoginAccessSection
+          title="Accede al marketplace segun tu perfil"
+          description="Los compradores pueden entrar a Mi cuenta para editar perfil, historial y recompra; los negocios pueden publicar su inventario, y tambien se puede seguir explorando sin cuenta."
+          types={['customer', 'marketplace-business', 'guest-order']}
+          returnUrl="/account"
+          className="bg-white/70 dark:bg-slate-950/40"
+        />
       </div>
     </MarketplaceLayout>
   );

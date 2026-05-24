@@ -37,10 +37,11 @@ export function usePOSKeyboard({
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
       return;
     }
+    const key = typeof event.key === 'string' ? event.key.toLowerCase() : '';
+    const rawKey = typeof event.key === 'string' ? event.key : '';
 
     // Atajos con Shift
     if (event.shiftKey) {
-      const key = event.key.toLowerCase();
       switch (key) {
         case 'f':
           event.preventDefault();
@@ -53,7 +54,7 @@ export function usePOSKeyboard({
       }
     }
 
-    switch (event.key) {
+    switch (rawKey) {
       case 'F1':
         event.preventDefault();
         onSearchFocus?.();
@@ -97,7 +98,6 @@ export function usePOSKeyboard({
 
     // Atajos con Ctrl
     if (event.ctrlKey) {
-      const key = event.key.toLowerCase();
       switch (key) {
         case '=':
         case '+':

@@ -1,4 +1,4 @@
-﻿import "server-only";
+import "server-only";
 
 import { unstable_cache } from "next/cache";
 import {
@@ -12,7 +12,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import type { GlobalProductCard } from "@/lib/public-site/data";
 
 const PUBLIC_ORGANIZATION_STATUSES = ["ACTIVE", "TRIAL"];
-const ORGANIZATION_BASE_COLUMNS = ["id", "name", "slug", "subscription_status"];
+const ORGANIZATION_BASE_COLUMNS = ["id", "name", "slug", "subscription_status", "marketplace_category_id"];
 const ORGANIZATION_OPTIONAL_COLUMNS: string[] = [];
 const PRODUCT_BASE_COLUMNS = ["id", "name", "sale_price", "organization_id"];
 const PRODUCT_OPTIONAL_COLUMNS = [
@@ -657,7 +657,7 @@ async function fetchBusinessConfigLocations(
 function mapProductsToCards(
   products: ProductRow[],
   organizations: PublicOrganization[],
-  categoryMap: Map<string, string>,
+  mktCatMap: Map<string, { id: string; name: string; slug: string }>,
   businessConfigMap: Map<string, Record<string, unknown>>,
   requestHost?: string | null,
 ): GlobalProductCard[] {
@@ -675,9 +675,10 @@ function mapProductsToCards(
         return null;
       }
 
-      const categoryName = product.category_id
-        ? categoryMap.get(product.category_id) || "Sin categoria"
-        : "Sin categoria";
+      const mktCatId = (organization as any).marketplace_category_id;
+      const mktCat = mktCatId ? mktCatMap.get(mktCatId) : null;
+      const categoryName = mktCat ? mktCat.name : "Otros";
+      const categoryKey = mktCat ? mktCat.slug : "otros";
 
       const location = extractOrganizationLocation(
         organization,
@@ -693,7 +694,7 @@ function mapProductsToCards(
         ),
         image: extractPrimaryImage(product.images, product.image_url),
         categoryName,
-        categoryKey: toCategoryKey(categoryName),
+        categoryKey,
         brand: product.brand ? normalizeDisplayText(product.brand) : undefined,
         basePrice: Number(product.sale_price || 0),
         offerPrice: normalizePositiveNumber(product.offer_price) || undefined,
@@ -988,24 +989,25 @@ export async function fetchGlobalCatalogSnapshot(
   }
 
   try {
+    const client = await createAdminClient();
     const organizationIds = organizations.map((organization) => organization.id);
-    const rawProducts = await fetchMatchingProducts(organizationIds, input);
-    const categoryIds = Array.from(
-      new Set(
-        rawProducts
-          .map((product) => product.category_id)
-          .filter(
-            (categoryId): categoryId is string =>
-              typeof categoryId === "string" && categoryId.length > 0,
-          ),
-      ),
+    const [rawProducts, mktCatsResult] = await Promise.all([
+      fetchMatchingProducts(organizationIds, input),
+      client
+        .from("marketplace_categories")
+        .select("id,name,slug")
+        .eq("is_active", true)
+    ]);
+    const mktCats = mktCatsResult.data;
+    const mktCatMap = new Map<string, { id: string; name: string; slug: string }>(
+      (mktCats || []).map((c: any) => [c.id, { id: c.id, name: c.name, slug: c.slug }])
     );
-    const categoryMap = await fetchCategoryMap(categoryIds);
+
     const businessConfigMap = new Map(businessConfigEntries);
     const mappedProducts = mapProductsToCards(
       rawProducts,
       organizations,
-      categoryMap,
+      mktCatMap,
       businessConfigMap,
       requestHost,
     );

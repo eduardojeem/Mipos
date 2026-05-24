@@ -27,12 +27,6 @@ function getUserPanelHref(role: string | null | undefined): string {
   return '/dashboard';
 }
 
-function getUserProfileHref(role: string | null | undefined): string {
-  const r = (role || '').toUpperCase();
-  if (r === 'OWNER' || r === 'ADMIN' || r === 'SUPER_ADMIN') return '/admin/profile';
-  return '/dashboard/profile';
-}
-
 function getUserInitials(name?: string | null, email?: string | null): string {
   const source = (name || email || '').trim();
   if (!source) return '?';
@@ -54,7 +48,7 @@ export function MarketplaceHeader({ searchQuery = '' }: MarketplaceHeaderProps) 
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const { user, loading: authLoading, signOut } = useAuth();
   const panelHref = useMemo(() => getUserPanelHref(user?.role), [user?.role]);
-  const profileHref = useMemo(() => getUserProfileHref(user?.role), [user?.role]);
+  const profileHref = '/account';
   const userInitials = useMemo(() => getUserInitials(user?.name, user?.email), [user?.name, user?.email]);
 
   const handleSignOut = async () => {
@@ -135,7 +129,7 @@ export function MarketplaceHeader({ searchQuery = '' }: MarketplaceHeaderProps) 
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => router.push(profileHref)} className="cursor-pointer">
                     <User className="mr-2 h-4 w-4" />
-                    Mi perfil
+                    Mi cuenta
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -149,15 +143,15 @@ export function MarketplaceHeader({ searchQuery = '' }: MarketplaceHeaderProps) 
               </DropdownMenu>
             ) : (
               <>
-                <Link href="/auth/signin">
+                <Link href="/auth/signin?type=customer&returnUrl=/account">
                   <Button variant="ghost" className="h-10 rounded-full px-4 text-slate-700 hover:bg-slate-100/60 dark:text-slate-200 dark:hover:bg-slate-800/70">
                     <LogIn className="mr-2 h-4 w-4" />
-                    Ingresar
+                    Cliente
                   </Button>
                 </Link>
                 <Link href="/inicio#como-funciona">
                   <Button className="h-10 rounded-full bg-slate-950 px-6 text-white transition-all hover:bg-emerald-700 hover:shadow-lg hover:shadow-emerald-500/20 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white">
-                    Crear-empresa
+                    Crear empresa
                   </Button>
                 </Link>
               </>
@@ -271,7 +265,7 @@ export function MarketplaceHeader({ searchQuery = '' }: MarketplaceHeaderProps) 
                     <Link href={profileHref} onClick={() => setIsMobileMenuOpen(false)}>
                       <Button variant="outline" className="h-14 w-full gap-2 rounded-2xl border-slate-200 text-lg font-bold dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800">
                         <User className="h-5 w-5" />
-                        Mi perfil
+                        Mi cuenta
                       </Button>
                     </Link>
                     <Button
@@ -285,14 +279,14 @@ export function MarketplaceHeader({ searchQuery = '' }: MarketplaceHeaderProps) 
                   </>
                 ) : (
                   <>
-                    <Link href="/auth/signin" onClick={() => setIsMobileMenuOpen(false)}>
+                    <Link href="/auth/signin?type=customer&returnUrl=/account" onClick={() => setIsMobileMenuOpen(false)}>
                       <Button variant="outline" className="h-14 w-full rounded-2xl border-slate-200 text-lg font-bold dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800">
-                        Ingresar
+                        Entrar como cliente
                       </Button>
                     </Link>
                     <Link href="/inicio#como-funciona" onClick={() => setIsMobileMenuOpen(false)}>
                       <Button className="h-14 w-full rounded-2xl bg-slate-950 text-lg font-bold dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white">
-                        Crear-empresa
+                        Crear empresa
                       </Button>
                     </Link>
                   </>
