@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -36,6 +37,9 @@ interface Plan {
     maxLocations: number;
   };
   is_active: boolean;
+  organization_count?: number;
+  active_subscription_count?: number;
+  mrr?: number;
 }
 
 interface PlanModalProps {
@@ -73,6 +77,22 @@ function toSafeInteger(value: string | number, fallback = 0, allowUnlimited = fa
 
 function featureLabel(feature: Plan['features'][number]) {
   return typeof feature === 'string' ? feature : feature.name;
+}
+
+function formatMoney(amount: number | undefined, currency: string) {
+  const safe = Number(amount || 0);
+  const upper = String(currency || 'PYG').toUpperCase();
+  try {
+    const isPy = upper === 'PYG';
+    return new Intl.NumberFormat('es-PY', {
+      style: 'currency',
+      currency: upper,
+      minimumFractionDigits: isPy ? 0 : 2,
+      maximumFractionDigits: isPy ? 0 : 2,
+    }).format(safe);
+  } catch {
+    return `${upper} ${safe.toLocaleString('es-PY')}`;
+  }
 }
 
 export function PlanModal({ isOpen, onClose, onSave, plan }: PlanModalProps) {
@@ -200,6 +220,9 @@ export function PlanModal({ isOpen, onClose, onSave, plan }: PlanModalProps) {
       <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{plan ? 'Editar plan' : 'Crear plan'}</DialogTitle>
+          <DialogDescription>
+            Configura precios, limites y funcionalidades disponibles para este plan.
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-5">
@@ -212,6 +235,22 @@ export function PlanModal({ isOpen, onClose, onSave, plan }: PlanModalProps) {
             </TabsList>
 
             <TabsContent value="general" className="space-y-4 pt-4">
+              {plan?.id && (
+                <div className="grid gap-3 rounded-md border bg-slate-50 p-4 dark:bg-slate-900/40 sm:grid-cols-3">
+                  <div>
+                    <p className="text-xs font-medium uppercase text-slate-500">Tenants</p>
+                    <p className="mt-1 text-lg font-semibold">{Number(plan.organization_count || 0).toLocaleString('es-PY')}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium uppercase text-slate-500">Suscripciones activas</p>
+                    <p className="mt-1 text-lg font-semibold">{Number(plan.active_subscription_count || 0).toLocaleString('es-PY')}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium uppercase text-slate-500">MRR estimado</p>
+                    <p className="mt-1 text-lg font-semibold">{formatMoney(plan.mrr, formData.currency)}</p>
+                  </div>
+                </div>
+              )}
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="plan-name">Nombre</Label>

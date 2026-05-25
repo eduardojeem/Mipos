@@ -2,7 +2,7 @@
 
 import React, { memo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Building2, Users, CreditCard, DollarSign, TrendingUp, TrendingDown } from 'lucide-react';
+import { Building2, CreditCard, Users, DollarSign, TrendingUp, TrendingDown } from 'lucide-react';
 import { AdminStats as AdminStatsType } from '../hooks/useAdminData';
 import {
   Tooltip,
@@ -22,6 +22,13 @@ interface AdminStatsProps {
 }
 
 export const AdminStats = memo(function AdminStats({ stats, trends }: AdminStatsProps) {
+  const formatMoney = (amount: number | undefined) => new Intl.NumberFormat('es-PY', {
+    style: 'currency',
+    currency: 'PYG',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(Number(amount || 0));
+
   const statCards = [
     {
       title: 'Total Organizaciones',
@@ -44,10 +51,10 @@ export const AdminStats = memo(function AdminStats({ stats, trends }: AdminStats
       borderColor: 'border-l-blue-500',
     },
     {
-      title: 'Suscripciones Activas',
-      value: stats.activeSubscriptions,
-      description: 'Organizaciones pagando',
-      icon: CreditCard,
+      title: 'Organizaciones Activas',
+      value: stats.activeOrganizations || 0,
+      description: 'Empresas operando',
+      icon: Building2,
       trend: trends?.subscriptions,
       color: 'text-emerald-600 dark:text-emerald-400',
       bgColor: 'bg-emerald-50 dark:bg-emerald-900/20',
@@ -55,7 +62,7 @@ export const AdminStats = memo(function AdminStats({ stats, trends }: AdminStats
     },
     {
       title: 'MRR Estimado',
-      value: `$${stats.totalRevenue.toLocaleString()}`,
+      value: formatMoney(stats.monthlyRevenue),
       description: 'Ingreso recurrente mensual',
       icon: DollarSign,
       trend: trends?.revenue,
@@ -63,11 +70,21 @@ export const AdminStats = memo(function AdminStats({ stats, trends }: AdminStats
       bgColor: 'bg-amber-50 dark:bg-amber-900/20',
       borderColor: 'border-l-amber-500',
     },
+    {
+      title: 'Suscripciones SaaS Activas',
+      value: stats.activeSubscriptions,
+      description: 'Contratos de plan activos',
+      icon: CreditCard,
+      trend: trends?.subscriptions,
+      color: 'text-violet-600 dark:text-violet-400',
+      bgColor: 'bg-violet-50 dark:bg-violet-900/20',
+      borderColor: 'border-l-violet-500',
+    },
   ];
 
   return (
     <TooltipProvider>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         {statCards.map((stat, index) => {
           const Icon = stat.icon;
           const hasTrend = typeof stat.trend === 'number';

@@ -199,6 +199,43 @@ async function getPermissionsForRoleNames(
   ))
 }
 
+function permissionVariants(permission: string): string[] {
+  const normalized = String(permission || '').trim().toLowerCase()
+  if (!normalized) return []
+
+  const variants = new Set<string>([normalized])
+  const separator = normalized.includes(':') ? ':' : normalized.includes('.') ? '.' : null
+
+  if (separator) {
+    const [resource, action] = normalized.split(separator)
+    if (resource && action) {
+      const actions = new Set([action])
+      if (['read', 'view', 'list'].includes(action)) {
+        actions.add('read')
+        actions.add('view')
+        actions.add('list')
+      }
+      if (['write', 'update', 'edit'].includes(action)) {
+        actions.add('write')
+        actions.add('update')
+        actions.add('edit')
+      }
+
+      for (const variantAction of actions) {
+        variants.add(`${resource}.${variantAction}`)
+        variants.add(`${resource}:${variantAction}`)
+      }
+    }
+  }
+
+  return Array.from(variants)
+}
+
+function hasPermissionVariant(permissions: string[], required: CompanyPermissionKey): boolean {
+  const granted = new Set(permissions.flatMap(permissionVariants))
+  return permissionVariants(required).some((variant) => granted.has(variant))
+}
+
 export async function resolveCompanyAccess(
   requirement: CompanyAccessRequirement = {}
 ): Promise<CompanyAccessResult> {
@@ -310,7 +347,7 @@ export async function resolveCompanyAccess(
     ]) : await getPlanFeatures(adminClient, planName)
 
     const roleAllowed = !requirement.allowedRoles || isSuperAdmin || requirement.allowedRoles.includes(role)
-    const permissionAllowed = !requirement.permission || isSuperAdmin || permissions.includes(requirement.permission)
+    const permissionAllowed = !requirement.permission || isSuperAdmin || hasPermissionVariant(permissions, requirement.permission)
     const featureAllowed = !requirement.feature || isSuperAdmin || features.includes(requirement.feature)
 
     if (!roleAllowed || !permissionAllowed || !featureAllowed) {

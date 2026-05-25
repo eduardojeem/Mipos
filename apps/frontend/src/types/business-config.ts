@@ -97,6 +97,8 @@ export interface BusinessConfig {
     enableBarcodeScanner?: boolean;
     printReceipts?: boolean;
     enableCashDrawer?: boolean;
+    maxDiscountPercentage?: number;
+    requireCustomerInfo?: boolean;
     decimalPlaces?: number;
     // POS Auto Actions
     autoPrintOnSale?: boolean;
@@ -306,6 +308,8 @@ export const defaultBusinessConfig: BusinessConfig = {
     enableBarcodeScanner: true,
     printReceipts: true,
     enableCashDrawer: true,
+    maxDiscountPercentage: 50,
+    requireCustomerInfo: false,
     autoPrintOnSale: true,
     autoShareReceipt: { whatsapp: false, email: false }
   },

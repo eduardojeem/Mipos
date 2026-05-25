@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient, createClient } from "@/lib/supabase/server";
 import { normalizeRole } from "@/lib/roles";
 
@@ -26,8 +26,10 @@ function getRoleName(row: UserRoleRow): string {
   return typeof role?.name === "string" ? role.name : "";
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const buyerScope = searchParams.get("scope") === "buyer";
     const supabase = await createClient();
     const {
       data: { user },
@@ -65,7 +67,7 @@ export async function GET() {
       normalizeRole(profile?.role) === "SUPER_ADMIN" ||
       roleRows.some((row) => normalizeRole(getRoleName(row)) === "SUPER_ADMIN");
 
-    if (isSuperAdmin) {
+    if (isSuperAdmin && !buyerScope) {
       const { data: organizations, error: orgsError } = await admin
         .from("organizations")
         .select(
@@ -102,7 +104,7 @@ export async function GET() {
       ),
     );
 
-    if (!organizationIds.length) {
+    if (!organizationIds.length && !buyerScope) {
       // Legacy fallback: some users predate the organization_members table and
       // only have users.organization_id set. Surface that org so they can sign
       // in, but DO NOT auto-create a membership row — silently restoring a

@@ -125,6 +125,7 @@ export async function POST(request: NextRequest) {
         const name = typeof body.name === 'string' ? body.name.trim() : '';
         const organizationName = typeof body.organizationName === 'string' ? body.organizationName.trim() : '';
         const { planSlug } = body;
+        const requestedBillingCycle = body.billingCycle === 'yearly' ? 'yearly' : 'monthly';
 
         // Validacion de datos
         if (!email || !password || !name || !organizationName) {
@@ -260,6 +261,7 @@ export async function POST(request: NextRequest) {
                 subscription_status: 'ACTIVE',
                 settings: {
                     requestedPlan,
+                    requestedBillingCycle,
                     requiresBilling,
                     onboardingCompleted: false,
                     signupCompletedAt: new Date().toISOString(),
@@ -350,6 +352,7 @@ export async function POST(request: NextRequest) {
                     settings: {
                         ...(orgData.settings || {}),
                         requestedPlan,
+                        requestedBillingCycle,
                         requiresBilling,
                         onboardingCompleted: false,
                     },
@@ -374,6 +377,7 @@ export async function POST(request: NextRequest) {
                 : 'Registro exitoso. Por favor verifica tu email.',
             linkedExistingUser,
             requestedPlan,
+            requestedBillingCycle,
             effectivePlan: effectiveSignupPlan,
             requiresBilling,
             user: {

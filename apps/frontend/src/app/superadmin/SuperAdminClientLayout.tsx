@@ -47,7 +47,6 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SuperAdminThemeToggle } from "./components/SuperAdminThemeToggle";
-import { useSuperAdminPrefetch } from "./hooks/usePrefetch";
 
 interface SuperAdminLayoutProps {
   children: React.ReactNode;
@@ -96,6 +95,13 @@ const NAV_ITEMS: NavItem[] = [
     href: "/superadmin",
     icon: BarChart3,
     description: "Métricas globales del sistema",
+    section: "overview",
+  },
+  {
+    title: "Analiticas",
+    href: "/superadmin/analytics",
+    icon: Activity,
+    description: "Crecimiento, ingresos y actividad SaaS",
     section: "overview",
   },
 
@@ -258,8 +264,6 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
     if (typeof window === "undefined") return false;
     try { return window.localStorage.getItem("sa_sidebar_collapsed") === "1"; } catch { return false; }
   });
-
-  useSuperAdminPrefetch();
 
   // Redirigir si no hay sesión
   useEffect(() => {

@@ -30,6 +30,12 @@ type MembershipSnapshot = {
   role?: MembershipRoleRow | MembershipRoleRow[] | null
 }
 
+type CriticalMembershipRow = {
+  user_id?: string | null
+  is_owner?: boolean | null
+  role?: MembershipRoleRow | MembershipRoleRow[] | null
+}
+
 type UserProfileSnapshot = {
   id?: string | null
   email?: string | null
@@ -51,6 +57,13 @@ function isSuperAdminRole(rows: ActiveRoleRow[] | null | undefined) {
     const role = Array.isArray(row.role) ? row.role[0] : row.role
     return String(role?.name || '').toUpperCase() === 'SUPER_ADMIN'
   })
+}
+
+function isAdministrativeMembership(row: CriticalMembershipRow | null | undefined) {
+  if (!row) return false
+  const role = firstRelation(row.role)
+  const roleName = String(role?.name || '').toUpperCase()
+  return Boolean(row.is_owner) || roleName === 'ADMIN' || roleName === 'OWNER'
 }
 
 function getRequestedOrganizationId(
@@ -346,7 +359,7 @@ export async function DELETE(
     const admin = createAdminClient()
     const { data: membership } = await admin
       .from('organization_members')
-      .select('organization_id, user_id, is_owner')
+      .select('organization_id, user_id, is_owner, role:roles(name)')
       .eq('organization_id', companyId)
       .eq('user_id', userId)
       .maybeSingle()
@@ -358,9 +371,9 @@ export async function DELETE(
       )
     }
 
-    if (membership.is_owner && !access.context.isSuperAdmin) {
+    if (membership.is_owner) {
       return NextResponse.json(
-        { error: 'No puedes eliminar al propietario de la organizacion' },
+        { error: 'No puedes remover al propietario desde /admin. Usa la consola superadmin para transferir o cambiar ownership.' },
         { status: 403 }
       )
     }
@@ -374,11 +387,36 @@ export async function DELETE(
     const targetIsSuperAdmin = isSuperAdminRole(
       activeSuperRole as ActiveRoleRow[] | null | undefined
     )
-    if (targetIsSuperAdmin && !access.context.isSuperAdmin) {
+    if (targetIsSuperAdmin) {
       return NextResponse.json(
-        { error: 'No puedes eliminar un super admin desde este panel' },
+        { error: 'No puedes remover un super admin desde este panel operativo' },
         { status: 403 }
       )
+    }
+
+    if (isAdministrativeMembership(membership as CriticalMembershipRow)) {
+      const { data: administrativeMemberships, error: administrativeError } = await admin
+        .from('organization_members')
+        .select('user_id, is_owner, role:roles(name)')
+        .eq('organization_id', companyId)
+
+      if (administrativeError) {
+        return NextResponse.json(
+          { error: 'No se pudo validar la administracion minima de la organizacion' },
+          { status: 500 }
+        )
+      }
+
+      const remainingAdmins = ((administrativeMemberships || []) as CriticalMembershipRow[])
+        .filter((row) => row.user_id !== userId)
+        .filter(isAdministrativeMembership)
+
+      if (remainingAdmins.length === 0) {
+        return NextResponse.json(
+          { error: 'No puedes remover el ultimo administrador operativo de la organizacion' },
+          { status: 403 }
+        )
+      }
     }
 
     await deactivateMembershipRole({ organizationId: companyId, userId })

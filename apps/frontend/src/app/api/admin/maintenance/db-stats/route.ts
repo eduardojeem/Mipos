@@ -1,15 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { assertAdmin } from '@/app/api/_utils/auth'
+import { ADMIN_API_ACCESS, requireAdminApiAccess } from '@/app/api/admin/_utils/access'
 
 export async function GET(request: NextRequest) {
   try {
-    const auth = await assertAdmin(request)
-    if (!('ok' in auth) || auth.ok === false) {
-      return NextResponse.json(auth.body, { status: auth.status })
+    const access = await requireAdminApiAccess(request, {
+      ...ADMIN_API_ACCESS.adminPanel,
+      requireOrganization: true,
+    })
+    if (!access.ok) {
+      return access.response
     }
 
-    const { organizationId } = auth
+    const organizationId = access.context.companyId
+    if (!organizationId) {
+      return NextResponse.json({ error: 'Selecciona una organizacion' }, { status: 400 })
+    }
+
     const supabase = await createClient()
 
     // Get table statistics for the organization

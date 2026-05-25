@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
 import { createAdminClient } from '@/lib/supabase/server';
 import { assertAdmin } from '@/app/api/_utils/auth';
+import {
+  COMPANY_PERMISSIONS,
+  requireCompanyAccess,
+} from '@/app/api/_utils/company-authorization';
 import { getUserOrganizationId } from '@/app/api/_utils/organization';
 import { logAudit } from '@/app/api/admin/_utils/audit';
 import { validateBusinessConfig } from '@/app/api/admin/_utils/business-config-validation';
@@ -11,6 +15,18 @@ import { defaultBusinessConfig } from '@/types/business-config';
 
 type AdminClient = Awaited<ReturnType<typeof createAdminClient>>;
 type SystemSettingsPayload = Record<string, unknown>;
+
+function getRequestedOrganizationId(request: NextRequest): string | null {
+  const searchParams = new URL(request.url).searchParams;
+  return (
+    request.headers.get('x-organization-id')?.trim() ||
+    request.headers.get('X-Organization-Id')?.trim() ||
+    searchParams.get('organizationId')?.trim() ||
+    searchParams.get('organization_id')?.trim() ||
+    request.cookies.get('x-organization-id')?.value?.trim() ||
+    null
+  );
+}
 
 const CURRENCY_SYMBOLS: Record<string, string> = {
   PYG: '\u20b2',
@@ -574,6 +590,15 @@ async function persistBusinessConfig(adminClient: AdminClient, organizationId: s
 
 export async function GET(request: NextRequest) {
   try {
+    const access = await requireCompanyAccess(request, {
+      companyId: getRequestedOrganizationId(request),
+      permission: COMPANY_PERMISSIONS.VIEW_SETTINGS,
+      allowedRoles: ['OWNER', 'ADMIN', 'SUPER_ADMIN'],
+    });
+    if (!access.ok) {
+      return NextResponse.json(access.body, { status: access.status });
+    }
+
     const authResult = await assertAdmin(request);
     if (!authResult.ok) {
       return NextResponse.json(authResult.body, { status: authResult.status });
@@ -616,6 +641,15 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    const access = await requireCompanyAccess(request, {
+      companyId: getRequestedOrganizationId(request),
+      permission: COMPANY_PERMISSIONS.EDIT_SETTINGS,
+      allowedRoles: ['OWNER', 'ADMIN', 'SUPER_ADMIN'],
+    });
+    if (!access.ok) {
+      return NextResponse.json(access.body, { status: access.status });
+    }
+
     const authResult = await assertAdmin(request);
     if (!authResult.ok) {
       return NextResponse.json(authResult.body, { status: authResult.status });

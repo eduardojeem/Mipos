@@ -174,7 +174,16 @@ export async function GET(request: NextRequest) {
       query = query.or(`name.ilike.%${search}%,slug.ilike.%${search}%`);
     }
     if (status && status !== 'ALL') {
-      query = query.eq('subscription_status', status);
+      const normalizedStatus = status.toUpperCase();
+      if (normalizedStatus === 'ACTIVE') {
+        query = query.in('subscription_status', ['ACTIVE', 'active', 'Active']);
+      } else if (normalizedStatus === 'TRIAL') {
+        query = query.in('subscription_status', ['TRIAL', 'trial', 'Trial']);
+      } else if (normalizedStatus === 'SUSPENDED') {
+        query = query.in('subscription_status', ['SUSPENDED', 'suspended', 'Suspended']);
+      } else {
+        query = query.eq('subscription_status', normalizedStatus);
+      }
     }
     if (plan && plan !== 'ALL') {
       query = query.in('subscription_plan', getOrganizationPlanFilterValues(plan));
@@ -191,14 +200,15 @@ export async function GET(request: NextRequest) {
 
     const [totalCountResult, activeCountResult, trialCountResult, suspendedCountResult] = await Promise.all([
       adminClient.from('organizations').select('id', { count: 'exact', head: true }),
-      adminClient.from('organizations').select('id', { count: 'exact', head: true }).eq('subscription_status', 'ACTIVE'),
-      adminClient.from('organizations').select('id', { count: 'exact', head: true }).eq('subscription_status', 'TRIAL'),
-      adminClient.from('organizations').select('id', { count: 'exact', head: true }).eq('subscription_status', 'SUSPENDED'),
+      adminClient.from('organizations').select('id', { count: 'exact', head: true }).in('subscription_status', ['ACTIVE', 'active', 'Active']),
+      adminClient.from('organizations').select('id', { count: 'exact', head: true }).in('subscription_status', ['TRIAL', 'trial', 'Trial']),
+      adminClient.from('organizations').select('id', { count: 'exact', head: true }).in('subscription_status', ['SUSPENDED', 'suspended', 'Suspended']),
     ]);
 
     const normalizedOrganizations = (organizations || []).map((organization: any) => ({
       ...organization,
       subscription_plan: normalizePlan(organization.subscription_plan),
+      subscription_status: String(organization.subscription_status || 'ACTIVE').toUpperCase(),
       member_count: organization.members?.[0]?.count || 0,
     }));
 

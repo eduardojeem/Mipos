@@ -58,7 +58,10 @@ export async function fetchSuperAdminData() {
     // Stats (simplified calculation for initial load)
     Promise.all([
       adminClient.from('organizations').select('*', { count: 'exact', head: true }),
-      adminClient.from('organizations').select('*', { count: 'exact', head: true }).eq('subscription_status', 'ACTIVE'),
+      adminClient
+        .from('organizations')
+        .select('*', { count: 'exact', head: true })
+        .in('subscription_status', ['ACTIVE', 'active', 'Active']),
       adminClient.from('users').select('*', { count: 'exact', head: true }),
       adminClient.from('saas_subscriptions').select('plan_id, billing_cycle, saas_plans(price_monthly, price_yearly)').eq('status', 'active')
     ])
@@ -80,11 +83,7 @@ export async function fetchSuperAdminData() {
     });
   }
 
-  // Fallback revenue estimation
   const activeOrgsCount = activeOrgs.count || 0;
-  if (monthlyRevenue === 0 && activeOrgsCount > 0) {
-    monthlyRevenue = activeOrgsCount * 49;
-  }
 
   return {
     organizations: orgsRes.data || [],
@@ -95,7 +94,7 @@ export async function fetchSuperAdminData() {
       activeUsers: allUsers.count || 0, // Simplified
       totalRevenue: monthlyRevenue * 12,
       monthlyRevenue: monthlyRevenue,
-      activeSubscriptions: activeOrgsCount
+      activeSubscriptions: subs.data?.length || 0
     }
   };
 }

@@ -7,15 +7,19 @@ const _orgCache: {
   data: Organization[] | null;
   fetchedAt: number;
   userId: string | null;
-} = { promise: null, data: null, fetchedAt: 0, userId: null };
+  scope: UserOrganizationScope;
+} = { promise: null, data: null, fetchedAt: 0, userId: null, scope: 'admin' };
 
 const ORG_CACHE_TTL = 30_000; // 30 seconds
 
-function getCachedOrFetch(userId: string): Promise<Organization[]> {
+type UserOrganizationScope = 'admin' | 'buyer';
+
+function getCachedOrFetch(userId: string, scope: UserOrganizationScope): Promise<Organization[]> {
   const now = Date.now();
   // Reuse in-flight request or fresh cache for the same user
   if (
     _orgCache.userId === userId &&
+    _orgCache.scope === scope &&
     _orgCache.promise &&
     now - _orgCache.fetchedAt < ORG_CACHE_TTL
   ) {
@@ -23,8 +27,10 @@ function getCachedOrFetch(userId: string): Promise<Organization[]> {
   }
 
   _orgCache.userId = userId;
+  _orgCache.scope = scope;
   _orgCache.fetchedAt = now;
-  _orgCache.promise = fetch('/api/auth/organizations', {
+  const url = scope === 'buyer' ? '/api/auth/organizations?scope=buyer' : '/api/auth/organizations';
+  _orgCache.promise = fetch(url, {
     method: 'GET',
     cache: 'no-store',
     credentials: 'include',
@@ -129,7 +135,21 @@ function isSameOrganization(a: Organization | null, b: Organization | null): boo
   );
 }
 
-export function useUserOrganizations(userId?: string) {
+function clearStoredOrganization() {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem('selected_organization');
+  writeOrganizationCookies(null);
+  window.dispatchEvent(new CustomEvent('organization-changed', {
+    detail: { organizationId: null, organization: null }
+  }));
+}
+
+export function useUserOrganizations(
+  userId?: string,
+  options: { scope?: UserOrganizationScope; autoSelect?: boolean } = {}
+) {
+  const scope = options.scope || 'admin';
+  const autoSelect = options.autoSelect ?? true;
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [selectedOrganization, setSelectedOrganization] = useState<Organization | null>(() => readStoredOrganization());
   const [loading, setLoading] = useState(true);
@@ -189,12 +209,19 @@ export function useUserOrganizations(userId?: string) {
     setError(null);
     
     try {
-      const orgsData = await getCachedOrFetch(currentUserId);
+      const orgsData = await getCachedOrFetch(currentUserId, scope);
 
       setOrganizations(orgsData);
 
+      const storedOrganization = readStoredOrganization();
+      if (storedOrganization && !orgsData.some((org) => org.id === storedOrganization.id)) {
+        setSelectedOrganization(null);
+        clearStoredOrganization();
+        return;
+      }
+
       // Auto-select first organization if none is currently selected
-      if (orgsData.length > 0 && !readStoredOrganization()) {
+      if (autoSelect && orgsData.length > 0 && !storedOrganization) {
         selectOrganization(orgsData[0]);
       }
     } catch (err) {
@@ -212,15 +239,11 @@ export function useUserOrganizations(userId?: string) {
     } finally {
       setLoading(false);
     }
-  }, [selectOrganization]);
+  }, [autoSelect, scope, selectOrganization]);
   const clearSelectedOrganization = useCallback(() => {
     setSelectedOrganization(null);
     try {
-      localStorage.removeItem('selected_organization');
-      writeOrganizationCookies(null);
-      window.dispatchEvent(new CustomEvent('organization-changed', {
-        detail: { organizationId: null, organization: null }
-      }));
+      clearStoredOrganization();
     } catch (e) {
       console.error('Error clearing selected organization:', e);
     }

@@ -1,6 +1,7 @@
 ﻿'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import {
   Activity,
@@ -614,6 +615,7 @@ export function CompanyProfileSettings() {
 
 export function SalesBillingSettings() {
   const organizationId = useCurrentOrganizationId();
+  const pathname = usePathname();
   const { data: systemSettings, isLoading } = useSystemSettings();
   const updateSystemSettings = useUpdateSystemSettings();
   const [localSettings, setLocalSettings] = useState<Partial<SystemSettings>>({});
@@ -648,6 +650,7 @@ export function SalesBillingSettings() {
 
   const taxRate = Number(currentSettings.tax_rate ?? 10);
   const maxDiscount = Number(currentSettings.max_discount_percentage ?? 50);
+  const invoicingHref = pathname?.startsWith('/admin') ? '/admin/invoicing' : '/dashboard/invoicing';
 
   return (
     <div className="space-y-6">

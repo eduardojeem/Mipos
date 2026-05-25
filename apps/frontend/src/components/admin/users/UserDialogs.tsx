@@ -192,9 +192,9 @@ export function DeleteUserDialog({
     <Dialog open={Boolean(userId)} onOpenChange={(open) => (!open ? onClose() : undefined)}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Remover usuario</DialogTitle>
+          <DialogTitle>Remover membresia</DialogTitle>
           <DialogDescription>
-            Esta accion quita la membresia de la organizacion actual. El acceso puede seguir existiendo en otras empresas si el usuario tiene otras vinculaciones.
+            Esta accion quita el acceso solo de la organizacion actual. No borra la cuenta global ni afecta otras empresas vinculadas.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
@@ -210,7 +210,7 @@ export function DeleteUserDialog({
             disabled={!userId || isDeleting}
           >
             {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Remover
+            Remover membresia
           </Button>
         </DialogFooter>
       </DialogContent>

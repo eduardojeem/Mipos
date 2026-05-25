@@ -43,6 +43,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { useAllOrganizations } from '@/hooks/use-all-organizations'
 import { useCompanyAccess } from '@/hooks/use-company-access'
 import { useUserOrganizations, type Organization } from '@/hooks/use-user-organizations'
+import { useConfigValidation } from './hooks/useConfigValidation'
 import { COMPANY_FEATURE_KEYS, COMPANY_PERMISSIONS } from '@/lib/company-access'
 import { buildTenantPublicBaseUrl } from '@/lib/domain/host-context'
 import { getCanonicalPlanDisplayName, normalizePlanSlug } from '@/lib/plan-catalog'
@@ -70,6 +71,14 @@ type LaunchCheck = {
   label: string
   description: string
   done: boolean
+}
+
+type MissingDataItem = {
+  id: string
+  label: string
+  description: string
+  tab: string
+  required: boolean
 }
 
 const TAB_CONFIG: TabConfig[] = [
@@ -130,7 +139,11 @@ function mergeConfig(base: BusinessConfig, updates: Partial<BusinessConfig>): Bu
   return merged
 }
 
-function getTabHealth(config: BusinessConfig, tabId: string): 'complete' | 'partial' | 'empty' {
+function getTabHealth(
+  config: BusinessConfig,
+  tabId: string,
+  extras?: { organizationIdentifier?: string | null }
+): 'complete' | 'partial' | 'empty' {
   switch (tabId) {
     case 'content': {
       const completed = Boolean(config.businessName && config.heroTitle && config.heroDescription)
@@ -163,13 +176,143 @@ function getTabHealth(config: BusinessConfig, tabId: string): 'complete' | 'part
     }
     case 'commerce':
       return config.storeSettings?.currency && config.storeSettings?.currencySymbol ? 'complete' : 'empty'
-    case 'publication':
-      return config.publicSite?.sections?.showCatalog || config.publicSite?.sections?.showOffers ? 'partial' : 'empty'
+    case 'publication': {
+      const hasIdentifier = Boolean(extras?.organizationIdentifier)
+      const hasSections = Boolean(
+        config.publicSite?.sections?.showCatalog || config.publicSite?.sections?.showOffers
+      )
+      if (hasIdentifier && hasSections) return 'complete'
+      if (hasIdentifier || hasSections) return 'partial'
+      return 'empty'
+    }
     case 'preview':
       return 'complete'
     default:
       return 'empty'
   }
+}
+
+function isBlank(value: unknown) {
+  return typeof value !== 'string' || value.trim().length === 0
+}
+
+function getMissingDataItems(config: BusinessConfig, canUseCustomBranding: boolean): MissingDataItem[] {
+  const missing: MissingDataItem[] = []
+  const add = (item: MissingDataItem, missingValue: boolean) => {
+    if (missingValue) missing.push(item)
+  }
+
+  add({
+    id: 'businessName',
+    label: 'Nombre publico del negocio',
+    description: 'Identifica la empresa en la web publica, footer y metadatos.',
+    tab: 'content',
+    required: true,
+  }, isBlank(config.businessName))
+
+  add({
+    id: 'heroTitle',
+    label: 'Titulo principal',
+    description: 'Texto central del hero que ve el cliente al entrar.',
+    tab: 'content',
+    required: true,
+  }, isBlank(config.heroTitle))
+
+  add({
+    id: 'heroDescription',
+    label: 'Descripcion comercial',
+    description: 'Explica que vende la empresa y por que comprar ahi.',
+    tab: 'content',
+    required: true,
+  }, isBlank(config.heroDescription))
+
+  add({
+    id: 'contact.phone',
+    label: 'Telefono publico',
+    description: 'Obligatorio para guardar y mostrar un canal real de contacto.',
+    tab: 'contact',
+    required: true,
+  }, isBlank(config.contact?.phone))
+
+  add({
+    id: 'contact.email',
+    label: 'Email publico',
+    description: 'Recomendado para consultas, soporte y confianza del cliente.',
+    tab: 'contact',
+    required: false,
+  }, isBlank(config.contact?.email))
+
+  add({
+    id: 'address',
+    label: 'Direccion visible',
+    description: 'Ayuda a ubicar la empresa y completa la seccion de contacto.',
+    tab: 'contact',
+    required: false,
+  }, isBlank(config.address?.street) || isBlank(config.address?.city))
+
+  add({
+    id: 'legalInfo.ruc',
+    label: 'RUC o identificacion fiscal',
+    description: 'Recomendado si la web publica debe transmitir datos legales.',
+    tab: 'contact',
+    required: false,
+  }, isBlank(config.legalInfo?.ruc))
+
+  add({
+    id: 'businessHours',
+    label: 'Horarios de atencion',
+    description: 'Evita dudas en contacto, footer y pedidos fuera de horario.',
+    tab: 'contact',
+    required: false,
+  }, !Array.isArray(config.businessHours) || config.businessHours.length === 0)
+
+  if (canUseCustomBranding) {
+    add({
+      id: 'branding.logo',
+      label: 'Logo de la empresa',
+      description: 'Mejora reconocimiento de marca en header, footer y preview.',
+      tab: 'brand',
+      required: false,
+    }, isBlank(config.branding?.logo))
+  }
+
+  add({
+    id: 'carousel.images',
+    label: 'Imagenes del carrusel',
+    description: 'Recomendado para que el inicio publico no se vea vacio.',
+    tab: 'content',
+    required: false,
+  }, !config.carousel?.images?.length)
+
+  return missing
+}
+
+function getManagedAssetUrls(config: BusinessConfig): Set<string> {
+  const urls = new Set<string>()
+  const add = (value?: string | null) => {
+    if (typeof value === 'string' && value.includes('/storage/v1/object/public/')) {
+      urls.add(value)
+    }
+  }
+
+  add(config.branding?.logo)
+  add(config.branding?.favicon)
+  ;(config.carousel?.images || []).forEach((image) => add(image?.url))
+  return urls
+}
+
+function cleanupRemovedAssets(previous: BusinessConfig, next: BusinessConfig) {
+  const previousUrls = getManagedAssetUrls(previous)
+  const nextUrls = getManagedAssetUrls(next)
+
+  previousUrls.forEach((url) => {
+    if (nextUrls.has(url)) return
+    fetch('/api/assets/delete', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, public: true }),
+    }).catch(() => undefined)
+  })
 }
 
 export default function BusinessConfigPage() {
@@ -186,6 +329,8 @@ export default function BusinessConfigPage() {
   const [localChanges, setLocalChanges] = useState<Partial<BusinessConfig>>({})
   const [showResetDialog, setShowResetDialog] = useState(false)
   const previousOrganizationId = useRef<string | null>(null)
+  const { validateAll } = useConfigValidation()
+
   const accessQuery = useCompanyAccess({
     permission: COMPANY_PERMISSIONS.MANAGE_COMPANY,
     feature: COMPANY_FEATURE_KEYS.ADMIN_PANEL,
@@ -267,6 +412,17 @@ export default function BusinessConfigPage() {
 
   const activeModulesCount = publicModules.filter((item) => item.enabled).length
   const warnings = launchChecks.filter((check) => !check.done)
+  const missingDataItems = useMemo(
+    () => getMissingDataItems(currentConfig, canUseCustomBranding),
+    [canUseCustomBranding, currentConfig]
+  )
+  const requiredMissingData = missingDataItems.filter((item) => item.required)
+  const recommendedMissingData = missingDataItems.filter((item) => !item.required)
+  const missingPublicContact = [
+    !currentConfig.contact?.phone?.trim() ? 'telefono publico' : null,
+    !currentConfig.contact?.email?.trim() ? 'email publico' : null,
+    !currentConfig.legalInfo?.ruc?.trim() ? 'RUC' : null,
+  ].filter(Boolean)
 
   const publicBaseUrl = useMemo(() => {
     if (typeof window === 'undefined') return ''
@@ -339,19 +495,60 @@ export default function BusinessConfigPage() {
   const handleSave = useCallback(async () => {
     if (!hasUnsavedChanges) return
 
+    // Validación client-side antes de ir al servidor
+    const validationErrors = validateAll(currentConfig)
+    if (validationErrors.length > 0) {
+      const firstError = validationErrors[0]
+      // Mapear el campo al tab correspondiente
+      const fieldToTab: Record<string, string> = {
+        businessName: 'content',
+        heroTitle: 'content',
+        heroDescription: 'content',
+        'contact.phone': 'contact',
+        'contact.email': 'contact',
+        'address.street': 'contact',
+        'address.city': 'contact',
+        'address.department': 'contact',
+        'legalInfo.businessType': 'contact',
+        'legalInfo.ruc': 'contact',
+        'branding.primaryColor': 'brand',
+        'branding.secondaryColor': 'brand',
+        'storeSettings.currency': 'commerce',
+        'storeSettings.currencySymbol': 'commerce',
+        'storeSettings.taxRate': 'commerce',
+      }
+      const targetTab = fieldToTab[firstError.field] || activeTab
+      setActiveTab(targetTab)
+      toast({
+        title: 'Revisá los datos antes de guardar',
+        description: firstError.message,
+        variant: 'destructive',
+      })
+      return
+    }
+
     try {
       setSaving(true)
+      const nextConfig = mergeConfig(config, localChanges)
       const result = await updateConfig({
         ...localChanges,
         updatedAt: new Date().toISOString(),
       })
 
       if (result.persisted) {
+        cleanupRemovedAssets(config, nextConfig)
         setHasUnsavedChanges(false)
         setLocalChanges({})
         toast({
           title: '✓ Configuración guardada',
           description: 'Los cambios ya están activos en tu página pública.',
+        })
+      } else if (result.status === 'validation') {
+        setActiveTab('contact')
+        toast({
+          title: 'Completa el contacto publico',
+          description: result.message || 'Agrega el telefono publico del negocio para poder guardar.',
+          variant: 'destructive',
         })
       } else {
         toast({
@@ -369,11 +566,12 @@ export default function BusinessConfigPage() {
     } finally {
       setSaving(false)
     }
-  }, [hasUnsavedChanges, localChanges, toast, updateConfig])
+  }, [activeTab, config, currentConfig, hasUnsavedChanges, localChanges, toast, updateConfig, validateAll])
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+      const key = typeof event.key === 'string' ? event.key.toLowerCase() : ''
+      if ((event.ctrlKey || event.metaKey) && key === 's') {
         event.preventDefault()
         void handleSave()
       }
@@ -398,13 +596,14 @@ export default function BusinessConfigPage() {
     if (!hasUnsavedChanges) return
     if (!window.confirm('Se descartaran todos los cambios no guardados. Deseas continuar?')) return
 
+    cleanupRemovedAssets(currentConfig, config)
     setLocalChanges({})
     setHasUnsavedChanges(false)
     toast({
       title: 'Cambios descartados',
       description: 'La configuracion volvio al ultimo estado guardado.',
     })
-  }, [hasUnsavedChanges, toast])
+  }, [config, currentConfig, hasUnsavedChanges, toast])
 
   const confirmReset = useCallback(async () => {
     try {
@@ -484,13 +683,141 @@ export default function BusinessConfigPage() {
             selectedOrganization={selectedOrganization}
             allowCustomDomain={canUseCustomBranding}
             planName={getCanonicalPlanDisplayName(currentPlan)}
-            onUpdate={() => {
-              toast({
-                title: 'Publicacion actualizada',
-                description: 'La configuracion publica se actualizo correctamente.',
-              })
-            }}
+            config={currentConfig}
+            onUpdate={onUpdate}
           />
+        )
+      case 'preview':
+        return <ConfigPreview config={currentConfig} onUpdate={handleConfigUpdate} onReset={handleReset} />
+      default:
+        return null
+    }
+  }
+
+  if (loading || accessQuery.isLoading) {
+    return (
+      <div className="flex min-h-[420px] items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="mx-auto mb-4 h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Cargando centro publico del negocio...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex min-h-[420px] items-center justify-center">
+        <Card className="w-full max-w-lg border-destructive/30">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="h-5 w-5" />
+              Error al cargar
+            </CardTitle>
+            <CardDescription>{error}</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={() => window.location.reload()}>Reintentar</Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  if (accessQuery.data && !accessQuery.data.allowed) {
+    return (
+      <div className="mx-auto max-w-3xl p-6">
+        <Card className="border-amber-500/30 bg-amber-500/5">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-amber-200">
+              <AlertCircle className="h-5 w-5" />
+              Seccion no habilitada para tu plan actual
+            </CardTitle>
+            <CardDescription className="text-amber-100/80">
+              Esta consola publica requiere acceso administrativo sobre el panel SaaS. En `Starter` podras gestionar contenido, carrusel y subdominio; en `Professional` tambien se habilitan branding avanzado y dominio personalizado.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" onClick={() => router.replace('/admin/subscriptions')}>
+              Ver plan y suscripcion
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mx-auto max-w-7xl space-y-6 p-6">
+      <div className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
+        <Card className="overflow-hidden border-border/60 bg-gradient-to-br from-background via-background to-primary/5">
+          <CardHeader className="space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                  <Globe className="h-4 w-4" />
+                  Centro de publicacion
+                </div>
+                <CardTitle className="text-3xl tracking-tight">Publicacion del negocio</CardTitle>
+                <CardDescription className="max-w-2xl text-sm">
+                  Gestiona contenido, marca, comercio y salida publica del negocio desde una sola superficie. Esta vista se enfoca en lo que realmente impacta en `/home`, `/catalog` y `/offers`.
+                </CardDescription>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {hasUnsavedChanges && (
+                  <Badge variant="outline" className="border-amber-500/40 text-amber-600">
+                    Cambios sin guardar
+                  </Badge>
+                )}
+                <Badge variant="outline" className={persisted ? 'border-emerald-500/40 text-emerald-600' : 'border-sky-500/40 text-sky-600'}>
+                  {persisted ? (
+                    <>
+                      <CheckCircle className="mr-1 h-3 w-3" />
+                      Sincronizado
+                    </>
+                  ) : (
+                    <>
+                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                      Pendiente de sincronizacion
+                    </>
+                  )}
+                </Badge>
+                <Badge variant="secondary" className="bg-primary/10 text-primary">
+                  {readinessPercent}% listo
+                </Badge>
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-2xl border border-border/70 bg-background/80 p-4">
+                <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Empresa</p>
+                <p className="mt-2 text-sm font-semibold text-foreground">{organizationName || 'Sin seleccionar'}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Configuracion por tenant</p>
+              </div>
+              <div className="rounded-2xl border border-border/70 bg-background/80 p-4">
+                <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Modulos publicos</p>
+                <p className="mt-2 text-sm font-semibold text-foreground">{activeModulesCount} activos</p>
+                <p className="mt-1 text-xs text-muted-foreground">Home, contacto, legales y senales comerciales</p>
+              </div>
+              <div className="rounded-2xl border border-border/70 bg-background/80 p-4">
+                <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">Plan activo</p>
+                <p className="mt-2 text-sm font-semibold text-foreground">
+                  {getCanonicalPlanDisplayName(currentPlan)}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {canUseCustomBranding ? 'Branding avanzado y dominio personalizado habilitados' : 'Contenido, comercio y ruta publica habilitados'}
+                </p>
+              </div>
+            </div>
+
+            {isSuperAdmin && (
+              <Suspense fallback={<div className="rounded-lg border px-3 py-2 text-sm text-muted-foreground">Cargando organizaciones...</div>}>
+                <OrganizationSelectorForConfig
+                  organizations={allOrganizationsQuery.organizations}
+                  selectedOrganization={selectedOrganization}
+                  loading={allOrganizationsQuery.loading}
+                  error={allOrganizationsQuery.error}
         )
       case 'preview':
         return <ConfigPreview config={currentConfig} onUpdate={handleConfigUpdate} onReset={handleReset} />
@@ -673,7 +1000,9 @@ export default function BusinessConfigPage() {
               <TabsList className="h-auto w-full flex-wrap justify-start gap-2 bg-transparent p-0">
                 {availableTabs.map((tab) => {
                   const Icon = tab.icon
-                  const health = getTabHealth(currentConfig, tab.id)
+                  const health = getTabHealth(currentConfig, tab.id, {
+                    organizationIdentifier: selectedOrganization?.subdomain || selectedOrganization?.slug,
+                  })
                   return (
                     <TabsTrigger
                       key={tab.id}
@@ -740,6 +1069,69 @@ export default function BusinessConfigPage() {
         </div>
 
         <div className="space-y-6">
+          <Card className="border-border/60 bg-background/80">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <AlertCircle className="h-4 w-4 text-primary" />
+                Datos faltantes
+              </CardTitle>
+              <CardDescription>Campos que conviene completar para guardar sin errores y publicar una web consistente.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {missingDataItems.length === 0 ? (
+                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-sm text-emerald-700 dark:text-emerald-400">
+                  No hay datos pendientes en la configuracion principal.
+                </div>
+              ) : (
+                <>
+                  {requiredMissingData.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-destructive">Obligatorios</p>
+                        <Badge variant="destructive">{requiredMissingData.length}</Badge>
+                      </div>
+                      {requiredMissingData.map((item) => (
+                        <div key={item.id} className="rounded-2xl border border-destructive/20 bg-destructive/5 p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-foreground">{item.label}</p>
+                              <p className="mt-1 text-xs text-muted-foreground">{item.description}</p>
+                            </div>
+                            <Button size="sm" variant="outline" onClick={() => setActiveTab(item.tab)}>
+                              Completar
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {recommendedMissingData.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Recomendados</p>
+                        <Badge variant="outline">{recommendedMissingData.length}</Badge>
+                      </div>
+                      {recommendedMissingData.map((item) => (
+                        <div key={item.id} className="rounded-2xl border border-border/70 bg-muted/20 p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-foreground">{item.label}</p>
+                              <p className="mt-1 text-xs text-muted-foreground">{item.description}</p>
+                            </div>
+                            <Button size="sm" variant="ghost" onClick={() => setActiveTab(item.tab)}>
+                              Agregar
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+
           <Card className="border-border/60 bg-background/80">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
@@ -833,6 +1225,14 @@ export default function BusinessConfigPage() {
               <CardDescription>Referencia rapida de lo que hoy queda expuesto en la web.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
+              {missingPublicContact.length > 0 && (
+                <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-800 dark:border-amber-800 dark:bg-amber-950/20 dark:text-amber-200">
+                  <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                  <span>
+                    Pendiente: {missingPublicContact.join(', ')}. No se publican datos genericos.
+                  </span>
+                </div>
+              )}
               <div className="flex items-center gap-3">
                 <Phone className="h-4 w-4 text-muted-foreground" />
                 <span className="text-foreground">{currentConfig.contact?.phone || 'Sin telefono'}</span>
@@ -850,6 +1250,8 @@ export default function BusinessConfigPage() {
               <div className="flex items-start gap-3">
                 <FileText className="mt-0.5 h-4 w-4 text-muted-foreground" />
                 <span className="text-foreground">
+                  {currentConfig.legalInfo?.ruc ? `RUC ${currentConfig.legalInfo.ruc}` : 'Sin RUC'}
+                  {' · '}
                   {currentConfig.legalDocuments?.termsUrl || currentConfig.legalDocuments?.privacyUrl ? 'Documentos legales disponibles' : 'Sin documentos legales publicos'}
                 </span>
               </div>

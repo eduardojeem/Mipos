@@ -425,6 +425,29 @@ export async function PATCH(
 
     const organization = await buildOrganizationDetailResponse(adminClient, id);
 
+    const { error: auditError } = await adminClient.from('audit_logs').insert({
+      user_id: auth.userId,
+      action: 'UPDATE',
+      table_name: 'organizations',
+      record_id: id,
+      organization_id: id,
+      old_data: currentOrganization,
+      new_data: organization,
+      metadata: {
+        source: 'superadmin_organization_detail',
+        changedFields: Object.keys(body || {}),
+      },
+      created_at: new Date().toISOString(),
+    });
+
+    if (auditError) {
+      structuredLogger.warn('Unable to write organization audit log', {
+        component: COMPONENT,
+        action: 'PATCH_AUDIT',
+        metadata: { id, error: auditError.message },
+      });
+    }
+
     return NextResponse.json({
       success: true,
       organization,

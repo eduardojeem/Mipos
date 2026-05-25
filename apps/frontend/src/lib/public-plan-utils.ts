@@ -215,6 +215,23 @@ export function formatCurrency(amount: number, currency: string) {
   }).format(amount)
 }
 
+export function getPlanBillingPrice(plan: Plan, billingCycle: 'monthly' | 'yearly') {
+  if (billingCycle === 'monthly') {
+    return Number(plan.priceMonthly || 0)
+  }
+
+  const yearly = Number(plan.priceYearly || 0)
+  if (yearly > 0) {
+    return yearly
+  }
+
+  return Number(plan.priceMonthly || 0) * 12
+}
+
+export function isSelfServicePaidPlan(plan: Plan | null | undefined) {
+  return Boolean(plan && normalizePlanSlug(plan.slug) !== 'enterprise' && Number(plan.priceMonthly || 0) > 0)
+}
+
 export function getPlanFeatureLabels(features: string[]) {
   return features
     .map((feature) => String(feature).trim())
@@ -302,12 +319,19 @@ export function getBillingBadgeDiscount(plans: Plan[]) {
   return discounts.length ? Math.max(...discounts) : 0
 }
 
-export function buildPublicRegistrationPath(planSlug?: string | null) {
+export function buildPublicRegistrationPath(
+  planSlug?: string | null,
+  options: { billingCycle?: 'monthly' | 'yearly'; mode?: 'free' | 'plans' } = {}
+) {
   if (!planSlug) {
     return '/inicio/registro'
   }
 
-  return `/inicio/registro?plan=${encodeURIComponent(planSlug)}`
+  const params = new URLSearchParams({ plan: planSlug })
+  if (options.billingCycle) params.set('billing', options.billingCycle)
+  if (options.mode) params.set('mode', options.mode)
+
+  return `/inicio/registro?${params.toString()}`
 }
 
 // Returns the effective features for a plan, inheriting features from lower-tier plans.

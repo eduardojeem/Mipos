@@ -133,7 +133,7 @@ export const UserMobileCard = memo(function UserMobileCard({
           </Button>
           <Button variant="outline" className="text-destructive hover:text-destructive" onClick={() => onDelete(item.id)} disabled={isBusy}>
             {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
-            Remover
+            Remover acceso
           </Button>
         </div>
       </div>

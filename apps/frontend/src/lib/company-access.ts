@@ -4,6 +4,8 @@ export const COMPANY_PERMISSIONS = {
   MANAGE_COMPANY: 'manage_company',
   MANAGE_BILLING: 'manage_billing',
   MANAGE_USERS: 'manage_users',
+  VIEW_SETTINGS: 'settings.view',
+  EDIT_SETTINGS: 'settings.edit',
   VIEW_REPORTS: 'view_reports',
   EDIT_PRODUCTS: 'edit_products',
   CREATE_SALES: 'create_sales',

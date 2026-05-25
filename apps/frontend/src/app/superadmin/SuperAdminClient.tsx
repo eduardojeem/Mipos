@@ -1,30 +1,21 @@
 'use client';
 
 import React, { useState } from 'react';
-import dynamic from 'next/dynamic';
+import Link from 'next/link';
+import { BarChart3, Building2, RefreshCw } from 'lucide-react';
 import { useAdminData, Organization, AdminStats as IAdminStats } from '@/app/superadmin/hooks/useAdminData';
 import { AdminStats } from '@/app/superadmin/components/AdminStats';
-import { OrganizationsTable } from '@/app/superadmin/components/OrganizationsTable';
-const SystemOverview = dynamic(() => import('@/app/superadmin/components/SystemOverview').then(m => m.SystemOverview), { ssr: false });
 import { ErrorDisplay } from '@/app/superadmin/components/ErrorDisplay';
+import { OrganizationsTable } from '@/app/superadmin/components/OrganizationsTable';
 import { PartialFailureWarning } from '@/app/superadmin/components/PartialFailureWarning';
-const AnalyticsDashboard = dynamic(() => import('@/app/superadmin/components/AnalyticsDashboard').then(m => m.AnalyticsDashboard), { ssr: false });
-import { SystemSettings } from '@/app/superadmin/components/SystemSettings';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
+import { SystemOverview } from '@/app/superadmin/components/SystemOverview';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Switch } from '@/components/ui/switch';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import {
-  RefreshCw,
-  Building2,
-  BarChart3,
-  TrendingUp,
-  Settings
-} from 'lucide-react';
-import { SuperAdminGuard } from './components/SuperAdminGuard';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/use-toast';
+import { SuperAdminGuard } from './components/SuperAdminGuard';
 
 interface SuperAdminClientProps {
   initialOrganizations?: Organization[];
@@ -34,7 +25,6 @@ interface SuperAdminClientProps {
 export function SuperAdminClient({ initialOrganizations, initialStats }: SuperAdminClientProps) {
   const { toast } = useToast();
   const [autoRefresh, setAutoRefresh] = useState(false);
-  const [activeTab, setActiveTab] = useState('overview');
 
   const {
     organizations,
@@ -46,42 +36,42 @@ export function SuperAdminClient({ initialOrganizations, initialStats }: SuperAd
     lastFetch,
     cachedData,
     refresh,
-    clearError
+    clearError,
   } = useAdminData({
     autoRefresh,
     refreshInterval: 5 * 60 * 1000,
-    onError: (error) => {
+    onError: (message) => {
       toast({
         title: 'Error al cargar datos',
-        description: error,
+        description: message,
         variant: 'destructive',
       });
     },
     initialOrganizations,
-    initialStats
+    initialStats,
   });
 
   const handleRefresh = async () => {
     toast({
-      title: 'Actualizando datos...',
+      title: 'Actualizando datos',
       description: 'Por favor espera un momento.',
     });
 
     await refresh();
 
     toast({
-      title: 'Actualización completa',
-      description: 'Todos los datos se actualizaron correctamente.',
+      title: 'Actualizacion completa',
+      description: 'Los datos se actualizaron correctamente.',
     });
   };
 
   const handleAutoRefreshToggle = (checked: boolean) => {
     setAutoRefresh(checked);
     toast({
-      title: checked ? 'Auto-actualización activada' : 'Auto-actualización desactivada',
+      title: checked ? 'Auto-actualizacion activada' : 'Auto-actualizacion desactivada',
       description: checked
-        ? 'Los datos se actualizarán cada 5 minutos.'
-        : 'La actualización automática está desactivada.',
+        ? 'Los datos se actualizaran cada 5 minutos.'
+        : 'La actualizacion automatica esta desactivada.',
     });
   };
 
@@ -99,16 +89,16 @@ export function SuperAdminClient({ initialOrganizations, initialStats }: SuperAd
   if (error) {
     return (
       <SuperAdminGuard>
-        <div className="p-8 space-y-6">
+        <div className="space-y-6 p-8">
           <div className="space-y-1">
-            <h2 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-slate-700 to-slate-900 dark:from-slate-300 dark:to-slate-100 bg-clip-text text-transparent">
-              Panel de Administración SaaS
+            <h2 className="text-3xl font-bold tracking-tight text-slate-950 dark:text-slate-50">
+              Panel de Administracion SaaS
             </h2>
             <p className="text-sm text-muted-foreground">
-              Gestiona organizaciones, usuarios y analíticas de tu plataforma
+              Gestiona organizaciones, usuarios y metricas de tu plataforma
             </p>
           </div>
-          
+
           <ErrorDisplay
             error={error}
             onRetry={refresh}
@@ -116,36 +106,24 @@ export function SuperAdminClient({ initialOrganizations, initialStats }: SuperAd
             showCachedDataWarning={cachedData?.isStale === true}
             cachedDataTimestamp={cachedData?.timestamp}
           />
-          
+
           {cachedData && cachedData.isStale && (
             <div className="space-y-6">
               <AdminStats stats={cachedData.stats} />
-              
               <Card>
                 <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle>Organizaciones Registradas (Datos en Caché)</CardTitle>
-                      <CardDescription>
-                        Mostrando datos guardados localmente
-                      </CardDescription>
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {cachedData.organizations.length} organizacion{cachedData.organizations.length !== 1 ? 'es' : ''}
-                    </div>
-                  </div>
+                  <CardTitle>Organizaciones registradas (datos en cache)</CardTitle>
+                  <CardDescription>Mostrando datos guardados localmente</CardDescription>
                 </CardHeader>
                 <CardContent>
                   {cachedData.organizations.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-12 text-center">
-                      <Building2 className="h-12 w-12 text-muted-foreground mb-4" />
-                      <h3 className="text-lg font-semibold mb-2">No hay organizaciones</h3>
-                      <p className="text-sm text-muted-foreground mb-4">
-                        No hay datos de organizaciones en caché
-                      </p>
+                      <Building2 className="mb-4 h-12 w-12 text-muted-foreground" />
+                      <h3 className="mb-2 text-lg font-semibold">No hay organizaciones</h3>
+                      <p className="text-sm text-muted-foreground">No hay datos de organizaciones en cache.</p>
                     </div>
                   ) : (
-                    <OrganizationsTable organizations={cachedData.organizations} />
+                    <OrganizationsTable organizations={cachedData.organizations.slice(0, 8)} compact />
                   )}
                 </CardContent>
               </Card>
@@ -161,18 +139,24 @@ export function SuperAdminClient({ initialOrganizations, initialStats }: SuperAd
       <div className="flex-1 space-y-6 p-8 pt-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
-            <h2 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-slate-700 to-slate-900 dark:from-slate-300 dark:to-slate-100 bg-clip-text text-transparent">
-              Panel de Administración SaaS
+            <h2 className="text-3xl font-bold tracking-tight text-slate-950 dark:text-slate-50">
+              Panel de Administracion SaaS
             </h2>
             <p className="text-sm text-muted-foreground">
-              Gestiona organizaciones, usuarios y analíticas de tu plataforma
+              Gestiona organizaciones, usuarios, planes y salud comercial de tu plataforma
             </p>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground hidden sm:inline">
-              Última actualización: {formatLastUpdated()}
+            <span className="hidden text-sm text-muted-foreground sm:inline">
+              Ultima actualizacion: {formatLastUpdated()}
             </span>
+            <Button asChild variant="outline" size="sm" className="gap-2">
+              <Link href="/superadmin/analytics">
+                <BarChart3 className="h-4 w-4" />
+                <span className="hidden sm:inline">Analiticas</span>
+              </Link>
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -186,20 +170,16 @@ export function SuperAdminClient({ initialOrganizations, initialStats }: SuperAd
           </div>
         </div>
 
-        <div className="flex items-center justify-between rounded-lg border p-4 bg-muted/50">
+        <div className="flex items-center justify-between rounded-md border bg-muted/50 p-4">
           <div className="space-y-0.5">
             <Label htmlFor="auto-refresh" className="text-base font-medium">
-              Actualización Automática
+              Actualizacion automatica
             </Label>
             <p className="text-sm text-muted-foreground">
-              Actualiza los datos cada 5 minutos automáticamente
+              Actualiza los datos cada 5 minutos automaticamente.
             </p>
           </div>
-          <Switch
-            id="auto-refresh"
-            checked={autoRefresh}
-            onCheckedChange={handleAutoRefreshToggle}
-          />
+          <Switch id="auto-refresh" checked={autoRefresh} onCheckedChange={handleAutoRefreshToggle} />
         </div>
 
         {(partialFailures.statsFailure || partialFailures.organizationsFailure) && (
@@ -213,83 +193,54 @@ export function SuperAdminClient({ initialOrganizations, initialStats }: SuperAd
         {loading ? (
           <div className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              {[1, 2, 3, 4].map((i) => (
-                <Skeleton key={i} className="h-40 rounded-xl" />
+              {[1, 2, 3, 4].map((item) => (
+                <Skeleton key={item} className="h-40 rounded-md" />
               ))}
             </div>
-            <Skeleton className="h-[400px] rounded-xl" />
+            <Skeleton className="h-[400px] rounded-md" />
           </div>
         ) : (
           <div className="space-y-6">
             <AdminStats stats={stats} />
+            <SystemOverview stats={stats} organizations={organizations} />
 
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-              <TabsList className="grid w-full grid-cols-4 lg:w-[800px]">
-                <TabsTrigger value="overview" className="gap-2">
-                  <TrendingUp className="h-4 w-4" />
-                  <span className="hidden sm:inline">Resumen</span>
-                </TabsTrigger>
-                <TabsTrigger value="organizations" className="gap-2">
-                  <Building2 className="h-4 w-4" />
-                  <span className="hidden sm:inline">Organizaciones</span>
-                </TabsTrigger>
-                <TabsTrigger value="analytics" className="gap-2">
-                  <BarChart3 className="h-4 w-4" />
-                  <span className="hidden sm:inline">Analíticas</span>
-                </TabsTrigger>
-                <TabsTrigger value="settings" className="gap-2">
-                  <Settings className="h-4 w-4" />
-                  <span className="hidden sm:inline">Configuración</span>
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="overview" className="space-y-4">
-                <SystemOverview />
-              </TabsContent>
-
-              <TabsContent value="organizations" className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle>Organizaciones Registradas</CardTitle>
-                        <CardDescription>
-                          Gestiona todas las organizaciones de la plataforma
-                        </CardDescription>
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        {organizations.length} organizacion{organizations.length !== 1 ? 'es' : ''}
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    {organizations.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-12 text-center">
-                        <Building2 className="h-12 w-12 text-muted-foreground mb-4" />
-                        <h3 className="text-lg font-semibold mb-2">No hay organizaciones</h3>
-                        <p className="text-sm text-muted-foreground mb-4">
-                          Aún no se han registrado organizaciones en la plataforma
-                        </p>
-                        <Button>
-                          <Building2 className="h-4 w-4 mr-2" />
-                          Crear Primera Organización
-                        </Button>
-                      </div>
-                    ) : (
-                      <OrganizationsTable organizations={organizations} />
-                    )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="analytics" className="space-y-4">
-                <AnalyticsDashboard />
-              </TabsContent>
-
-              <TabsContent value="settings" className="space-y-4">
-                <SystemSettings onUpdate={refresh} />
-              </TabsContent>
-            </Tabs>
+            <Card>
+              <CardHeader>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <CardTitle>Organizaciones recientes</CardTitle>
+                    <CardDescription>
+                      Vista rapida de las ultimas organizaciones registradas
+                    </CardDescription>
+                  </div>
+                  <Button asChild variant="outline" size="sm" className="gap-2">
+                    <Link href="/superadmin/organizations">
+                      <Building2 className="h-4 w-4" />
+                      Ver todas
+                    </Link>
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {organizations.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <Building2 className="mb-4 h-12 w-12 text-muted-foreground" />
+                    <h3 className="mb-2 text-lg font-semibold">No hay organizaciones</h3>
+                    <p className="mb-4 text-sm text-muted-foreground">
+                      Aun no se han registrado organizaciones en la plataforma.
+                    </p>
+                    <Button asChild>
+                      <Link href="/superadmin/organizations/create">
+                        <Building2 className="mr-2 h-4 w-4" />
+                        Crear primera organizacion
+                      </Link>
+                    </Button>
+                  </div>
+                ) : (
+                  <OrganizationsTable organizations={organizations.slice(0, 8)} compact />
+                )}
+              </CardContent>
+            </Card>
           </div>
         )}
       </div>

@@ -137,6 +137,8 @@ export const UserTableRow = memo(function UserTableRow({
             className="text-destructive hover:bg-destructive/10 hover:text-destructive"
             onClick={() => onDelete(item.id)}
             disabled={isBusy}
+            title="Remover membresia de esta organizacion"
+            aria-label="Remover membresia de esta organizacion"
           >
             {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
           </Button>

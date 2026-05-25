@@ -142,6 +142,7 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
       let orgsError: ErrorState | null = null;
       let statsData: AdminStats | null = null;
       let orgsData: Organization[] | null = null;
+      let orgsMetrics: { total?: number; active?: number; trial?: number; suspended?: number } | null = null;
 
       timeoutId = setTimeout(() => {
         console.warn('⏰ [useAdminData] Timeout reached (30s), aborting requests...');
@@ -195,6 +196,7 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
         if (r.ok) {
           const payload = await r.json();
           orgsData = (payload.organizations as Organization[]) || [];
+          orgsMetrics = payload.metrics || null;
           console.log(`✅ [useAdminData] Organizations data received: ${orgsData?.length ?? 0} items`);
         } else {
           const errorText = await readErrorBody(r);
@@ -244,12 +246,12 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
       // Update state with fetched data
       if (statsData) {
         const newStats = {
-          totalOrganizations: statsData.totalOrganizations || 0,
+          totalOrganizations: orgsMetrics?.total ?? statsData.totalOrganizations ?? 0,
           totalUsers: statsData.totalUsers || 0,
-          activeSubscriptions: statsData.activeOrganizations || 0,
+          activeSubscriptions: statsData.activeSubscriptions || 0,
           totalRevenue: statsData.totalRevenue || 0,
           monthlyRevenue: statsData.monthlyRevenue || 0,
-          activeOrganizations: statsData.activeOrganizations || 0,
+          activeOrganizations: orgsMetrics?.active ?? statsData.activeOrganizations ?? 0,
           activeUsers: statsData.activeUsers || 0,
         };
         setStats(newStats);
@@ -266,12 +268,12 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
         const dataToCache = {
           organizations: orgsData || organizations,
           stats: statsData ? {
-            totalOrganizations: statsData.totalOrganizations || 0,
+            totalOrganizations: orgsMetrics?.total ?? statsData.totalOrganizations ?? 0,
             totalUsers: statsData.totalUsers || 0,
-            activeSubscriptions: statsData.activeOrganizations || 0,
+            activeSubscriptions: statsData.activeSubscriptions || 0,
             totalRevenue: statsData.totalRevenue || 0,
             monthlyRevenue: statsData.monthlyRevenue || 0,
-            activeOrganizations: statsData.activeOrganizations || 0,
+            activeOrganizations: orgsMetrics?.active ?? statsData.activeOrganizations ?? 0,
             activeUsers: statsData.activeUsers || 0,
           } : stats
         };

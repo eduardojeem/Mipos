@@ -39,6 +39,40 @@ type InvoiceCustomerSnapshot = {
   taxId: string | null;
 };
 
+type PosSalesSettings = {
+  maxDiscountPercentage: number;
+  requireCustomerInfo: boolean;
+};
+
+function numberValue(value: unknown, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function clampPercentage(value: unknown, fallback: number): number {
+  return Math.min(100, Math.max(0, numberValue(value, fallback)));
+}
+
+async function loadPosSalesSettings(organizationId: string): Promise<PosSalesSettings> {
+  const admin = await createAdminClient();
+  const { data } = await admin
+    .from('settings')
+    .select('value')
+    .eq('organization_id', organizationId)
+    .eq('key', 'business_config')
+    .maybeSingle();
+
+  const value = (data as { value?: Record<string, unknown> } | null)?.value;
+  const storeSettings = value && typeof value.storeSettings === 'object' && value.storeSettings !== null
+    ? value.storeSettings as Record<string, unknown>
+    : {};
+
+  return {
+    maxDiscountPercentage: clampPercentage(storeSettings.maxDiscountPercentage, 50),
+    requireCustomerInfo: storeSettings.requireCustomerInfo === true,
+  };
+}
+
 async function createInvoiceForSale({
   organizationId,
   userId,
@@ -206,9 +240,27 @@ export async function POST(request: NextRequest) {
     const customerId = normalizeString(customer_id);
     const requestedDocumentType = String(document_type || 'internal_ticket').trim().toLowerCase();
     const shouldCreateInvoice = requestedDocumentType === 'invoice';
+    const salesSettings = await loadPosSalesSettings(organizationId);
     let invoiceCustomer: InvoiceCustomerSnapshot | null = null;
 
-    if (shouldCreateInvoice) {
+    if (salesSettings.requireCustomerInfo && !customerId) {
+      return NextResponse.json(
+        { error: 'Customer is required by the active sales settings' },
+        { status: 400 }
+      );
+    }
+
+    if (
+      discount_type === 'PERCENTAGE' &&
+      Number(discount_amount) > salesSettings.maxDiscountPercentage
+    ) {
+      return NextResponse.json(
+        { error: `Discount cannot exceed ${salesSettings.maxDiscountPercentage}% for this organization` },
+        { status: 400 }
+      );
+    }
+
+    if (shouldCreateInvoice || salesSettings.requireCustomerInfo) {
       if (!customerId) {
         return NextResponse.json(
           { error: 'Customer is required to issue an invoice from POS' },

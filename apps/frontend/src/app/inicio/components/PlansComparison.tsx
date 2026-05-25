@@ -5,7 +5,7 @@ import { Check, Minus, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { Plan } from '@/hooks/use-subscription';
-import { buildComparisonRows, formatCurrency } from '@/lib/public-plan-utils';
+import { buildComparisonRows, formatCurrency, getPlanBillingPrice } from '@/lib/public-plan-utils';
 
 interface PlansComparisonProps {
   plans: Plan[];
@@ -131,9 +131,11 @@ function ComparisonTable({ plans, billingCycle, rows, emptyMessage = 'No hay dat
                 <th key={plan.id} className="min-w-[180px] px-5 py-4 text-left">
                   <p className="text-sm font-semibold text-white">{plan.name}</p>
                   <p className="mt-1 text-sm text-slate-400">
-                    {billingCycle === 'yearly'
-                      ? `${formatCurrency(plan.priceYearly, plan.currency)} / año`
-                      : `${formatCurrency(plan.priceMonthly, plan.currency)} / mes`}
+                    {plan.slug === 'enterprise'
+                      ? 'A consultar'
+                      : billingCycle === 'yearly'
+                        ? `${formatCurrency(getPlanBillingPrice(plan, 'yearly'), plan.currency)} / ano`
+                        : `${formatCurrency(plan.priceMonthly, plan.currency)} / mes`}
                   </p>
                 </th>
               ))}
@@ -201,9 +203,11 @@ function ComparisonTable({ plans, billingCycle, rows, emptyMessage = 'No hay dat
                     <div>
                       <p className="text-sm font-medium text-slate-100">{plan.name}</p>
                       <p className="text-xs text-slate-500">
-                        {billingCycle === 'yearly'
-                          ? `${formatCurrency(plan.priceYearly, plan.currency)} / año`
-                          : `${formatCurrency(plan.priceMonthly, plan.currency)} / mes`}
+                        {plan.slug === 'enterprise'
+                          ? 'A consultar'
+                          : billingCycle === 'yearly'
+                            ? `${formatCurrency(getPlanBillingPrice(plan, 'yearly'), plan.currency)} / ano`
+                            : `${formatCurrency(plan.priceMonthly, plan.currency)} / mes`}
                       </p>
                     </div>
                     <div className="text-right text-sm text-slate-300">

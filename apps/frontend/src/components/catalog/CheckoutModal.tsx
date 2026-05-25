@@ -27,6 +27,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useBusinessConfig } from '@/contexts/BusinessConfigContext';
 import { useTenantPublicRouting } from '@/hooks/useTenantPublicRouting';
+import { useUserOrganizations } from '@/hooks/use-user-organizations';
 import { getConfiguredShippingCost, getFreeShippingThreshold } from '@/lib/pos/calculations';
 import { formatPrice } from '@/utils/formatters';
 import { useToast } from '@/components/ui/use-toast';
@@ -182,6 +183,10 @@ export default function CheckoutModal({
   const { tenantApiPath, tenantStorageScope } = useTenantPublicRouting();
   const { user } = useAuth();
   const { profile } = useProfile();
+  const { organizations: buyerOrganizations, loading: buyerOrganizationsLoading } = useUserOrganizations(user?.id, {
+    scope: 'buyer',
+    autoSelect: false,
+  });
   const { toast } = useToast();
   const firstInputRef = useRef<HTMLInputElement>(null);
   const enabledPaymentMethods = useMemo(() => getEnabledPaymentMethods(config), [config]);
@@ -328,6 +333,40 @@ export default function CheckoutModal({
 
     setTimeout(() => firstInputRef.current?.focus(), 100);
   }, [configuredShippingZones, defaultShippingRegion, enabledPaymentMethods, isOpen, profile?.location, profile?.name, profile?.phone, storageKey, user?.email, user?.full_name, user?.id, user?.name, user?.organizationId, user?.phone]);
+
+  useEffect(() => {
+    if (!isOpen || !user?.id || buyerOrganizationsLoading || !buyerOrganization?.id) return;
+
+    const matchedOrganization = buyerOrganizations.find((organization) => organization.id === buyerOrganization.id);
+    if (matchedOrganization) {
+      if (matchedOrganization.name !== buyerOrganization.name || matchedOrganization.slug !== buyerOrganization.slug) {
+        setBuyerOrganization({
+          id: matchedOrganization.id,
+          name: matchedOrganization.name,
+          slug: matchedOrganization.slug,
+        });
+      }
+      return;
+    }
+
+    setBuyerOrganization(null);
+    setBuyerType('customer');
+
+    try {
+      const rawOrg = localStorage.getItem('selected_organization');
+      const parsed = rawOrg ? JSON.parse(rawOrg) : null;
+      if (parsed?.id === buyerOrganization.id) {
+        localStorage.removeItem('selected_organization');
+        const expired = 'path=/; SameSite=Lax; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+        document.cookie = `x-organization-id=; ${expired}`;
+        document.cookie = `x-organization-name=; ${expired}`;
+        document.cookie = `x-organization-slug=; ${expired}`;
+        window.dispatchEvent(new CustomEvent('organization-changed', {
+          detail: { organizationId: null, organization: null },
+        }));
+      }
+    } catch {}
+  }, [buyerOrganization, buyerOrganizations, buyerOrganizationsLoading, isOpen, user?.id]);
 
   useEffect(() => {
     if (isOpen && cartItems.length === 0 && !isLoading) {

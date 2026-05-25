@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { assertSuperAdmin } from '@/app/api/_utils/auth'
-import { dedupeCanonicalPlans, getCanonicalPlanDisplayName, normalizePlanSlug } from '@/lib/plan-catalog'
+import { dedupeCanonicalPlans, getCanonicalPlanDisplayName, isCanonicalPlanSlug, normalizePlanSlug } from '@/lib/plan-catalog'
 
 interface PlanLimits {
   maxUsers: number
@@ -30,6 +30,32 @@ type OrganizationPlanRow = {
   id?: string | null
   subscription_plan?: string | null
   subscription_status?: string | null
+}
+
+type SupabasePlanError = {
+  code?: string
+  message?: string
+  details?: string
+}
+
+function getMissingColumn(error: SupabasePlanError | null | undefined) {
+  if (!error || error.code !== '42703') return null
+  const message = String(error.message || error.details || '')
+  const match = message.match(/column\s+"?([a-zA-Z0-9_]+)"?\s+of relation/i)
+    || message.match(/column\s+"?([a-zA-Z0-9_]+)"?\s+does not exist/i)
+  return match?.[1] || null
+}
+
+function getPlanConstraintMessage(error: SupabasePlanError | null | undefined) {
+  if (!error || error.code !== '23514') return null
+  const message = String(error.message || error.details || '')
+  if (message.includes('price_yearly')) {
+    return 'El precio anual no puede superar 12 meses del precio mensual'
+  }
+  if (message.includes('price_monthly')) {
+    return 'El precio mensual no puede ser negativo'
+  }
+  return 'El plan no cumple una regla de validacion de la base de datos'
 }
 
 export async function GET(request: NextRequest) {
@@ -70,7 +96,7 @@ export async function GET(request: NextRequest) {
     else if (sort === 'updated_at_desc') ordered = ordered.order('updated_at', { ascending: false })
     else ordered = ordered.order('price_monthly', { ascending: true })
 
-    const { data, error, count } = await ordered
+    const { data, error } = await ordered
       .range(from, to)
       .limit(pageSize) // Explicit limit for better performance
 
@@ -176,7 +202,7 @@ export async function GET(request: NextRequest) {
 
     const response = NextResponse.json({
       plans: plans,
-      total: count || 0,
+      total: plans.length,
       page,
       pageSize,
     })
@@ -260,12 +286,6 @@ export async function PATCH(request: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    const allowed = ['free','starter','professional','enterprise']
-    await supabase
-      .from('saas_plans')
-      .update({ is_active: false })
-      .not('slug','in', `(${allowed.join(',')})`)
-
     return NextResponse.json({ success: true, message: 'Planes sincronizados correctamente' })
   } catch (err) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
@@ -282,13 +302,21 @@ export async function POST(request: NextRequest) {
     const supabase = await createAdminClient()
 
     const body = await request.json()
-    const normalizedSlug = normalizePlanSlug(String(body.slug || '').toLowerCase())
+    const rawSlug = String(body.slug || '').trim().toLowerCase()
+    const normalizedSlug = normalizePlanSlug(rawSlug)
     
     // Validate required fields
     if (!body.name || !body.slug) {
       return NextResponse.json({ 
         error: 'Nombre y slug son requeridos',
         field: !body.name ? 'name' : 'slug'
+      }, { status: 400 })
+    }
+
+    if (!isCanonicalPlanSlug(rawSlug)) {
+      return NextResponse.json({
+        error: 'Solo se pueden crear planes base: free, starter, professional o enterprise',
+        field: 'slug'
       }, { status: 400 })
     }
 
@@ -380,9 +408,17 @@ export async function PUT(request: NextRequest) {
 
     const body = await request.json()
     const id = String(body.id || '')
+    const rawSlug = body.slug !== undefined ? String(body.slug || '').trim().toLowerCase() : ''
     
     if (!id) {
       return NextResponse.json({ error: 'ID requerido' }, { status: 400 })
+    }
+
+    if (body.slug !== undefined && !isCanonicalPlanSlug(rawSlug)) {
+      return NextResponse.json({
+        error: 'Solo se pueden usar planes base: free, starter, professional o enterprise',
+        field: 'slug'
+      }, { status: 400 })
     }
 
     // Validate price values if provided
@@ -392,6 +428,18 @@ export async function PUT(request: NextRequest) {
     if (body.price_yearly !== undefined && Number(body.price_yearly) < 0) {
       return NextResponse.json({ error: 'El precio anual no puede ser negativo' }, { status: 400 })
     }
+    if (
+      body.price_monthly !== undefined
+      && body.price_yearly !== undefined
+      && Number(body.price_yearly) > Number(body.price_monthly) * 12
+    ) {
+      return NextResponse.json({
+        error: 'El precio anual no puede superar 12 meses del precio mensual',
+        field: 'price_yearly'
+      }, { status: 400 })
+    }
+
+    const limits = body.limits && typeof body.limits === 'object' ? body.limits as PlanLimits : undefined
 
     const updates: Record<string, unknown> = {
       name: body.name ? String(body.name).trim() : undefined,
@@ -403,7 +451,11 @@ export async function PUT(request: NextRequest) {
       trial_days: body.trial_days !== undefined ? Math.max(0, Number(body.trial_days)) : undefined,
       is_active: body.is_active !== undefined ? Boolean(body.is_active) : undefined,
       features: body.features !== undefined ? (Array.isArray(body.features) ? body.features : []) : undefined,
-      limits: body.limits !== undefined ? (typeof body.limits === 'object' ? body.limits : undefined) : undefined,
+      limits,
+      max_users: limits?.maxUsers,
+      max_products: limits?.maxProducts,
+      max_transactions_per_month: limits?.maxTransactionsPerMonth,
+      max_locations: limits?.maxLocations,
       updated_at: new Date().toISOString(),
     }
 
@@ -418,14 +470,38 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'No hay campos para actualizar' }, { status: 400 })
     }
 
-    const { data, error } = await supabase
-      .from('saas_plans')
-      .update(updates)
-      .eq('id', id)
-      .select('*')
-      .single()
+    let nextUpdates = { ...updates }
+    let data: PlanRow | null = null
+    let error: SupabasePlanError | null = null
+
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const result = await supabase
+        .from('saas_plans')
+        .update(nextUpdates)
+        .eq('id', id)
+        .select('*')
+        .single()
+
+      data = result.data as PlanRow | null
+      error = result.error as SupabasePlanError | null
+
+      const missingColumn = getMissingColumn(error)
+      if (!missingColumn || !(missingColumn in nextUpdates)) break
+
+      console.warn(`saas_plans.${missingColumn} column not found, retrying plan update without it`)
+      const { [missingColumn]: _removed, ...remainingUpdates } = nextUpdates
+      nextUpdates = remainingUpdates
+    }
 
     if (error) {
+      const validationMessage = getPlanConstraintMessage(error)
+      if (validationMessage) {
+        return NextResponse.json({
+          error: validationMessage,
+          details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        }, { status: 400 })
+      }
+
       console.error('Error updating plan:', error)
       return NextResponse.json({ 
         error: 'Error al actualizar el plan',

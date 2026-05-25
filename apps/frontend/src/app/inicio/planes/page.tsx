@@ -20,6 +20,7 @@ import {
     getBillingBadgeDiscount,
     getPlanNarrative,
     getRecommendedPlan,
+    isSelfServicePaidPlan,
 } from '@/lib/public-plan-utils';
 import '../landing.css';
 
@@ -69,15 +70,22 @@ export default function PlanesPage() {
         ? plans.find((p) => p.id === selectedPlanId) ?? recommendedPlan
         : recommendedPlan;
     const registrationTargetPlan = activePlan ?? cheapestPaidPlan ?? plans[0] ?? null;
+    const isPaidRegistrationTarget = isSelfServicePaidPlan(registrationTargetPlan);
 
     const handlePlanSelect = (plan: Plan) => {
         setSelectedPlanId(plan.id);
-        router.push(buildPublicRegistrationPath(plan.slug));
+        router.push(buildPublicRegistrationPath(plan.slug, {
+            billingCycle,
+            mode: plan.priceMonthly > 0 && plan.slug !== 'enterprise' ? 'plans' : 'free',
+        }));
     };
 
     const handlePrimaryCta = () => {
         if (!registrationTargetPlan) return;
-        router.push(buildPublicRegistrationPath(registrationTargetPlan.slug));
+        router.push(buildPublicRegistrationPath(registrationTargetPlan.slug, {
+            billingCycle,
+            mode: isPaidRegistrationTarget ? 'plans' : 'free',
+        }));
     };
 
     const handleScrollToComparison = () => {
@@ -102,13 +110,13 @@ export default function PlanesPage() {
                             <div>
                                 <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.16em] text-emerald-200">
                                     <Sparkles className="h-3.5 w-3.5" />
-                                    Catalogo publico de planes
+                                    Crea gratis, escala cuando quieras
                                 </div>
                                 <h1 className="mt-6 max-w-4xl text-4xl font-semibold tracking-tight text-white md:text-5xl lg:text-6xl">
-                                    Elige el plan que se ajusta a tu negocio
+                                    Elige capacidad sin pagar antes de probar
                                 </h1>
                                 <p className="mt-5 max-w-3xl text-lg leading-8 text-slate-300">
-                                    Compara precios, capacidad operativa y funciones reales del sistema antes de iniciar el alta.
+                                    La cuenta se crea en Free. Si eliges un plan pago, lo dejamos preparado para activarlo despues desde tu panel.
                                 </p>
 
                                 <div className="mt-8 flex flex-wrap items-center gap-3">
@@ -157,7 +165,9 @@ export default function PlanesPage() {
                                         disabled={!registrationTargetPlan}
                                         className="gradient-primary rounded-lg px-6 text-sm font-medium text-white shadow-[0_22px_50px_-22px_rgba(16,185,129,0.95)] hover:opacity-95"
                                     >
-                                        Empezar con {registrationTargetPlan?.name || 'un plan'}
+                                        {isPaidRegistrationTarget
+                                            ? `Crear gratis y preparar ${registrationTargetPlan?.name}`
+                                            : `Crear cuenta gratis`}
                                         <ArrowRight className="ml-2 h-4 w-4" />
                                     </Button>
                                     <Button
@@ -193,6 +203,11 @@ export default function PlanesPage() {
                                         {recommendedPlan?.name || 'Sin recomendacion'}
                                     </p>
                                     <p className="mt-2 text-sm text-slate-400">{heroPlanNarrative.summary}</p>
+                                    {recommendedPlan && isSelfServicePaidPlan(recommendedPlan) ? (
+                                        <p className="mt-3 rounded-md border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-xs leading-5 text-emerald-100">
+                                            No se cobra ahora. Tu cuenta inicia en Free y {recommendedPlan.name} queda como plan sugerido.
+                                        </p>
+                                    ) : null}
                                 </div>
 
                                 <div className="grid gap-4 sm:grid-cols-2">
@@ -230,7 +245,7 @@ export default function PlanesPage() {
                                 <p className="text-sm font-medium uppercase tracking-[0.18em] text-slate-400">Catalogo activo</p>
                                 <h2 className="mt-3 text-3xl font-semibold text-white md:text-4xl">Elige por capacidad, no por marketing</h2>
                                 <p className="mt-3 text-base text-slate-300">
-                                    Cada plan muestra capacidad operativa, funciones disponibles y el precio real para el ciclo elegido.
+                                    Cada plan muestra capacidad operativa, funciones disponibles y el precio real. El alta inicial siempre es gratis.
                                 </p>
                             </div>
                             {recommendedPlan ? (
@@ -373,7 +388,7 @@ export default function PlanesPage() {
                                     Cuando tengas el plan claro, sigue con el registro
                                 </h2>
                                 <p className="mt-3 text-base text-slate-300">
-                                    Selecciona el plan que mejor encaja con tu operacion y continua con la creacion de la cuenta.
+                                    Selecciona el plan que mejor encaja con tu operacion. Primero creas la cuenta gratis; luego decides si activarlo.
                                 </p>
                             </div>
                             <Button
@@ -381,7 +396,9 @@ export default function PlanesPage() {
                                 disabled={!registrationTargetPlan}
                                 className="gradient-primary rounded-lg px-6 text-sm font-medium text-white shadow-[0_22px_50px_-22px_rgba(16,185,129,0.95)] hover:opacity-95"
                             >
-                                Continuar con {registrationTargetPlan?.name || 'el registro'}
+                                {isPaidRegistrationTarget
+                                    ? `Crear gratis y preparar ${registrationTargetPlan?.name}`
+                                    : `Continuar gratis`}
                                 <ArrowRight className="ml-2 h-4 w-4" />
                             </Button>
                         </div>

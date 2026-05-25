@@ -453,6 +453,8 @@ export default function OrganizationDetailsPage() {
   const [settingsSource, setSettingsSource] = useState<Record<string, unknown>>({});
   const [settingsDraft, setSettingsDraft] = useState<OrganizationSettingsView>(DEFAULT_SETTINGS_VIEW);
   const [suspendDialogOpen, setSuspendDialogOpen] = useState(false);
+  const [reactivateDialogOpen, setReactivateDialogOpen] = useState(false);
+  const [saveConfirmAction, setSaveConfirmAction] = useState<'profile' | 'subscription' | 'settings' | 'all' | null>(null);
 
   const syncDraftsFromOrganization = useCallback((source: OrganizationDetail) => {
     setProfileDraft({
@@ -742,7 +744,11 @@ export default function OrganizationDetailsPage() {
     await Promise.all([refreshOrganization(), refreshUsers()]);
   };
 
-  const handleSaveProfile = async () => {
+  const requestSaveConfirmation = (action: 'profile' | 'subscription' | 'settings' | 'all') => {
+    setSaveConfirmAction(action);
+  };
+
+  const performSaveProfile = async () => {
     await updateOrganization({
       name: profileDraft.name,
       slug: profileDraft.slug,
@@ -751,7 +757,7 @@ export default function OrganizationDetailsPage() {
     });
   };
 
-  const handleSaveSubscription = async () => {
+  const performSaveSubscription = async () => {
     await updateOrganization({
       subscription_plan: subscriptionDraft.plan,
       subscription_status: subscriptionDraft.status,
@@ -759,16 +765,36 @@ export default function OrganizationDetailsPage() {
     });
   };
 
-  const handleSaveSettings = async () => {
+  const performSaveSettings = async () => {
     await updateOrganization({
       settings: currentSettingsPayload,
     });
   };
 
-  const handleSaveAll = async () => {
-    if (profileDirty) await handleSaveProfile();
-    if (subscriptionDirty) await handleSaveSubscription();
-    if (settingsDirty) await handleSaveSettings();
+  const handleSaveProfile = () => requestSaveConfirmation('profile');
+
+  const handleSaveSubscription = () => requestSaveConfirmation('subscription');
+
+  const handleSaveSettings = () => requestSaveConfirmation('settings');
+
+  const handleSaveAll = () => requestSaveConfirmation('all');
+
+  const handleConfirmSaveChanges = async () => {
+    if (!saveConfirmAction) return;
+
+    if (saveConfirmAction === 'profile') {
+      await performSaveProfile();
+    } else if (saveConfirmAction === 'subscription') {
+      await performSaveSubscription();
+    } else if (saveConfirmAction === 'settings') {
+      await performSaveSettings();
+    } else {
+      if (profileDirty) await performSaveProfile();
+      if (subscriptionDirty) await performSaveSubscription();
+      if (settingsDirty) await performSaveSettings();
+    }
+
+    setSaveConfirmAction(null);
   };
 
   const handleSuspendOrganization = async () => {
@@ -778,6 +804,7 @@ export default function OrganizationDetailsPage() {
 
   const handleReactivateOrganization = async () => {
     await updateOrganization({ subscription_status: 'ACTIVE' });
+    setReactivateDialogOpen(false);
   };
 
   const handleToggleUserStatus = async (user: AdminUser) => {
@@ -1074,8 +1101,8 @@ export default function OrganizationDetailsPage() {
                       Gestionar tenant
                     </Button>
                     {subscriptionDraft.status === 'SUSPENDED' ? (
-                      <Button className="gap-2" onClick={handleReactivateOrganization} disabled={orgUpdating}>
-                        {orgUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                      <Button className="gap-2" onClick={() => setReactivateDialogOpen(true)} disabled={orgUpdating}>
+                        <CheckCircle2 className="h-4 w-4" />
                         Reactivar ahora
                       </Button>
                     ) : (
@@ -1611,8 +1638,8 @@ export default function OrganizationDetailsPage() {
 
                   <div className="flex flex-wrap gap-2">
                     {subscriptionDraft.status === 'SUSPENDED' ? (
-                      <Button variant="outline" className="gap-2" onClick={handleReactivateOrganization} disabled={orgUpdating}>
-                        {orgUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                      <Button variant="outline" className="gap-2" onClick={() => setReactivateDialogOpen(true)} disabled={orgUpdating}>
+                        <CheckCircle2 className="h-4 w-4" />
                         Reactivar ahora
                       </Button>
                     ) : (
@@ -1821,6 +1848,60 @@ export default function OrganizationDetailsPage() {
                 </>
               ) : (
                 'Confirmar suspension'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={reactivateDialogOpen} onOpenChange={setReactivateDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reactivar organizacion</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta accion vuelve a habilitar el acceso operativo de la organizacion. Revisa antes que el plan y la suscripcion sean correctos.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={orgUpdating}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleReactivateOrganization} disabled={orgUpdating}>
+              {orgUpdating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Reactivando
+                </>
+              ) : (
+                'Confirmar reactivacion'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={Boolean(saveConfirmAction)} onOpenChange={(open) => !open && setSaveConfirmAction(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar cambios sensibles</AlertDialogTitle>
+            <AlertDialogDescription>
+              {saveConfirmAction === 'profile'
+                ? 'Vas a modificar datos de identidad del tenant como nombre, slug o dominio.'
+                : saveConfirmAction === 'subscription'
+                  ? 'Vas a modificar plan, estado o ciclo de facturacion de esta organizacion.'
+                  : saveConfirmAction === 'settings'
+                    ? 'Vas a modificar configuraciones operativas y limites del tenant.'
+                    : 'Vas a aplicar todos los cambios pendientes de perfil, suscripcion y configuracion.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={orgUpdating}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmSaveChanges} disabled={orgUpdating}>
+              {orgUpdating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Guardando
+                </>
+              ) : (
+                'Confirmar cambios'
               )}
             </AlertDialogAction>
           </AlertDialogFooter>

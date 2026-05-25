@@ -15,9 +15,11 @@ import { usePlans } from '@/hooks/use-plans';
 import type { Plan } from '@/hooks/use-subscription';
 import {
   formatCurrency,
+  getPlanBillingPrice,
   getPlanFeatureLabels,
   getPlanLimitItems,
   getPlanNarrative,
+  isSelfServicePaidPlan,
   getRecommendedPlan,
 } from '@/lib/public-plan-utils';
 
@@ -77,6 +79,7 @@ export default function RegistroPage() {
   const router = useRouter();
   const requestedSlug = searchParams.get('plan');
   const requestedMode = searchParams.get('mode');
+  const requestedBilling = searchParams.get('billing') === 'yearly' ? 'yearly' : 'monthly';
   const { plans, isLoading, error, refetch } = usePlans();
   const [showAllFeatures, setShowAllFeatures] = useState(false);
 
@@ -86,6 +89,7 @@ export default function RegistroPage() {
   const freePlan = plans.find((plan) => plan.slug === 'free') || null;
   const isEnterpriseSelected = selectedPlan?.slug === 'enterprise';
   const isFreeSelected = selectedPlan?.id === freePlan?.id;
+  const isPaidSelfServiceSelected = isSelfServicePaidPlan(selectedPlan);
 
   const entryMode: 'free' | 'plans' = (() => {
     if (requestedMode === 'plans') return 'plans';
@@ -114,10 +118,15 @@ export default function RegistroPage() {
     router.push('/onboarding');
   };
 
-  const buildRegistrationUrl = (planSlug?: string | null, mode: 'free' | 'plans' = 'free') => {
+  const buildRegistrationUrl = (
+    planSlug?: string | null,
+    mode: 'free' | 'plans' = 'free',
+    billingCycle: 'monthly' | 'yearly' = requestedBilling,
+  ) => {
     const params = new URLSearchParams();
     if (planSlug) params.set('plan', planSlug);
     params.set('mode', mode);
+    params.set('billing', billingCycle);
     return `/inicio/registro?${params.toString()}`;
   };
 
@@ -143,7 +152,7 @@ export default function RegistroPage() {
       ? 'A consultar'
       : selectedPlan.priceMonthly === 0
         ? 'Gratis'
-        : `${formatCurrency(selectedPlan.priceMonthly, selectedPlan.currency)} / mes`
+        : `${formatCurrency(getPlanBillingPrice(selectedPlan, requestedBilling), selectedPlan.currency)} / ${requestedBilling === 'yearly' ? 'ano' : 'mes'}`
     : null;
 
   return (
@@ -181,8 +190,8 @@ export default function RegistroPage() {
                     <div>
                       <p className="text-lg font-semibold text-white">Empieza gratis. Sin tarjeta.</p>
                       <p className="mt-2 max-w-xl text-sm leading-6 text-emerald-50/85">
-                        Crea tu cuenta en Free y sube de nivel cuando quieras. El alta inicial no
-                        depende de un cobro ni de completar datos de pago.
+                        Crea tu cuenta en Free. Si elegiste un plan pago, queda guardado como plan preparado
+                        para activarlo despues desde el panel, sin cobro en este paso.
                       </p>
                     </div>
                     <div className="flex flex-col gap-2 md:items-end">
@@ -372,6 +381,11 @@ export default function RegistroPage() {
                                 Arrancas sin tarjeta y mejoras el plan solo cuando haga falta.
                               </p>
                             )}
+                            {isPaidSelfServiceSelected && (
+                              <p className="mt-3 rounded-md border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-sm text-emerald-100">
+                                La cuenta se crea gratis. {selectedPlan.name} queda preparado en ciclo {requestedBilling === 'yearly' ? 'anual' : 'mensual'} para activarlo despues.
+                              </p>
+                            )}
                           </div>
                           <div className="rounded-lg border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-right">
                             <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-emerald-100/80">Precio</p>
@@ -498,7 +512,7 @@ export default function RegistroPage() {
                     </div>
                     <div className="pt-5">
                       {selectedPlan ? (
-                        <RegistrationForm selectedPlan={selectedPlan} onSuccess={handleRegistrationSuccess} />
+                        <RegistrationForm selectedPlan={selectedPlan} billingCycle={requestedBilling} onSuccess={handleRegistrationSuccess} />
                       ) : isLoading ? (
                         <div className="flex min-h-[280px] items-center justify-center">
                           <div className="inline-flex items-center gap-3 text-sm text-slate-400">

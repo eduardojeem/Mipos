@@ -6,9 +6,11 @@ import type { Plan } from '@/hooks/use-subscription';
 import { cn } from '@/lib/utils';
 import {
     formatCurrency,
+    getPlanBillingPrice,
     getPlanFeatureLabels,
     getPlanLimitItems,
     getPlanNarrative,
+    isSelfServicePaidPlan,
     resolvePlanLimits,
 } from '@/lib/public-plan-utils';
 
@@ -23,12 +25,13 @@ interface PricingCardProps {
 export function PricingCard({ plan, billingCycle, onSelect, isSelected, isPopular }: PricingCardProps) {
     const isEnterprise = plan.slug === 'enterprise';
     const isFree = plan.priceMonthly === 0 && !isEnterprise;
+    const isPaidSelfService = isSelfServicePaidPlan(plan);
     const displayPrice = isEnterprise
         ? 'A consultar'
         : billingCycle === 'monthly'
             ? formatCurrency(plan.priceMonthly, plan.currency)
-            : formatCurrency(plan.priceYearly, plan.currency);
-    const annualSavings = Math.max(0, plan.priceMonthly * 12 - plan.priceYearly);
+            : formatCurrency(getPlanBillingPrice(plan, 'yearly'), plan.currency);
+    const annualSavings = Math.max(0, plan.priceMonthly * 12 - getPlanBillingPrice(plan, 'yearly'));
     const featureLabels = getPlanFeatureLabels(plan.features).slice(0, 6);
     const planNarrative = getPlanNarrative(plan.slug);
     const limitItems = getPlanLimitItems(plan);
@@ -81,6 +84,11 @@ export function PricingCard({ plan, billingCycle, onSelect, isSelected, isPopula
                         Ahorro anual: {formatCurrency(annualSavings, plan.currency)}
                     </p>
                 ) : null}
+                {isPaidSelfService ? (
+                    <p className="mt-3 rounded-md border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-xs leading-5 text-emerald-100">
+                        Creas la cuenta gratis. Este plan queda preparado para activarlo despues.
+                    </p>
+                ) : null}
             </div>
 
             <dl className="mt-5 grid grid-cols-2 gap-x-5 gap-y-4">
@@ -129,7 +137,7 @@ export function PricingCard({ plan, billingCycle, onSelect, isSelected, isPopula
                             : 'border border-white/10 bg-white/5 text-white hover:bg-white/10'
                     )}
                 >
-                    Elegir este plan
+                    {isFree ? 'Crear cuenta gratis' : 'Preparar este plan'}
                     <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
             )}

@@ -192,7 +192,7 @@ export default function AccountPage() {
     loading: organizationsLoading,
     selectOrganization,
     clearSelectedOrganization,
-  } = useUserOrganizations(user?.id);
+  } = useUserOrganizations(user?.id, { scope: 'buyer' });
   const { config } = useBusinessConfig();
   const { tenantHref, tenantApiPath, isPathTenantRouting } = useTenantPublicRouting();
   const [form, setForm] = useState({ name: '', phone: '', address: '' });
@@ -203,6 +203,7 @@ export default function AccountPage() {
   const displayConfig = isPathTenantRouting ? config : defaultBusinessConfig;
   const primary = displayConfig.branding?.primaryColor || '#0f766e';
   const isLoading = authLoading || profileLoading;
+  const isSuperAdmin = String(user?.role || '').toUpperCase() === 'SUPER_ADMIN';
   const personalPurchases = purchases.filter((purchase) => purchase.buyerType !== 'business');
   const businessPurchases = purchases.filter((purchase) => purchase.buyerType === 'business');
   const initials = useMemo(() => {
@@ -439,6 +440,11 @@ export default function AccountPage() {
                   <p className="text-sm text-slate-500 dark:text-slate-400">
                     Usa la misma cuenta para comprar como persona o como empresa.
                   </p>
+                  {isSuperAdmin ? (
+                    <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+                      Como super admin podes administrar empresas desde el panel, pero aca solo aparecen empresas donde sos miembro real para comprar.
+                    </p>
+                  ) : null}
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <button
@@ -459,7 +465,9 @@ export default function AccountPage() {
                     </div>
                   ) : organizations.length === 0 ? (
                     <div className="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-500 dark:border-slate-700">
-                      Todavia no tenes empresas asociadas a esta cuenta.
+                      {isSuperAdmin
+                        ? 'No tenes empresas asignadas como miembro comprador. Podes comprar como persona o agregarte como miembro de una empresa.'
+                        : 'Todavia no tenes empresas asociadas a esta cuenta.'}
                     </div>
                   ) : (
                     organizations.map((organization) => {

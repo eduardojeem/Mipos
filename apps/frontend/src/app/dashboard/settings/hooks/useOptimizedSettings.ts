@@ -380,16 +380,10 @@ export function useUpdateSystemSettings() {
       } catch (error: unknown) {
         // Si es error 431, intentar con menos datos
         if (getErrorStatus(error) === 431) {
-          logger.warn('Headers too large, retrying with minimal data');
-          const minimalSettings = {
-            business_name: settings.business_name,
-            currency: settings.currency,
-            timezone: settings.timezone,
-          };
-          const response = await api.put('/system/settings', minimalSettings, {
+          logger.warn('Headers too large, retrying settings update without optional retry headers');
+          const response = await api.put('/system/settings', settings, {
             headers: {
               'Content-Type': 'application/json',
-              'X-No-Retry': 'true',
             },
           });
           return response.data;

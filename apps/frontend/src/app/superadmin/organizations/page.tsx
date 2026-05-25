@@ -9,7 +9,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
-  CreditCard,
   Download,
   ExternalLink,
   FileSpreadsheet,
@@ -20,7 +19,6 @@ import {
   Plus,
   RefreshCcw,
   Search,
-  Trash2,
   Wifi,
   WifiOff,
   XCircle,
@@ -36,7 +34,6 @@ import { exportCSV, exportExcel } from '@/lib/export-utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -53,16 +50,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import {
   Table,
   TableBody,
@@ -322,12 +309,6 @@ export default function OrganizationsPage() {
   const [planFilter, setPlanFilter] = useState<PlanFilter>('ALL');
   const [sortValue, setSortValue] = useState<SortOptionValue>('created_at:desc');
   const [currentPage, setCurrentPage] = useState(1);
-  const [selectedOrgs, setSelectedOrgs] = useState<string[]>([]);
-  const [archiveDialog, setArchiveDialog] = useState<{ open: boolean; ids: string[]; label: string }>({
-    open: false,
-    ids: [],
-    label: '',
-  });
 
   const [sortBy, sortOrder] = useMemo(() => {
     const [field, direction] = sortValue.split(':');
@@ -352,14 +333,6 @@ export default function OrganizationsPage() {
     metrics,
     error,
     refresh,
-    updating,
-    isUpdating,
-    suspendOrganization,
-    activateOrganization,
-    deleteOrganization,
-    bulkUpdateOrganizations,
-    bulkDeleteOrganizations,
-    changeSubscriptionPlan,
   } = useOrganizations({
     filters: organizationFilters,
     sortBy,
@@ -371,25 +344,12 @@ export default function OrganizationsPage() {
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   const paginationItems = buildPagination(currentPage, totalPages);
   const hasActiveFilters = searchQuery.length > 0 || statusFilter !== 'ALL' || planFilter !== 'ALL';
-  const selectedCount = selectedOrgs.length;
-  const allVisibleSelected = organizations.length > 0 && selectedCount === organizations.length;
-
-  useEffect(() => {
-    setSelectedOrgs((current) => {
-      const filtered = current.filter((id) => organizations.some((org: Organization) => org.id === id));
-      return filtered.length === current.length ? current : filtered;
-    });
-  }, [organizations]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
       setCurrentPage(totalPages);
     }
   }, [currentPage, totalPages]);
-
-  const openArchiveDialog = (ids: string[], label: string) => {
-    setArchiveDialog({ open: true, ids, label });
-  };
 
   const clearFilters = () => {
     setSearchQuery('');
@@ -446,53 +406,6 @@ export default function OrganizationsPage() {
     } catch {
       toast.error('No se pudo exportar el Excel');
     }
-  };
-
-  const toggleSelectAll = () => {
-    if (allVisibleSelected) {
-      setSelectedOrgs([]);
-      return;
-    }
-
-    setSelectedOrgs(organizations.map((org: Organization) => org.id));
-  };
-
-  const toggleSelectOrg = (id: string) => {
-    setSelectedOrgs((current) =>
-      current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
-    );
-  };
-
-  const handleBulkStatusChange = async (status: 'ACTIVE' | 'SUSPENDED') => {
-    if (selectedOrgs.length === 0) return;
-    await bulkUpdateOrganizations(selectedOrgs, { subscription_status: status });
-    setSelectedOrgs([]);
-  };
-
-  const handleBulkPlanChange = async (plan: 'FREE' | 'STARTER' | 'PROFESSIONAL') => {
-    if (selectedOrgs.length === 0) return;
-    await bulkUpdateOrganizations(selectedOrgs, {
-      subscription_plan: plan,
-      subscription_status: plan === 'FREE' ? undefined : 'ACTIVE',
-    });
-    setSelectedOrgs([]);
-  };
-
-  const handlePlanChange = async (id: string, plan: 'FREE' | 'STARTER' | 'PROFESSIONAL') => {
-    await changeSubscriptionPlan(id, plan);
-  };
-
-  const confirmArchive = async () => {
-    if (archiveDialog.ids.length === 0) return;
-
-    if (archiveDialog.ids.length === 1) {
-      await deleteOrganization(archiveDialog.ids[0]);
-    } else {
-      await bulkDeleteOrganizations(archiveDialog.ids);
-      setSelectedOrgs([]);
-    }
-
-    setArchiveDialog({ open: false, ids: [], label: '' });
   };
 
   if (error) {
@@ -735,17 +648,9 @@ export default function OrganizationsPage() {
                     {organizations.map((org: Organization) => (
                       <div
                         key={org.id}
-                        className={cn(
-                          'rounded-2xl border border-slate-200 p-4 dark:border-slate-800',
-                          (updating === 'bulk' || updating === org.id) && 'pointer-events-none opacity-60'
-                        )}
+                        className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800"
                       >
                         <div className="flex items-start gap-3">
-                          <Checkbox
-                            checked={selectedOrgs.includes(org.id)}
-                            onCheckedChange={() => toggleSelectOrg(org.id)}
-                            className="mt-1"
-                          />
                           <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-semibold', getOrgAvatarColor(org.name))}>
                             {getOrgInitials(org.name)}
                           </div>
@@ -763,11 +668,7 @@ export default function OrganizationsPage() {
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
-                                {updating === org.id ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <MoreHorizontal className="h-4 w-4" />
-                                )}
+                                <MoreHorizontal className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-56">
@@ -777,36 +678,9 @@ export default function OrganizationsPage() {
                                 <ExternalLink className="mr-2 h-4 w-4" />
                                 Abrir detalle
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handlePlanChange(org.id, 'FREE')}>
-                                <CreditCard className="mr-2 h-4 w-4" />
-                                Cambiar a Gratis
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handlePlanChange(org.id, 'STARTER')}>
-                                <CreditCard className="mr-2 h-4 w-4" />
-                                Cambiar a Starter
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handlePlanChange(org.id, 'PROFESSIONAL')}>
-                                <CreditCard className="mr-2 h-4 w-4" />
-                                Cambiar a Professional
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              {org.subscription_status === 'ACTIVE' || org.subscription_status === 'TRIAL' ? (
-                                <DropdownMenuItem onClick={() => suspendOrganization(org.id)}>
-                                  <XCircle className="mr-2 h-4 w-4" />
-                                  Suspender acceso
-                                </DropdownMenuItem>
-                              ) : (
-                                <DropdownMenuItem onClick={() => activateOrganization(org.id)}>
-                                  <CheckCircle2 className="mr-2 h-4 w-4" />
-                                  Activar organizacion
-                                </DropdownMenuItem>
-                              )}
-                              <DropdownMenuItem
-                                className="text-rose-600 focus:text-rose-600"
-                                onClick={() => openArchiveDialog([org.id], org.name)}
-                              >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Archivar
+                              <DropdownMenuItem onClick={() => router.push(`/superadmin/organizations/${org.id}`)}>
+                                <AlertCircle className="mr-2 h-4 w-4" />
+                                Gestionar cambios sensibles
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -835,13 +709,6 @@ export default function OrganizationsPage() {
                   <Table>
                     <TableHeader>
                       <TableRow className="border-slate-100 dark:border-slate-800">
-                        <TableHead className="w-12">
-                          <Checkbox
-                            checked={allVisibleSelected}
-                            onCheckedChange={() => toggleSelectAll()}
-                            aria-label="Seleccionar todas"
-                          />
-                        </TableHead>
                         <TableHead className="min-w-[320px]">Organización</TableHead>
                         <TableHead>Estado</TableHead>
                         <TableHead>Plan</TableHead>
@@ -854,9 +721,6 @@ export default function OrganizationsPage() {
                       {isLoading && organizations.length === 0 ? (
                         Array.from({ length: 6 }).map((_, index) => (
                           <TableRow key={index} className="animate-pulse">
-                            <TableCell>
-                              <div className="h-5 w-5 rounded bg-slate-100 dark:bg-slate-800" />
-                            </TableCell>
                             <TableCell>
                               <div className="h-11 w-full rounded-xl bg-slate-100 dark:bg-slate-800" />
                             </TableCell>
@@ -879,7 +743,7 @@ export default function OrganizationsPage() {
                         ))
                       ) : organizations.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={7} className="px-6 py-20 text-center">
+                          <TableCell colSpan={6} className="px-6 py-20 text-center">
                             <div className="mx-auto flex max-w-md flex-col items-center gap-3">
                               <div className="rounded-full bg-slate-100 p-4 text-slate-400 dark:bg-slate-900 dark:text-slate-500">
                                 <Search className="h-8 w-8" />
@@ -902,20 +766,9 @@ export default function OrganizationsPage() {
                         organizations.map((org: Organization) => (
                           <TableRow
                             key={org.id}
-                            className={cn(
-                              'cursor-pointer border-slate-100 transition-colors hover:bg-slate-50/80 dark:border-slate-800 dark:hover:bg-slate-900/50',
-                              (updating === 'bulk' || updating === org.id) && 'pointer-events-none opacity-60',
-                              selectedOrgs.includes(org.id) && 'bg-slate-50 dark:bg-slate-900/60'
-                            )}
+                            className="cursor-pointer border-slate-100 transition-colors hover:bg-slate-50/80 dark:border-slate-800 dark:hover:bg-slate-900/50"
                             onClick={() => router.push(`/superadmin/organizations/${org.id}`)}
                           >
-                            <TableCell onClick={(event) => event.stopPropagation()}>
-                              <Checkbox
-                                checked={selectedOrgs.includes(org.id)}
-                                onCheckedChange={() => toggleSelectOrg(org.id)}
-                                aria-label={`Seleccionar ${org.name}`}
-                              />
-                            </TableCell>
                             <TableCell className="py-4">
                               <div className="flex items-center gap-3">
                                 <div className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-semibold', getOrgAvatarColor(org.name))}>
@@ -944,11 +797,7 @@ export default function OrganizationsPage() {
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl">
-                                    {updating === org.id ? (
-                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                      <MoreHorizontal className="h-4 w-4" />
-                                    )}
+                                    <MoreHorizontal className="h-4 w-4" />
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" className="w-56">
@@ -958,32 +807,9 @@ export default function OrganizationsPage() {
                                     <ExternalLink className="mr-2 h-4 w-4" />
                                     Abrir detalle
                                   </DropdownMenuItem>
-                                  {(['FREE', 'STARTER', 'PROFESSIONAL'] as const)
-                                    .filter((plan) => plan !== org.subscription_plan)
-                                    .map((plan) => (
-                                      <DropdownMenuItem key={plan} onClick={() => handlePlanChange(org.id, plan)}>
-                                        <CreditCard className="mr-2 h-4 w-4" />
-                                        Cambiar a {getPlanLabel(plan)}
-                                      </DropdownMenuItem>
-                                    ))}
-                                  <DropdownMenuSeparator />
-                                  {org.subscription_status === 'ACTIVE' || org.subscription_status === 'TRIAL' ? (
-                                    <DropdownMenuItem onClick={() => suspendOrganization(org.id)}>
-                                      <XCircle className="mr-2 h-4 w-4" />
-                                      Suspender acceso
-                                    </DropdownMenuItem>
-                                  ) : (
-                                    <DropdownMenuItem onClick={() => activateOrganization(org.id)}>
-                                      <CheckCircle2 className="mr-2 h-4 w-4" />
-                                      Activar organizacion
-                                    </DropdownMenuItem>
-                                  )}
-                                  <DropdownMenuItem
-                                    className="text-rose-600 focus:text-rose-600"
-                                    onClick={() => openArchiveDialog([org.id], org.name)}
-                                  >
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    Archivar
+                                  <DropdownMenuItem onClick={() => router.push(`/superadmin/organizations/${org.id}`)}>
+                                    <AlertCircle className="mr-2 h-4 w-4" />
+                                    Gestionar cambios sensibles
                                   </DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>
@@ -1051,116 +877,6 @@ export default function OrganizationsPage() {
             </CardContent>
           </Card>
         </div>
-
-        {/* Bulk Actions Floating Bar */}
-        {selectedCount > 0 && (
-          <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 animate-in fade-in slide-in-from-bottom-4 duration-200">
-            <Card className="flex items-center gap-3 rounded-2xl border-slate-700 bg-slate-900 px-4 py-2 text-white shadow-2xl dark:bg-slate-800">
-              <div className="flex items-center gap-2 border-r border-slate-700 pr-3">
-                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-500 text-sm font-bold">
-                  {selectedCount}
-                </div>
-                <span className="text-sm text-slate-300">seleccionadas</span>
-              </div>
-
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 gap-1.5 text-emerald-400 hover:bg-emerald-900/20 hover:text-emerald-300"
-                  onClick={() => handleBulkStatusChange('ACTIVE')}
-                  disabled={isUpdating}
-                >
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  Activar
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 gap-1.5 text-amber-400 hover:bg-amber-900/20 hover:text-amber-300"
-                  onClick={() => handleBulkStatusChange('SUSPENDED')}
-                  disabled={isUpdating}
-                >
-                  <XCircle className="h-3.5 w-3.5" />
-                  Suspender
-                </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 gap-1.5 text-blue-400 hover:bg-blue-900/20 hover:text-blue-300"
-                      disabled={isUpdating}
-                    >
-                      <CreditCard className="h-3.5 w-3.5" />
-                      Plan
-                      <ChevronRight className="h-3 w-3 rotate-90" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => handleBulkPlanChange('FREE')}>
-                      Cambiar a Gratis
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleBulkPlanChange('STARTER')}>
-                      Cambiar a Starter
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleBulkPlanChange('PROFESSIONAL')}>
-                      Cambiar a Professional
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 gap-1.5 text-rose-400 hover:bg-rose-900/20 hover:text-rose-300"
-                  onClick={() => openArchiveDialog(selectedOrgs, `${selectedCount} organizaciones`)}
-                  disabled={isUpdating}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Archivar
-                </Button>
-              </div>
-
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 border-l border-slate-700 pl-3 text-slate-400 hover:text-white"
-                onClick={() => setSelectedOrgs([])}
-              >
-                Cancelar
-              </Button>
-            </Card>
-          </div>
-        )}
-
-        <AlertDialog
-          open={archiveDialog.open}
-          onOpenChange={(open) => setArchiveDialog((current) => ({ ...current, open }))}
-        >
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Archivar organizaciones</AlertDialogTitle>
-              <AlertDialogDescription>
-                {archiveDialog.ids.length > 1
-                  ? `Se suspendera el acceso de ${archiveDialog.label}. Podras reactivarlas despues desde esta misma vista.`
-                  : `Se suspendera el acceso de ${archiveDialog.label}. La organizacion seguira existiendo, pero quedara archivada.`}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel disabled={isUpdating}>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={confirmArchive} disabled={isUpdating}>
-                {isUpdating ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Archivando
-                  </>
-                ) : (
-                  'Confirmar archivado'
-                )}
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
       </TooltipProvider>
     </SuperAdminGuard>
   );

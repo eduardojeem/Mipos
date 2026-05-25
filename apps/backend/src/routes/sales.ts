@@ -25,6 +25,44 @@ function requireOrganizationId(req: EnhancedAuthenticatedRequest): string {
   return organizationId;
 }
 
+type SalesSettings = {
+  maxDiscountPercentage: number;
+  requireCustomerInfo: boolean;
+};
+
+function numberValue(value: unknown, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function clampPercentage(value: unknown, fallback: number): number {
+  return Math.min(100, Math.max(0, numberValue(value, fallback)));
+}
+
+async function loadSalesSettings(organizationId: string): Promise<SalesSettings> {
+  const supabase = getSupabaseClient();
+  const { data, error } = await supabase
+    .from('settings')
+    .select('value')
+    .eq('organization_id', organizationId)
+    .eq('key', 'business_config')
+    .maybeSingle();
+
+  if (error) {
+    console.warn('Could not load sales settings, using defaults:', error.message);
+  }
+
+  const value = (data as { value?: Record<string, unknown> } | null)?.value;
+  const storeSettings = value && typeof value.storeSettings === 'object' && value.storeSettings !== null
+    ? value.storeSettings as Record<string, unknown>
+    : {};
+
+  return {
+    maxDiscountPercentage: clampPercentage(storeSettings.maxDiscountPercentage, 50),
+    requireCustomerInfo: storeSettings.requireCustomerInfo === true,
+  };
+}
+
 // Validation schemas
 const saleItemSchema = z.object({
   productId: z.string().uuid('Product ID must be a valid UUID'), // ✅ SEGURIDAD: Validar UUID
@@ -730,6 +768,11 @@ async function createSaleWithSupabaseFallback(params: {
     throw createError('No hay un cliente Supabase configurado para procesar la venta en modo fallback', 503);
   }
 
+  const salesSettings = await loadSalesSettings(params.organizationId);
+  if (salesSettings.requireCustomerInfo && !params.customerId) {
+    throw createError('Customer is required by the active sales settings', 400);
+  }
+
   const uniqueProductIds = [...new Set(params.items.map((item) => item.productId))];
   const { data: productsData, error: productsError } = await supabaseClient
     .from('products')
@@ -858,6 +901,13 @@ async function createSaleWithSupabaseFallback(params: {
       discountAmount = (subtotal * value) / 100;
     } else {
       discountAmount = Math.min(value, subtotal);
+    }
+
+    const discountPercentage = type === 'PERCENTAGE'
+      ? value
+      : (subtotal > 0 ? (discountAmount / subtotal) * 100 : 0);
+    if (discountPercentage > salesSettings.maxDiscountPercentage) {
+      throw createError(`Discount cannot exceed ${salesSettings.maxDiscountPercentage}% for this organization`, 400);
     }
 
     discountType = type;
@@ -1135,6 +1185,11 @@ router.post('/', criticalOperationsRateLimit, requirePermission('sales', 'create
   const userId = req.user!.id;
   const organizationId = requireOrganizationId(req);
   const operationalContext = getOperationalContext(req);
+  const salesSettings = await loadSalesSettings(organizationId);
+
+  if (salesSettings.requireCustomerInfo && !customerId) {
+    throw createError('Customer is required by the active sales settings', 400);
+  }
 
   // Legacy early cash validation hook; final validation runs after totals are computed.
   if (paymentMethod === 'CASH' && req.headers['x-legacy-cash-validation'] === '1') {
@@ -1279,6 +1334,13 @@ router.post('/', criticalOperationsRateLimit, requirePermission('sales', 'create
       discountAmount = (subtotal * value) / 100;
     } else {
       discountAmount = Math.min(value, subtotal); // Cannot exceed subtotal
+    }
+
+    const discountPercentage = type === 'PERCENTAGE'
+      ? value
+      : (subtotal > 0 ? (discountAmount / subtotal) * 100 : 0);
+    if (discountPercentage > salesSettings.maxDiscountPercentage) {
+      throw createError(`Discount cannot exceed ${salesSettings.maxDiscountPercentage}% for this organization`, 400);
     }
 
     discountType = type;
@@ -1592,15 +1654,15 @@ router.post('/', criticalOperationsRateLimit, requirePermission('sales', 'create
       userEmail: req.user!.email,
       userFullName: req.user!.fullName,
       customerId,
-      items,
+      items: items as Array<{ productId: string; quantity: number }>,
       paymentMethod,
       couponCode,
-      manualDiscount,
+      manualDiscount: manualDiscount as { type: 'PERCENTAGE' | 'FIXED_AMOUNT'; value: number; reason: string } | undefined,
       notes,
       cashReceived,
       change,
       transferReference,
-      mixedPayments,
+      mixedPayments: mixedPayments as Array<{ type: 'CASH' | 'CARD' | 'TRANSFER' | 'QR' | 'OTHER'; amount: number; details?: Record<string, unknown> }> | undefined,
       paymentDetails,
       operationalContext,
       requestUser: req.user,

@@ -2,7 +2,7 @@
 
 import React, { useCallback, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useDebouncedCallback } from 'use-debounce';
 import {
   AlertCircle,
@@ -13,11 +13,9 @@ import {
   Edit,
   Loader2,
   MoreHorizontal,
-  Plus,
   RefreshCw,
   Search,
   Sparkles,
-  Trash2,
 } from 'lucide-react';
 import { SuperAdminGuard } from '../components/SuperAdminGuard';
 import { PlanModal } from './components/PlanModal';
@@ -28,21 +26,10 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
@@ -53,7 +40,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 import {
   dedupeCanonicalPlans,
@@ -165,8 +151,6 @@ export default function PlansPage() {
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize] = useState(50);
-  const [deleteTarget, setDeleteTarget] = useState<Plan | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active');
   const [sort, setSort] = useState<SortValue>('price_monthly_asc');
 
@@ -226,65 +210,13 @@ export default function PlansPage() {
   const summary = useMemo(() => {
     const activePlans = processedPlans.filter((plan) => plan.is_active).length;
     const tenants = processedPlans.reduce((sum, plan) => sum + Number(plan.organization_count || 0), 0);
+    const activeSubscriptions = processedPlans.reduce((sum, plan) => sum + Number(plan.active_subscription_count || 0), 0);
     const mrr = processedPlans.reduce((sum, plan) => sum + Number(plan.mrr || 0), 0);
-    return { activePlans, tenants, mrr };
+    return { activePlans, tenants, activeSubscriptions, mrr };
   }, [processedPlans]);
-
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const response = await fetch(`/api/superadmin/plans?id=${id}`, { method: 'DELETE' });
-      if (!response.ok) {
-        const errorBody = await response.json();
-        throw new Error(errorBody.error || 'Error al eliminar plan');
-      }
-      return response.json();
-    },
-    onMutate: async (deletedId) => {
-      await queryClient.cancelQueries({ queryKey: ['saas-plans'] });
-      setDeletingId(deletedId);
-    },
-    onSuccess: () => {
-      toast.success('Plan eliminado');
-      queryClient.invalidateQueries({ queryKey: ['saas-plans'] });
-    },
-    onError: (err) => {
-      toast.error('No se pudo eliminar', {
-        description: err instanceof Error ? err.message : 'Error desconocido',
-      });
-    },
-    onSettled: () => {
-      setDeletingId(null);
-      setDeleteTarget(null);
-    },
-  });
-
-  const syncMutation = useMutation({
-    mutationFn: async () => {
-      const response = await fetch('/api/superadmin/plans', { method: 'PATCH' });
-      const json = await response.json();
-      if (!response.ok) throw new Error(json.error || 'Error al sincronizar planes');
-      return json;
-    },
-    onSuccess: (json) => {
-      toast.success('Planes sincronizados', {
-        description: typeof json?.message === 'string' ? json.message : undefined,
-      });
-      queryClient.invalidateQueries({ queryKey: ['saas-plans'] });
-    },
-    onError: (err) => {
-      toast.error('No se pudo sincronizar', {
-        description: err instanceof Error ? err.message : 'Error desconocido',
-      });
-    },
-  });
 
   const openEditModal = useCallback((plan: Plan) => {
     setSelectedPlan(plan);
-    setIsModalOpen(true);
-  }, []);
-
-  const openCreateModal = useCallback(() => {
-    setSelectedPlan(null);
     setIsModalOpen(true);
   }, []);
 
@@ -338,23 +270,27 @@ export default function PlansPage() {
             <Button
               variant="outline"
               className="gap-2"
-              onClick={() => syncMutation.mutate()}
-              disabled={syncMutation.isPending}
+              onClick={() => refetch()}
+              disabled={isFetching}
             >
-              {syncMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              Sincronizar defaults
-            </Button>
-            <Button className="gap-2" onClick={openCreateModal}>
-              <Plus className="h-4 w-4" />
-              Nuevo plan
+              {isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              Actualizar
             </Button>
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <SummaryCard label="Planes activos" value={String(summary.activePlans)} helper={`${processedPlans.length} planes canonicos`} />
           <SummaryCard label="Tenants asignados" value={String(summary.tenants)} helper="Segun suscripciones SaaS" />
+          <SummaryCard label="Suscripciones activas" value={String(summary.activeSubscriptions)} helper="Tenants activos o en prueba" />
           <SummaryCard label="MRR estimado" value={formatMoney(summary.mrr, processedPlans[0]?.currency || 'PYG')} helper="Suscripciones activas por plan" />
+        </div>
+
+        <div className="rounded-md border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200">
+          <p className="font-medium">Catalogo fijo de planes base</p>
+          <p className="mt-1">
+            Esta seccion administra solo los planes Free, Starter, Professional y Enterprise. Para evitar inconsistencias en permisos, precios publicos y limites, no se crean ni eliminan planes desde aqui.
+          </p>
         </div>
 
         <Card className="rounded-md">
@@ -423,6 +359,8 @@ export default function PlansPage() {
                   <TableHead className="text-right">Ventas/mes</TableHead>
                   <TableHead className="text-right">Sucursales</TableHead>
                   <TableHead className="text-right">Tenants</TableHead>
+                  <TableHead className="text-right">Activas</TableHead>
+                  <TableHead className="text-right">MRR</TableHead>
                   <TableHead>Features</TableHead>
                   <TableHead>Actualizado</TableHead>
                   <TableHead className="w-12" />
@@ -431,7 +369,7 @@ export default function PlansPage() {
               <TableBody>
                 {processedPlans.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={12} className="h-32 text-center text-slate-500">
+                    <TableCell colSpan={14} className="h-32 text-center text-slate-500">
                       No hay planes para los filtros actuales.
                     </TableCell>
                   </TableRow>
@@ -480,6 +418,8 @@ export default function PlansPage() {
                             {tenantCount}
                           </Link>
                         </TableCell>
+                        <TableCell className="text-right">{Number(plan.active_subscription_count || 0).toLocaleString('es-PY')}</TableCell>
+                        <TableCell className="text-right">{formatMoney(plan.mrr || 0, plan.currency)}</TableCell>
                         <TableCell>
                           <div className="flex max-w-[260px] flex-wrap gap-1">
                             {(plan.features || []).slice(0, 3).map((feature, index) => (
@@ -513,15 +453,6 @@ export default function PlansPage() {
                                   <Building2 className="mr-2 h-4 w-4" />
                                   Ver organizaciones
                                 </Link>
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                disabled={tenantCount > 0 || deletingId === plan.id}
-                                onClick={() => setDeleteTarget(plan)}
-                                className="text-rose-600 focus:text-rose-600"
-                              >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                {tenantCount > 0 ? 'En uso' : 'Eliminar'}
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -571,37 +502,6 @@ export default function PlansPage() {
         onSave={() => queryClient.invalidateQueries({ queryKey: ['saas-plans'] })}
         plan={selectedPlan}
       />
-
-      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Eliminar plan</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta accion no se puede deshacer. Solo se pueden eliminar planes sin tenants asignados.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteMutation.isPending}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(event) => {
-                event.preventDefault();
-                if (deleteTarget) deleteMutation.mutate(deleteTarget.id);
-              }}
-              className="bg-rose-600 hover:bg-rose-700"
-              disabled={deleteMutation.isPending}
-            >
-              {deleteMutation.isPending ? (
-                <span className="inline-flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Eliminando...
-                </span>
-              ) : (
-                'Eliminar'
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </SuperAdminGuard>
   );
 }

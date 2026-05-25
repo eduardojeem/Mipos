@@ -319,10 +319,10 @@ export default function UserManagement() {
     setRowActionId(targetUser.id)
     try {
       await deleteUser(targetUser.id)
-      toast({ title: 'Usuario removido', description: 'La membresia fue quitada de esta organizacion.' })
+      toast({ title: 'Membresia removida', description: 'El acceso fue quitado solo de esta organizacion.' })
     } catch (deleteError: unknown) {
       toast({
-        title: 'No se pudo remover el usuario',
+        title: 'No se pudo remover la membresia',
         description: getErrorMessage(deleteError),
         variant: 'destructive',
       })

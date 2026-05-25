@@ -34,6 +34,11 @@ const defaultStats = {
   totalOrders: 0,
 };
 
+function getMutationErrorMessage(error: unknown, fallback: string) {
+  const responseData = (error as { response?: { data?: { error?: string; details?: string } } })?.response?.data;
+  return responseData?.details || responseData?.error || (error as Error)?.message || fallback;
+}
+
 export function useSuppliers(params?: SuppliersQueryParams) {
   const organizationId = getSelectedOrganizationId();
   const {
@@ -85,7 +90,10 @@ export function useCreateSupplier() {
 
   return useMutation({
     mutationFn: async (supplierData: CreateSupplierFormData) => {
-      const res = await api.post('/suppliers', supplierData);
+      const res = await api.post('/suppliers', supplierData, {
+        headers: { 'X-No-Retry': 'true' },
+        _noRetry: true,
+      } as any);
       if (!res.data?.success) {
         throw new Error(res.data?.error || 'Error al crear el proveedor');
       }
@@ -98,7 +106,7 @@ export function useCreateSupplier() {
     onError: (error: Error) => {
       toast({
         title: 'Error',
-        description: error.message || 'Error al crear el proveedor',
+        description: getMutationErrorMessage(error, 'Error al crear el proveedor'),
         variant: 'destructive',
       });
     },
@@ -110,7 +118,10 @@ export function useUpdateSupplier() {
 
   return useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<CreateSupplierFormData> }) => {
-      const res = await api.put(`/suppliers/${id}`, data);
+      const res = await api.put(`/suppliers/${id}`, data, {
+        headers: { 'X-No-Retry': 'true' },
+        _noRetry: true,
+      } as any);
       if (!res.data?.success) {
         throw new Error(res.data?.error || 'Error al actualizar el proveedor');
       }
@@ -123,7 +134,7 @@ export function useUpdateSupplier() {
     onError: (error: Error) => {
       toast({
         title: 'Error',
-        description: error.message || 'Error al actualizar el proveedor',
+        description: getMutationErrorMessage(error, 'Error al actualizar el proveedor'),
         variant: 'destructive',
       });
     },
@@ -135,7 +146,10 @@ export function useDeleteSupplier() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const res = await api.delete(`/suppliers/${id}`);
+      const res = await api.delete(`/suppliers/${id}`, {
+        headers: { 'X-No-Retry': 'true' },
+        _noRetry: true,
+      } as any);
       if (!res.data?.success) {
         throw new Error(res.data?.error || 'Error al eliminar el proveedor');
       }
@@ -147,7 +161,7 @@ export function useDeleteSupplier() {
     onError: (error: Error) => {
       toast({
         title: 'Error',
-        description: error.message || 'Error al eliminar el proveedor',
+        description: getMutationErrorMessage(error, 'Error al eliminar el proveedor'),
         variant: 'destructive',
       });
     },

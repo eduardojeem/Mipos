@@ -108,7 +108,10 @@ export async function GET(request: NextRequest) {
     // Perform data queries in parallel
     const [orgsRes, activeOrgsRes, usersRes, subsRes] = await Promise.all([
       adminClient.from('organizations').select('*', { count: 'exact', head: true }),
-      adminClient.from('organizations').select('*', { count: 'exact', head: true }).eq('subscription_status', 'ACTIVE'),
+      adminClient
+        .from('organizations')
+        .select('*', { count: 'exact', head: true })
+        .in('subscription_status', ['ACTIVE', 'active', 'Active']),
       adminClient.from('users').select('*', { count: 'exact', head: true }),
       adminClient.from('saas_subscriptions').select('plan_id, billing_cycle, saas_plans(price_monthly, price_yearly)').eq('status', 'active')
     ]);
@@ -150,6 +153,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Process revenue calculation
+    let activeSubscriptions = 0;
     let monthlyRevenue = 0;
     if (subsRes.error) {
       structuredLogger.warn('Error fetching subscriptions', {
@@ -163,6 +167,7 @@ export async function GET(request: NextRequest) {
         saas_plans: { price_monthly: number; price_yearly: number } | null
       }>
 
+      activeSubscriptions = subscriptions.length;
       subscriptions.forEach((sub) => {
         if (sub.saas_plans) {
           if (sub.billing_cycle === 'yearly') {
@@ -175,18 +180,6 @@ export async function GET(request: NextRequest) {
     }
     
     const activeUsers = totalUsers;
-    
-    if (monthlyRevenue === 0 && (totalOrgs || 0) > 0) {
-      structuredLogger.info('Using estimated revenue based on organization count', {
-        component: 'SuperAdminStatsAPI',
-        action: 'fetchRevenue',
-        metadata: {
-          activeOrgs,
-          estimatedMonthlyRevenuePerOrg: 49,
-        },
-      });
-      monthlyRevenue = (activeOrgs || 0) * 49;
-    }
 
     const duration = Date.now() - startTime;
     const responseData = {
@@ -194,8 +187,8 @@ export async function GET(request: NextRequest) {
       activeOrganizations: activeOrgs,
       totalUsers: totalUsers,
       activeUsers: activeUsers,
-      activeSubscriptions: activeOrgs,
-      totalRevenue: monthlyRevenue * 12, // ARR estimado
+      activeSubscriptions,
+      totalRevenue: monthlyRevenue * 12,
       monthlyRevenue: monthlyRevenue,
       systemHealth: 'healthy',
       uptime: 99.95

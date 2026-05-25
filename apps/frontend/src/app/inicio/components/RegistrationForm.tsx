@@ -13,6 +13,7 @@ import { toast } from '@/lib/toast';
 
 interface RegistrationFormProps {
   selectedPlan: Plan;
+  billingCycle?: 'monthly' | 'yearly';
   onSuccess: () => void;
 }
 
@@ -39,7 +40,7 @@ function getPasswordStrength(password: string): { score: number; label: string; 
   return { score, label: 'Fuerte', color: 'bg-emerald-500' };
 }
 
-export function RegistrationForm({ selectedPlan, onSuccess }: RegistrationFormProps) {
+export function RegistrationForm({ selectedPlan, billingCycle = 'monthly', onSuccess }: RegistrationFormProps) {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -82,8 +83,8 @@ export function RegistrationForm({ selectedPlan, onSuccess }: RegistrationFormPr
 
     if (!formData.password) {
       errors.password = 'La contrasena es requerida';
-    } else if (formData.password.length < 6) {
-      errors.password = 'Minimo 6 caracteres';
+    } else if (formData.password.length < 8) {
+      errors.password = 'Minimo 8 caracteres';
     } else if (passwordStrength.score < 2) {
       errors.password = 'Agrega mayusculas, numeros o simbolos para mayor seguridad';
     }
@@ -132,6 +133,7 @@ export function RegistrationForm({ selectedPlan, onSuccess }: RegistrationFormPr
           organizationName: formData.organizationName.trim(),
           password: formData.password,
           planSlug: selectedPlan.slug,
+          billingCycle,
         }),
       });
 
@@ -263,7 +265,7 @@ export function RegistrationForm({ selectedPlan, onSuccess }: RegistrationFormPr
             id="reg-password"
             type={showPassword ? 'text' : 'password'}
             autoComplete="new-password"
-            placeholder="Minimo 6 caracteres"
+            placeholder="Minimo 8 caracteres"
             value={formData.password}
             onChange={(e) => handleInputChange('password', e.target.value)}
             disabled={loading}
@@ -352,7 +354,7 @@ export function RegistrationForm({ selectedPlan, onSuccess }: RegistrationFormPr
         ) : (
           <>
             <CheckCircle2 className="mr-2 h-5 w-5" aria-hidden="true" />
-            {isFreePlan ? 'Crear gratis' : 'Crear mi cuenta'}
+            {isFreePlan ? 'Crear gratis' : 'Crear cuenta gratis'}
           </>
         )}
       </Button>
@@ -363,7 +365,7 @@ export function RegistrationForm({ selectedPlan, onSuccess }: RegistrationFormPr
         </p>
       ) : (
         <p className="text-center text-[11px] text-slate-500">
-          Puedes cambiar este plan mas adelante desde suscripcion.
+          No se cobrara ahora. La cuenta inicia en Free y este plan queda preparado para activarlo despues.
         </p>
       )}
 
