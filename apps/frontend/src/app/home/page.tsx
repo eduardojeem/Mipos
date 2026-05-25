@@ -7,6 +7,7 @@ import { StaticBusinessConfigProvider } from '@/contexts/BusinessConfigContext';
 import { resolveRequestTenantContext } from '@/lib/domain/request-tenant';
 import { getGlobalMarketplaceHomeData, getPublicBusinessConfig } from '@/lib/public-site/data';
 import { fetchTenantHomeSnapshot } from '@/lib/public-site/home-data';
+import { getMarketplaceContent } from '@/lib/web-content/server';
 import { createAdminClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
@@ -245,9 +246,12 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   if (context.kind === 'root') {
     const params = await searchParams;
     const query = String(params.q || '').trim();
-    const marketplaceData = await getGlobalMarketplaceHomeData(context.hostname, query);
+    const [marketplaceData, marketplaceContent] = await Promise.all([
+      getGlobalMarketplaceHomeData(context.hostname, query),
+      getMarketplaceContent(),
+    ]);
 
-    return <PublicMarketplaceHome data={marketplaceData} searchQuery={query} />;
+    return <PublicMarketplaceHome data={marketplaceData} searchQuery={query} content={marketplaceContent} />;
   }
 
   const config = await getPublicBusinessConfig(context.organization);

@@ -28,6 +28,8 @@ import {
   CreditCard,
   Crown,
   FileText,
+  Globe,
+  LayoutTemplate,
   LogOut,
   LayoutDashboard,
   Mail,
@@ -38,6 +40,7 @@ import {
   Settings,
   Shield,
   Sparkles,
+  Store,
   UserCheck,
   Users,
 } from "lucide-react";
@@ -63,7 +66,7 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>;
   badge?: string;
   description?: string;
-  section: "overview" | "tenants" | "billing" | "system";
+  section: "overview" | "tenants" | "billing" | "content" | "system";
   children?: NavChild[];
 }
 
@@ -72,6 +75,7 @@ const SECTION_LABELS: Record<NavItem["section"], string> = {
   overview: "Visión general",
   tenants:  "Tenants",
   billing:  "Facturación",
+  content:  "Contenido web",
   system:   "Sistema",
 };
 
@@ -79,6 +83,7 @@ const SECTION_ORDER: NavItem["section"][] = [
   "overview",
   "tenants",
   "billing",
+  "content",
   "system",
 ];
 
@@ -159,6 +164,29 @@ const NAV_ITEMS: NavItem[] = [
     icon: FileText,
     description: "Historial de facturación",
     section: "billing",
+  },
+
+  // ── Contenido web ───────────────────────────────────────────────────────────
+  {
+    title: "Contenido web",
+    href: "/superadmin/web-content",
+    icon: Globe,
+    description: "Paginas publicas del sistema SaaS",
+    section: "content",
+    children: [
+      {
+        title: "Pagina de inicio",
+        href: "/superadmin/web-content/landing",
+        icon: LayoutTemplate,
+        description: "Contenido de /inicio",
+      },
+      {
+        title: "Marketplace",
+        href: "/superadmin/web-content/marketplace",
+        icon: Store,
+        description: "Contenido de /home",
+      },
+    ],
   },
 
   // ── Sistema ─────────────────────────────────────────────────────────────────
