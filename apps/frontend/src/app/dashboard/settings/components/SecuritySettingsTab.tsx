@@ -133,33 +133,45 @@ export function SecuritySettingsTab() {
               />
             </div>
 
-            <div className="space-y-2.5">
-              <Label htmlFor="password_expiry" className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                Caducidad de Contraseña (días)
-              </Label>
+            <div className="space-y-2.5 opacity-60">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="password_expiry" className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                  Caducidad de Contraseña (días)
+                </Label>
+                <Badge variant="outline" className="text-xs px-2 py-0 bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/20">
+                  Próximamente
+                </Badge>
+              </div>
               <Input
                 id="password_expiry"
                 type="number"
                 min="0"
                 max="365"
+                disabled
                 className="bg-muted/30 border-none h-11"
                 value={currentSettings.password_expiry_days || 90}
                 onChange={(e) => updateSetting('password_expiry_days', parseInt(e.target.value))}
               />
               <p className="text-xs text-muted-foreground">
-                0 = sin caducidad. Recomendado: 90 días
+                La verificación de caducidad estará disponible próximamente.
               </p>
             </div>
 
-            <div className="flex items-center justify-between p-4 rounded-2xl bg-muted/20 border transition-colors hover:bg-muted/30">
+            <div className="flex items-center justify-between p-4 rounded-2xl bg-muted/20 border opacity-60">
               <div className="space-y-1">
-                <Label className="font-bold">Cambio Obligatorio</Label>
+                <Label className="font-bold flex items-center gap-2">
+                  Cambio Obligatorio
+                  <Badge variant="outline" className="text-xs px-2 py-0 bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/20">
+                    Próximamente
+                  </Badge>
+                </Label>
                 <p className="text-xs text-muted-foreground leading-tight">
                   Forzar cambio de contraseña en próximo login
                 </p>
               </div>
               <Switch
                 checked={currentSettings.require_password_change ?? false}
+                disabled
                 onCheckedChange={(checked) => updateSetting('require_password_change', checked)}
               />
             </div>
@@ -217,21 +229,27 @@ export function SecuritySettingsTab() {
               </p>
             </div>
 
-            <div className="space-y-2.5">
-              <Label htmlFor="session_timeout" className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                Tiempo de Sesión (minutos)
-              </Label>
+            <div className="space-y-2.5 opacity-60">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="session_timeout" className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                  Tiempo de Sesión (minutos)
+                </Label>
+                <Badge variant="outline" className="text-xs px-2 py-0 bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/20">
+                  Próximamente
+                </Badge>
+              </div>
               <Input
                 id="session_timeout"
                 type="number"
                 min="5"
                 max="1440"
+                disabled
                 className="bg-muted/30 border-none h-11"
                 value={currentSettings.session_timeout || 30}
                 onChange={(e) => updateSetting('session_timeout', parseInt(e.target.value))}
               />
               <p className="text-xs text-muted-foreground">
-                Cierre automático de sesión por inactividad
+                El cierre automático por inactividad estará disponible próximamente.
               </p>
             </div>
           </CardContent>
