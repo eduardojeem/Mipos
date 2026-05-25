@@ -1,70 +1,35 @@
-'use client';
+﻿'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import {
   Activity,
   AlertTriangle,
   ArrowRight,
-  BadgeCheck,
   Bell,
-  Building2,
-  Calendar,
   CheckCircle2,
   Clock3,
-  Download,
   ExternalLink,
   FileJson,
   Globe2,
-  HardDrive,
   Info,
   KeyRound,
   Loader2,
   LockKeyhole,
-  Mail,
-  MapPin,
-  Monitor,
   PackageSearch,
-  Phone,
-  PlugZap,
-  Plus,
   Receipt,
   RefreshCw,
   Save,
-  Server,
   Settings2,
   ShieldCheck,
   ShoppingCart,
   Store,
-  Trash2,
-  UserPlus,
   UsersRound,
-  X,
 } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -103,53 +68,6 @@ interface SettingLineProps {
   icon?: React.ElementType;
   children: ReactNode;
 }
-
-type TeamUser = {
-  id: string;
-  email?: string;
-  name?: string;
-  full_name?: string;
-  role?: string;
-  status?: string;
-  isActive?: boolean;
-  created_at?: string;
-};
-
-type RoleSummary = {
-  id: string;
-  name?: string;
-  displayName?: string;
-  description?: string;
-  userCount?: number;
-  isActive?: boolean;
-  permissions?: unknown[];
-};
-
-type BranchSummary = {
-  id: string;
-  name: string;
-  slug?: string | null;
-  address?: string | null;
-  phone?: string | null;
-  is_active?: boolean | null;
-  created_at?: string | null;
-};
-
-type BranchStats = {
-  branch_id: string;
-  users_assigned: number;
-  active_cash_sessions: number;
-  sales_today: number;
-  sales_month: number;
-};
-
-type BranchUser = {
-  user_id: string;
-  email?: string;
-  full_name?: string | null;
-  role?: string | null;
-  assigned_at?: string;
-};
 
 type SessionPreview = {
   id: string;
@@ -692,258 +610,6 @@ export function CompanyProfileSettings() {
 }
 
 
-function CompanyContactSettings() {
-  const { data: systemSettings, isLoading } = useSystemSettings();
-  const updateSystemSettings = useUpdateSystemSettings();
-  const [localSettings, setLocalSettings] = useState<Partial<SystemSettings>>({});
-
-  const currentSettings = { ...systemSettings, ...localSettings };
-  const hasChanges = Object.keys(localSettings).length > 0;
-
-  const updateSetting = (key: keyof SystemSettings, value: unknown) => {
-    setLocalSettings((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const handleSave = () => {
-    updateSystemSettings.mutate(localSettings, {
-      onSuccess: () => setLocalSettings({}),
-    });
-  };
-
-  if (isLoading) {
-    return <SettingsSkeleton rows={2} />;
-  }
-
-  return (
-    <SectionCard
-      title="Contacto publico"
-      description="Datos que alimentan recibos, sitio publico y comunicaciones."
-      icon={Building2}
-    >
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="business-email">Email comercial</Label>
-          <Input
-            id="business-email"
-            type="email"
-            value={currentSettings.email || ''}
-            onChange={(event) => updateSetting('email', event.target.value)}
-            placeholder="ventas@empresa.com"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="business-phone">Telefono</Label>
-          <Input
-            id="business-phone"
-            value={currentSettings.phone || ''}
-            onChange={(event) => updateSetting('phone', event.target.value)}
-            placeholder="+595 ..."
-          />
-        </div>
-        <div className="space-y-2 md:col-span-2">
-          <Label htmlFor="business-address">Direccion</Label>
-          <Input
-            id="business-address"
-            value={currentSettings.address || ''}
-            onChange={(event) => updateSetting('address', event.target.value)}
-            placeholder="Direccion principal"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="business-website">Sitio web</Label>
-          <Input
-            id="business-website"
-            value={currentSettings.website || ''}
-            onChange={(event) => updateSetting('website', event.target.value)}
-            placeholder="https://..."
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="business-logo">Logo URL</Label>
-          <Input
-            id="business-logo"
-            value={currentSettings.logo_url || ''}
-            onChange={(event) => updateSetting('logo_url', event.target.value)}
-            placeholder="https://cdn..."
-          />
-        </div>
-      </div>
-
-      <div className="mt-6">
-        <SaveRow
-          hasChanges={hasChanges}
-          isSaving={updateSystemSettings.isPending}
-          onSave={handleSave}
-          label="Guardar contacto"
-        />
-      </div>
-    </SectionCard>
-  );
-}
-
-export function UsersRolesSettings() {
-  const organizationId = useCurrentOrganizationId();
-  const [users, setUsers] = useState<TeamUser[]>([]);
-  const [roles, setRoles] = useState<RoleSummary[]>([]);
-  const [totalUsers, setTotalUsers] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const loadTeamData = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const headers = selectedOrganizationHeaders(organizationId);
-      const [usersRes, rolesRes] = await Promise.all([
-        fetch('/api/users?limit=8', { cache: 'no-store', headers }),
-        fetch('/api/roles?includeInactive=false', { cache: 'no-store', headers }),
-      ]);
-
-      const errors: string[] = [];
-      let nextUsers: TeamUser[] = [];
-      let nextRoles: RoleSummary[] = [];
-      let nextTotal = 0;
-
-      if (usersRes.ok) {
-        const p = await usersRes.json();
-        nextUsers = Array.isArray(p?.data) ? p.data : Array.isArray(p?.users) ? p.users : [];
-        nextTotal = Number(p?.total ?? nextUsers.length);
-      } else errors.push('usuarios');
-
-      if (rolesRes.ok) {
-        const p = await rolesRes.json();
-        nextRoles = Array.isArray(p) ? p : Array.isArray(p?.data) ? p.data : [];
-      } else errors.push('roles');
-
-      setUsers(nextUsers);
-      setRoles(nextRoles);
-      setTotalUsers(nextTotal);
-      if (errors.length > 0) setError(`No se pudieron cargar: ${errors.join(' y ')}`);
-    } catch {
-      setError('No se pudo cargar el equipo.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void loadTeamData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [organizationId]);
-
-  const activeUsers = users.filter((u) => u.isActive !== false && u.status !== 'INACTIVE').length;
-  const activeRoles = roles.filter((r) => r.isActive !== false).length;
-
-  const getInitials = (user: TeamUser) => {
-    const name = user.full_name || user.name || user.email || '';
-    return name.split(' ').slice(0, 2).map((n) => n[0]?.toUpperCase()).join('') || '?';
-  };
-
-  return (
-    <div className="space-y-6">
-      {/* Metrics */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <MetricCard icon={UsersRound} label="Usuarios totales" value={totalUsers || users.length} />
-        <MetricCard icon={BadgeCheck} label="Activos ahora" value={activeUsers} />
-        <MetricCard icon={ShieldCheck} label="Roles configurados" value={activeRoles || roles.length} />
-      </div>
-
-      {error && (
-        <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
-        {/* Users list */}
-        <SectionCard
-          title="Equipo"
-          description="Últimos usuarios registrados en la organización."
-          icon={UsersRound}
-          action={
-            <Button asChild size="sm">
-              <Link href="/dashboard/users">
-                Gestionar <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
-          }
-        >
-          {isLoading ? (
-            <SettingsSkeleton rows={4} />
-          ) : users.length === 0 ? (
-            <EmptyPanel title="Sin usuarios registrados" description="Crea usuarios desde el módulo de usuarios." />
-          ) : (
-            <div className="space-y-2">
-              {users.map((user) => (
-                <div
-                  key={user.id}
-                  className="flex items-center gap-3 rounded-lg border border-border/50 bg-muted/10 p-3"
-                >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">
-                    {getInitials(user)}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">
-                      {user.full_name || user.name || user.email || 'Usuario'}
-                    </p>
-                    <p className="truncate text-xs text-muted-foreground">{user.email || 'Sin email'}</p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <Badge variant="outline" className="text-xs">{user.role || 'USER'}</Badge>
-                    <Badge
-                      variant={user.isActive === false || user.status === 'INACTIVE' ? 'secondary' : 'default'}
-                      className="text-xs"
-                    >
-                      {user.isActive === false || user.status === 'INACTIVE' ? 'Inactivo' : 'Activo'}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
-              {totalUsers > users.length && (
-                <p className="pt-1 text-center text-xs text-muted-foreground">
-                  Mostrando {users.length} de {totalUsers} usuarios
-                </p>
-              )}
-            </div>
-          )}
-        </SectionCard>
-
-        {/* Roles */}
-        <SectionCard
-          title="Roles"
-          description="Roles activos en la organización."
-          icon={ShieldCheck}
-        >
-          {isLoading ? (
-            <SettingsSkeleton rows={3} />
-          ) : roles.length === 0 ? (
-            <EmptyPanel title="Sin roles configurados" description="Los roles se crean desde seguridad." />
-          ) : (
-            <div className="space-y-2">
-              {roles.slice(0, 6).map((role) => (
-                <div key={role.id} className="flex items-center justify-between gap-3 rounded-lg border border-border/50 bg-muted/10 p-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">
-                      {role.displayName || role.name || 'Rol'}
-                    </p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {role.description || `${role.permissions?.length ?? 0} permisos`}
-                    </p>
-                  </div>
-                  <Badge variant="secondary" className="shrink-0 text-xs">
-                    {role.userCount ?? 0} usuarios
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          )}
-        </SectionCard>
-      </div>
-    </div>
-  );
-}
-
 
 
 export function SalesBillingSettings() {
@@ -1122,8 +788,10 @@ export function InventorySettings() {
     });
   };
 
-  // Fetch real stock statistics
+  // Fetch real stock statistics — depends on the saved threshold so stats
+  // refresh automatically after the user saves a new value.
   useEffect(() => {
+    const savedThreshold = systemSettings?.low_stock_threshold ?? 10;
     const loadStats = async () => {
       if (!organizationId) { setStatsLoading(false); return; }
       setStatsLoading(true);
@@ -1131,7 +799,7 @@ export function InventorySettings() {
         const headers = selectedOrganizationHeaders(organizationId);
         const [productsRes, alertsRes] = await Promise.all([
           fetch('/api/products?limit=1&countOnly=true', { cache: 'no-store', headers }),
-          fetch(`/api/stock-alerts?threshold=${threshold}`, { cache: 'no-store', headers }),
+          fetch(`/api/stock-alerts?threshold=${savedThreshold}`, { cache: 'no-store', headers }),
         ]);
 
         let total = 0;
@@ -1144,9 +812,8 @@ export function InventorySettings() {
         }
         if (alertsRes.ok) {
           const a = await alertsRes.json();
-          const alerts = Array.isArray(a?.data) ? a.data : Array.isArray(a) ? a : [];
-          outOfStock = alerts.filter((item: Record<string, unknown>) => Number(item.stock ?? item.quantity ?? 0) === 0).length;
-          lowStock = alerts.length - outOfStock;
+          outOfStock = Number(a?.stats?.outOfStockAlerts ?? 0);
+          lowStock = Number(a?.stats?.lowStockAlerts ?? 0);
         }
 
         setStats({ total, lowStock, outOfStock });
@@ -1158,8 +825,7 @@ export function InventorySettings() {
     };
 
     void loadStats();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [organizationId]);
+  }, [organizationId, systemSettings?.low_stock_threshold]);
 
   if (isLoading) return <SettingsSkeleton rows={4} />;
 
@@ -1187,47 +853,58 @@ export function InventorySettings() {
         description="Reglas globales de stock sincronizadas con Supabase."
         icon={PackageSearch}
       >
-        <div className="grid gap-6 xl:grid-cols-2">
-          {/* Tracking toggle */}
-          <SettingLine
-            title="Seguimiento automático"
-            description="Descuenta stock con cada venta, devolución y ajuste de inventario."
-            icon={PackageSearch}
-          >
-            <Switch
-              checked={currentSettings.enable_inventory_tracking ?? true}
-              onCheckedChange={(checked) => updateSetting('enable_inventory_tracking', checked)}
-            />
-          </SettingLine>
+        <div className="space-y-4">
+          <div className="grid gap-6 xl:grid-cols-2">
+            {/* Tracking toggle */}
+            <SettingLine
+              title="Seguimiento automático"
+              description="Descuenta stock con cada venta, devolución y ajuste de inventario."
+              icon={PackageSearch}
+            >
+              <Switch
+                checked={currentSettings.enable_inventory_tracking ?? true}
+                onCheckedChange={(checked) => updateSetting('enable_inventory_tracking', checked)}
+              />
+            </SettingLine>
 
-          {/* Threshold with live preview */}
-          <div className="space-y-3 rounded-xl border border-border/50 bg-card p-4 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <Label htmlFor="low-stock" className="text-sm font-medium">Umbral de stock bajo</Label>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  Alerta cuando el stock cae por debajo de este valor.
-                </p>
+            {/* Threshold with live preview */}
+            <div className="space-y-3 rounded-xl border border-border/50 bg-card p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label htmlFor="low-stock" className="text-sm font-medium">Umbral de stock bajo</Label>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Alerta cuando el stock cae por debajo de este valor.
+                  </p>
+                </div>
+                <div className="flex h-10 w-14 items-center justify-center rounded-lg bg-primary/10">
+                  <span className="text-xl font-bold text-primary">{threshold}</span>
+                </div>
               </div>
-              <div className="flex h-10 w-14 items-center justify-center rounded-lg bg-primary/10">
-                <span className="text-xl font-bold text-primary">{threshold}</span>
+              <Slider
+                id="low-stock"
+                value={[threshold]}
+                min={0}
+                max={100}
+                step={1}
+                onValueChange={([value]) => updateSetting('low_stock_threshold', value)}
+                className="py-1"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>0 unidades</span>
+                <span>50</span>
+                <span>100 unidades</span>
               </div>
-            </div>
-            <Slider
-              id="low-stock"
-              value={[threshold]}
-              min={0}
-              max={100}
-              step={1}
-              onValueChange={([value]) => updateSetting('low_stock_threshold', value)}
-              className="py-1"
-            />
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>0 unidades</span>
-              <span>50</span>
-              <span>100 unidades</span>
             </div>
           </div>
+
+          {!(currentSettings.enable_inventory_tracking ?? true) && (
+            <Alert variant="destructive" className="border-amber-500/40 bg-amber-50/60 text-amber-900 dark:border-amber-500/30 dark:bg-amber-950/30 dark:text-amber-200">
+              <AlertTriangle className="h-4 w-4 !text-amber-600 dark:!text-amber-400" />
+              <AlertDescription>
+                El seguimiento está desactivado. Las ventas y devoluciones <strong>no descontarán ni ajustarán el stock</strong> hasta que se reactive.
+              </AlertDescription>
+            </Alert>
+          )}
         </div>
       </SectionCard>
 
@@ -1252,885 +929,6 @@ export function InventorySettings() {
         isSaving={updateSystemSettings.isPending}
         onSave={handleSave}
         label="Guardar inventario"
-      />
-    </div>
-  );
-}
-
-
-type BranchFormData = { name: string; address: string; phone: string };
-type PlanLimitInfo = { message: string; maxLocations: number } | null;
-
-function formatCurrencyShort(value: number): string {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(0)}k`;
-  return String(value);
-}
-
-function BranchFormFields({
-  formData,
-  onChange,
-  nameId = 'branch-name',
-}: {
-  formData: BranchFormData;
-  onChange: (patch: Partial<BranchFormData>) => void;
-  nameId?: string;
-}) {
-  return (
-    <>
-      <div className="space-y-2">
-        <Label htmlFor={nameId}>
-          Nombre <span className="text-destructive">*</span>
-        </Label>
-        <Input
-          id={nameId}
-          value={formData.name}
-          onChange={(e) => onChange({ name: e.target.value })}
-          placeholder="Ej. Sede Central, Sucursal Norte..."
-          className="focus-visible:ring-primary/50"
-          autoFocus
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor={`${nameId}-address`}>Dirección</Label>
-        <Input
-          id={`${nameId}-address`}
-          value={formData.address}
-          onChange={(e) => onChange({ address: e.target.value })}
-          placeholder="Av. Principal 123..."
-          className="focus-visible:ring-primary/50"
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor={`${nameId}-phone`}>Teléfono</Label>
-        <Input
-          id={`${nameId}-phone`}
-          value={formData.phone}
-          onChange={(e) => onChange({ phone: e.target.value })}
-          placeholder="+595 9XX XXX XXX"
-          className="focus-visible:ring-primary/50"
-        />
-      </div>
-    </>
-  );
-}
-
-export function BranchesSettings() {
-  const organizationId = useCurrentOrganizationId();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-
-  const [branches, setBranches] = useState<BranchSummary[]>([]);
-  const [statsMap, setStatsMap] = useState<Record<string, BranchStats>>({});
-  const [isLoading, setIsLoading] = useState(true);
-  const [isCreating, setIsCreating] = useState(false);
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [planLimit, setPlanLimit] = useState<PlanLimitInfo>(null);
-
-  // Create form
-  const [createForm, setCreateForm] = useState<BranchFormData>({ name: '', address: '', phone: '' });
-
-  // Edit state
-  const [editingBranch, setEditingBranch] = useState<BranchSummary | null>(null);
-  const [editForm, setEditForm] = useState<BranchFormData>({ name: '', address: '', phone: '' });
-  const [isSavingEdit, setIsSavingEdit] = useState(false);
-
-  // Delete confirm state
-  const [deletingBranch, setDeletingBranch] = useState<BranchSummary | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  // Toggle active state per-branch
-  const [togglingId, setTogglingId] = useState<string | null>(null);
-
-  // User assignment panel state
-  const [managingBranch, setManagingBranch] = useState<BranchSummary | null>(null);
-  const [branchUsers, setBranchUsers] = useState<BranchUser[]>([]);
-  const [orgUsers, setOrgUsers] = useState<{ id: string; email?: string; full_name?: string | null; role?: string | null }[]>([]);
-  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
-  const [isAssigning, setIsAssigning] = useState(false);
-
-  const loadBranches = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      if (!organizationId) {
-        setBranches([]);
-        setError('Selecciona una organización para ver sus sucursales.');
-        return;
-      }
-      const [branchRes, statsRes] = await Promise.all([
-        fetch('/api/branches', { cache: 'no-store', headers: selectedOrganizationHeaders(organizationId) }),
-        fetch('/api/branches/stats', { cache: 'no-store', headers: selectedOrganizationHeaders(organizationId) }),
-      ]);
-      const branchPayload = await branchRes.json();
-      if (!branchRes.ok) throw new Error(branchPayload?.error || 'No se pudieron cargar sucursales');
-      setBranches(Array.isArray(branchPayload?.data) ? branchPayload.data : []);
-
-      if (statsRes.ok) {
-        const statsPayload = await statsRes.json();
-        const map: Record<string, BranchStats> = {};
-        for (const s of (statsPayload?.data ?? []) as BranchStats[]) {
-          map[s.branch_id] = s;
-        }
-        setStatsMap(map);
-      }
-    } catch (fetchError) {
-      setError(fetchError instanceof Error ? fetchError.message : 'No se pudieron cargar sucursales');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [organizationId]);
-
-  useEffect(() => {
-    void loadBranches();
-  }, [loadBranches]);
-
-  const createBranch = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!createForm.name.trim()) {
-      toast({ title: 'Nombre requerido', description: 'Ingresa el nombre de la sucursal.', variant: 'destructive' });
-      return;
-    }
-    setIsCreating(true);
-    setPlanLimit(null);
-    try {
-      const response = await fetch('/api/branches', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...selectedOrganizationHeaders(organizationId) },
-        body: JSON.stringify(createForm),
-      });
-      const payload = await response.json();
-
-      if (response.status === 403) {
-        setPlanLimit({
-          message: payload?.error ?? 'Tu plan no permite más sucursales.',
-          maxLocations: payload?.maxLocations ?? 1,
-        });
-        setIsCreateOpen(false);
-        return;
-      }
-      if (!response.ok) throw new Error(payload?.error || 'No se pudo crear la sucursal');
-
-      toast({ title: 'Sucursal creada', description: `"${createForm.name}" fue agregada correctamente.` });
-      setCreateForm({ name: '', address: '', phone: '' });
-      setIsCreateOpen(false);
-      await loadBranches();
-      void queryClient.invalidateQueries({ queryKey: ['branches'] });
-    } catch (createError) {
-      toast({
-        title: 'Error al crear sucursal',
-        description: createError instanceof Error ? createError.message : 'No se pudo crear la sucursal',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsCreating(false);
-    }
-  };
-
-  const openEdit = (branch: BranchSummary) => {
-    setEditingBranch(branch);
-    setEditForm({ name: branch.name, address: branch.address ?? '', phone: branch.phone ?? '' });
-  };
-
-  const saveEdit = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!editingBranch) return;
-    if (!editForm.name.trim()) {
-      toast({ title: 'Nombre requerido', variant: 'destructive' });
-      return;
-    }
-    setIsSavingEdit(true);
-    try {
-      const response = await fetch(`/api/branches/${editingBranch.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', ...selectedOrganizationHeaders(organizationId) },
-        body: JSON.stringify(editForm),
-      });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload?.error || 'No se pudo actualizar');
-      toast({ title: 'Sucursal actualizada', description: `"${editForm.name}" fue guardada.` });
-      setEditingBranch(null);
-      await loadBranches();
-    } catch (err) {
-      toast({
-        title: 'Error al actualizar',
-        description: err instanceof Error ? err.message : 'No se pudo actualizar la sucursal',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsSavingEdit(false);
-    }
-  };
-
-  const toggleActive = async (branch: BranchSummary) => {
-    setTogglingId(branch.id);
-    try {
-      const response = await fetch(`/api/branches/${branch.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', ...selectedOrganizationHeaders(organizationId) },
-        body: JSON.stringify({ is_active: !branch.is_active }),
-      });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload?.error);
-      const nextState = payload.data?.is_active ? 'activada' : 'desactivada';
-      toast({ title: `Sucursal ${nextState}`, description: `"${branch.name}" fue ${nextState}.` });
-      await loadBranches();
-    } catch (err) {
-      toast({
-        title: 'Error al cambiar estado',
-        description: err instanceof Error ? err.message : 'No se pudo cambiar el estado',
-        variant: 'destructive',
-      });
-    } finally {
-      setTogglingId(null);
-    }
-  };
-
-  const deleteBranch = async () => {
-    if (!deletingBranch) return;
-    setIsDeleting(true);
-    try {
-      const response = await fetch(`/api/branches/${deletingBranch.id}`, {
-        method: 'DELETE',
-        headers: selectedOrganizationHeaders(organizationId),
-      });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload?.error);
-
-      if (payload.softDeleted) {
-        toast({
-          title: 'Sucursal desactivada',
-          description: payload.message ?? 'Tiene datos asociados — fue desactivada en lugar de eliminada.',
-        });
-      } else {
-        toast({ title: 'Sucursal eliminada', description: `"${deletingBranch.name}" fue eliminada.` });
-      }
-      setDeletingBranch(null);
-      await loadBranches();
-    } catch (err) {
-      toast({
-        title: 'No se pudo eliminar',
-        description: err instanceof Error ? err.message : 'Error al eliminar la sucursal',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
-  // ── User assignment ───────────────────────────────────────────
-  const openManageUsers = useCallback(async (branch: BranchSummary) => {
-    setManagingBranch(branch);
-    setIsLoadingUsers(true);
-    try {
-      const headers = selectedOrganizationHeaders(organizationId);
-      const [assignedRes, allUsersRes] = await Promise.all([
-        fetch(`/api/branches/${branch.id}/users`, { cache: 'no-store', headers }),
-        fetch('/api/users?limit=100', { cache: 'no-store', headers }),
-      ]);
-      if (assignedRes.ok) {
-        const p = await assignedRes.json();
-        setBranchUsers(Array.isArray(p?.data) ? p.data : []);
-      }
-      if (allUsersRes.ok) {
-        const p = await allUsersRes.json();
-        setOrgUsers(Array.isArray(p?.data) ? p.data : Array.isArray(p?.users) ? p.users : []);
-      }
-    } finally {
-      setIsLoadingUsers(false);
-    }
-  }, [organizationId]);
-
-  const assignUser = useCallback(async (userId: string) => {
-    if (!managingBranch) return;
-    setIsAssigning(true);
-    try {
-      const response = await fetch(`/api/branches/${managingBranch.id}/users`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...selectedOrganizationHeaders(organizationId) },
-        body: JSON.stringify({ user_id: userId }),
-      });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload?.error);
-      toast({ title: 'Usuario asignado', description: 'Ahora puede operar en esta sucursal.' });
-      await openManageUsers(managingBranch);
-      await loadBranches();
-    } catch (err) {
-      toast({ title: 'Error', description: err instanceof Error ? err.message : 'No se pudo asignar', variant: 'destructive' });
-    } finally {
-      setIsAssigning(false);
-    }
-  }, [managingBranch, organizationId, openManageUsers, loadBranches, toast]);
-
-  const removeUser = useCallback(async (userId: string) => {
-    if (!managingBranch) return;
-    try {
-      const response = await fetch(`/api/branches/${managingBranch.id}/users?user_id=${userId}`, {
-        method: 'DELETE',
-        headers: selectedOrganizationHeaders(organizationId),
-      });
-      if (!response.ok) throw new Error('No se pudo quitar el usuario');
-      toast({ title: 'Usuario removido', description: 'Ya no tiene acceso específico a esta sucursal.' });
-      await openManageUsers(managingBranch);
-      await loadBranches();
-    } catch (err) {
-      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Error al remover', variant: 'destructive' });
-    }
-  }, [managingBranch, organizationId, openManageUsers, loadBranches, toast]);
-
-  const assignedIds = useMemo(() => new Set(branchUsers.map((u) => u.user_id)), [branchUsers]);
-  const unassignedUsers = useMemo(() => orgUsers.filter((u) => !assignedIds.has(u.id)), [orgUsers, assignedIds]);
-  // ──────────────────────────────────────────────────────────────
-
-  const activeBranches = branches.filter((b) => b.is_active !== false).length;
-  const sortedBranches = useMemo(
-    () => [...branches].sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()),
-    [branches]
-  );
-  const lastBranchDate = sortedBranches[0]?.created_at
-    ? formatDateTime(sortedBranches[0].created_at).split(',')[0]
-    : '—';
-
-  return (
-    <div className="space-y-6">
-      {/* Metrics */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <MetricCard icon={MapPin} label="Sucursales registradas" value={branches.length} />
-        <MetricCard icon={Store} label="Sucursales activas" value={activeBranches} />
-        <MetricCard icon={Clock3} label="Última alta" value={lastBranchDate} />
-      </div>
-
-      {/* Plan limit warning */}
-      {planLimit && (
-        <Alert className="border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-400">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>
-            {planLimit.message}{' '}
-            <Link href="/admin/settings?tab=subscription" className="font-semibold underline underline-offset-2">
-              Ver planes
-            </Link>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Error */}
-      {error && (
-        <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      <SectionCard
-        title="Locales operativos"
-        description="Sedes físicas de tu negocio — caja, inventario y ventas por ubicación."
-        icon={Building2}
-        action={
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon" onClick={() => void loadBranches()} disabled={isLoading} title="Actualizar">
-              <Loader2 className={cn('h-4 w-4', isLoading && 'animate-spin')} />
-            </Button>
-
-            {/* Create dialog */}
-            <Dialog open={isCreateOpen} onOpenChange={(open) => { setIsCreateOpen(open); if (!open) setCreateForm({ name: '', address: '', phone: '' }); }}>
-              <DialogTrigger asChild>
-                <Button className="shadow-sm">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Nueva sucursal
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[440px]">
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2">
-                    <Store className="h-5 w-5 text-primary" />
-                    Nueva sucursal
-                  </DialogTitle>
-                  <DialogDescription>Registra una nueva sede física.</DialogDescription>
-                </DialogHeader>
-                <form onSubmit={(e) => void createBranch(e)} className="space-y-4 pt-2">
-                  <BranchFormFields formData={createForm} onChange={(p) => setCreateForm((prev) => ({ ...prev, ...p }))} nameId="create-branch-name" />
-                  <DialogFooter className="gap-2 border-t pt-4">
-                    <Button type="button" variant="ghost" onClick={() => setIsCreateOpen(false)}>Cancelar</Button>
-                    <Button type="submit" disabled={isCreating} className="min-w-[110px]">
-                      {isCreating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                      Guardar
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </DialogContent>
-            </Dialog>
-          </div>
-        }
-      >
-        {isLoading ? (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <SettingsSkeleton rows={1} />
-            <SettingsSkeleton rows={1} />
-          </div>
-        ) : branches.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-border bg-muted/10 py-14 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
-              <Store className="h-7 w-7 text-primary" />
-            </div>
-            <div>
-              <p className="font-semibold">Sin sucursales configuradas</p>
-              <p className="mt-1 max-w-xs text-sm text-muted-foreground">
-                Crea tu primera sede para gestionar inventario y ventas por ubicación.
-              </p>
-            </div>
-            <Button onClick={() => setIsCreateOpen(true)} variant="outline" size="sm">
-              <Plus className="mr-2 h-4 w-4" />
-              Crear primera sucursal
-            </Button>
-          </div>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {sortedBranches.map((branch) => (
-              <div
-                key={branch.id}
-                className={cn(
-                  'group flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-sm transition-all hover:shadow-md',
-                  branch.is_active !== false
-                    ? 'border-border/50 hover:border-primary/30'
-                    : 'border-border/30 bg-muted/20 opacity-75'
-                )}
-              >
-                {/* Header */}
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className={cn(
-                      'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors',
-                      branch.is_active !== false ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
-                    )}>
-                      <Store className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <p className={cn('font-semibold leading-tight transition-colors', branch.is_active !== false && 'group-hover:text-primary')}>
-                        {branch.name}
-                      </p>
-                      {branch.slug && (
-                        <Badge variant="secondary" className="mt-0.5 text-[10px] uppercase tracking-wider px-1.5 py-0">
-                          {branch.slug}
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                  <Badge
-                    className={cn(
-                      'shrink-0 text-xs',
-                      branch.is_active !== false
-                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
-                        : 'bg-muted text-muted-foreground'
-                    )}
-                  >
-                    {branch.is_active !== false ? 'Activa' : 'Inactiva'}
-                  </Badge>
-                </div>
-
-                {/* Details */}
-                <div className="space-y-1.5 border-t border-border/50 pt-3">
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <MapPin className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">{branch.address || 'Sin dirección registrada'}</span>
-                  </div>
-                  {branch.phone && (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Phone className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">{branch.phone}</span>
-                    </div>
-                  )}
-                  {branch.created_at && (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Calendar className="h-3.5 w-3.5 shrink-0" />
-                      <span>{formatDateTime(branch.created_at).split(',')[0]}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Stats row */}
-                {statsMap[branch.id] && (
-                  <div className="grid grid-cols-3 gap-2 rounded-lg bg-muted/30 p-2.5 text-center border-t border-border/50 pt-3">
-                    <div>
-                      <p className="text-[10px] text-muted-foreground">Usuarios</p>
-                      <p className="text-sm font-semibold">{statsMap[branch.id].users_assigned}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-muted-foreground">Cajas abiertas</p>
-                      <p className="text-sm font-semibold">{statsMap[branch.id].active_cash_sessions}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-muted-foreground">Ventas hoy</p>
-                      <p className="text-sm font-semibold">{formatCurrencyShort(statsMap[branch.id].sales_today)}</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Actions */}
-                <div className="flex items-center justify-between gap-2 border-t border-border/50 pt-3">
-                  {/* Toggle active */}
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Switch
-                      checked={branch.is_active !== false}
-                      disabled={togglingId === branch.id}
-                      onCheckedChange={() => void toggleActive(branch)}
-                      aria-label={branch.is_active !== false ? 'Desactivar sucursal' : 'Activar sucursal'}
-                    />
-                    <span>{branch.is_active !== false ? 'Activa' : 'Inactiva'}</span>
-                  </div>
-
-                  <div className="flex items-center gap-1">
-                    {/* Manage users button */}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      title="Gestionar usuarios"
-                      onClick={() => void openManageUsers(branch)}
-                    >
-                      <UsersRound className="h-3.5 w-3.5" />
-                    </Button>
-
-                    {/* Edit button */}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      title="Editar sucursal"
-                      onClick={() => openEdit(branch)}
-                    >
-                      <Settings2 className="h-3.5 w-3.5" />
-                    </Button>
-
-                    {/* Delete button */}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-destructive/60 hover:text-destructive"
-                      title="Eliminar sucursal"
-                      onClick={() => setDeletingBranch(branch)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </SectionCard>
-
-      {/* Edit dialog */}
-      <Dialog open={Boolean(editingBranch)} onOpenChange={(open) => { if (!open) setEditingBranch(null); }}>
-        <DialogContent className="sm:max-w-[440px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Settings2 className="h-5 w-5 text-primary" />
-              Editar sucursal
-            </DialogTitle>
-            <DialogDescription>Modifica los datos de {editingBranch?.name}.</DialogDescription>
-          </DialogHeader>
-          <form onSubmit={(e) => void saveEdit(e)} className="space-y-4 pt-2">
-            <BranchFormFields formData={editForm} onChange={(p) => setEditForm((prev) => ({ ...prev, ...p }))} nameId="edit-branch-name" />
-            <DialogFooter className="gap-2 border-t pt-4">
-              <Button type="button" variant="ghost" onClick={() => setEditingBranch(null)}>Cancelar</Button>
-              <Button type="submit" disabled={isSavingEdit} className="min-w-[110px]">
-                {isSavingEdit ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                Guardar
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete confirmation */}
-      <AlertDialog open={Boolean(deletingBranch)} onOpenChange={(open) => { if (!open) setDeletingBranch(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Eliminar sucursal?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Vas a eliminar <strong>{deletingBranch?.name}</strong>. Si tiene ventas, cajas o movimientos asociados será
-              desactivada en lugar de eliminada permanentemente. Esta acción no se puede deshacer.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => void deleteBranch()}
-              disabled={isDeleting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Eliminar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Manage users dialog */}
-      <Dialog open={Boolean(managingBranch)} onOpenChange={(open) => { if (!open) { setManagingBranch(null); setBranchUsers([]); setOrgUsers([]); } }}>
-        <DialogContent className="sm:max-w-[520px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <UsersRound className="h-5 w-5 text-primary" />
-              Usuarios — {managingBranch?.name}
-            </DialogTitle>
-            <DialogDescription>
-              Asigna qué miembros del equipo operan en esta sucursal. Sin asignación, el acceso queda abierto para todos.
-            </DialogDescription>
-          </DialogHeader>
-
-          {isLoadingUsers ? (
-            <SettingsSkeleton rows={3} />
-          ) : (
-            <div className="space-y-4 pt-1">
-              {/* Assigned users */}
-              <div>
-                <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
-                  Asignados ({branchUsers.length})
-                </p>
-                {branchUsers.length === 0 ? (
-                  <p className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
-                    Sin usuarios asignados — todos los miembros tienen acceso.
-                  </p>
-                ) : (
-                  <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                    {branchUsers.map((u) => (
-                      <div key={u.user_id} className="flex items-center justify-between gap-3 rounded-lg border bg-muted/10 px-3 py-2">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">{u.full_name || u.email || 'Usuario'}</p>
-                          <p className="truncate text-xs text-muted-foreground">{u.email}</p>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                          {u.role && <Badge variant="outline" className="text-xs">{u.role}</Badge>}
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive/60 hover:text-destructive" onClick={() => void removeUser(u.user_id)}>
-                            <X className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Unassigned users to add */}
-              {unassignedUsers.length > 0 && (
-                <div>
-                  <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
-                    Agregar miembro
-                  </p>
-                  <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                    {unassignedUsers.map((u) => (
-                      <div key={u.id} className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">{u.full_name || u.email || 'Usuario'}</p>
-                          <p className="truncate text-xs text-muted-foreground">{u.email}</p>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 shrink-0 gap-1 text-xs"
-                          disabled={isAssigning}
-                          onClick={() => void assignUser(u.id)}
-                        >
-                          {isAssigning ? <Loader2 className="h-3 w-3 animate-spin" /> : <UserPlus className="h-3 w-3" />}
-                          Asignar
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          <DialogFooter className="border-t pt-4">
-            <Button variant="ghost" onClick={() => { setManagingBranch(null); setBranchUsers([]); setOrgUsers([]); }}>
-              Cerrar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
-
-
-
-export function IntegrationsSettings() {
-  const { data: systemSettings, isLoading } = useSystemSettings();
-  const updateSystemSettings = useUpdateSystemSettings();
-  const { toast } = useToast();
-  const [localSettings, setLocalSettings] = useState<Partial<SystemSettings>>({});
-  const [isTestingSmtp, setIsTestingSmtp] = useState(false);
-  const currentSettings = { ...systemSettings, ...localSettings };
-  const hasChanges = Object.keys(localSettings).length > 0;
-
-  const updateSetting = (key: keyof SystemSettings, value: unknown) => {
-    setLocalSettings((prev) => ({ ...prev, [key]: value }));
-  };
-
-  const handleSave = () => {
-    updateSystemSettings.mutate(localSettings, {
-      onSuccess: () => setLocalSettings({}),
-    });
-  };
-
-  const testSmtp = async () => {
-    if (!currentSettings.smtp_host || !currentSettings.smtp_port || !currentSettings.smtp_user || !currentSettings.smtp_password) {
-      toast({
-        title: 'Datos SMTP incompletos',
-        description: 'Completa host, puerto, usuario y password para probar.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    setIsTestingSmtp(true);
-    try {
-      const response = await fetch('/api/system/smtp/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          smtp_host: currentSettings.smtp_host,
-          smtp_port: currentSettings.smtp_port,
-          smtp_user: currentSettings.smtp_user,
-          smtp_password: currentSettings.smtp_password,
-        }),
-      });
-      const payload = await response.json();
-
-      if (!response.ok) {
-        throw new Error(payload?.error || 'No se pudo conectar al SMTP');
-      }
-
-      toast({ title: 'SMTP conectado', description: payload?.message || 'La conexion fue exitosa.' });
-    } catch (smtpError) {
-      toast({
-        title: 'Error SMTP',
-        description: smtpError instanceof Error ? smtpError.message : 'No se pudo conectar al SMTP',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsTestingSmtp(false);
-    }
-  };
-
-  if (isLoading) {
-    return <SettingsSkeleton rows={4} />;
-  }
-
-  return (
-    <div className="space-y-6">
-      <div className="grid gap-6 xl:grid-cols-2">
-        <SectionCard
-          title="Hardware POS"
-          description="Conectores fisicos disponibles en el punto de venta."
-          icon={Monitor}
-        >
-          <div className="space-y-4">
-            <SettingLine title="Lector de codigos" description="Habilita escaneo rapido de productos." icon={PlugZap}>
-              <Switch
-                checked={currentSettings.enable_barcode_scanner ?? true}
-                onCheckedChange={(checked) => updateSetting('enable_barcode_scanner', checked)}
-              />
-            </SettingLine>
-            <SettingLine title="Impresora de tickets" description="Permite impresion automatica de comprobantes." icon={Receipt}>
-              <Switch
-                checked={currentSettings.enable_receipt_printer ?? true}
-                onCheckedChange={(checked) => updateSetting('enable_receipt_printer', checked)}
-              />
-            </SettingLine>
-            <SettingLine title="Cajon de dinero" description="Controla apertura desde el flujo de cobro." icon={Store}>
-              <Switch
-                checked={currentSettings.enable_cash_drawer ?? true}
-                onCheckedChange={(checked) => updateSetting('enable_cash_drawer', checked)}
-              />
-            </SettingLine>
-          </div>
-        </SectionCard>
-
-        <SectionCard
-          title="Correo saliente"
-          description="SMTP para avisos del sistema, reportes y seguridad."
-          icon={Server}
-          action={
-            currentSettings.smtp_password_configured ? (
-              <Badge variant="outline">Password guardado</Badge>
-            ) : (
-              <Badge variant="secondary">Pendiente</Badge>
-            )
-          }
-        >
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="smtp-host">Servidor SMTP</Label>
-              <Input
-                id="smtp-host"
-                value={currentSettings.smtp_host || ''}
-                onChange={(event) => updateSetting('smtp_host', event.target.value)}
-                placeholder="smtp.gmail.com"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="smtp-port">Puerto</Label>
-              <Input
-                id="smtp-port"
-                type="number"
-                value={currentSettings.smtp_port || 587}
-                onChange={(event) => updateSetting('smtp_port', asNumber(event.target.value, 587))}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="smtp-secure">TLS</Label>
-              <Select
-                value={(currentSettings.smtp_secure ?? true) ? 'true' : 'false'}
-                onValueChange={(value) => updateSetting('smtp_secure', value === 'true')}
-              >
-                <SelectTrigger id="smtp-secure">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="true">Activo</SelectItem>
-                  <SelectItem value="false">Inactivo</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="smtp-user">Usuario</Label>
-              <Input
-                id="smtp-user"
-                value={currentSettings.smtp_user || ''}
-                onChange={(event) => updateSetting('smtp_user', event.target.value)}
-                placeholder="notificaciones@empresa.com"
-              />
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="smtp-password">Password / App password</Label>
-              <Input
-                id="smtp-password"
-                type="password"
-                value={currentSettings.smtp_password || ''}
-                onChange={(event) => updateSetting('smtp_password', event.target.value)}
-                placeholder={currentSettings.smtp_password_configured ? 'Password ya configurado' : 'Password SMTP'}
-              />
-            </div>
-          </div>
-
-          <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-            <Button type="button" variant="outline" onClick={() => void testSmtp()} disabled={isTestingSmtp}>
-              {isTestingSmtp ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Mail className="mr-2 h-4 w-4" />}
-              Probar SMTP
-            </Button>
-          </div>
-        </SectionCard>
-      </div>
-
-      <SaveRow
-        hasChanges={hasChanges}
-        isSaving={updateSystemSettings.isPending}
-        onSave={handleSave}
-        label="Guardar integraciones"
       />
     </div>
   );
