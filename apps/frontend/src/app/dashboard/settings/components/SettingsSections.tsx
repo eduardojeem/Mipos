@@ -725,26 +725,6 @@ export function SalesBillingSettings() {
                 onCheckedChange={(checked) => updateSetting('email_notifications', checked)}
               />
             </SettingLine>
-            
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-5 transition-all hover:bg-primary/10">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Receipt className="h-4 w-4 text-primary" />
-                    <p className="font-semibold text-primary">Módulo de Facturación</p>
-                  </div>
-                  <p className="mt-1.5 text-sm text-muted-foreground">
-                    Accede al módulo dedicado para emitir, anular y gestionar todas tus facturas y comprobantes.
-                  </p>
-                </div>
-                <Button asChild variant="default" size="sm" className="shrink-0 shadow-sm">
-                  <Link href="/dashboard/invoicing">
-                    Abrir Módulo
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
-                </Button>
-              </div>
-            </div>
           </div>
         </div>
       </SectionCard>
