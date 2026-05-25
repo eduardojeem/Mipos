@@ -64,7 +64,9 @@ export function SaleDetailModal({ sale, open, onClose }: SaleDetailModalProps) {
     isError: errorDetail,
   } = useQuery<SaleDetailResponse>({
     queryKey: ['sale-detail', sale?.id],
-    queryFn: () => api.get<SaleDetailResponse>(`/sales/${sale!.id}`).then((r) => r.data),
+    queryFn: () => api.get<SaleDetailResponse>(`/sales/${sale!.id}`, {
+      params: { include: 'items,product' },
+    }).then((r) => r.data),
     enabled: open && !!sale?.id,
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -73,7 +75,7 @@ export function SaleDetailModal({ sale, open, onClose }: SaleDetailModalProps) {
 
   if (!sale) return null;
 
-  const items: DetailItem[] = detail?.sale?.saleItems ?? (sale.items as DetailItem[] | undefined) ?? [];
+  const items: DetailItem[] = detail?.sale?.saleItems ?? detail?.sale?.items ?? (sale.items as DetailItem[] | undefined) ?? [];
   const cashier = detail?.sale?.user;
 
   const handleStartReturn = () => {

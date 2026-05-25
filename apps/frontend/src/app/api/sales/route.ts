@@ -248,7 +248,7 @@ export async function GET(request: NextRequest) {
 
     const page = Number(searchParams.get('page') || 1);
     const limit = Number(searchParams.get('limit') || 50);
-    const customerId = searchParams.get('customer_id') || undefined;
+    const customerId = searchParams.get('customer_id') || searchParams.get('customerId') || undefined;
     const sortParam = searchParams.get('sort') || '';
 
     // Normalización robusta de casing y mapeos
@@ -282,13 +282,19 @@ export async function GET(request: NextRequest) {
   };
 
     const status = normalizeStatus(searchParams.get('status'));
-    const paymentMethod = normalizePaymentMethod(searchParams.get('payment_method'));
-    const dateFrom = searchParams.get('date_from') || undefined;
-    const dateTo = searchParams.get('date_to') || undefined;
-    const saleType = normalizeSaleType(searchParams.get('sale_type'));
+    const paymentMethod = normalizePaymentMethod(searchParams.get('payment_method') || searchParams.get('paymentMethod'));
+    const dateFrom = searchParams.get('date_from') || searchParams.get('startDate') || undefined;
+    const dateTo = searchParams.get('date_to') || searchParams.get('endDate') || undefined;
+    const saleType = normalizeSaleType(searchParams.get('sale_type') || searchParams.get('saleType'));
     const saleId = (searchParams.get('id') || searchParams.get('sale_id') || undefined) || undefined;
-    const [sortFieldRaw, sortDirectionRaw] = sortParam.split(':');
-    const allowedSortFields = new Set(['created_at', 'updated_at', 'total_amount']);
+    const [sortFieldRawFromSort, sortDirectionRawFromSort] = sortParam.split(':');
+    const sortByParam = searchParams.get('sortBy');
+    const sortOrderParam = searchParams.get('sortOrder');
+    const sortFieldRaw = sortByParam
+      ? ({ date: 'created_at', total: 'total_amount', status: 'status' } as Record<string, string>)[sortByParam] || sortByParam
+      : sortFieldRawFromSort;
+    const sortDirectionRaw = sortOrderParam || sortDirectionRawFromSort;
+    const allowedSortFields = new Set(['created_at', 'updated_at', 'total_amount', 'status']);
     const sortField = allowedSortFields.has(sortFieldRaw) ? sortFieldRaw : 'created_at';
     const sortAscending = String(sortDirectionRaw || 'desc').toLowerCase() === 'asc';
     const includeRaw = (searchParams.get('include') || '').toLowerCase();

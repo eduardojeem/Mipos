@@ -26,6 +26,42 @@ function getBackendHeaders(
   return headers;
 }
 
+function normalizeSaleItems(sale: any) {
+  if (!sale || typeof sale !== 'object') return sale;
+
+  const rawItems = Array.isArray(sale.sale_items)
+    ? sale.sale_items
+    : Array.isArray(sale.saleItems)
+      ? sale.saleItems
+      : Array.isArray(sale.items)
+        ? sale.items
+        : [];
+
+  const saleItems = rawItems.map((item: any) => ({
+    id: item.id,
+    sale_id: item.sale_id ?? item.saleId,
+    product_id: item.product_id ?? item.productId,
+    quantity: Number(item.quantity || 0),
+    unit_price: Number(item.unit_price ?? item.unitPrice ?? 0),
+    total_price: Number(item.total_price ?? item.totalPrice ?? ((Number(item.quantity || 0) * Number(item.unit_price ?? item.unitPrice ?? 0)) - Number(item.discount_amount ?? item.discountAmount ?? 0))),
+    discount_amount: Number(item.discount_amount ?? item.discountAmount ?? 0),
+    alreadyReturned: Number(item.alreadyReturned ?? item.already_returned ?? 0),
+    product: item.product ?? (item.products ? {
+      id: item.products.id,
+      name: item.products.name,
+      sku: item.products.sku,
+      images: item.products.images,
+    } : undefined),
+  }));
+
+  const { sale_items, ...rest } = sale;
+  return {
+    ...rest,
+    saleItems,
+    items: saleItems,
+  };
+}
+
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id: rawId } = await params;
@@ -62,7 +98,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         .maybeSingle();
 
       if (!error && sale) {
-        return NextResponse.json({ success: true, sale });
+        return NextResponse.json({ success: true, sale: normalizeSaleItems(sale) });
       }
     }
 
@@ -78,7 +114,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: `Backend error: ${res.status}`, details }, { status: res.status });
     }
     const data = await res.json();
-    return NextResponse.json({ success: true, sale: data.sale || data });
+    return NextResponse.json({ success: true, sale: normalizeSaleItems(data.sale || data) });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch sale', details: error instanceof Error ? error.message : 'Unknown error' }, { status: 500 });
   }
