@@ -8,7 +8,6 @@ import {
   Settings,
   Shield,
   Users,
-  Wrench,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { CompanyFeatureKey } from '@/lib/company-access'
@@ -123,15 +122,7 @@ export const adminNavigationConfig: AdminNavItemConfig[] = [
     requiredRoles: ['ADMIN', 'SUPER_ADMIN', 'OWNER'],
     requireAdminPanel: true,
   },
-  {
-    title: 'Mantenimiento',
-    href: '/admin/maintenance',
-    icon: Wrench,
-    description: 'Herramientas de mantenimiento y soporte',
-    section: 'platform',
-    requiredRoles: ['SUPER_ADMIN'],
-    superAdminOnly: true,
-  },
+
   {
     title: 'Planes SaaS',
     href: '/superadmin/plans',

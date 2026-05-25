@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { apiCache } from '@/lib/api-cache'
-import { assertAdmin } from '@/app/api/_utils/auth'
+import { assertAdmin, assertSuperAdmin } from '@/app/api/_utils/auth'
 
 export async function GET(req: NextRequest) {
   const auth = await assertAdmin(req)
@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const auth = await assertAdmin(req)
+  const auth = await assertSuperAdmin(req)
   if (!auth.ok) {
     return NextResponse.json(auth.body, { status: auth.status })
   }

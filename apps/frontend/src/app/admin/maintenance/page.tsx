@@ -1,8 +1,5 @@
-'use client'
+import { redirect } from 'next/navigation';
 
-import React from 'react'
-import { MaintenanceDashboard } from '@/components/admin/MaintenanceDashboard'
-
-export default function MaintenancePage() {
-  return <MaintenanceDashboard />
+export default function MaintenanceRedirectPage() {
+  redirect('/superadmin/maintenance');
 }
