@@ -43,6 +43,7 @@ import {
   Store,
   UserCheck,
   Users,
+  Wrench,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SuperAdminThemeToggle } from "./components/SuperAdminThemeToggle";
@@ -217,6 +218,13 @@ const NAV_ITEMS: NavItem[] = [
     href: "/superadmin/settings",
     icon: Settings,
     description: "Parámetros globales del sistema",
+    section: "system",
+  },
+  {
+    title: "Mantenimiento",
+    href: "/superadmin/maintenance",
+    icon: Wrench,
+    description: "Caché, sesiones y purga de logs",
     section: "system",
   },
 

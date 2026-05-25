@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { assertAdmin } from '@/app/api/_utils/auth'
+import { assertSuperAdmin } from '@/app/api/_utils/auth'
 import { isSupabaseActive } from '@/lib/env'
 import { createAdminClient } from '@/lib/supabase-admin'
 
 export async function POST(request: NextRequest) {
-  const auth = await assertAdmin(request)
-  if (!('ok' in auth) || auth.ok === false) {
+  const auth = await assertSuperAdmin(request)
+  if (!auth.ok) {
     return NextResponse.json(auth.body, { status: auth.status })
   }
 
