@@ -1,7 +1,6 @@
 "use client";
 
 import Image from 'next/image';
-import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { ArrowRight, Building2, Globe, Layers3, MapPin, PackageSearch } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -97,16 +96,18 @@ export function OrganizationGrid({ organizations, className }: OrganizationGridP
               ) : null}
             </div>
 
-            {/* CTA */}
+            {/* CTA — plain <a> forces full-page navigation so the middleware
+                sets the correct tenant context (avoids client router cache collision
+                when all tenant paths rewrite to the same /home route). */}
             <Button
               asChild
               size="sm"
               className="mt-4 w-full rounded-lg bg-slate-950 text-white transition-all hover:bg-sky-700 hover:shadow-md hover:shadow-sky-500/20 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white"
             >
-              <Link href={org.href}>
+              <a href={org.href}>
                 Ver empresa
                 <ArrowRight className="ml-2 h-3.5 w-3.5" />
-              </Link>
+              </a>
             </Button>
           </div>
         </motion.article>

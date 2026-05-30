@@ -87,13 +87,13 @@ function OrganizationCard({ organization }: { organization: FeaturedOrganization
             <Layers3 className="h-4 w-4 text-amber-300" />
             <span>{formatInteger(Number(organization.categoryCount || 0))} categorías</span>
           </div>
-          <Link
+          <a
             href={organization.href}
             className="inline-flex items-center gap-2 text-emerald-300 transition hover:text-emerald-200"
           >
             Ver empresa
             <ArrowRight className="h-4 w-4" />
-          </Link>
+          </a>
         </div>
       </div>
     </article>

@@ -2,7 +2,6 @@
 
 import { useCallback, useMemo, useRef, useState, useEffect } from 'react';
 import Image from 'next/image';
-import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowLeft, ArrowRight, Building2, Globe, Layers3, PackageSearch } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -212,10 +211,10 @@ export function OrganizationsCarousel({ organizations }: OrganizationsCarouselPr
                   asChild
                   className="rounded-lg bg-slate-950 px-5 text-white hover:bg-emerald-700 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white"
                 >
-                  <Link href={active.href}>
+                  <a href={active.href}>
                     Ver empresa
                     <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
+                  </a>
                 </Button>
 
                 {items.length > 1 && (
