@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -59,14 +59,9 @@ export function OrganizationsCarousel({ organizations }: OrganizationsCarouselPr
     return () => clearTimeout(timer);
   }, [activeIndex, isPaused, items.length, goNext]);
 
-  // Keyboard navigation
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowLeft') goPrev();
-      if (e.key === 'ArrowRight') goNext();
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowLeft') { e.preventDefault(); goPrev(); }
+    if (e.key === 'ArrowRight') { e.preventDefault(); goNext(); }
   }, [goNext, goPrev]);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
@@ -84,9 +79,11 @@ export function OrganizationsCarousel({ organizations }: OrganizationsCarouselPr
 
   return (
     <section
-      className="relative overflow-hidden rounded-xl border border-slate-200 bg-white/80 shadow-sm backdrop-blur-sm dark:border-slate-800 dark:bg-slate-950/80"
+      className="relative overflow-hidden rounded-xl border border-slate-200 bg-white/80 shadow-sm backdrop-blur-sm focus:outline-none dark:border-slate-800 dark:bg-slate-950/80"
       aria-roledescription="carousel"
       aria-label="Empresas destacadas"
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
       onTouchStart={handleTouchStart}
@@ -211,12 +208,15 @@ export function OrganizationsCarousel({ organizations }: OrganizationsCarouselPr
 
               {/* Actions */}
               <div className="mt-6 flex flex-wrap items-center gap-3">
-                <Link href={active.href}>
-                  <Button className="rounded-lg bg-slate-950 px-5 text-white hover:bg-emerald-700 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white">
+                <Button
+                  asChild
+                  className="rounded-lg bg-slate-950 px-5 text-white hover:bg-emerald-700 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white"
+                >
+                  <Link href={active.href}>
                     Ver empresa
                     <ArrowRight className="ml-2 h-4 w-4" />
-                  </Button>
-                </Link>
+                  </Link>
+                </Button>
 
                 {items.length > 1 && (
                   <div className="ml-auto flex items-center gap-2">

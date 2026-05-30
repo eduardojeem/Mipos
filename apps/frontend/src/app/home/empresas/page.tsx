@@ -16,11 +16,11 @@ import type { Metadata } from 'next';
 export const metadata: Metadata = {
   title: 'Directorio de empresas | MiPOS Marketplace',
   description:
-    'Explora negocios activos, compara presencia publica y entra directo a la tienda de cada empresa desde un directorio real.',
+    'Explora negocios activos, compara presencia pública y entra directo a la tienda de cada empresa desde un directorio real.',
   openGraph: {
     title: 'Directorio de empresas | MiPOS Marketplace',
     description:
-      'Directorio publico de organizaciones activas con catalogo y presencia comercial en MiPOS.',
+      'Directorio público de organizaciones activas con catálogo y presencia comercial en MiPOS.',
     type: 'website',
     locale: 'es_PY',
     url: '/home/empresas',
@@ -34,8 +34,8 @@ type OrganizationsQueryRecord = Record<string, string | string[] | undefined>;
 
 const SORT_OPTIONS: Array<{ value: GlobalOrganizationsSortMode; label: string }> = [
   { value: 'featured', label: 'Destacadas' },
-  { value: 'products', label: 'Mas productos' },
-  { value: 'recent', label: 'Mas recientes' },
+  { value: 'products', label: 'Más productos' },
+  { value: 'recent', label: 'Más recientes' },
   { value: 'name', label: 'Nombre' },
 ];
 
@@ -94,6 +94,10 @@ export default async function OrganizationsPage({
 
         {snapshot.organizations.length > 0 ? (
           <>
+            <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
+              {snapshot.organizations.length}{' '}
+              {snapshot.organizations.length === 1 ? 'empresa encontrada' : 'empresas encontradas'}
+            </p>
             <OrganizationGrid organizations={snapshot.organizations} />
           </>
         ) : (

@@ -123,14 +123,18 @@ async function buildTenantSchemas(organizationId: string, businessName: string, 
       '@type': 'Organization',
       name: businessName,
       url: baseUrl,
-      logo: config.branding.logo || '',
-      description: config.tagline || '',
-      contactPoint: {
-        '@type': 'ContactPoint',
-        telephone: config.contact.phone || '',
-        email: config.contact.email || '',
-        contactType: 'customer service',
-      },
+      ...(config.branding.logo ? { logo: config.branding.logo } : {}),
+      ...(config.tagline ? { description: config.tagline } : {}),
+      ...(config.contact.phone || config.contact.email
+        ? {
+            contactPoint: {
+              '@type': 'ContactPoint',
+              ...(config.contact.phone ? { telephone: config.contact.phone } : {}),
+              ...(config.contact.email ? { email: config.contact.email } : {}),
+              contactType: 'customer service',
+            },
+          }
+        : {}),
     },
     websiteSchema: {
       '@context': 'https://schema.org',

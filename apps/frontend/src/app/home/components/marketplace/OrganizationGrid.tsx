@@ -90,7 +90,7 @@ export function OrganizationGrid({ organizations, className }: OrganizationGridP
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
                   className="ml-auto flex items-center gap-1 text-slate-400 transition-colors hover:text-sky-600 dark:hover:text-sky-400"
-                  aria-label="Sitio web externo"
+                  aria-label={`Sitio web de ${org.name}`}
                 >
                   <Globe className="h-3.5 w-3.5" />
                 </a>
@@ -98,15 +98,16 @@ export function OrganizationGrid({ organizations, className }: OrganizationGridP
             </div>
 
             {/* CTA */}
-            <Link href={org.href} className="mt-4">
-              <Button
-                size="sm"
-                className="w-full rounded-lg bg-slate-950 text-white transition-all hover:bg-sky-700 hover:shadow-md hover:shadow-sky-500/20 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white"
-              >
+            <Button
+              asChild
+              size="sm"
+              className="mt-4 w-full rounded-lg bg-slate-950 text-white transition-all hover:bg-sky-700 hover:shadow-md hover:shadow-sky-500/20 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white"
+            >
+              <Link href={org.href}>
                 Ver empresa
                 <ArrowRight className="ml-2 h-3.5 w-3.5" />
-              </Button>
-            </Link>
+              </Link>
+            </Button>
           </div>
         </motion.article>
       ))}

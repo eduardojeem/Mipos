@@ -57,10 +57,12 @@ function OrganizationCard({ organization }: { organization: FeaturedOrganization
             </div>
             <div className="min-w-0">
               <h3 className="truncate text-lg font-semibold text-white">{organization.name}</h3>
-              <div className="mt-1 flex items-center gap-1.5 text-xs text-slate-300">
-                <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
-                <span className="truncate">{organization.location}</span>
-              </div>
+              {organization.location ? (
+                <div className="mt-1 flex items-center gap-1.5 text-xs text-slate-300">
+                  <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
+                  <span className="truncate">{organization.location}</span>
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -72,14 +74,18 @@ function OrganizationCard({ organization }: { organization: FeaturedOrganization
 
       <div className="flex flex-1 flex-col gap-4 p-5">
         <div>
-          <p className="text-base font-semibold text-white">{organization.tagline}</p>
-          <p className="mt-2 text-sm leading-6 text-slate-400">{organization.description}</p>
+          {organization.tagline ? (
+            <p className="text-base font-semibold text-white">{organization.tagline}</p>
+          ) : null}
+          {organization.description ? (
+            <p className="mt-2 text-sm leading-6 text-slate-400">{organization.description}</p>
+          ) : null}
         </div>
 
         <div className="mt-auto flex items-center justify-between gap-4 border-t border-white/10 pt-4 text-xs uppercase tracking-[0.14em] text-slate-500">
           <div className="flex items-center gap-2">
             <Layers3 className="h-4 w-4 text-amber-300" />
-            <span>{formatInteger(Number(organization.categoryCount || 0))} categorias</span>
+            <span>{formatInteger(Number(organization.categoryCount || 0))} categorías</span>
           </div>
           <Link
             href={organization.href}
@@ -169,9 +175,9 @@ export default async function EmpresasPage() {
             </div>
           ) : (
             <div className="rounded-lg border border-dashed border-white/10 bg-white/[0.03] px-6 py-16 text-center">
-              <p className="text-xl font-semibold text-white">Aun no hay empresas para destacar.</p>
+              <p className="text-xl font-semibold text-white">Aún no hay empresas para destacar.</p>
               <p className="mt-3 text-sm leading-6 text-slate-400">
-                Cuando existan organizaciones visibles, esta seccion se completa automaticamente.
+                Cuando existan organizaciones visibles, esta sección se completa automáticamente.
               </p>
             </div>
           )}

@@ -242,14 +242,14 @@ function resolveMarketplaceCategoryValue(profile: CompanyProfile | null, categor
     .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
     .map((value) => value.trim().toLowerCase());
 
-  if (candidates.length === 0) return categories[0]?.id || '';
+  if (candidates.length === 0) return '';
 
   const match = categories.find((category) => {
     const values = [category.id, category.slug, category.name].map((value) => value.toLowerCase());
     return values.some((value) => candidates.includes(value));
   });
 
-  return match?.id || categories[0]?.id || '';
+  return match?.id || '';
 }
 
 async function fetchMarketplaceCategories(): Promise<MarketplaceCategoryOption[]> {
@@ -301,9 +301,8 @@ function validateStep(stepId: StepId, form: FormState): Record<string, string> {
 
   if (stepId === 'contact') {
     if (!form.phone.trim()) {
-      errors.contact = 'Completa un telefono publico para que tus clientes te contacten.';
-    }
-    if (form.phone.trim() && !/^\+?[\d\s\-()]{7,}$/.test(form.phone.trim())) {
+      errors.phone = 'Completá un teléfono público para que tus clientes te contacten.';
+    } else if (!/^\+?[\d\s\-()]{7,}$/.test(form.phone.trim())) {
       errors.phone = 'El teléfono no parece válido. Ej: +595 981 000000';
     }
     if (form.email.trim() && !isValidEmail(form.email.trim())) {
@@ -525,7 +524,6 @@ export default function OnboardingPage() {
     setFieldErrors((current) => {
       const next = { ...current };
       delete next[field];
-      if (field === 'phone' || field === 'email') delete next.contact;
       return next;
     });
   };
@@ -658,7 +656,6 @@ export default function OnboardingPage() {
       description: 'Tu negocio quedó configurado.',
     });
     router.replace('/dashboard');
-    router.refresh();
   };
 
   // ---- Render guards ----
@@ -682,7 +679,11 @@ export default function OnboardingPage() {
             </h1>
             {alreadyCompleted ? (
               <p className="mt-1 text-xs text-sky-300">
-                Ya configurado anteriormente. Podés actualizar los datos.
+                Ya configurado anteriormente. Podés actualizar los datos aquí o ir a{' '}
+                <Link href="/settings/business" className="underline underline-offset-2 hover:text-white">
+                  Configuración del negocio
+                </Link>
+                .
               </p>
             ) : (
               <p className="mt-1 text-xs text-slate-400">
@@ -745,6 +746,14 @@ export default function OnboardingPage() {
           </div>
         ) : null}
 
+        <form
+          noValidate
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (isLastStep) void handleFinish();
+            else handleNext();
+          }}
+        >
         <section className="rounded-xl border border-white/10 bg-white/5 p-6 sm:p-8">
           <div className="mb-6 flex items-center gap-3">
             <StepIcon className="h-5 w-5 text-emerald-400" />
@@ -781,17 +790,15 @@ export default function OnboardingPage() {
 
           {!isLastStep ? (
             <Button
-              type="button"
+              type="submit"
               className="rounded-full bg-emerald-600 px-6 text-white hover:bg-emerald-700"
-              onClick={handleNext}
             >
               Siguiente <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           ) : (
             <Button
-              type="button"
+              type="submit"
               className="rounded-full bg-emerald-600 px-6 text-white hover:bg-emerald-700"
-              onClick={() => void handleFinish()}
               disabled={saving}
             >
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
@@ -799,6 +806,7 @@ export default function OnboardingPage() {
             </Button>
           )}
         </div>
+        </form>
       </main>
     </div>
   );
@@ -863,7 +871,7 @@ function BusinessStep({
             </SelectContent>
           </Select>
           <p className="text-[11px] text-slate-500">
-            Este rubro sale de los rubros activos del marketplace y define donde aparecera tu empresa publicamente.
+            Este rubro sale de los rubros activos del marketplace y define dónde aparecerá tu empresa públicamente.
           </p>
           {selectedCategory?.description ? (
             <p className="text-[11px] text-emerald-300">{selectedCategory.description}</p>
@@ -966,12 +974,12 @@ function ContactStep({ form, errors, onField }: StepProps) {
   return (
     <div className="grid gap-5">
       <p className="text-sm text-slate-400">
-        Necesitamos un telefono publico del negocio. El email comercial es opcional y podes completarlo despues en Configuracion del negocio.
+        Necesitamos un teléfono público del negocio. El email comercial es opcional y podés completarlo después en Configuración del negocio.
       </p>
 
       <div className="grid gap-5 md:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor="contact-phone" className="text-slate-200">Telefono <span className="text-red-300">*</span></Label>
+          <Label htmlFor="contact-phone" className="text-slate-200">Teléfono <span className="text-red-300">*</span></Label>
           <div className="relative">
             <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
             <Input
@@ -981,7 +989,7 @@ function ContactStep({ form, errors, onField }: StepProps) {
               placeholder="+595 981 000000"
               className={cn(
                 'pl-10 border-white/10 bg-white/5 text-white placeholder:text-slate-500',
-                (errors.contact || errors.phone) && 'border-red-400'
+                errors.phone && 'border-red-400'
               )}
             />
           </div>
@@ -989,7 +997,7 @@ function ContactStep({ form, errors, onField }: StepProps) {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="contact-email" className="text-slate-200">Email publico <span className="text-xs text-slate-500">(opcional)</span></Label>
+          <Label htmlFor="contact-email" className="text-slate-200">Email público <span className="text-xs text-slate-500">(opcional)</span></Label>
           <div className="relative">
             <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
             <Input
@@ -1000,19 +1008,13 @@ function ContactStep({ form, errors, onField }: StepProps) {
               placeholder="ventas@empresa.com"
               className={cn(
                 'pl-10 border-white/10 bg-white/5 text-white placeholder:text-slate-500',
-                (errors.contact || errors.email) && 'border-red-400'
+                errors.email && 'border-red-400'
               )}
             />
           </div>
           {errors.email ? <p className="text-xs text-red-400">{errors.email}</p> : null}
         </div>
       </div>
-
-      {errors.contact ? (
-        <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
-          {errors.contact}
-        </p>
-      ) : null}
 
       <div className="space-y-2">
         <Label htmlFor="contact-website" className="text-slate-200">
@@ -1131,6 +1133,7 @@ function BrandStep({
                 )}
                 style={{ backgroundColor: color }}
                 aria-label={`Seleccionar color ${color}`}
+                aria-pressed={active}
               >
                 {active ? (
                   <span className="absolute inset-0 flex items-center justify-center text-white">
