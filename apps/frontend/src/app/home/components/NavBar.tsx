@@ -122,6 +122,22 @@ function NavBarComponent({
     setIsMenuOpen(false);
   };
 
+  const toggleMobileSearch = () => {
+    setIsSearchOpen((current) => {
+      const next = !current;
+      if (next) setIsMenuOpen(false);
+      return next;
+    });
+  };
+
+  const toggleMobileMenu = () => {
+    setIsMenuOpen((current) => {
+      const next = !current;
+      if (next) setIsSearchOpen(false);
+      return next;
+    });
+  };
+
   const navItems = useMemo<NavItem[]>(
     () =>
       [
@@ -288,13 +304,29 @@ function NavBarComponent({
           {/* Mobile actions */}
           <div className="flex items-center gap-1 lg:hidden">
             {sections.showCatalog ? (
-              <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg text-slate-500 dark:text-slate-400" onClick={() => setIsSearchOpen((v) => !v)} aria-label={isSearchOpen ? 'Cerrar busqueda' : 'Abrir busqueda'}>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 rounded-lg text-slate-500 dark:text-slate-400"
+                onClick={toggleMobileSearch}
+                aria-label={isSearchOpen ? 'Cerrar busqueda' : 'Abrir busqueda'}
+                aria-controls="public-mobile-search"
+                aria-expanded={isSearchOpen}
+              >
                 <Search className="h-4 w-4" />
               </Button>
             ) : null}
             {showCartButton ? <CartButton /> : null}
             <SimpleThemeToggle />
-            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg text-slate-500 dark:text-slate-400" onClick={() => setIsMenuOpen((v) => !v)} aria-expanded={isMenuOpen} aria-label={isMenuOpen ? 'Cerrar menu' : 'Abrir menu'}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 rounded-lg text-slate-500 dark:text-slate-400"
+              onClick={toggleMobileMenu}
+              aria-expanded={isMenuOpen}
+              aria-controls="public-mobile-menu"
+              aria-label={isMenuOpen ? 'Cerrar menu' : 'Abrir menu'}
+            >
               {isMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
             </Button>
           </div>
@@ -302,14 +334,14 @@ function NavBarComponent({
 
         {/* Mobile search */}
         {isSearchOpen && sections.showCatalog ? (
-          <div className="border-t border-slate-100 py-3 dark:border-slate-800 lg:hidden">
+          <div id="public-mobile-search" className="border-t border-slate-100 py-3 dark:border-slate-800 lg:hidden">
             <PublicSearchBar />
           </div>
         ) : null}
 
         {/* Mobile menu */}
         {isMenuOpen ? (
-          <div className="border-t border-slate-100 py-3 dark:border-slate-800 lg:hidden">
+          <div id="public-mobile-menu" className="border-t border-slate-100 py-3 dark:border-slate-800 lg:hidden">
             <div className="flex flex-col gap-1">
               {navItems.map((item) => {
                 const Icon = item.icon;

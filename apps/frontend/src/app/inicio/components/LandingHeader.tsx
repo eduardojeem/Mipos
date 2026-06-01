@@ -140,7 +140,7 @@ export function LandingHeader() {
 
   return (
     <header className="landing-header-surface sticky top-0 z-50 w-full">
-      <div className="landing-container">
+      <div className="landing-container relative">
         <div className="flex h-16 items-center justify-between gap-4 lg:h-20">
           <div className="flex min-w-0 items-center gap-3">
             <Link href="/inicio" className="flex min-w-0 items-center gap-3">
@@ -255,15 +255,20 @@ export function LandingHeader() {
           <button
             type="button"
             onClick={() => setMobileMenuOpen((current) => !current)}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-200 lg:hidden"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-700 bg-slate-900 text-slate-100 shadow-sm lg:hidden"
             aria-label={mobileMenuOpen ? 'Cerrar menu' : 'Abrir menu'}
+            aria-controls="landing-mobile-menu"
+            aria-expanded={mobileMenuOpen}
           >
             {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
         </div>
 
         {mobileMenuOpen ? (
-          <div className="pb-4 lg:hidden">
+          <div
+            id="landing-mobile-menu"
+            className="absolute left-4 right-4 top-full z-50 mt-2 lg:hidden"
+          >
             <div className="landing-panel rounded-2xl p-3">
               <div className="space-y-1">
                 {NAV_ITEMS.map((item) => {
@@ -277,7 +282,7 @@ export function LandingHeader() {
                         onClick={() => handleNavItem(item)}
                         className={cn(
                           'block w-full rounded-xl px-4 py-3 text-left text-sm font-medium transition-colors',
-                          active ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                          active ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                         )}
                       >
                         {item.label}
@@ -292,7 +297,7 @@ export function LandingHeader() {
                       onClick={() => setMobileMenuOpen(false)}
                       className={cn(
                         'block rounded-xl px-4 py-3 text-sm font-medium transition-colors',
-                        active ? 'bg-white/10 text-white' : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                        active ? 'bg-slate-800 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                       )}
                     >
                       {item.label}
@@ -303,10 +308,10 @@ export function LandingHeader() {
 
               <div className="landing-divider mt-3 border-t pt-3">
                 {authLoading ? (
-                  <div className="h-12 w-full animate-pulse rounded-xl bg-white/5" />
+                  <div className="h-12 w-full animate-pulse rounded-xl bg-slate-800" />
                 ) : user ? (
                   <div className="space-y-2">
-                    <div className="flex items-center gap-3 rounded-xl bg-white/5 px-3 py-2.5">
+                    <div className="flex items-center gap-3 rounded-xl bg-slate-800 px-3 py-2.5">
                       <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 text-xs font-semibold text-white">
                         {userInitials}
                       </span>
@@ -325,7 +330,7 @@ export function LandingHeader() {
                       <Link href={profileHref} onClick={() => setMobileMenuOpen(false)}>
                         <Button
                           variant="outline"
-                          className="w-full rounded-xl border-white/10 bg-transparent text-white hover:bg-white/5"
+                          className="w-full rounded-xl border-slate-700 bg-slate-900 text-white hover:bg-slate-800"
                         >
                           <User className="mr-2 h-4 w-4" />
                           Mi perfil
@@ -346,7 +351,7 @@ export function LandingHeader() {
                     <Link href="/auth/signin?type=business-owner&returnUrl=/dashboard" onClick={() => setMobileMenuOpen(false)}>
                       <Button
                         variant="outline"
-                        className="w-full rounded-xl border-white/10 bg-transparent text-white hover:bg-white/5"
+                        className="w-full rounded-xl border-slate-700 bg-slate-900 text-white hover:bg-slate-800"
                       >
                         <LogIn className="mr-2 h-4 w-4" />
                         Ingresar
