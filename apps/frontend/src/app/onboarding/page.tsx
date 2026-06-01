@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useConfirmationDialog } from '@/components/ui/confirmation-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -34,7 +35,7 @@ import {
   useCurrentOrganizationId,
   useCurrentOrganizationName,
 } from '@/hooks/use-current-organization';
-import { markOnboardingCompleted } from '@/lib/onboarding-storage';
+import { hasCompletedOnboarding, markOnboardingCompleted } from '@/lib/onboarding-storage';
 import planService, {
   type CompanyProfile,
   type PlanData,
@@ -210,6 +211,74 @@ const DEFAULT_FORM: FormState = {
   department: '',
   primary_color: '#059669',
 };
+
+function areFormsEqual(a: FormState, b: FormState): boolean {
+  return (
+    a.name === b.name &&
+    a.rfc === b.rfc &&
+    a.industry === b.industry &&
+    a.size === b.size &&
+    a.tagline === b.tagline &&
+    a.phone === b.phone &&
+    a.email === b.email &&
+    a.website === b.website &&
+    a.country === b.country &&
+    a.city === b.city &&
+    a.department === b.department &&
+    a.primary_color === b.primary_color
+  );
+}
+
+function getOnboardingDraftKey(userId: string | null | undefined, organizationId: string) {
+  return userId
+    ? `onboarding_draft:${userId}:${organizationId}`
+    : `onboarding_draft:${organizationId}`;
+}
+
+function readOnboardingDraft(userId: string | null | undefined, organizationId: string): Partial<FormState> | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(getOnboardingDraftKey(userId, organizationId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const draft = parsed?.draft;
+    return typeof draft === 'object' && draft ? (draft as Partial<FormState>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeOnboardingDraft(userId: string | null | undefined, organizationId: string, draft: FormState) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(
+      getOnboardingDraftKey(userId, organizationId),
+      JSON.stringify({ draft, savedAt: new Date().toISOString() })
+    );
+  } catch {}
+}
+
+function clearOnboardingDraft(userId: string | null | undefined, organizationId: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(getOnboardingDraftKey(userId, organizationId));
+  } catch {}
+}
+
+function mergeDraftIntoBase(base: FormState, draft: Partial<FormState> | null): FormState {
+  if (!draft) return base;
+  const next: FormState = { ...base };
+  (Object.keys(next) as Array<keyof FormState>).forEach((key) => {
+    const draftValue = draft[key];
+    if (typeof draftValue !== 'string') return;
+    if (next[key].trim().length > 0) return;
+    next[key] = draftValue;
+  });
+  if (draft.size && base.size === 'micro' && draft.size !== 'micro') {
+    next.size = draft.size as CompanySize;
+  }
+  return next;
+}
 
 // ---------------------------------------------------------------------------
 // Validators
@@ -414,6 +483,7 @@ function NoOrgFallback() {
 export default function OnboardingPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const { showConfirmation, ConfirmationDialog } = useConfirmationDialog();
   const { user, loading: authLoading } = useAuth();
   const organizationId = useCurrentOrganizationId();
   const organizationName = useCurrentOrganizationName();
@@ -475,12 +545,18 @@ export default function OnboardingPage() {
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
   const [planData, setPlanData] = useState<PlanData | null>(null);
   const [marketplaceCategories, setMarketplaceCategories] = useState<MarketplaceCategoryOption[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
+  const [categoriesError, setCategoriesError] = useState<string | null>(null);
   const [loadingData, setLoadingData] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [stepIndex, setStepIndex] = useState(0);
   const [saving, setSaving] = useState(false);
   const [alreadyCompleted, setAlreadyCompleted] = useState(false);
+  const [initialForm, setInitialForm] = useState<FormState | null>(null);
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
+  const autosaveTimer = useRef<number | null>(null);
+  const lastDraftSnapshot = useRef<FormState | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -492,6 +568,8 @@ export default function OnboardingPage() {
     (async () => {
       setLoadingData(true);
       setLoadError(null);
+      setCategoriesLoading(true);
+      setCategoriesError(null);
       try {
         const [profile, limits, categories] = await Promise.allSettled([
           planService.getCompanyProfile(resolvedOrgId),
@@ -503,21 +581,118 @@ export default function OnboardingPage() {
         const limitsData = limits.status === 'fulfilled' ? limits.value : null;
         const categoryData = categories.status === 'fulfilled' ? categories.value : [];
         setMarketplaceCategories(categoryData);
-        setForm(buildForm(profileData, resolvedOrgName, categoryData));
+        if (categories.status !== 'fulfilled') {
+          setCategoriesError('No se pudieron cargar los rubros del marketplace.');
+        } else if (categoryData.length === 0) {
+          setCategoriesError('No hay rubros activos del marketplace.');
+        }
+        const baseForm = buildForm(profileData, resolvedOrgName, categoryData);
+        const draft = readOnboardingDraft(user?.id, resolvedOrgId);
+        const merged = mergeDraftIntoBase(baseForm, draft);
+        setForm(merged);
+        setInitialForm(baseForm);
+        try {
+          const rawDraft = localStorage.getItem(getOnboardingDraftKey(user?.id, resolvedOrgId));
+          const parsed = rawDraft ? JSON.parse(rawDraft) : null;
+          const savedAt = typeof parsed?.savedAt === 'string' ? parsed.savedAt : null;
+          setDraftSavedAt(savedAt);
+        } catch {}
         setPlanData(limitsData);
-        const isNeeds = await planService.needsOnboarding(resolvedOrgId);
-        if (!cancelled) setAlreadyCompleted(!isNeeds);
+        const cachedCompleted = hasCompletedOnboarding(user.id, resolvedOrgId);
+        if (!cachedCompleted) {
+          const isNeeds = await planService.needsOnboarding(resolvedOrgId);
+          if (!cancelled) setAlreadyCompleted(!isNeeds);
+        } else if (!cancelled) {
+          setAlreadyCompleted(true);
+        }
       } catch (err) {
         if (!cancelled) {
           console.error('Error loading onboarding:', err);
           setLoadError('No se pudo cargar la configuración inicial.');
         }
       } finally {
-        if (!cancelled) setLoadingData(false);
+        if (!cancelled) {
+          setLoadingData(false);
+          setCategoriesLoading(false);
+        }
       }
     })();
     return () => { cancelled = true; };
   }, [authLoading, resolvedOrgId, resolvedOrgName, user]);
+
+  const isDirty = useMemo(() => {
+    if (!initialForm) return false;
+    return !areFormsEqual(initialForm, form);
+  }, [form, initialForm]);
+
+  useEffect(() => {
+    if (!user || !resolvedOrgId) return;
+    if (!hydrated) return;
+    if (!initialForm) return;
+    if (!isDirty) return;
+
+    if (autosaveTimer.current) {
+      window.clearTimeout(autosaveTimer.current);
+    }
+
+    autosaveTimer.current = window.setTimeout(() => {
+      if (!resolvedOrgId) return;
+      if (lastDraftSnapshot.current && areFormsEqual(lastDraftSnapshot.current, form)) {
+        return;
+      }
+      writeOnboardingDraft(user.id, resolvedOrgId, form);
+      lastDraftSnapshot.current = form;
+      setDraftSavedAt(new Date().toISOString());
+    }, 450);
+
+    return () => {
+      if (autosaveTimer.current) {
+        window.clearTimeout(autosaveTimer.current);
+        autosaveTimer.current = null;
+      }
+    };
+  }, [form, hydrated, initialForm, isDirty, resolvedOrgId, user]);
+
+  useEffect(() => {
+    if (saving) return;
+    const id =
+      currentStep?.id === 'business'
+        ? 'business-name'
+        : currentStep?.id === 'contact'
+          ? 'contact-phone'
+          : null;
+    if (!id) return;
+    const el = document.getElementById(id) as HTMLInputElement | null;
+    el?.focus();
+  }, [saving, stepIndex]);
+
+  const reloadMarketplaceCategories = async () => {
+    if (!resolvedOrgId) return;
+    setCategoriesLoading(true);
+    setCategoriesError(null);
+    try {
+      const categoryData = await fetchMarketplaceCategories();
+      setMarketplaceCategories(categoryData);
+      if (categoryData.length === 0) {
+        setCategoriesError('No hay rubros activos del marketplace.');
+        return;
+      }
+      setForm((current) => {
+        const isValid = categoryData.some((category) => category.id === current.industry);
+        if (isValid) return current;
+        return { ...current, industry: categoryData[0].id };
+      });
+      setFieldErrors((current) => {
+        const next = { ...current };
+        delete next.industry;
+        return next;
+      });
+    } catch {
+      setCategoriesError('No se pudieron cargar los rubros del marketplace.');
+    } finally {
+      setCategoriesLoading(false);
+    }
+  };
 
   // ---- Field updates ----
   const onField = (field: keyof FormState, value: string) => {
@@ -552,6 +727,14 @@ export default function OnboardingPage() {
   };
 
   const handleNext = () => {
+    if (currentStep.id === 'business' && marketplaceCategories.length === 0) {
+      toast({
+        title: 'Faltan rubros del marketplace',
+        description: 'Reintentá cargar los rubros para continuar.',
+        variant: 'destructive',
+      });
+      return;
+    }
     const errors = validateStep(currentStep.id, form);
     if (Object.keys(errors).length > 0) {
       setFieldErrors(errors);
@@ -653,6 +836,7 @@ export default function OnboardingPage() {
     }
 
     markOnboardingCompleted(user.id, resolvedOrgId);
+    clearOnboardingDraft(user.id, resolvedOrgId);
     toast({
       title: '¡Listo!',
       description: 'Tu negocio quedó configurado.',
@@ -667,9 +851,39 @@ export default function OnboardingPage() {
   if (!loadingData && user && !resolvedOrgId) return <NoOrgFallback />;
 
   const StepIcon = currentStep.icon;
+  const progressPct = Math.round(((stepIndex + 1) / STEPS.length) * 100);
+  const canContinueLater = !saving;
+  const currentStepErrorFields = useMemo(() => {
+    const keys =
+      currentStep.id === 'business'
+        ? (['name', 'industry', 'rfc'] as const)
+        : currentStep.id === 'contact'
+          ? (['contact', 'phone', 'email', 'website', 'department', 'city'] as const)
+          : (['primary_color'] as const);
+    return keys.filter((key) => Boolean(fieldErrors[key]));
+  }, [currentStep.id, fieldErrors]);
+  const continueLater = () => {
+    if (!canContinueLater) return;
+    if (!isDirty) {
+      router.replace('/dashboard');
+      return;
+    }
+    showConfirmation({
+      title: 'Continuar luego',
+      description: 'Tu borrador queda guardado en este dispositivo. Podés volver cuando quieras para terminar la configuración.',
+      confirmText: 'Ir al dashboard',
+      cancelText: 'Seguir acá',
+      variant: 'info',
+      onConfirm: () => {
+        router.replace('/dashboard');
+        router.refresh();
+      },
+    });
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
+      <ConfirmationDialog />
       {/* Header */}
       <header className="border-b border-white/10 bg-slate-950/80 backdrop-blur-sm">
         <div className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-6 sm:flex-row sm:items-center sm:justify-between sm:px-6">
@@ -689,12 +903,18 @@ export default function OnboardingPage() {
                 Completá los datos básicos para empezar a operar.
               </p>
             )}
+            {draftSavedAt ? (
+              <p className="mt-2 text-[11px] text-slate-500">
+                Borrador guardado.
+              </p>
+            ) : null}
           </div>
           <Button
             type="button"
             variant="outline"
             className="self-start rounded-full border-white/20 px-4 text-slate-300 hover:bg-white/5 sm:self-auto"
-            onClick={() => router.replace('/dashboard')}
+            onClick={continueLater}
+            disabled={!canContinueLater}
           >
             Continuar luego
           </Button>
@@ -702,23 +922,41 @@ export default function OnboardingPage() {
 
         {/* Step indicator */}
         <div className="mx-auto max-w-3xl px-4 pb-6 sm:px-6">
+          <div className="mb-3">
+            <div className="flex items-center justify-between text-[11px] text-slate-400">
+              <span>Paso {stepIndex + 1} de {STEPS.length}</span>
+              <span>{progressPct}%</span>
+            </div>
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+              <div
+                className="h-full rounded-full bg-emerald-500 transition-[width]"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+          </div>
           <div className="flex items-center justify-between gap-2">
             {STEPS.map((step, idx) => {
               const isCurrent = idx === stepIndex;
               const isDone = idx < stepIndex;
               const Icon = step.icon;
+              const canJump = idx <= stepIndex && !saving;
               return (
                 <div key={step.id} className="flex flex-1 items-center gap-3">
-                  <div
+                  <button
+                    type="button"
+                    onClick={() => setStepIndex(idx)}
+                    disabled={!canJump}
                     className={cn(
                       'flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs font-semibold transition',
+                      canJump ? 'cursor-pointer' : 'cursor-not-allowed opacity-80',
                       isCurrent && 'border-emerald-400 bg-emerald-400/10 text-emerald-300',
                       isDone && 'border-emerald-500 bg-emerald-500 text-white',
                       !isCurrent && !isDone && 'border-white/20 bg-white/5 text-slate-500'
                     )}
+                    aria-label={`Ir al paso ${idx + 1}: ${step.title}`}
                   >
                     {isDone ? <CheckCircle2 className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
-                  </div>
+                  </button>
                   <div className="hidden sm:block">
                     <div className={cn('text-[10px] uppercase tracking-wider', isCurrent ? 'text-emerald-300' : 'text-slate-500')}>
                       Paso {idx + 1} de {STEPS.length}
@@ -751,6 +989,15 @@ export default function OnboardingPage() {
             <h2 className="text-lg font-semibold text-white">{currentStep.title}</h2>
           </div>
 
+          {currentStepErrorFields.length > 0 ? (
+            <div role="alert" className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 p-4">
+              <div className="text-sm font-semibold text-red-200">Revisá estos campos</div>
+              <div className="mt-2 text-sm text-red-200/90">
+                {currentStepErrorFields.map(getFieldLabel).join(' · ')}
+              </div>
+            </div>
+          ) : null}
+
           {currentStep.id === 'business' ? (
             <BusinessStep
               form={form}
@@ -758,6 +1005,9 @@ export default function OnboardingPage() {
               onField={onField}
               marketplaceCategories={marketplaceCategories}
               planData={planData}
+              categoriesLoading={categoriesLoading}
+              categoriesError={categoriesError}
+              onRetryCategories={reloadMarketplaceCategories}
             />
           ) : null}
           {currentStep.id === 'contact' ? (
@@ -784,6 +1034,11 @@ export default function OnboardingPage() {
               type="button"
               className="rounded-full bg-emerald-600 px-6 text-white hover:bg-emerald-700"
               onClick={handleNext}
+              disabled={
+                saving ||
+                categoriesLoading ||
+                (currentStep.id === 'business' && marketplaceCategories.length === 0)
+              }
             >
               Siguiente <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
@@ -792,7 +1047,7 @@ export default function OnboardingPage() {
               type="button"
               className="rounded-full bg-emerald-600 px-6 text-white hover:bg-emerald-700"
               onClick={() => void handleFinish()}
-              disabled={saving}
+              disabled={saving || categoriesLoading}
             >
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
               Guardar y entrar al dashboard
@@ -819,7 +1074,16 @@ function BusinessStep({
   onField,
   marketplaceCategories,
   planData,
-}: StepProps & { marketplaceCategories: MarketplaceCategoryOption[]; planData: PlanData | null }) {
+  categoriesLoading,
+  categoriesError,
+  onRetryCategories,
+}: StepProps & {
+  marketplaceCategories: MarketplaceCategoryOption[];
+  planData: PlanData | null;
+  categoriesLoading: boolean;
+  categoriesError: string | null;
+  onRetryCategories: () => Promise<void>;
+}) {
   const selectedCategory = marketplaceCategories.find((category) => category.id === form.industry);
   const selectedSizeOption = SIZE_OPTIONS.find(o => o.value === form.size);
   const isAllowed = isSizeAllowedForPlan(form.size, planData);
@@ -869,7 +1133,23 @@ function BusinessStep({
             <p className="text-[11px] text-emerald-300">{selectedCategory.description}</p>
           ) : null}
           {marketplaceCategories.length === 0 ? (
-            <p className="text-xs text-amber-300">No se pudieron cargar rubros del marketplace. Reintenta en unos segundos.</p>
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+              <p className="text-xs text-amber-200">
+                {categoriesError || 'Cargando rubros del marketplace...'}
+              </p>
+              <div className="mt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-8 rounded-full border-white/20 px-3 text-xs text-white hover:bg-white/10"
+                  onClick={() => void onRetryCategories()}
+                  disabled={categoriesLoading}
+                >
+                  {categoriesLoading ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
+                  Reintentar cargar rubros
+                </Button>
+              </div>
+            </div>
           ) : null}
           {errors.industry ? <p className="text-xs text-red-400">{errors.industry}</p> : null}
         </div>
@@ -976,6 +1256,8 @@ function ContactStep({ form, errors, onField }: StepProps) {
             <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
             <Input
               id="contact-phone"
+              inputMode="tel"
+              autoComplete="tel"
               value={form.phone}
               onChange={(e) => onField('phone', e.target.value)}
               placeholder="+595 981 000000"
@@ -995,6 +1277,7 @@ function ContactStep({ form, errors, onField }: StepProps) {
             <Input
               id="contact-email"
               type="email"
+              autoComplete="email"
               value={form.email}
               onChange={(e) => onField('email', e.target.value)}
               placeholder="ventas@empresa.com"
@@ -1022,6 +1305,8 @@ function ContactStep({ form, errors, onField }: StepProps) {
           <Globe className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
           <Input
             id="contact-website"
+            inputMode="url"
+            autoComplete="url"
             value={form.website}
             onChange={(e) => onField('website', e.target.value)}
             placeholder="empresa.com.py"

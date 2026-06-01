@@ -274,6 +274,8 @@ class PlanService {
       const hasBasicInfo =
         Boolean(companyProfile.name && companyProfile.name.trim().length >= 2) &&
         companyProfile.name !== 'Mi Empresa' &&
+        Boolean(companyProfile.phone && companyProfile.phone.trim()) &&
+        Boolean(companyProfile.marketplace_category_id && companyProfile.marketplace_category_id.trim()) &&
         Boolean(companyProfile.size) &&
         Boolean(companyProfile.city && companyProfile.city.trim()) &&
         Boolean(companyProfile.department && companyProfile.department.trim());
