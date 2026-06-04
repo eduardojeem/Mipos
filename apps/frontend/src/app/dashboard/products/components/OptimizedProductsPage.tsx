@@ -37,11 +37,13 @@ import {
 } from 'lucide-react';
 import api, { getErrorMessage } from '@/lib/api';
 import { toast } from '@/lib/toast';
-import { useAuth } from '@/components/auth/AuthProvider';
+import { useAuth } from '@/hooks/use-auth';
+import { usePermissionsContext } from '@/hooks/use-unified-permissions';
 import { LoginModal } from '@/components/auth/LoginModal';
 import type { Product } from '@/types';
 import { PremiumDashboardCard } from '@/components/dashboard/shared/PremiumDashboardCard';
 import { cn } from '@/lib/utils';
+import { canCreateProducts } from '../utils/product-permissions';
 
 interface OptimizedProductsPageProps {
   className?: string;
@@ -104,9 +106,14 @@ function downloadCsv(filename: string, rows: string[]) {
 
 // ── Component ────────────────────────────────────────────────────────────────
 export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageProps) {
-  const { user, canManageProducts, hasPermission } = useAuth();
-  const canCreateProduct = canManageProducts();
-  const canExportProducts = hasPermission('products.read');
+  const { user } = useAuth();
+  const permissionsContext = usePermissionsContext();
+  const canCreateProduct = canCreateProducts({
+    permissions: permissionsContext.permissions,
+    roles: permissionsContext.roles,
+    hasPermission: permissionsContext.hasPermission,
+  });
+  const canExportProducts = permissionsContext.hasPermission('products', 'read');
 
   // ── Filters ──
   const [filters, setFilters] = useState({

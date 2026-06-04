@@ -16,10 +16,10 @@ interface SimpleProductListProps {
 
 const ProductSkeltonGrid = memo(function ProductSkeletonGrid() {
   return (
-    <div className="grid grid-cols-2 gap-4 p-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+    <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
       {Array.from({ length: 12 }).map((_, i) => (
         <div key={i} className="overflow-hidden rounded-lg border border-border/40">
-          <Skeleton className="aspect-square w-full" />
+          <Skeleton className="aspect-[4/3] w-full" />
           <div className="space-y-2 p-3">
             <Skeleton className="h-3 w-full" />
             <Skeleton className="h-3 w-3/4" />
@@ -55,7 +55,7 @@ export const SimpleProductList = memo(function SimpleProductList({
   }
 
   return (
-    <div className="grid grid-cols-2 gap-4 p-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+    <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
       {products.map((product, index) => (
         <SimpleProductCard
           key={product.id}
