@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canCreateProducts } from './product-permissions';
+import { canCreateProducts, canDeleteProducts, canEditProducts } from './product-permissions';
 
 describe('canCreateProducts', () => {
   it('allows product admins by role', () => {
@@ -38,5 +38,30 @@ describe('canCreateProducts', () => {
   it('supports legacy write/manage aliases for compatibility', () => {
     expect(canCreateProducts({ permissions: [{ resource: 'products', action: 'write' }] })).toBe(true);
     expect(canCreateProducts({ permissions: [{ resource: 'products', action: 'manage' }] })).toBe(true);
+  });
+});
+
+describe('canEditProducts', () => {
+  it('allows explicit edit/update/write/manage permissions', () => {
+    expect(canEditProducts({ permissions: [{ resource: 'products', action: 'edit' }] })).toBe(true);
+    expect(canEditProducts({ permissions: [{ resource: 'products', action: 'update' }] })).toBe(true);
+    expect(canEditProducts({ permissions: [{ resource: 'products', action: 'write' }] })).toBe(true);
+    expect(canEditProducts({ permissions: [{ resource: 'products', action: 'manage' }] })).toBe(true);
+  });
+
+  it('keeps read-only users from editing products', () => {
+    expect(canEditProducts({ permissions: [{ resource: 'products', action: 'read' }] })).toBe(false);
+  });
+});
+
+describe('canDeleteProducts', () => {
+  it('allows explicit delete/remove/manage permissions', () => {
+    expect(canDeleteProducts({ permissions: [{ resource: 'products', action: 'delete' }] })).toBe(true);
+    expect(canDeleteProducts({ permissions: [{ resource: 'products', action: 'remove' }] })).toBe(true);
+    expect(canDeleteProducts({ permissions: [{ resource: 'products', action: 'manage' }] })).toBe(true);
+  });
+
+  it('allows write users to delete products (dashboard parity)', () => {
+    expect(canDeleteProducts({ permissions: [{ resource: 'products', action: 'write' }] })).toBe(true);
   });
 });

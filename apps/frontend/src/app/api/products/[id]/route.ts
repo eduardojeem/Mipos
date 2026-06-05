@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { requireOrganization } from '@/lib/organization';
+import { requirePOSPermissions } from '@/app/api/_utils/role-validation';
+import { assertCsrf } from '@/app/api/_utils/csrf';
 
 function normalizeOptionalString(value: unknown) {
   if (value === undefined) {
@@ -22,6 +24,24 @@ function normalizeOptionalNumber(value: unknown) {
 
   const normalized = Number(value);
   return Number.isFinite(normalized) ? normalized : null;
+}
+
+function normalizeOptionalBoolean(value: unknown) {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === null || value === '') {
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true') return true;
+    if (normalized === 'false') return false;
+  }
+
+  return Boolean(value);
 }
 
 async function syncProductToExternal(origin: string, product: Record<string, unknown>, orgId: string) {
@@ -108,6 +128,19 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const csrf = assertCsrf(request);
+    if (!csrf.ok) return csrf.response;
+
+    const auth = await requirePOSPermissions(request, [
+      'products.update',
+      'products.edit',
+      'products.write',
+      'products.manage',
+    ]);
+    if (!auth.ok) {
+      return NextResponse.json(auth.body, { status: auth.status });
+    }
+
     const { id } = await params;
     const orgId = await requireOrganization(request);
     const body = await request.json();
@@ -167,6 +200,23 @@ export async function PUT(
       }
     }
 
+    if (body.supplier_id !== undefined && body.supplier_id !== null && body.supplier_id !== '') {
+      const { data: supplier, error: supplierError } = await supabase
+        .from('suppliers')
+        .select('id')
+        .eq('id', body.supplier_id)
+        .eq('organization_id', orgId)
+        .maybeSingle();
+
+      if (supplierError) {
+        throw supplierError;
+      }
+
+      if (!supplier) {
+        return NextResponse.json({ error: 'Supplier not found' }, { status: 400 });
+      }
+    }
+
     const updateData: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     };
@@ -197,6 +247,20 @@ export async function PUT(
     }
     if (body.barcode !== undefined) updateData.barcode = normalizeOptionalString(body.barcode);
     if (body.is_active !== undefined) updateData.is_active = Boolean(body.is_active);
+    if (body.iva_included !== undefined) updateData.iva_included = normalizeOptionalBoolean(body.iva_included);
+    if (body.iva_rate !== undefined) updateData.iva_rate = normalizeOptionalNumber(body.iva_rate);
+    if (body.brand !== undefined) updateData.brand = normalizeOptionalString(body.brand);
+    if (body.shade !== undefined) updateData.shade = normalizeOptionalString(body.shade);
+    if (body.skin_type !== undefined) updateData.skin_type = normalizeOptionalString(body.skin_type);
+    if (body.ingredients !== undefined) updateData.ingredients = normalizeOptionalString(body.ingredients);
+    if (body.volume !== undefined) updateData.volume = normalizeOptionalString(body.volume);
+    if (body.spf !== undefined) updateData.spf = normalizeOptionalNumber(body.spf);
+    if (body.finish !== undefined) updateData.finish = normalizeOptionalString(body.finish);
+    if (body.coverage !== undefined) updateData.coverage = normalizeOptionalString(body.coverage);
+    if (body.waterproof !== undefined) updateData.waterproof = normalizeOptionalBoolean(body.waterproof);
+    if (body.vegan !== undefined) updateData.vegan = normalizeOptionalBoolean(body.vegan);
+    if (body.cruelty_free !== undefined) updateData.cruelty_free = normalizeOptionalBoolean(body.cruelty_free);
+    if (body.expiration_date !== undefined) updateData.expiration_date = normalizeOptionalString(body.expiration_date);
 
     const { data: product, error } = await supabase
       .from('products')
@@ -234,6 +298,19 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const csrf = assertCsrf(request);
+    if (!csrf.ok) return csrf.response;
+
+    const auth = await requirePOSPermissions(request, [
+      'products.delete',
+      'products.remove',
+      'products.write',
+      'products.manage',
+    ]);
+    if (!auth.ok) {
+      return NextResponse.json(auth.body, { status: auth.status });
+    }
+
     const { id } = await params;
     const orgId = await requireOrganization(request);
     const supabase = await createAdminClient();

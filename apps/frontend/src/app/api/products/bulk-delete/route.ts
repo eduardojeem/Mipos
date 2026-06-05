@@ -1,9 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { requireOrganization } from '@/lib/organization';
+import { requirePOSPermissions } from '@/app/api/_utils/role-validation';
+import { assertCsrf } from '@/app/api/_utils/csrf';
 
 export async function POST(request: NextRequest) {
   try {
+    const csrf = assertCsrf(request);
+    if (!csrf.ok) return csrf.response;
+
+    const auth = await requirePOSPermissions(request, [
+      'products.delete',
+      'products.remove',
+      'products.write',
+      'products.manage',
+    ]);
+    if (!auth.ok) {
+      return NextResponse.json(auth.body, { status: auth.status });
+    }
+
     const orgId = await requireOrganization(request);
     const body = await request.json();
     const ids = Array.isArray(body?.ids)
