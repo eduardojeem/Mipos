@@ -378,6 +378,19 @@ export async function fetchDashboardOverview(
   if (!overviewRpc.error) {
     const mapped = mapOverviewPayload(overviewRpc.data);
     if (mapped) {
+      // El RPC puede devolver totalProducts sin filtrar is_active.
+      // Sobreescribimos con una query directa de solo activos para
+      // mantener consistencia con la sección de productos del dashboard.
+      const { count: activeCount } = await supabase
+        .from('products')
+        .select('id', { count: 'estimated', head: true })
+        .eq('organization_id', organizationId)
+        .eq('is_active', true);
+
+      if (activeCount !== null && activeCount !== undefined) {
+        mapped.totalProducts = activeCount;
+      }
+
       return setCachedValue(overviewCache, organizationId, mapped, OVERVIEW_CACHE_TTL_MS);
     }
   }
@@ -415,7 +428,8 @@ export async function fetchDashboardOverview(
     supabase
       .from('products')
       .select('id', { count: 'estimated', head: true })
-      .eq('organization_id', organizationId),
+      .eq('organization_id', organizationId)
+      .eq('is_active', true),
     supabase
       .from('products')
       .select('stock_quantity, min_stock')

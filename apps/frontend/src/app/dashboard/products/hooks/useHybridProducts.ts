@@ -12,13 +12,17 @@ interface UseHybridProductsOptions {
   enableRealtime?: boolean;
   pageSize?: number;
   page?: number;
+  /**
+   * Forzar modo demo/desarrollo con datos locales.
+   * NO se activa automáticamente en errores de producción.
+   */
   preferMockData?: boolean;
 }
 
-// Mock data as fallback
-const mockProducts: Product[] = [
+// Datos de demo — solo se usan cuando preferMockData=true (desarrollo explícito)
+const DEMO_PRODUCTS: Product[] = [
   {
-    id: '1',
+    id: 'demo-1',
     name: 'Labial Rojo Intenso',
     sku: 'LAB-001',
     description: 'Labial de larga duración con acabado mate',
@@ -40,7 +44,7 @@ const mockProducts: Product[] = [
       description: 'Productos de maquillaje',
       is_active: true,
       created_at: '2024-12-01T00:00:00Z',
-      updated_at: '2024-12-01T00:00:00Z'
+      updated_at: '2024-12-01T00:00:00Z',
     },
     supplier: {
       id: 'sup-1',
@@ -50,11 +54,11 @@ const mockProducts: Product[] = [
       address: 'Calle 123 #45-67',
       is_active: true,
       created_at: '2024-12-01T00:00:00Z',
-      updated_at: '2024-12-01T00:00:00Z'
-    }
+      updated_at: '2024-12-01T00:00:00Z',
+    },
   },
   {
-    id: '2',
+    id: 'demo-2',
     name: 'Base Líquida Natural',
     sku: 'BASE-002',
     description: 'Base de maquillaje con cobertura natural',
@@ -76,7 +80,7 @@ const mockProducts: Product[] = [
       description: 'Productos de maquillaje',
       is_active: true,
       created_at: '2024-12-01T00:00:00Z',
-      updated_at: '2024-12-01T00:00:00Z'
+      updated_at: '2024-12-01T00:00:00Z',
     },
     supplier: {
       id: 'sup-2',
@@ -86,11 +90,11 @@ const mockProducts: Product[] = [
       address: 'Carrera 45 #12-34',
       is_active: true,
       created_at: '2024-12-01T00:00:00Z',
-      updated_at: '2024-12-01T00:00:00Z'
-    }
+      updated_at: '2024-12-01T00:00:00Z',
+    },
   },
   {
-    id: '3',
+    id: 'demo-3',
     name: 'Máscara de Pestañas',
     sku: 'MASC-003',
     description: 'Máscara para pestañas voluminosa',
@@ -112,7 +116,7 @@ const mockProducts: Product[] = [
       description: 'Productos de maquillaje',
       is_active: true,
       created_at: '2024-12-01T00:00:00Z',
-      updated_at: '2024-12-01T00:00:00Z'
+      updated_at: '2024-12-01T00:00:00Z',
     },
     supplier: {
       id: 'sup-1',
@@ -122,19 +126,19 @@ const mockProducts: Product[] = [
       address: 'Calle 123 #45-67',
       is_active: true,
       created_at: '2024-12-01T00:00:00Z',
-      updated_at: '2024-12-01T00:00:00Z'
-    }
-  }
+      updated_at: '2024-12-01T00:00:00Z',
+    },
+  },
 ];
 
-const mockCategories: Category[] = [
+const DEMO_CATEGORIES: Category[] = [
   {
     id: 'cat-1',
     name: 'Maquillaje',
     description: 'Productos de maquillaje',
     is_active: true,
     created_at: '2024-12-01T00:00:00Z',
-    updated_at: '2024-12-01T00:00:00Z'
+    updated_at: '2024-12-01T00:00:00Z',
   },
   {
     id: 'cat-2',
@@ -142,194 +146,115 @@ const mockCategories: Category[] = [
     description: 'Productos para el cuidado facial y corporal',
     is_active: true,
     created_at: '2024-12-01T00:00:00Z',
-    updated_at: '2024-12-01T00:00:00Z'
-  }
+    updated_at: '2024-12-01T00:00:00Z',
+  },
 ];
 
+function calculateDemoStats(products: Product[]) {
+  const totalValue = products.reduce(
+    (sum, p) => sum + (p.stock_quantity || 0) * (p.cost_price || p.sale_price || 0),
+    0,
+  );
+  const lowStockProducts = products.filter(
+    (p) => (p.stock_quantity || 0) > 0 && (p.stock_quantity || 0) <= (p.min_stock || 5),
+  ).length;
+  const outOfStockProducts = products.filter((p) => (p.stock_quantity || 0) === 0).length;
+  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const recentlyAdded = products.filter(
+    (p) => new Date(p.created_at || 0).getTime() >= weekAgo,
+  ).length;
+
+  return {
+    totalProducts: products.length,
+    lowStockProducts,
+    outOfStockProducts,
+    totalValue: Math.round(totalValue),
+    recentlyAdded,
+    topCategory: 'Maquillaje',
+  };
+}
+
 export function useHybridProducts(options: UseHybridProductsOptions = {}) {
-  const [useMockData, setUseMockData] = useState(options.preferMockData || false);
-  
-  // Performance monitoring
+  // Solo modo demo cuando se solicita explícitamente (desarrollo/testing)
+  const [useDemoData, setUseDemoData] = useState(options.preferMockData === true);
+
   const { recordApiCall, recordInteraction } = usePerformanceMonitor();
   const { getOrSet } = useAdvancedCache();
   const { executeAction, cacheForOffline } = useOfflineManager();
-  
-  // Try Supabase first
+
   const supabaseResult = useSupabaseProducts({
     ...options,
-    enableRealtime: !useMockData && options.enableRealtime
+    enableRealtime: !useDemoData && options.enableRealtime,
   });
 
-  // Mock data calculations
-  const calculateMockStats = useCallback(() => {
-    const totalValue = mockProducts.reduce((sum, p) => 
-      sum + (p.stock_quantity || 0) * (p.cost_price || p.sale_price || 0), 0
-    );
-    
-    const lowStockProducts = mockProducts.filter(p => 
-      (p.stock_quantity || 0) > 0 && (p.stock_quantity || 0) <= (p.min_stock || 5)
-    ).length;
-    
-    const outOfStockProducts = mockProducts.filter(p => 
-      (p.stock_quantity || 0) === 0
-    ).length;
-
-    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    const recentlyAdded = mockProducts.filter(p => 
-      new Date(p.created_at || 0).getTime() >= weekAgo
-    ).length;
-
-    return {
-      totalProducts: mockProducts.length,
-      lowStockProducts,
-      outOfStockProducts,
-      totalValue: Math.round(totalValue),
-      recentlyAdded,
-      topCategory: 'Maquillaje'
-    };
-  }, []);
-
-  // Mock CRUD operations with performance monitoring
-  const mockCreateProduct = useCallback(async (data: any) => {
-    const startTime = performance.now();
-    recordInteraction?.('create_product_mock');
-    
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // Queue for offline sync if needed
-    await executeAction?.({
-      type: 'create',
-      entity: 'product',
-      data
-    });
-    
-    const duration = performance.now() - startTime;
-    recordApiCall?.('mock/products', duration, true);
-    
-    console.log('Mock create product:', data);
+  // Acciones de demo (desarrollo/testing explícito)
+  const demoCreate = useCallback(async (_data: any) => {
+    recordInteraction?.('create_product_demo');
+    await new Promise((r) => setTimeout(r, 300));
+    recordApiCall?.('demo/products', 300, true);
     return true;
-  }, [recordInteraction, recordApiCall, executeAction]);
-
-  const mockUpdateProduct = useCallback(async (id: string, data: any) => {
-    const startTime = performance.now();
-    recordInteraction?.('update_product_mock');
-    
-    await new Promise(resolve => setTimeout(resolve, 300));
-    
-    await executeAction?.({
-      type: 'update',
-      entity: 'product',
-      data: { id, ...data }
-    });
-    
-    const duration = performance.now() - startTime;
-    recordApiCall?.('mock/products/' + id, duration, true);
-    
-    console.log('Mock update product:', id, data);
-    return true;
-  }, [recordInteraction, recordApiCall, executeAction]);
-
-  const mockDeleteProduct = useCallback(async (id: string) => {
-    const startTime = performance.now();
-    recordInteraction?.('delete_product_mock');
-    
-    await new Promise(resolve => setTimeout(resolve, 200));
-    
-    await executeAction?.({
-      type: 'delete',
-      entity: 'product',
-      data: { id }
-    });
-    
-    const duration = performance.now() - startTime;
-    recordApiCall?.('mock/products/' + id, duration, true);
-    
-    console.log('Mock delete product:', id);
-    return true;
-  }, [recordInteraction, recordApiCall, executeAction]);
-
-  const mockRefetch = useCallback(async () => {
-    const startTime = performance.now();
-    recordInteraction?.('refetch_products_mock');
-    
-    // Cache products for offline access
-    await cacheForOffline?.('products', mockProducts);
-    await cacheForOffline?.('categories', mockCategories);
-    
-    const duration = performance.now() - startTime;
-    recordApiCall?.('mock/products/refetch', duration, true);
-    
-    console.log('Mock refetch');
-  }, [recordInteraction, recordApiCall, cacheForOffline]);
-
-  const mockLoadMore = useCallback(async () => {
-    const startTime = performance.now();
-    recordInteraction?.('load_more_products_mock');
-    
-    await new Promise(resolve => setTimeout(resolve, 400));
-    
-    const duration = performance.now() - startTime;
-    recordApiCall?.('mock/products/load-more', duration, true);
-    
-    console.log('Mock load more');
   }, [recordInteraction, recordApiCall]);
 
-  const mockClearCache = useCallback(() => {
-    console.log('Mock clear cache');
+  const demoUpdate = useCallback(async (_id: string, _data: any) => {
+    recordInteraction?.('update_product_demo');
+    await new Promise((r) => setTimeout(r, 200));
+    recordApiCall?.('demo/products/update', 200, true);
+    return true;
+  }, [recordInteraction, recordApiCall]);
+
+  const demoDelete = useCallback(async (_id: string) => {
+    recordInteraction?.('delete_product_demo');
+    await new Promise((r) => setTimeout(r, 150));
+    recordApiCall?.('demo/products/delete', 150, true);
+    return true;
+  }, [recordInteraction, recordApiCall]);
+
+  const demoRefetch = useCallback(async () => {
+    await cacheForOffline?.('products', DEMO_PRODUCTS);
+    await cacheForOffline?.('categories', DEMO_CATEGORIES);
+  }, [cacheForOffline]);
+
+  const demoLoadMore = useCallback(async () => {
+    await new Promise((r) => setTimeout(r, 200));
   }, []);
 
-  // Switch to mock data
-  const switchToMockData = useCallback(() => {
-    setUseMockData(true);
-  }, []);
+  const demoClearCache = useCallback(() => {}, []);
 
-  // Switch back to Supabase
-  const switchToSupabase = useCallback(() => {
-    setUseMockData(false);
-  }, []);
+  const switchToMockData = useCallback(() => setUseDemoData(true), []);
+  const switchToSupabase = useCallback(() => setUseDemoData(false), []);
 
-  // Return appropriate data based on mode
-  if (useMockData || (supabaseResult.error && !supabaseResult.isLoading)) {
+  // ── Modo demo explícito (solo con preferMockData=true) ──
+  if (useDemoData) {
     return {
-      // Mock data
-      products: mockProducts,
-      categories: mockCategories,
+      products: DEMO_PRODUCTS,
+      categories: DEMO_CATEGORIES,
       isLoading: false,
-      error: useMockData ? null : supabaseResult.error,
-      total: mockProducts.length,
+      error: null,
+      total: DEMO_PRODUCTS.length,
       hasMore: false,
-      dashboardStats: calculateMockStats(),
-      pagination: {
-        page: 1,
-        pageSize: 25,
-        total: mockProducts.length
-      },
-
-      // Mock actions
-      refetch: mockRefetch,
-      loadMore: mockLoadMore,
-      createProduct: mockCreateProduct,
-      updateProduct: mockUpdateProduct,
-      deleteProduct: mockDeleteProduct,
-      clearCache: mockClearCache,
-
-      // Mode control
+      dashboardStats: calculateDemoStats(DEMO_PRODUCTS),
+      pagination: { page: 1, pageSize: 25, total: DEMO_PRODUCTS.length },
+      refetch: demoRefetch,
+      loadMore: demoLoadMore,
+      createProduct: demoCreate,
+      updateProduct: demoUpdate,
+      deleteProduct: demoDelete,
+      clearCache: demoClearCache,
       isMockMode: true,
       switchToMockData,
       switchToSupabase,
-      canRetrySupabase: !useMockData
+      canRetrySupabase: true,
     };
   }
 
-  // Return Supabase data
+  // ── Modo producción: delegar a Supabase, propagar errores reales ──
+  // Si supabaseResult.error !== null el componente consumidor recibe el error
+  // y puede mostrarlo al usuario. NO se reemplaza con datos de demo.
   return {
     ...supabaseResult,
-    
-    // Mode control
     isMockMode: false,
     switchToMockData,
     switchToSupabase,
-    canRetrySupabase: true
+    canRetrySupabase: true,
   };
 }

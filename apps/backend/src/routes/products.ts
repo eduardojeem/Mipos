@@ -546,11 +546,11 @@ router.get('/public', async (req: Request, res: Response) => {
       isActive: p.is_active,
       createdAt: p.created_at,
       updatedAt: p.updated_at,
-      // Enhanced fields for better UX
-      rating: Math.random() * 2 + 3, // Mock rating 3-5
-      reviewCount: Math.floor(Math.random() * 500) + 50,
-      isPopular: Math.random() > 0.7,
-      isFeatured: Math.random() > 0.8,
+      // Campos deterministas — sin valores aleatorios por request
+      rating: null,
+      reviewCount: 0,
+      isPopular: false,
+      isFeatured: p.is_featured ?? false,
       tags: generateProductTags(p.name, p.brand, p.categories?.name)
     }));
     

@@ -35,6 +35,7 @@ const RICH_PRODUCT_SELECT = `
 `;
 
 type ProductRow = Record<string, any>;
+const STOCK_STATUS_CANDIDATE_LIMIT = 10000;
 
 function parsePositiveInt(value: string | null, fallback: number) {
   const parsed = Number.parseInt(value || '', 10);
@@ -118,16 +119,23 @@ function applyProductFilters(query: any, params: URLSearchParams, orgId: string)
   if (stockStatus) {
     switch (stockStatus) {
       case 'out_of_stock':
+        // stock_quantity = 0
         scopedQuery = scopedQuery.eq('stock_quantity', 0);
         break;
       case 'low_stock':
-        scopedQuery = scopedQuery.gt('stock_quantity', 0).lte('stock_quantity', 5);
+        // 0 < stock_quantity <= min_stock
+        // Supabase JS client no soporta comparación entre columnas; filtramos
+        // stock > 0 en DB y post-procesamos en normalizeProduct si es necesario.
+        // La comparación exacta se aplica en el endpoint con los datos retornados.
+        scopedQuery = scopedQuery.gt('stock_quantity', 0);
         break;
       case 'in_stock':
-        scopedQuery = scopedQuery.gt('stock_quantity', 5);
+        // stock_quantity > min_stock (post-procesado)
+        scopedQuery = scopedQuery.gt('stock_quantity', 0);
         break;
       case 'critical':
-        scopedQuery = scopedQuery.lte('stock_quantity', 2);
+        // stock_quantity <= min_stock / 2 (post-procesado)
+        scopedQuery = scopedQuery.gt('stock_quantity', 0);
         break;
     }
   }
@@ -208,15 +216,21 @@ export async function GET(request: NextRequest) {
 
     const supabase = await createAdminClient();
 
+    const stockStatus = searchParams.get('stockStatus');
+
     const buildQuery = (select: string) => {
       let query = supabase
         .from('products')
         .select(select, { count: 'estimated' });
 
       query = applyProductFilters(query, searchParams, orgId);
-      return query
-        .order(sortField, { ascending: sortOrder === 'asc' })
-        .range(from, to);
+      const orderedQuery = query.order(sortField, { ascending: sortOrder === 'asc' });
+
+      if (stockStatus) {
+        return orderedQuery.range(0, STOCK_STATUS_CANDIDATE_LIMIT - 1);
+      }
+
+      return orderedQuery.range(from, to);
     };
 
     let { data: products, error, count } = await buildQuery(RICH_PRODUCT_SELECT);
@@ -260,11 +274,37 @@ export async function GET(request: NextRequest) {
     }
 
     const transformedProducts = rows.map((product) => normalizeProduct(product, categoryMap));
-    const total = count || 0;
+
+    // Post-procesamiento de stockStatus usando min_stock real del producto.
+    // La DB no soporta comparación entre columnas con Supabase JS client,
+    // por eso filtramos aquí con los datos ya cargados.
+    const stockFilteredProducts = stockStatus
+      ? transformedProducts.filter((p) => {
+          const stock = p.stock_quantity;
+          const min = p.min_stock;
+          switch (stockStatus) {
+            case 'out_of_stock':
+              return stock === 0;
+            case 'low_stock':
+              return stock > 0 && stock <= min;
+            case 'in_stock':
+              return stock > min;
+            case 'critical':
+              return stock > 0 && stock <= Math.ceil(min / 2);
+            default:
+              return true;
+          }
+        })
+      : transformedProducts;
+
+    const finalProducts = stockStatus
+      ? stockFilteredProducts.slice(from, to + 1)
+      : stockFilteredProducts;
+    const total = stockStatus ? stockFilteredProducts.length : (count || 0);
     const totalPages = Math.ceil(total / limit);
 
     return NextResponse.json({
-      products: transformedProducts,
+      products: finalProducts,
       pagination: {
         page,
         limit,

@@ -2,22 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { getValidatedOrganizationId } from '@/lib/organization';
 
-const PRODUCTS_SUMMARY_CACHE_TTL_MS = 60_000;
+// TTL en segundos para Cache-Control (60 s).
+// Funciona correctamente en multi-instancia / serverless porque el caché
+// vive en el cliente HTTP, no en memoria del proceso del servidor.
+const CACHE_TTL_SECONDS = 60;
 
-type ProductsSummaryPayload = {
-  totalProducts: number;
-  lowStockProducts: number;
-  outOfStockProducts: number;
-  totalValue: number;
-  recentlyAdded: number;
-  topCategory: string;
-  lastUpdated: string;
+const FALLBACK_SUMMARY = {
+  totalProducts: 0,
+  lowStockProducts: 0,
+  outOfStockProducts: 0,
+  totalValue: 0,
+  recentlyAdded: 0,
+  topCategory: 'N/A',
+  lastUpdated: new Date().toISOString(),
 };
-
-const productsSummaryCache = new Map<
-  string,
-  { data: ProductsSummaryPayload; expiresAt: number }
->();
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,38 +23,20 @@ export async function GET(request: NextRequest) {
     if (!orgId) {
       return NextResponse.json(
         { error: 'Organization required', message: 'No organization selected' },
-        { status: 400 }
+        { status: 400 },
       );
     }
-    
+
     const supabase = await createAdminClient();
     const { searchParams } = new URL(request.url);
     const isActiveParam = searchParams.get('isActive');
     const normalizedIsActive =
       isActiveParam === 'true' ? true : isActiveParam === 'false' ? false : null;
-    const cacheKey = `${orgId}:${normalizedIsActive === null ? 'all' : normalizedIsActive ? 'active' : 'inactive'}`;
-    const cached = productsSummaryCache.get(cacheKey);
 
-    if (cached && cached.expiresAt > Date.now()) {
-      return NextResponse.json(cached.data);
-    }
-
-    // Get current date for recent products calculation
-    const now = new Date();
-    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-
-    // Fetch only the fields needed for summary calculations.
+    // Fetch solo los campos necesarios para las métricas
     let query = supabase
       .from('products')
-      .select(`
-        id,
-        stock_quantity,
-        min_stock,
-        sale_price,
-        cost_price,
-        category_id,
-        created_at
-      `)
+      .select('id, stock_quantity, min_stock, sale_price, cost_price, category_id, created_at')
       .eq('organization_id', orgId);
 
     if (normalizedIsActive !== null) {
@@ -64,56 +44,61 @@ export async function GET(request: NextRequest) {
     }
 
     const { data: scopedProducts, error: scopedError } = await query;
-
     if (scopedError) throw scopedError;
 
     const allProducts = scopedProducts || [];
-    
-    // Calculate stats in memory
-    const stats = allProducts.reduce((acc: {
-      totalValue: number;
-      outOfStock: number;
-      lowStock: number;
-      recentlyAdded: number;
-      categoryCounts: Record<string, number>;
-    }, product: any) => {
-      const stock = Number(product.stock_quantity || 0);
-      const minStock = Number(product.min_stock || 5); // Default to 5 if not set
-      const price = Number(product.cost_price || product.sale_price || 0); // Use cost price for inventory value
-      const createdAt = new Date(product.created_at || 0).getTime();
-      
-      // Total Value
-      acc.totalValue += stock * price;
+    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
 
-      // Stock Status
-      if (stock === 0) {
-        acc.outOfStock++;
-      } else if (stock <= minStock) {
-        acc.lowStock++;
-      }
+    const stats = allProducts.reduce(
+      (
+        acc: {
+          totalValue: number;
+          outOfStock: number;
+          lowStock: number;
+          recentlyAdded: number;
+          categoryCounts: Record<string, number>;
+        },
+        product: any,
+      ) => {
+        const stock = Number(product.stock_quantity || 0);
+        // Usar min_stock real del producto, sin threshold hardcodeado
+        const minStock = Number(product.min_stock ?? 0);
+        const price = Number(product.cost_price || product.sale_price || 0);
+        const createdAt = new Date(product.created_at || 0).getTime();
 
-      // Recent Products
-      if (createdAt >= weekAgo.getTime()) {
-        acc.recentlyAdded++;
-      }
+        acc.totalValue += stock * price;
 
-      // Category Count
-      if (product.category_id) {
-        acc.categoryCounts[product.category_id] = (acc.categoryCounts[product.category_id] || 0) + 1;
-      }
+        if (stock === 0) {
+          acc.outOfStock++;
+        } else if (stock <= minStock) {
+          // Bajo stock = stock positivo pero <= min_stock del producto
+          acc.lowStock++;
+        }
 
-      return acc;
-    }, {
-      totalValue: 0,
-      outOfStock: 0,
-      lowStock: 0,
-      recentlyAdded: 0,
-      categoryCounts: {} as Record<string, number>
-    });
+        if (createdAt >= weekAgo) {
+          acc.recentlyAdded++;
+        }
 
-    // Find Top Category
-    const topCategoryId = Object.entries(stats.categoryCounts)
-      .sort(([, a], [, b]) => (b as number) - (a as number))[0]?.[0];
+        if (product.category_id) {
+          acc.categoryCounts[product.category_id] =
+            (acc.categoryCounts[product.category_id] || 0) + 1;
+        }
+
+        return acc;
+      },
+      {
+        totalValue: 0,
+        outOfStock: 0,
+        lowStock: 0,
+        recentlyAdded: 0,
+        categoryCounts: {} as Record<string, number>,
+      },
+    );
+
+    // Categoría con más productos
+    const topCategoryId = Object.entries(stats.categoryCounts).sort(
+      ([, a], [, b]) => (b as number) - (a as number),
+    )[0]?.[0];
 
     let topCategory = 'N/A';
     if (topCategoryId) {
@@ -133,29 +118,26 @@ export async function GET(request: NextRequest) {
       totalValue: Math.round(stats.totalValue),
       recentlyAdded: stats.recentlyAdded,
       topCategory,
-      lastUpdated: new Date().toISOString()
+      lastUpdated: new Date().toISOString(),
     };
 
-    productsSummaryCache.set(cacheKey, {
-      data: summary,
-      expiresAt: Date.now() + PRODUCTS_SUMMARY_CACHE_TTL_MS,
+    // Cache-Control funciona correctamente en entornos multi-instancia y
+    // serverless, a diferencia de un Map en memoria del proceso del servidor.
+    return NextResponse.json(summary, {
+      headers: {
+        'Cache-Control': `private, max-age=${CACHE_TTL_SECONDS}, stale-while-revalidate=${CACHE_TTL_SECONDS * 2}`,
+      },
     });
-
-    return NextResponse.json(summary);
-
   } catch (error) {
     console.error('Products summary error:', error);
-    
-    // Return fallback data
-    return NextResponse.json({
-      totalProducts: 0,
-      lowStockProducts: 0,
-      outOfStockProducts: 0,
-      totalValue: 0,
-      recentlyAdded: 0,
-      topCategory: 'N/A',
-      lastUpdated: new Date().toISOString(),
-      error: 'Could not fetch products summary'
-    });
+
+    return NextResponse.json(
+      {
+        ...FALLBACK_SUMMARY,
+        lastUpdated: new Date().toISOString(),
+        error: 'Could not fetch products summary',
+      },
+      { status: 500 },
+    );
   }
 }

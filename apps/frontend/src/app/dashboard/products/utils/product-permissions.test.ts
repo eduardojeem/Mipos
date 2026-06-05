@@ -39,9 +39,27 @@ describe('canCreateProducts', () => {
     expect(canCreateProducts({ permissions: [{ resource: 'products', action: 'write' }] })).toBe(true);
     expect(canCreateProducts({ permissions: [{ resource: 'products', action: 'manage' }] })).toBe(true);
   });
+
+  it('supports permission names returned by roles APIs', () => {
+    expect(
+      canCreateProducts({
+        permissions: [{ resource: '', action: '', name: 'products.create' }],
+      })
+    ).toBe(true);
+    expect(
+      canCreateProducts({
+        permissions: [{ resource: '', action: '', name: 'products:create' }],
+      })
+    ).toBe(true);
+  });
 });
 
 describe('canEditProducts', () => {
+  it('allows product admins by role', () => {
+    expect(canEditProducts({ roles: ['ADMIN'] })).toBe(true);
+    expect(canEditProducts({ roles: ['OWNER'] })).toBe(true);
+  });
+
   it('allows explicit edit/update/write/manage permissions', () => {
     expect(canEditProducts({ permissions: [{ resource: 'products', action: 'edit' }] })).toBe(true);
     expect(canEditProducts({ permissions: [{ resource: 'products', action: 'update' }] })).toBe(true);
@@ -52,9 +70,22 @@ describe('canEditProducts', () => {
   it('keeps read-only users from editing products', () => {
     expect(canEditProducts({ permissions: [{ resource: 'products', action: 'read' }] })).toBe(false);
   });
+
+  it('supports update permission names returned by roles APIs', () => {
+    expect(
+      canEditProducts({
+        permissions: [{ resource: '', action: '', name: 'products.update' }],
+      })
+    ).toBe(true);
+  });
 });
 
 describe('canDeleteProducts', () => {
+  it('allows product admins by role', () => {
+    expect(canDeleteProducts({ roles: ['ADMIN'] })).toBe(true);
+    expect(canDeleteProducts({ roles: ['OWNER'] })).toBe(true);
+  });
+
   it('allows explicit delete/remove/manage permissions', () => {
     expect(canDeleteProducts({ permissions: [{ resource: 'products', action: 'delete' }] })).toBe(true);
     expect(canDeleteProducts({ permissions: [{ resource: 'products', action: 'remove' }] })).toBe(true);
@@ -63,5 +94,13 @@ describe('canDeleteProducts', () => {
 
   it('allows write users to delete products (dashboard parity)', () => {
     expect(canDeleteProducts({ permissions: [{ resource: 'products', action: 'write' }] })).toBe(true);
+  });
+
+  it('supports delete permission names returned by roles APIs', () => {
+    expect(
+      canDeleteProducts({
+        permissions: [{ resource: '', action: '', name: 'products:delete' }],
+      })
+    ).toBe(true);
   });
 });

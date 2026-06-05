@@ -499,11 +499,11 @@ export function isOutOfStock(product: ProductEntity): boolean {
 /**
  * Calcula el nivel de severidad de stock
  */
-export function getStockSeverity(product: ProductEntity): StockAlertSeverity {
+export function getStockSeverity(product: ProductEntity): StockAlertSeverity | 'normal' {
     if (product.stock_quantity === 0) return 'out_of_stock'
     if (product.stock_quantity <= product.min_stock / 2) return 'critical'
     if (product.stock_quantity <= product.min_stock) return 'low'
-    return 'low' // Fallback
+    return 'normal'
 }
 
 // ============================================================================

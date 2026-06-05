@@ -1,18 +1,25 @@
 'use client';
 
-import { createClient } from '@/lib/supabase';
 import api from '@/lib/api';
 import { Product, Category } from '@/types';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tipos públicos
+// ─────────────────────────────────────────────────────────────────────────────
 
 export interface ProductFilters {
   search?: string;
   categoryId?: string;
+  supplierId?: string;
+  /** Filtrar por stock bajo (usa min_stock real de cada producto) */
   lowStock?: boolean;
+  stockStatus?: 'in_stock' | 'out_of_stock' | 'low_stock' | 'critical';
   minPrice?: number;
   maxPrice?: number;
   minStock?: number;
   maxStock?: number;
-  sortBy?: 'name' | 'price' | 'stock' | 'created_at' | 'category';
+  isActive?: boolean;
+  sortBy?: 'name' | 'sku' | 'sale_price' | 'stock_quantity' | 'created_at' | 'updated_at';
   sortOrder?: 'asc' | 'desc';
 }
 
@@ -22,7 +29,11 @@ export interface PaginatedProductsResponse {
     page: number;
     limit: number;
     total: number;
+    /** Alias de total para compatibilidad */
     pages: number;
+    totalPages: number;
+    hasMore: boolean;
+    hasPrev: boolean;
   };
 }
 
@@ -32,300 +43,183 @@ export interface ProductsServiceOptions {
   filters?: ProductFilters;
 }
 
-function toStringOrUndefined(value: unknown): string | undefined {
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers de normalización (usados en getProductById y CRUD responses)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function toStr(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
-function toNumberOrUndefined(value: unknown): number | undefined {
+function toNum(value: unknown): number | undefined {
   if (value === null || value === undefined || value === '') return undefined;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
 }
 
-function toBooleanOrUndefined(value: unknown): boolean | undefined {
+function toBool(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
 }
 
-function toIsoString(value: unknown): string | undefined {
-  if (typeof value === 'string') {
-    return value;
-  }
-
+function toIso(value: unknown): string | undefined {
+  if (typeof value === 'string') return value;
   if (typeof value === 'number' || value instanceof Date) {
     return new Date(value).toISOString();
   }
-
   return undefined;
 }
 
 function normalizeImages(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) {
-    const single = toStringOrUndefined(value);
-    return single ? [single] : undefined;
+    const s = toStr(value);
+    return s ? [s] : undefined;
   }
-
-  const normalized = value
-    .map((image) => {
-      if (typeof image === 'string') {
-        return image;
+  const result = value
+    .map((item) => {
+      if (typeof item === 'string') return item;
+      if (item && typeof item === 'object' && 'url' in item) {
+        return toStr((item as { url?: unknown }).url);
       }
-
-      if (image && typeof image === 'object' && 'url' in image) {
-        return toStringOrUndefined((image as { url?: unknown }).url);
-      }
-
       return undefined;
     })
-    .filter((image): image is string => typeof image === 'string' && image.length > 0);
-
-  return normalized.length > 0 ? normalized : undefined;
+    .filter((x): x is string => typeof x === 'string' && x.length > 0);
+  return result.length > 0 ? result : undefined;
 }
 
+function normalizeProduct(raw: Record<string, unknown>): Product {
+  const cat = raw.category && typeof raw.category === 'object'
+    ? (raw.category as Record<string, unknown>)
+    : null;
+  const sup = raw.supplier && typeof raw.supplier === 'object'
+    ? (raw.supplier as Record<string, unknown>)
+    : null;
+
+  return {
+    id: String(raw.id),
+    name: String(raw.name || ''),
+    sku: String(raw.sku || raw.code || ''),
+    description: toStr(raw.description),
+    cost_price: Number(raw.cost_price ?? raw.costPrice ?? 0),
+    sale_price: Number(raw.sale_price ?? raw.salePrice ?? raw.price ?? 0),
+    wholesale_price: toNum(raw.wholesale_price ?? raw.wholesalePrice),
+    min_wholesale_quantity: toNum(raw.min_wholesale_quantity),
+    stock_quantity: Number(raw.stock_quantity ?? raw.stockQuantity ?? raw.stock ?? 0),
+    min_stock: Number(raw.min_stock ?? raw.minStock ?? 0),
+    max_stock: toNum(raw.max_stock),
+    category_id: String(raw.category_id ?? raw.categoryId ?? ''),
+    supplier_id: toStr(raw.supplier_id),
+    barcode: toStr(raw.barcode),
+    image_url: toStr(raw.image_url ?? raw.image),
+    is_active: Boolean(raw.is_active ?? raw.isActive ?? true),
+    regular_price: toNum(raw.regular_price),
+    discount_percentage: toNum(raw.discount_percentage),
+    rating: toNum(raw.rating),
+    images: normalizeImages(raw.images),
+    iva_rate: toNum(raw.iva_rate),
+    iva_included: toBool(raw.iva_included),
+    brand: toStr(raw.brand),
+    shade: toStr(raw.shade),
+    skin_type: toStr(raw.skin_type),
+    ingredients: toStr(raw.ingredients),
+    volume: toStr(raw.volume),
+    spf: toNum(raw.spf),
+    finish: toStr(raw.finish),
+    coverage: toStr(raw.coverage),
+    waterproof: toBool(raw.waterproof),
+    vegan: toBool(raw.vegan),
+    cruelty_free: toBool(raw.cruelty_free),
+    expiration_date: toStr(raw.expiration_date),
+    created_at: toIso(raw.created_at) ?? toIso(raw.createdAt) ?? new Date().toISOString(),
+    updated_at: toIso(raw.updated_at) ?? toIso(raw.updatedAt) ?? new Date().toISOString(),
+    category: cat
+      ? ({ id: String(cat.id), name: String(cat.name || '') } as Category)
+      : undefined,
+    supplier: sup
+      ? ({
+          id: String(sup.id),
+          name: String(sup.name || ''),
+        } as Product['supplier'])
+      : undefined,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Servicio
+// ─────────────────────────────────────────────────────────────────────────────
+
 class ProductService {
-  private supabase = createClient();
-  // Cache removido - ahora lo maneja useCache de forma centralizada
-
-  // Batch loading para múltiples productos por ID
-  private batchLoadQueue: string[] = [];
-  private batchLoadTimer: NodeJS.Timeout | null = null;
-  private batchLoadPromises = new Map<string, Promise<Product | null>>();
-
-  private normalizeProduct(raw: Record<string, unknown>): Product {
-    const categoryRecord = raw.category && typeof raw.category === 'object'
-      ? raw.category as Record<string, unknown>
-      : null;
-    const supplierRecord = raw.supplier && typeof raw.supplier === 'object'
-      ? raw.supplier as Record<string, unknown>
-      : null;
-
-    return {
-      id: String(raw.id),
-      name: String(raw.name || ''),
-      sku: String(raw.sku || raw.code || ''),
-      description: toStringOrUndefined(raw.description),
-      cost_price: Number(raw.cost_price ?? raw.costPrice ?? 0),
-      sale_price: Number(raw.sale_price ?? raw.salePrice ?? raw.price ?? 0),
-      wholesale_price: toNumberOrUndefined(raw.wholesale_price ?? raw.wholesalePrice),
-      min_wholesale_quantity: toNumberOrUndefined(raw.min_wholesale_quantity),
-      stock_quantity: Number(raw.stock_quantity ?? raw.stockQuantity ?? raw.stock ?? 0),
-      min_stock: Number(raw.min_stock ?? raw.minStock ?? 0),
-      max_stock: toNumberOrUndefined(raw.max_stock),
-      category_id: String(raw.category_id ?? raw.categoryId ?? ''),
-      supplier_id: toStringOrUndefined(raw.supplier_id),
-      barcode: toStringOrUndefined(raw.barcode),
-      image_url: toStringOrUndefined(raw.image_url ?? raw.image),
-      is_active: Boolean(raw.is_active ?? raw.isActive ?? true),
-      regular_price: toNumberOrUndefined(raw.regular_price),
-      discount_percentage: toNumberOrUndefined(raw.discount_percentage),
-      rating: toNumberOrUndefined(raw.rating),
-      images: normalizeImages(raw.images),
-      iva_rate: toNumberOrUndefined(raw.iva_rate),
-      iva_included: toBooleanOrUndefined(raw.iva_included),
-      brand: toStringOrUndefined(raw.brand),
-      shade: toStringOrUndefined(raw.shade),
-      skin_type: toStringOrUndefined(raw.skin_type),
-      ingredients: toStringOrUndefined(raw.ingredients),
-      volume: toStringOrUndefined(raw.volume),
-      spf: toNumberOrUndefined(raw.spf),
-      finish: toStringOrUndefined(raw.finish),
-      coverage: toStringOrUndefined(raw.coverage),
-      waterproof: toBooleanOrUndefined(raw.waterproof),
-      vegan: toBooleanOrUndefined(raw.vegan),
-      cruelty_free: toBooleanOrUndefined(raw.cruelty_free),
-      expiration_date: toStringOrUndefined(raw.expiration_date),
-      created_at: toIsoString(raw.created_at) ?? toIsoString(raw.createdAt) ?? new Date().toISOString(),
-      updated_at: toIsoString(raw.updated_at) ?? toIsoString(raw.updatedAt) ?? new Date().toISOString(),
-      category: categoryRecord
-        ? {
-            id: String(categoryRecord.id),
-            name: String(categoryRecord.name || ''),
-          } as Category
-        : undefined,
-      supplier: supplierRecord
-        ? {
-            id: String(supplierRecord.id),
-            name: String(supplierRecord.name || ''),
-          } as Product['supplier']
-        : undefined,
-    };
-  }
-
   /**
-   * Optimized getProducts - Supabase first with intelligent fallback
+   * Lista paginada de productos.
+   * Usa /api/products/list como única fuente de verdad.
+   * Este endpoint aplica filtros server-side incluyendo min_stock real por producto.
    */
   async getProducts(options: ProductsServiceOptions = {}): Promise<PaginatedProductsResponse> {
-    try {
-      return await this.getProductsFromSupabase(options);
-    } catch (error) {
-      console.warn('Supabase fetch failed, falling back to API:', error);
-      return await this.getProductsFromAPI(options);
-    }
-  }
-
-  // Helper para obtener el ID de la organización seleccionada
-  private getOrganizationId(): string | null {
-    if (typeof window === 'undefined') return null;
-    try {
-      const raw = window.localStorage.getItem('selected_organization');
-      if (!raw) return null;
-      
-      // Intentar parsear si es JSON
-      if (raw.startsWith('{')) {
-        const parsed = JSON.parse(raw);
-        return parsed?.id || parsed?.organization_id || null;
-      }
-      return raw; // Es un string directo (ID)
-    } catch (e) {
-      console.warn('Error reading selected_organization:', e);
-      return null;
-    }
-  }
-
-  /**
-   * Optimized Supabase query with minimal data selection
-   */
-  async getProductsFromSupabase(options: ProductsServiceOptions = {}): Promise<PaginatedProductsResponse> {
     const page = options.page || 1;
     const limit = options.limit || 20;
-    const from = (page - 1) * limit;
-    const to = from + limit - 1;
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: String(limit),
+    });
 
-    const orgId = this.getOrganizationId();
-    if (!orgId) {
-      console.warn('No organization selected, returning empty list');
-      return {
-        products: [],
-        pagination: { page, limit, total: 0, pages: 0 }
+    const f = options.filters || {};
+    if (f.search?.trim()) params.append('search', f.search.trim());
+    if (f.categoryId) params.append('categoryId', f.categoryId);
+    if (f.supplierId) params.append('supplierId', f.supplierId);
+    if (f.isActive !== undefined) params.append('isActive', String(f.isActive));
+    if (f.minPrice !== undefined) params.append('minPrice', String(f.minPrice));
+    if (f.maxPrice !== undefined) params.append('maxPrice', String(f.maxPrice));
+    if (f.minStock !== undefined) params.append('minStock', String(f.minStock));
+    if (f.maxStock !== undefined) params.append('maxStock', String(f.maxStock));
+    if (f.sortBy) params.append('sortBy', f.sortBy);
+    if (f.sortOrder) params.append('sortOrder', f.sortOrder);
+
+    // lowStock se mapea a stockStatus=low_stock para el endpoint unificado
+    if (f.lowStock) params.append('stockStatus', 'low_stock');
+    else if (f.stockStatus) params.append('stockStatus', f.stockStatus);
+
+    const response = await api.get<{
+      products: Record<string, unknown>[];
+      pagination: {
+        page: number;
+        limit: number;
+        total: number;
+        totalPages: number;
+        hasMore: boolean;
+        hasPrev: boolean;
       };
-    }
+    }>(`/products/list?${params.toString()}`);
 
-    // Optimized select - solo campos necesarios para reducir payload
-    let query = this.supabase
-      .from('products')
-      .select(`
-        id, name, sku, description, cost_price, sale_price, 
-        stock_quantity, min_stock, category_id, supplier_id,
-        barcode, image_url, is_active, created_at, updated_at,
-        category:categories!products_category_id_fkey(id, name),
-        supplier:suppliers!products_supplier_id_fkey(id, name)
-      `, { count: 'exact' })
-      .eq('organization_id', orgId);
-
-    // Apply filters
-    if (options.filters) {
-      const { filters } = options;
-
-      if (filters.search) {
-        const searchTerm = filters.search.trim();
-        query = query.or(`name.ilike.%${searchTerm}%,sku.ilike.%${searchTerm}%,barcode.ilike.%${searchTerm}%`);
-      }
-
-      if (filters.categoryId) {
-        query = query.eq('category_id', filters.categoryId);
-      }
-
-      if (filters.lowStock) {
-        // Low stock: stock_quantity <= min_stock
-        query = query.lte('stock_quantity', 10);
-      }
-
-      if (filters.minPrice !== undefined) {
-        query = query.gte('sale_price', filters.minPrice);
-      }
-
-      if (filters.maxPrice !== undefined) {
-        query = query.lte('sale_price', filters.maxPrice);
-      }
-
-      if (filters.minStock !== undefined) {
-        query = query.gte('stock_quantity', filters.minStock);
-      }
-
-      if (filters.maxStock !== undefined) {
-        query = query.lte('stock_quantity', filters.maxStock);
-      }
-
-      // Sorting
-      if (filters.sortBy) {
-        const ascending = filters.sortOrder === 'asc';
-        query = query.order(filters.sortBy, { ascending });
-      } else {
-        query = query.order('updated_at', { ascending: false });
-      }
-    } else {
-      query = query.order('updated_at', { ascending: false });
-    }
-
-    // Apply pagination
-    query = query.range(from, to);
-
-    const { data, error, count } = await query;
-
-    if (error) {
-      throw error;
-    }
+    const data = response.data;
+    const products = (data?.products || []).map(normalizeProduct);
+    const pg = data?.pagination ?? { page, limit, total: 0, totalPages: 0, hasMore: false, hasPrev: false };
 
     return {
-      products: (data || []).map((p: Record<string, unknown>) => this.normalizeProduct(p)),
+      products,
       pagination: {
-        page,
-        limit,
-        total: count || 0,
-        pages: count ? Math.ceil(count / limit) : 0
-      }
+        page: pg.page,
+        limit: pg.limit,
+        total: pg.total,
+        pages: pg.totalPages,        // alias legacy
+        totalPages: pg.totalPages,
+        hasMore: pg.hasMore,
+        hasPrev: pg.hasPrev,
+      },
     };
   }
 
   /**
-   * Fallback API method (kept for compatibility)
+   * @deprecated Usar getProducts() que ahora usa /api/products/list directamente.
+   * Mantenido para compatibilidad con callers que aún llamen a este método.
    */
-  private async getProductsFromAPI(options: ProductsServiceOptions = {}): Promise<PaginatedProductsResponse> {
-    const params = new URLSearchParams();
-    params.append('page', (options.page || 1).toString());
-    params.append('limit', (options.limit || 20).toString());
-
-    if (options.filters) {
-      const { filters } = options;
-      if (filters.search) params.append('search', filters.search);
-      if (filters.categoryId) params.append('categoryId', filters.categoryId);
-      if (filters.lowStock) params.append('lowStock', 'true');
-    }
-
-    const response = await api.get(`/products?${params.toString()}`);
-
-    if (!response.data) {
-      throw new Error('Invalid response format');
-    }
-
-    return {
-      products: (response.data.products || []).map((p: Record<string, unknown>) => this.normalizeProduct(p)),
-      pagination: response.data.pagination || {
-        page: options.page || 1,
-        limit: options.limit || 20,
-        total: 0,
-        pages: 0
-      }
-    };
+  async getProductsFromSupabase(options: ProductsServiceOptions = {}): Promise<PaginatedProductsResponse> {
+    return this.getProducts(options);
   }
 
   async getProductById(id: string): Promise<Product> {
     try {
-      // Intentar primero con Supabase
-      const orgId = this.getOrganizationId();
-      if (orgId) {
-        const { data, error } = await this.supabase
-          .from('products')
-          .select('*')
-          .eq('id', id)
-          .eq('organization_id', orgId)
-          .single();
-        
-        if (data && !error) return this.normalizeProduct(data);
-      }
-
       const response = await api.get(`/products/${id}`);
-      const raw = response.data.product || response.data;
-      return this.normalizeProduct(raw);
+      const raw = response.data?.product || response.data;
+      return normalizeProduct(raw);
     } catch (error) {
       console.error('Error fetching product:', error);
       throw error;
@@ -335,8 +229,7 @@ class ProductService {
   async createProduct(productData: Partial<Product>): Promise<Product> {
     try {
       const response = await api.post('/products', productData);
-      // Cache invalidation is now handled by useCache hook in components
-      return this.normalizeProduct(response.data.product || response.data);
+      return normalizeProduct(response.data?.product || response.data);
     } catch (error) {
       console.error('Error creating product:', error);
       throw error;
@@ -346,8 +239,7 @@ class ProductService {
   async updateProduct(id: string, productData: Partial<Product>): Promise<Product> {
     try {
       const response = await api.put(`/products/${id}`, productData);
-      // Cache invalidation is now handled by useCache hook in components
-      return this.normalizeProduct(response.data.product || response.data);
+      return normalizeProduct(response.data?.product || response.data);
     } catch (error) {
       console.error('Error updating product:', error);
       throw error;
@@ -357,7 +249,6 @@ class ProductService {
   async deleteProduct(id: string): Promise<void> {
     try {
       await api.delete(`/products/${id}`);
-      // Cache invalidation is now handled by useCache hook in components
     } catch (error) {
       console.error('Error deleting product:', error);
       throw error;
@@ -366,85 +257,61 @@ class ProductService {
 
   async getCategories(): Promise<Category[]> {
     try {
-      const orgId = this.getOrganizationId();
-      if (orgId) {
-        const { data, error } = await this.supabase
-          .from('categories')
-          .select('*')
-          .eq('organization_id', orgId);
-        
-        if (data && !error) return data as Category[];
-      }
-
-      const response = await api.get('/categories/public');
-      return response.data.categories || response.data || [];
+      const response = await api.get('/products/categories');
+      const payload = response.data;
+      return (
+        (Array.isArray(payload?.categories) ? payload.categories : []) ||
+        (Array.isArray(payload) ? payload : [])
+      );
     } catch (error) {
       console.error('Error fetching categories:', error);
       throw error;
     }
   }
 
-  async getLowStockProducts(threshold: number = 10): Promise<Product[]> {
+  /**
+   * Productos con stock bajo. Usa /api/products/list con stockStatus=low_stock
+   * para que el filtro use min_stock real de cada producto (no threshold hardcodeado).
+   */
+  async getLowStockProducts(threshold?: number): Promise<Product[]> {
     try {
-      const orgId = this.getOrganizationId();
-      if (orgId) {
-        const { data, error } = await this.supabase
-          .from('products')
-          .select('*')
-          .eq('organization_id', orgId)
-          .lte('stock_quantity', threshold);
-        
-        if (data && !error) return data.map((p: Record<string, unknown>) => this.normalizeProduct(p));
-      }
-
-      const response = await api.get(`/products/low-stock?threshold=${threshold}`);
-      return response.data.products || response.data || [];
+      const result = await this.getProducts({
+        filters: { stockStatus: 'low_stock' },
+        limit: 200,
+      });
+      return result.products;
     } catch (error) {
       console.error('Error fetching low stock products:', error);
       throw error;
     }
   }
 
-  async searchProducts(query: string, limit: number = 10): Promise<Product[]> {
+  async searchProducts(query: string, limit = 10): Promise<Product[]> {
     try {
-      const orgId = this.getOrganizationId();
-      if (orgId) {
-        const { data, error } = await this.supabase
-          .from('products')
-          .select('*')
-          .eq('organization_id', orgId)
-          .ilike('name', `%${query}%`)
-          .limit(limit);
-        
-        if (data && !error) return data.map((p: Record<string, unknown>) => this.normalizeProduct(p));
-      }
-
-      const response = await api.get(`/products?search=${encodeURIComponent(query)}&limit=${limit}`);
-      return response.data.products || [];
+      const result = await this.getProducts({
+        filters: { search: query },
+        limit,
+      });
+      return result.products;
     } catch (error) {
       console.error('Error searching products:', error);
       throw error;
     }
   }
 
-
-  // Método para prefetch de datos (optimización de carga)
+  /** Prefetch silencioso de la siguiente página. */
   async prefetchNextPage(currentOptions: ProductsServiceOptions): Promise<void> {
-    const nextPageOptions = {
-      ...currentOptions,
-      page: (currentOptions.page || 1) + 1
-    };
-
     try {
-      await this.getProducts(nextPageOptions);
-    } catch (error) {
-      // Silenciar errores de prefetch
-      console.debug('Prefetch failed:', error);
+      await this.getProducts({
+        ...currentOptions,
+        page: (currentOptions.page || 1) + 1,
+      });
+    } catch {
+      // silencioso — el prefetch no debe interrumpir la UI
     }
-
   }
 }
 
-// Singleton instance
+// Singleton
 export const productService = new ProductService();
 export default productService;

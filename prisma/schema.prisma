@@ -188,8 +188,8 @@ model Category {
 model Product {
   id                 String              @id @default(cuid())
   name               String
-  sku                String              @unique
-  barcode            String?             @unique
+  sku                String
+  barcode            String?
   categoryId         String              @map("category_id")
   description        String?
   costPrice          Float               @map("cost_price")
@@ -227,6 +227,13 @@ model Product {
   rewards            Reward[]
   organization       Organization?       @relation(fields: [organizationId], references: [id])
 
+  // SKU y barcode únicos por organización (multi-tenant).
+  // Se eliminan los @unique individuales y se reemplazan por constraints compuestos.
+  @@unique([organizationId, sku])
+  @@unique([organizationId, barcode])
+  @@index([organizationId])
+  @@index([organizationId, isActive])
+  @@index([organizationId, categoryId])
   @@map("products")
 }
 
