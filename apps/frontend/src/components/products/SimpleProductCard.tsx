@@ -2,9 +2,16 @@
 
 import React, { memo, useState } from 'react';
 import Image from 'next/image';
-import { AlertTriangle, Edit, Eye, PackageCheck, PackageX, Tag, Trash2 } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
+import { Edit, Eye, MoreVertical, ShoppingCart, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { ProductImagePlaceholder } from '@/components/products/ProductImagePlaceholder';
 import { cn } from '@/lib/utils';
 import type { Product } from '@/types';
@@ -15,19 +22,19 @@ interface SimpleProductCardProps {
   onDelete?: (id: string) => void;
   onView?: (product: Product) => void;
   priority?: boolean;
+  isSelected?: boolean;
+  onSelect?: (id: string) => void;
 }
 
 function getImageUrl(product: Product) {
   if (product.image_url) return product.image_url;
+  if (!Array.isArray(product.images) || product.images.length === 0) return null;
+  const first = product.images[0];
+  return typeof first === 'string' ? first : (first as { url?: string })?.url || null;
+}
 
-  if (!Array.isArray(product.images) || product.images.length === 0) {
-    return null;
-  }
-
-  const firstImage = product.images[0];
-  return typeof firstImage === 'string'
-    ? firstImage
-    : (firstImage as { url?: string })?.url || null;
+function formatPrice(n: number) {
+  return `Gs ${n.toLocaleString('es-PY')}`;
 }
 
 export const SimpleProductCard = memo(function SimpleProductCard({
@@ -36,14 +43,15 @@ export const SimpleProductCard = memo(function SimpleProductCard({
   onDelete,
   onView,
   priority = false,
+  isSelected = false,
+  onSelect,
 }: SimpleProductCardProps) {
   const [imgError, setImgError] = useState(false);
-  const stock = Number(product.stock_quantity || 0);
+
+  const stock   = Number(product.stock_quantity || 0);
   const minStock = Number(product.min_stock || 5);
-  const isLowStock = stock <= minStock && stock > 0;
+  const isLowStock   = stock > 0 && stock <= minStock;
   const isOutOfStock = stock === 0;
-  const price = `Gs ${(product.sale_price || 0).toLocaleString('es-PY')}`;
-  const stockRatio = Math.min(100, Math.round((stock / Math.max(minStock * 2, 1)) * 100));
   const imageUrl = getImageUrl(product);
 
   const categoryName =
@@ -51,151 +59,194 @@ export const SimpleProductCard = memo(function SimpleProductCard({
       ? product.category.name
       : null;
 
-  const stockToneClass = isOutOfStock
-    ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/70 dark:bg-red-950/35 dark:text-red-300'
+  // Stock pill
+  const stockPillClass = isOutOfStock
+    ? 'bg-red-500/90 text-white'
     : isLowStock
-      ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/70 dark:bg-amber-950/35 dark:text-amber-300'
-      : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/70 dark:bg-emerald-950/35 dark:text-emerald-300';
+      ? 'bg-amber-400/90 text-amber-950'
+      : 'bg-emerald-500/90 text-white';
 
-  const stockBarClass = isOutOfStock
-    ? 'bg-red-500'
-    : isLowStock
-      ? 'bg-amber-500'
-      : 'bg-emerald-500';
-
-  const stockLabel = isOutOfStock ? 'Sin stock' : isLowStock ? 'Stock bajo' : 'Disponible';
-  const StockIcon = isOutOfStock ? PackageX : isLowStock ? AlertTriangle : PackageCheck;
+  const stockText = isOutOfStock
+    ? 'Sin stock'
+    : `${stock} uds${isLowStock ? ' ⚠' : ''}`;
 
   return (
-    <Card className="group relative flex h-full overflow-hidden border-border/70 bg-card shadow-sm transition-colors hover:border-primary/35 hover:shadow-md">
-      <div className="flex min-w-0 flex-1 flex-col">
-        <button
-          type="button"
-          onClick={(e) => { e.preventDefault(); onView?.(product); }}
-          className="relative block aspect-[4/3] w-full overflow-hidden bg-muted/40 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-          aria-label={`Ver detalles de ${product.name || 'producto'}`}
-        >
-          {imageUrl && !imgError ? (
-            <Image
-              src={imageUrl}
-              alt={product.name || 'Producto'}
-              fill
-              className="object-cover transition-transform duration-500 group-hover:scale-[1.03]"
-              onError={() => setImgError(true)}
-              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 20vw"
-              loading={priority ? undefined : 'lazy'}
-              priority={priority}
-            />
-          ) : (
-            <ProductImagePlaceholder productName={product.name} className="rounded-none border-0" compact />
-          )}
+    <div
+      className={cn(
+        'group relative flex flex-col overflow-hidden rounded-2xl border bg-card text-card-foreground shadow-sm',
+        'transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md',
+        isSelected
+          ? 'border-primary ring-2 ring-primary/30'
+          : 'border-border/60 hover:border-border',
+        !product.is_active && 'opacity-60',
+      )}
+    >
+      {/* ── Image ── */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => onView?.(product)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            onView?.(product);
+          }
+        }}
+        className="relative block aspect-square w-full overflow-hidden bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+        aria-label={`Ver ${product.name || 'producto'}`}
+      >
+        {imageUrl && !imgError ? (
+          <Image
+            src={imageUrl}
+            alt={product.name || 'Producto'}
+            fill
+            className="object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+            onError={() => setImgError(true)}
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+            loading={priority ? undefined : 'lazy'}
+            priority={priority}
+          />
+        ) : (
+          <ProductImagePlaceholder productName={product.name} className="rounded-none border-0" compact />
+        )}
 
-          <div className="absolute left-2 top-2 flex max-w-[calc(100%-1rem)] items-center gap-1.5">
-            <span
-              className={cn(
-                'inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold shadow-sm backdrop-blur-sm',
-                stockToneClass
-              )}
-            >
-              <StockIcon className="h-3 w-3" />
-              {stockLabel}
-            </span>
-            {!product.is_active && (
-              <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-600 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
-                Inactivo
-              </span>
+        {/* Gradient overlay bottom */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-black/50 to-transparent" />
+
+        {/* Stock pill — bottom left */}
+        <span className={cn(
+          'absolute bottom-2 left-2 rounded-full px-2 py-0.5 text-[10px] font-semibold backdrop-blur-sm',
+          stockPillClass,
+        )}>
+          {stockText}
+        </span>
+
+        {/* Inactivo badge */}
+        {!product.is_active && (
+          <span className="absolute bottom-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white/80">
+            Inactivo
+          </span>
+        )}
+
+        {/* Checkbox — top left, visible on hover or selected */}
+        {onSelect && (
+          <div
+            className={cn(
+              'absolute left-2 top-2 transition-opacity',
+              isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
             )}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            <Checkbox
+              checked={isSelected}
+              onCheckedChange={() => onSelect(product.id)}
+              aria-label={`Seleccionar ${product.name}`}
+              className="h-5 w-5 rounded-lg border-2 border-white/80 bg-black/30 data-[state=checked]:bg-primary data-[state=checked]:border-primary shadow-sm"
+            />
           </div>
-        </button>
+        )}
 
-        <CardContent className="flex flex-1 flex-col gap-3 p-3">
-          <div className="space-y-1.5">
-            <h3 className="min-h-[2.5rem] text-sm font-semibold leading-snug text-foreground line-clamp-2">
-              {product.name || 'Sin nombre'}
-            </h3>
-
-            <div className="flex items-center justify-between gap-2">
-              <p className="truncate text-lg font-bold tabular-nums text-foreground">
-                {price}
-              </p>
-              {product.sku && (
-                <span className="max-w-[96px] truncate rounded border border-border/70 bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-                  {product.sku}
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-              <span>Stock</span>
-              <span className="font-medium tabular-nums text-foreground">{stock} uds</span>
-            </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-              <div
-                className={cn('h-full rounded-full transition-all', stockBarClass)}
-                style={{ width: `${isOutOfStock ? 100 : Math.max(stockRatio, 8)}%` }}
-              />
-            </div>
-          </div>
-
-          <div className="mt-auto flex items-center justify-between gap-2 border-t border-border/50 pt-2">
-            <div className="min-w-0">
-              {categoryName ? (
-                <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                  <Tag className="h-3 w-3 shrink-0" />
-                  <span className="truncate">{categoryName}</span>
-                </div>
-              ) : (
-                <span className="text-[11px] text-muted-foreground">Sin categoria</span>
-              )}
-            </div>
-
-            <div className="flex shrink-0 items-center gap-1">
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8"
-                onClick={(e) => { e.preventDefault(); onView?.(product); }}
-                title="Ver detalles"
-              >
-                <Eye className="h-4 w-4" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8"
-                onClick={(e) => { e.preventDefault(); onEdit?.(product); }}
-                title="Editar"
-              >
-                <Edit className="h-4 w-4" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                onClick={(e) => { e.preventDefault(); onDelete?.(product.id); }}
-                title="Eliminar"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </CardContent>
+        {/* Quick-view button — center on hover */}
+        <div className={cn(
+          'absolute inset-0 flex items-center justify-center',
+          'opacity-0 transition-opacity group-hover:opacity-100',
+        )}>
+          <span className="rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-slate-800 shadow-md backdrop-blur-sm">
+            <Eye className="mr-1.5 inline h-3.5 w-3.5" />
+            Ver detalle
+          </span>
+        </div>
       </div>
-    </Card>
+
+      {/* ── Body ── */}
+      <div className="flex flex-1 flex-col gap-2 p-3">
+        {/* Name + menu */}
+        <div className="flex items-start justify-between gap-1">
+          <h3 className="line-clamp-2 min-h-[2.5rem] flex-1 text-sm font-semibold leading-snug text-foreground">
+            {product.name || 'Sin nombre'}
+          </h3>
+
+          {/* Menú de acciones */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-6 w-6 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <MoreVertical className="h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuItem onClick={() => onView?.(product)}>
+                <Eye className="mr-2 h-4 w-4" /> Ver detalle
+              </DropdownMenuItem>
+              {onEdit && (
+                <DropdownMenuItem onClick={() => onEdit(product)}>
+                  <Edit className="mr-2 h-4 w-4" /> Editar
+                </DropdownMenuItem>
+              )}
+              {onDelete && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onClick={() => onDelete(product.id)}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" /> Eliminar
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        {/* Price */}
+        <p className="text-base font-bold tabular-nums text-foreground">
+          {formatPrice(product.sale_price || 0)}
+        </p>
+
+        {/* Category + SKU row */}
+        <div className="flex items-center justify-between gap-1 text-[11px] text-muted-foreground">
+          {categoryName ? (
+            <span className="truncate rounded-md bg-muted/60 px-1.5 py-0.5">
+              {categoryName}
+            </span>
+          ) : (
+            <span className="italic">Sin categoría</span>
+          )}
+          {product.sku && (
+            <span className="shrink-0 font-mono">{product.sku}</span>
+          )}
+        </div>
+
+        {/* Edit button — full width, appears on hover */}
+        {onEdit && (
+          <Button
+            size="sm"
+            variant="secondary"
+            className="mt-1 w-full gap-1.5 opacity-0 transition-opacity group-hover:opacity-100 text-xs h-7"
+            onClick={() => onEdit(product)}
+          >
+            <ShoppingCart className="h-3.5 w-3.5" />
+            Editar producto
+          </Button>
+        )}
+      </div>
+    </div>
   );
-}, (prevProps, nextProps) => {
-  return (
-    prevProps.product.id === nextProps.product.id &&
-    prevProps.product.name === nextProps.product.name &&
-    prevProps.product.sku === nextProps.product.sku &&
-    prevProps.product.is_active === nextProps.product.is_active &&
-    prevProps.product.stock_quantity === nextProps.product.stock_quantity &&
-    prevProps.product.min_stock === nextProps.product.min_stock &&
-    prevProps.product.sale_price === nextProps.product.sale_price &&
-    JSON.stringify(prevProps.product.images) === JSON.stringify(nextProps.product.images) &&
-    prevProps.product.image_url === nextProps.product.image_url &&
-    prevProps.priority === nextProps.priority
-  );
-});
+}, (prev, next) =>
+  prev.product.id === next.product.id &&
+  prev.product.name === next.product.name &&
+  prev.product.sku === next.product.sku &&
+  prev.product.is_active === next.product.is_active &&
+  prev.product.stock_quantity === next.product.stock_quantity &&
+  prev.product.min_stock === next.product.min_stock &&
+  prev.product.sale_price === next.product.sale_price &&
+  prev.product.image_url === next.product.image_url &&
+  JSON.stringify(prev.product.images) === JSON.stringify(next.product.images) &&
+  prev.priority === next.priority &&
+  prev.isSelected === next.isSelected
+);

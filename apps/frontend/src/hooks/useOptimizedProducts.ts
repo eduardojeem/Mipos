@@ -58,7 +58,7 @@ function normalizeFilters(filters: ProductFilters) {
     limit: filters.limit || 25,
     sortBy: filters.sortBy || 'updated_at',
     sortOrder: filters.sortOrder || ('desc' as const),
-    isActive: typeof filters.isActive === 'boolean' ? filters.isActive : true,
+    isActive: typeof filters.isActive === 'boolean' ? filters.isActive : undefined,
   };
 }
 
@@ -116,7 +116,7 @@ export function useOptimizedProducts(filters: ProductFilters = {}): UseOptimized
   const totalPages = data?.totalPages || 1;
 
   const loadMore = useCallback(async () => {
-    console.warn('loadMore should be handled by incrementing the page from the parent component');
+    // Pagination is handled by page increments from the parent — loadMore is unused.
   }, []);
 
   const refetch = useCallback(async () => {
@@ -146,7 +146,7 @@ export function useOptimizedProducts(filters: ProductFilters = {}): UseOptimized
 }
 
 export function useProductStats(filters: Pick<ProductFilters, 'isActive'> = {}) {
-  const normalizedStatus = typeof filters.isActive === 'boolean' ? filters.isActive : true;
+  const normalizedStatus = typeof filters.isActive === 'boolean' ? filters.isActive : undefined;
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['products-summary', normalizedStatus],

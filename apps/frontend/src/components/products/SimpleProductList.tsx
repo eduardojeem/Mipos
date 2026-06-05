@@ -12,6 +12,8 @@ interface SimpleProductListProps {
   onDelete?: (id: string) => void;
   onView?: (product: Product) => void;
   loading?: boolean;
+  selectedIds?: Set<string>;
+  onSelectProduct?: (id: string) => void;
 }
 
 const ProductSkeltonGrid = memo(function ProductSkeletonGrid() {
@@ -37,6 +39,8 @@ export const SimpleProductList = memo(function SimpleProductList({
   onDelete,
   onView,
   loading = false,
+  selectedIds,
+  onSelectProduct,
 }: SimpleProductListProps) {
   if (loading) {
     return <ProductSkeltonGrid />;
@@ -55,7 +59,7 @@ export const SimpleProductList = memo(function SimpleProductList({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+    <div className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
       {products.map((product, index) => (
         <SimpleProductCard
           key={product.id}
@@ -63,7 +67,9 @@ export const SimpleProductList = memo(function SimpleProductList({
           onEdit={onEdit}
           onDelete={onDelete}
           onView={onView}
-          priority={index < 6}
+          priority={index < 8}
+          isSelected={selectedIds?.has(product.id)}
+          onSelect={onSelectProduct}
         />
       ))}
     </div>

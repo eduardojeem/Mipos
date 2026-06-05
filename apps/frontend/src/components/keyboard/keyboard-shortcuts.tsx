@@ -76,7 +76,7 @@ const defaultShortcuts: KeyboardShortcut[] = [
     keys: ['Ctrl', 'I'],
     description: 'Gestionar Inventario',
     category: 'navigation',
-    action: () => window.location.href = '/dashboard/products?tab=inventory',
+    action: () => window.location.href = '/dashboard/products',
     global: true
   },
   {

@@ -13,10 +13,24 @@ function normalizeAction(action?: string | null) {
   return String(action || '').trim().toLowerCase();
 }
 
+function permissionNameMatches(permissionName: string | undefined | null, allowedActions: Set<string>) {
+  const normalized = String(permissionName || '').trim().toLowerCase().replace(/:/g, '.');
+  if (!normalized.startsWith('products.')) {
+    return false;
+  }
+
+  const action = normalized.slice('products.'.length);
+  return allowedActions.has(normalizeAction(action));
+}
+
 function isProductPermission(
-  permission: Pick<Permission, 'resource' | 'action'>,
+  permission: Pick<Permission, 'resource' | 'action'> & Partial<Pick<Permission, 'name'>>,
   allowedActions: Set<string>
 ) {
+  if (permissionNameMatches(permission.name, allowedActions)) {
+    return true;
+  }
+
   return (
     String(permission.resource || '').trim().toLowerCase() === 'products' &&
     allowedActions.has(normalizeAction(permission.action))
@@ -31,7 +45,7 @@ function hasAdminProductRole(roles: Array<Pick<Role, 'name'> | string>) {
 }
 
 function canManageProducts(options: {
-  permissions?: Array<Pick<Permission, 'resource' | 'action'>>;
+  permissions?: Array<Pick<Permission, 'resource' | 'action'> & Partial<Pick<Permission, 'name'>>>;
   roles?: Array<Pick<Role, 'name'> | string>;
   hasPermission?: (resource: string, action: string) => boolean;
 }, actions: Set<string>) {
@@ -51,7 +65,7 @@ function canManageProducts(options: {
 }
 
 export function canCreateProducts(options: {
-  permissions?: Array<Pick<Permission, 'resource' | 'action'>>;
+  permissions?: Array<Pick<Permission, 'resource' | 'action'> & Partial<Pick<Permission, 'name'>>>;
   roles?: Array<Pick<Role, 'name'> | string>;
   hasPermission?: (resource: string, action: string) => boolean;
 }) {
@@ -59,7 +73,7 @@ export function canCreateProducts(options: {
 }
 
 export function canEditProducts(options: {
-  permissions?: Array<Pick<Permission, 'resource' | 'action'>>;
+  permissions?: Array<Pick<Permission, 'resource' | 'action'> & Partial<Pick<Permission, 'name'>>>;
   roles?: Array<Pick<Role, 'name'> | string>;
   hasPermission?: (resource: string, action: string) => boolean;
 }) {
@@ -67,7 +81,7 @@ export function canEditProducts(options: {
 }
 
 export function canDeleteProducts(options: {
-  permissions?: Array<Pick<Permission, 'resource' | 'action'>>;
+  permissions?: Array<Pick<Permission, 'resource' | 'action'> & Partial<Pick<Permission, 'name'>>>;
   roles?: Array<Pick<Role, 'name'> | string>;
   hasPermission?: (resource: string, action: string) => boolean;
 }) {

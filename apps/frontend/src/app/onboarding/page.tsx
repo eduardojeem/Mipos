@@ -269,10 +269,12 @@ function mergeDraftIntoBase(base: FormState, draft: Partial<FormState> | null): 
   if (!draft) return base;
   const next: FormState = { ...base };
   (Object.keys(next) as Array<keyof FormState>).forEach((key) => {
+    if (key === 'size') return; // 'size' es CompanySize, se maneja por separado abajo
     const draftValue = draft[key];
     if (typeof draftValue !== 'string') return;
-    if (next[key].trim().length > 0) return;
-    next[key] = draftValue;
+    const current = next[key] as string;
+    if (current.trim().length > 0) return;
+    (next as unknown as Record<string, string>)[key] = draftValue;
   });
   if (draft.size && base.size === 'micro' && draft.size !== 'micro') {
     next.size = draft.size as CompanySize;

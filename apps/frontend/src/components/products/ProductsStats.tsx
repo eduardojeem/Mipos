@@ -1,9 +1,9 @@
 'use client';
 
 import React, { memo, useMemo } from 'react';
-import { Package, AlertTriangle, DollarSign } from 'lucide-react';
+import { Package, AlertTriangle, TrendingDown, DollarSign } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { DashboardStatCard } from '@/components/dashboard/shared/DashboardStatCard';
+import { cn } from '@/lib/utils';
 import type { Product } from '@/types';
 
 interface ProductsStatsProps {
@@ -18,15 +18,30 @@ interface ProductsStatsProps {
   };
 }
 
-const StatsSkeleton = memo(function StatsSkeleton() {
+interface StatPillProps {
+  icon: React.ElementType;
+  label: string;
+  value: string | number;
+  tone?: 'default' | 'warning' | 'danger' | 'success' | 'info';
+}
+
+function StatPill({ icon: Icon, label, value, tone = 'default' }: StatPillProps) {
+  const toneClass = {
+    default: 'bg-muted/60 text-foreground',
+    warning: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400',
+    danger:  'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400',
+    success: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400',
+    info:    'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400',
+  }[tone];
+
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-      {Array.from({ length: 4 }).map((_, i) => (
-        <Skeleton key={i} className="h-32 w-full rounded-2xl" />
-      ))}
+    <div className={cn('flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium', toneClass)}>
+      <Icon className="h-3.5 w-3.5 shrink-0" />
+      <span className="hidden sm:inline text-[11px] opacity-70">{label}</span>
+      <span className="font-semibold">{value}</span>
     </div>
   );
-});
+}
 
 export const ProductsStats = memo(function ProductsStats({
   products,
@@ -34,106 +49,77 @@ export const ProductsStats = memo(function ProductsStats({
   loading = false,
   summary,
 }: ProductsStatsProps) {
-  const fallbackStats = useMemo(() => {
-    if (loading || (!products && !total)) {
-      return {
-        totalProducts: 0,
-        lowStockCount: 0,
-        outOfStockCount: 0,
-        totalValue: 0,
-        averagePrice: 0,
-        lowStockPercentage: 0,
-        outOfStockPercentage: 0,
-      };
-    }
+  const stats = useMemo(() => {
+    const base = summary ?? null;
 
-    const totalProducts = total || products.length;
+    const totalProducts = base?.totalProducts ?? total ?? products.length;
 
-    const lowStockProducts = products.filter((product) => {
-      const stock = product.stock_quantity || 0;
-      const minStock = product.min_stock || 5;
-      return stock > 0 && stock <= minStock;
-    });
+    const lowStock = base?.lowStockProducts ??
+      products.filter((p) => {
+        const s = p.stock_quantity || 0;
+        return s > 0 && s <= (p.min_stock || 5);
+      }).length;
 
-    const outOfStockProducts = products.filter((product) =>
-      (product.stock_quantity || 0) === 0
-    );
+    const outOfStock = base?.outOfStockProducts ??
+      products.filter((p) => (p.stock_quantity || 0) === 0).length;
 
-    const totalValue = products.reduce((sum, product) => {
-      const stock = product.stock_quantity || 0;
-      const price = product.cost_price || product.sale_price || 0;
-      return sum + stock * price;
-    }, 0);
+    const totalValue = base?.totalValue ??
+      products.reduce((sum, p) => sum + (p.stock_quantity || 0) * (p.cost_price || 0), 0);
 
-    const averagePrice = products.length > 0
-      ? products.reduce((sum, product) => sum + (product.sale_price || 0), 0) / products.length
+    const avgPrice = products.length > 0
+      ? products.reduce((sum, p) => sum + (p.sale_price || 0), 0) / products.length
       : 0;
 
-    return {
-      totalProducts,
-      lowStockCount: lowStockProducts.length,
-      outOfStockCount: outOfStockProducts.length,
-      totalValue,
-      averagePrice,
-      lowStockPercentage: totalProducts > 0 ? (lowStockProducts.length / totalProducts) * 100 : 0,
-      outOfStockPercentage: totalProducts > 0 ? (outOfStockProducts.length / totalProducts) * 100 : 0,
-    };
-  }, [loading, products, total]);
-
-  const resolvedStats = summary ? {
-    totalProducts: summary.totalProducts,
-    lowStockCount: summary.lowStockProducts,
-    outOfStockCount: summary.outOfStockProducts,
-    totalValue: summary.totalValue,
-    averagePrice: fallbackStats.averagePrice,
-    lowStockPercentage: summary.totalProducts > 0
-      ? (summary.lowStockProducts / summary.totalProducts) * 100
-      : 0,
-    outOfStockPercentage: summary.totalProducts > 0
-      ? (summary.outOfStockProducts / summary.totalProducts) * 100
-      : 0,
-  } : fallbackStats;
+    return { totalProducts, lowStock, outOfStock, totalValue, avgPrice };
+  }, [products, total, summary]);
 
   if (loading) {
-    return <StatsSkeleton />;
+    return (
+      <div className="flex flex-wrap gap-2">
+        {[80, 60, 60, 90].map((w, i) => (
+          <Skeleton key={i} className={`h-7 rounded-lg`} style={{ width: w }} />
+        ))}
+      </div>
+    );
   }
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-      <DashboardStatCard
-        title="Total Productos"
-        value={resolvedStats.totalProducts.toLocaleString()}
-        description={`${products.length || 0} cargados en vista`}
+    <div className="flex flex-wrap items-center gap-2">
+      <StatPill
         icon={Package}
-        accent="from-violet-500 to-fuchsia-500"
-        delay={0.1}
+        label="Productos"
+        value={stats.totalProducts.toLocaleString()}
+        tone="default"
       />
-
-      <DashboardStatCard
-        title="Stock Bajo"
-        value={resolvedStats.lowStockCount}
-        description={`${resolvedStats.lowStockPercentage.toFixed(1)}% requiere reposición`}
-        icon={AlertTriangle}
-        accent={resolvedStats.lowStockCount > 0 ? 'from-amber-500 to-orange-500' : 'from-emerald-500 to-teal-500'}
-        delay={0.2}
-      />
-
-      <DashboardStatCard
-        title="Sin Stock"
-        value={resolvedStats.outOfStockCount}
-        description={`${resolvedStats.outOfStockPercentage.toFixed(1)}% agotado totalmente`}
-        icon={AlertTriangle}
-        accent={resolvedStats.outOfStockCount > 0 ? 'from-red-500 to-pink-500' : 'from-emerald-500 to-teal-500'}
-        delay={0.3}
-      />
-
-      <DashboardStatCard
-        title="Valor Total Estimado"
-        value={`Gs ${resolvedStats.totalValue.toLocaleString('es-PY')}`}
-        description={`Precio promedio visible: Gs ${Math.round(resolvedStats.averagePrice).toLocaleString('es-PY')}`}
+      {stats.outOfStock > 0 && (
+        <StatPill
+          icon={AlertTriangle}
+          label="Sin stock"
+          value={stats.outOfStock}
+          tone="danger"
+        />
+      )}
+      {stats.lowStock > 0 && (
+        <StatPill
+          icon={TrendingDown}
+          label="Stock bajo"
+          value={stats.lowStock}
+          tone="warning"
+        />
+      )}
+      {stats.outOfStock === 0 && stats.lowStock === 0 && (
+        <StatPill
+          icon={Package}
+          label="Stock"
+          value="OK"
+          tone="success"
+        />
+      )}
+      <StatPill
         icon={DollarSign}
-        accent="from-blue-500 to-cyan-500"
-        delay={0.4}
+        label="Valor"
+        value={`Gs ${Math.round(stats.totalValue / 1_000_000)}M`}
+        tone="info"
       />
     </div>
   );

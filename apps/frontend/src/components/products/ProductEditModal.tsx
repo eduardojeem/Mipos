@@ -18,6 +18,8 @@ import {
   CheckCircle2,
   ImageOff,
   Trash2,
+  Sparkles,
+  ChevronDown,
 } from 'lucide-react';
 import {
   Dialog,
@@ -40,6 +42,7 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { toast } from '@/lib/toast';
 import { createClient } from '@/lib/supabase/client';
 import { cn } from '@/lib/utils';
@@ -75,6 +78,22 @@ interface ProductFormData {
   barcode?: string;
   is_active: boolean;
   image_url?: string;
+  // IVA
+  iva_included?: boolean;
+  iva_rate?: number;
+  // Cosméticos
+  brand?: string;
+  shade?: string;
+  skin_type?: string;
+  ingredients?: string;
+  volume?: string;
+  spf?: number;
+  finish?: string;
+  coverage?: string;
+  waterproof?: boolean;
+  vegan?: boolean;
+  cruelty_free?: boolean;
+  expiration_date?: string;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -354,9 +373,14 @@ export const ProductEditModal = memo(function ProductEditModal({
   const salePrice = Number(watch('sale_price')) || 0;
   const offerPrice = Number(watch('offer_price')) || 0;
   const wholesalePrice = Number(watch('wholesale_price')) || 0;
+  const ivaIncluded = watch('iva_included');
+  const isVegan = watch('vegan');
+  const isCrueltyFree = watch('cruelty_free');
+  const isWaterproof = watch('waterproof');
 
   // UI state
   const [loading, setLoading] = useState(false);
+  const [cosmeticsOpen, setCosmeticsOpen] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
   const [categories, setCategories] = useState<Array<{ id: string; name: string }>>(propCategories);
   const [suppliers, setSuppliers] = useState<Array<{ id: string; name: string }>>(propSuppliers);
@@ -457,6 +481,20 @@ export const ProductEditModal = memo(function ProductEditModal({
         barcode: product.barcode || '',
         is_active: product.is_active ?? true,
         image_url: product.image_url || '',
+        iva_included: product.iva_included ?? false,
+        iva_rate: product.iva_rate ?? 0,
+        brand: product.brand || '',
+        shade: product.shade || '',
+        skin_type: product.skin_type || '',
+        ingredients: product.ingredients || '',
+        volume: product.volume || '',
+        spf: product.spf ?? undefined,
+        finish: product.finish || '',
+        coverage: product.coverage || '',
+        waterproof: product.waterproof ?? false,
+        vegan: product.vegan ?? false,
+        cruelty_free: product.cruelty_free ?? false,
+        expiration_date: product.expiration_date || '',
       });
       setImagePreview(product.image_url || null);
       setAutoGenerateSku(false);
@@ -701,6 +739,20 @@ export const ProductEditModal = memo(function ProductEditModal({
         barcode: data.barcode?.trim() || undefined,
         image_url: finalImageUrl,
         images: finalImageUrl ? [finalImageUrl] : [],
+        iva_included: data.iva_included ?? false,
+        iva_rate: data.iva_rate ? Number(data.iva_rate) : undefined,
+        brand: data.brand?.trim() || undefined,
+        shade: data.shade?.trim() || undefined,
+        skin_type: data.skin_type?.trim() || undefined,
+        ingredients: data.ingredients?.trim() || undefined,
+        volume: data.volume?.trim() || undefined,
+        spf: data.spf ? Number(data.spf) : undefined,
+        finish: data.finish?.trim() || undefined,
+        coverage: data.coverage?.trim() || undefined,
+        waterproof: data.waterproof ?? false,
+        vegan: data.vegan ?? false,
+        cruelty_free: data.cruelty_free ?? false,
+        expiration_date: data.expiration_date?.trim() || undefined,
       };
 
       await onSave(productData);
@@ -1129,6 +1181,97 @@ export const ProductEditModal = memo(function ProductEditModal({
                   ))}
                 </div>
               </section>
+
+              <Separator />
+
+              {/* ── IVA ── */}
+              <section className="space-y-4">
+                <SectionHeader icon={Percent} title="IVA" accent="green" />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex items-center justify-between rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
+                    <div>
+                      <p className="text-sm font-medium">IVA incluido</p>
+                      <p className="text-xs text-muted-foreground">El precio ya incluye IVA</p>
+                    </div>
+                    <Switch
+                      id="iva_included"
+                      checked={!!ivaIncluded}
+                      onCheckedChange={(v) => setValue('iva_included', v)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="iva_rate" className="text-sm">Tasa IVA (%)</Label>
+                    <Input
+                      id="iva_rate"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      placeholder="0"
+                      className="text-sm"
+                      {...register('iva_rate', { min: { value: 0, message: '≥ 0' }, max: { value: 100, message: '≤ 100' } })}
+                    />
+                    {errors.iva_rate && <p className="text-xs text-destructive">{errors.iva_rate.message}</p>}
+                  </div>
+                </div>
+              </section>
+
+              <Separator />
+
+              {/* ── Cosméticos (colapsable) ── */}
+              <Collapsible open={cosmeticsOpen} onOpenChange={setCosmeticsOpen}>
+                <CollapsibleTrigger className="flex w-full items-center justify-between rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5 hover:bg-muted/40 transition-colors">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-pink-500" />
+                    <p className="text-sm font-medium">Detalles Cosméticos</p>
+                    <span className="text-xs text-muted-foreground">(Opcional)</span>
+                  </div>
+                  <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', cosmeticsOpen && 'rotate-180')} />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-4 space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    {[
+                      { id: 'brand', label: 'Marca', placeholder: "Ej: L'Oréal" },
+                      { id: 'shade', label: 'Tono/Shade', placeholder: 'Ej: Nude, Beige' },
+                      { id: 'skin_type', label: 'Tipo de Piel', placeholder: 'Ej: Grasa, Seca' },
+                      { id: 'volume', label: 'Volumen/Tamaño', placeholder: 'Ej: 50ml, 100g' },
+                      { id: 'finish', label: 'Acabado', placeholder: 'Ej: Mate, Brillante' },
+                      { id: 'coverage', label: 'Cobertura', placeholder: 'Ej: Ligera, Media' },
+                    ].map(({ id, label, placeholder }) => (
+                      <div key={id} className="space-y-1.5">
+                        <Label htmlFor={id} className="text-sm">{label}</Label>
+                        <Input id={id} placeholder={placeholder} className="text-sm" {...register(id as keyof ProductFormData)} />
+                      </div>
+                    ))}
+                    <div className="space-y-1.5">
+                      <Label htmlFor="spf" className="text-sm">SPF</Label>
+                      <Input id="spf" type="number" min="0" max="100" placeholder="Ej: 30" className="text-sm" {...register('spf', { min: 0, max: 100 })} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="expiration_date" className="text-sm">Fecha de Expiración</Label>
+                      <Input id="expiration_date" type="date" className="text-sm" {...register('expiration_date')} />
+                    </div>
+                    <div className="col-span-2 space-y-1.5">
+                      <Label htmlFor="ingredients" className="text-sm">Ingredientes</Label>
+                      <Textarea id="ingredients" rows={2} placeholder="Lista de ingredientes..." className="resize-none text-sm" {...register('ingredients')} />
+                    </div>
+                  </div>
+
+                  {/* Características especiales */}
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { id: 'vegan' as const, label: '🌱 Vegano', value: isVegan },
+                      { id: 'cruelty_free' as const, label: '🐰 Cruelty Free', value: isCrueltyFree },
+                      { id: 'waterproof' as const, label: '💧 Waterproof', value: isWaterproof },
+                    ].map(({ id, label, value }) => (
+                      <div key={id} className="flex items-center justify-between rounded-lg border border-border/50 bg-muted/10 px-3 py-2">
+                        <Label htmlFor={id} className="cursor-pointer text-sm">{label}</Label>
+                        <Switch id={id} checked={!!value} onCheckedChange={(v) => setValue(id, v)} />
+                      </div>
+                    ))}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
             </div>
           </form>
         </div>

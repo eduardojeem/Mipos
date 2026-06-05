@@ -90,7 +90,7 @@ const quickActions: QuickAction[] = [
     id: "product",
     title: "Cargar producto",
     description: "Actualizar inventario",
-    href: "/dashboard/products?tab=products",
+    href: "/dashboard/products",
     icon: Plus,
     accent: "bg-blue-600",
   },

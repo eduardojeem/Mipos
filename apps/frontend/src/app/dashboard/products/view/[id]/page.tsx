@@ -661,7 +661,7 @@ export default function ProductViewPage({ params }: { params: Promise<{ id: stri
                 )}
               </div>
               <div className="mt-6 text-center">
-                <Button variant="outline" onClick={() => router.push(`/dashboard/products?tab=inventory`)}>
+                <Button variant="outline" onClick={() => router.push('/dashboard/products')}>
                   Ver historial completo
                 </Button>
               </div>

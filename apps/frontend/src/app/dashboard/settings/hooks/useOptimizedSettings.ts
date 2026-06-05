@@ -267,10 +267,12 @@ export function useSystemSettings() {
         return { ...DEFAULT_SYSTEM_SETTINGS, ...settings };
       } catch (error: unknown) {
         const status = getErrorStatus(error);
-        if (status === 401 || status === 403) {
-          throw error;
+        if (status === 401) {
+          throw error; // sesión expirada — dejar que react-query marque el error
         }
-        logger.warn('Failed to load system settings, using defaults');
+        // 403 = usuario sin permiso de admin (esperado para CASHIER/SELLER)
+        // cualquier otro error → usar defaults silenciosamente
+        logger.warn('Failed to load system settings, using defaults', { status });
         return DEFAULT_SYSTEM_SETTINGS;
       }
     },

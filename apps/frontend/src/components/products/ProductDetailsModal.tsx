@@ -397,8 +397,11 @@ export const ProductDetailsModal = memo(function ProductDetailsModal({
           {onEdit && (
             <Button
               onClick={() => {
-                onEdit(product);
+                // Cerrar este Dialog primero y diferir la apertura del siguiente
+                // para evitar que Radix deje `pointer-events: none` en el body,
+                // lo que bloquea los clics del modal que se abre a continuación.
                 onOpenChange(false);
+                setTimeout(() => onEdit(product), 150);
               }}
               className="gap-2"
             >
@@ -410,8 +413,10 @@ export const ProductDetailsModal = memo(function ProductDetailsModal({
             <Button
               variant="destructive"
               onClick={() => {
-                onDelete(product.id);
+                // Ver comentario en "Editar": diferir evita el bloqueo de clics
+                // del diálogo de confirmación que abre el componente padre.
                 onOpenChange(false);
+                setTimeout(() => onDelete(product.id), 150);
               }}
               className="gap-2"
             >

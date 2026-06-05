@@ -260,24 +260,28 @@ const ProductRow = memo(function ProductRow({
           >
             <Eye className="h-3.5 w-3.5" />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => onEdit?.(product)}
-            className="h-7 w-7 text-muted-foreground hover:text-foreground"
-            title="Editar"
-          >
-            <Edit className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => onDelete?.(product.id)}
-            className="h-7 w-7 text-destructive/70 hover:text-destructive"
-            title="Eliminar"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+          {onEdit && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => onEdit(product)}
+              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+              title="Editar"
+            >
+              <Edit className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          {onDelete && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => onDelete(product.id)}
+              className="h-7 w-7 text-destructive/70 hover:text-destructive"
+              title="Eliminar"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
         </div>
       </TableCell>
     </TableRow>

@@ -17,6 +17,7 @@ import {
   KeyRound,
   Loader2,
   LockKeyhole,
+  MapPin,
   PackageSearch,
   Receipt,
   RefreshCw,
@@ -1119,6 +1120,28 @@ function SecurityActivityPreview() {
             ))}
           </div>
         )}
+      </SectionCard>
+    </div>
+  );
+}
+
+/** Placeholder de gestión de sucursales usado en /admin/sucursal. */
+export function BranchesSettings() {
+  return (
+    <div className="space-y-6">
+      <SectionCard
+        title="Sucursales"
+        description="Gestión de sedes y locales operativos."
+        icon={MapPin}
+      >
+        <div className="flex flex-col items-center gap-4 py-8 text-center">
+          <p className="text-sm text-muted-foreground">
+            La gestión avanzada de sucursales estará disponible próximamente.
+          </p>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/admin/sucursales">Ver sucursales</Link>
+          </Button>
+        </div>
       </SectionCard>
     </div>
   );

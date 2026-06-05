@@ -29,7 +29,7 @@ const CUSTOM_DOMAIN_REGEX = /^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$/;
 interface DomainSettingsFormProps {
   selectedOrganization: Organization | null;
   allowCustomDomain?: boolean;
-  onUpdate?: () => void;
+  onUpdate?: (updates: Partial<BusinessConfig>) => void;
   planName?: string;
   config?: BusinessConfig | null;
 }
@@ -201,7 +201,7 @@ export function DomainSettingsForm({
           : 'La ruta publica quedo actualizada correctamente.',
       });
 
-      onUpdate?.();
+      onUpdate?.({});
     } catch (error: unknown) {
       toast({
         title: 'Error',

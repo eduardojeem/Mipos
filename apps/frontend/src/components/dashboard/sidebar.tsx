@@ -162,7 +162,7 @@ export const navigation: NavItem[] = [
   },
   {
     name: 'Productos',
-    href: '/dashboard/products?tab=products',
+    href: '/dashboard/products',
     icon: Package,
     roles: ['ADMIN', 'CASHIER', 'SUPER_ADMIN', 'OWNER'],
     category: 'inventory',
