@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase-admin'
-import api from '@/lib/api'
 
 export async function GET(request: NextRequest) {
   try {
@@ -26,29 +24,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ data });
     }
 
-    try {
-      const admin = createAdminClient()
-      const { data, error } = await (admin as any)
-        .from('loyalty_programs')
-        .select('*')
-        .eq('organization_id', orgId)
-        .order('created_at', { ascending: false })
-      if (error) throw new Error(String(error.message))
-      if (!Array.isArray(data) || data.length === 0) {
-        // Fallback or empty list
-        return NextResponse.json({ data: [] })
-      }
-      return NextResponse.json({ data })
-    } catch {
-      // Fallback logic preserved but might be less relevant for strict SaaS
-      // If we keep fallback, we can't really filter by orgId in external API unless supported.
-      // Assuming fallback is for development/mock.
-      const resp = await api.get('/loyalty/programs')
-      const raw: any = resp.data
-      const programs = raw?.data ?? raw?.programs ?? raw
-      // ... fallback handling
-      return NextResponse.json({ data: programs || [] })
+    const admin = createAdminClient()
+    const { data, error } = await (admin as any)
+      .from('loyalty_programs')
+      .select('*')
+      .eq('organization_id', orgId)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('[loyalty/programs GET] Supabase error:', error.message)
+      return NextResponse.json({ data: [] })
     }
+
+    return NextResponse.json({ data: Array.isArray(data) ? data : [] })
   } catch (error: any) {
      return NextResponse.json({ data: [] })
   }
