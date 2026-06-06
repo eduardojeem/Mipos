@@ -110,7 +110,7 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
     offers: {
       '@type': 'Offer',
       price: pricing.displayPrice || 0,
-      priceCurrency: 'PYG',
+      priceCurrency: 'COP',
       availability: product.stock_quantity > 0
         ? 'https://schema.org/InStock'
         : 'https://schema.org/OutOfStock',

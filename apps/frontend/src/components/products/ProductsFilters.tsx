@@ -36,6 +36,7 @@ interface Filters {
   stockStatus?: string;
   minPrice?: number;
   maxPrice?: number;
+  showDeleted?: boolean;
 }
 
 interface ProductsFiltersProps {
@@ -64,7 +65,11 @@ const STOCK_STATUS_LABELS: Record<string, string> = {
 function countActiveFilters(f: Filters) {
   let n = 0;
   if (f.categoryId) n++;
-  if (f.isActive === false || f.isActive === undefined) n++;
+  if (f.showDeleted) {
+    n++;
+  } else {
+    if (f.isActive === false || f.isActive === undefined) n++;
+  }
   if (f.sortBy && f.sortBy !== 'updated_at') n++;
   if (f.stockStatus) n++;
   if (f.minPrice != null && f.minPrice > 0) n++;
@@ -127,9 +132,10 @@ export const ProductsFilters = memo(function ProductsFilters({
 
   const handleStatusChange = useCallback(
     (v: string) => {
-      if (v === '__active') onFilterChange({ isActive: true });
-      else if (v === '__inactive') onFilterChange({ isActive: false });
-      else onFilterChange({ isActive: undefined });
+      if (v === '__deleted') onFilterChange({ showDeleted: true, isActive: undefined });
+      else if (v === '__active') onFilterChange({ isActive: true, showDeleted: false });
+      else if (v === '__inactive') onFilterChange({ isActive: false, showDeleted: false });
+      else onFilterChange({ isActive: undefined, showDeleted: false });
     },
     [onFilterChange],
   );
@@ -162,6 +168,7 @@ export const ProductsFilters = memo(function ProductsFilters({
       stockStatus: undefined,
       minPrice: undefined,
       maxPrice: undefined,
+      showDeleted: false,
     });
   }, [onFilterChange]);
 
@@ -176,7 +183,9 @@ export const ProductsFilters = memo(function ProductsFilters({
       onRemove: () => onFilterChange({ categoryId: '' }),
     });
   }
-  if (filters.isActive === false) {
+  if (filters.showDeleted) {
+    chips.push({ key: 'deleted', label: 'Estado: Eliminados', onRemove: () => onFilterChange({ showDeleted: false, isActive: true }) });
+  } else if (filters.isActive === false) {
     chips.push({ key: 'status', label: 'Estado: Inactivos', onRemove: () => onFilterChange({ isActive: true }) });
   } else if (filters.isActive === undefined) {
     chips.push({ key: 'status', label: 'Estado: Todos', onRemove: () => onFilterChange({ isActive: true }) });
@@ -215,6 +224,7 @@ export const ProductsFilters = memo(function ProductsFilters({
 
   // Status select value
   const statusValue =
+    filters.showDeleted ? '__deleted' :
     filters.isActive === undefined ? '__all' :
     filters.isActive ? '__active' : '__inactive';
 
@@ -287,6 +297,7 @@ export const ProductsFilters = memo(function ProductsFilters({
             'h-9 w-[130px] rounded-xl text-xs',
             filters.isActive === false && 'border-amber-400/50 bg-amber-50 text-amber-700 ring-1 ring-amber-400/20 dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-400',
             filters.isActive === undefined && 'border-sky-400/50 bg-sky-50 text-sky-700 ring-1 ring-sky-400/20 dark:border-sky-700/50 dark:bg-sky-950/30 dark:text-sky-400',
+            filters.showDeleted && 'border-rose-400/50 bg-rose-50 text-rose-700 ring-1 ring-rose-400/20 dark:border-rose-700/50 dark:bg-rose-950/30 dark:text-rose-400',
           )}>
             <SelectValue />
           </SelectTrigger>
@@ -301,6 +312,12 @@ export const ProductsFilters = memo(function ProductsFilters({
               <span className="flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-full bg-amber-400" />
                 Solo inactivos
+              </span>
+            </SelectItem>
+            <SelectItem value="__deleted">
+              <span className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-rose-500" />
+                Eliminados
               </span>
             </SelectItem>
             <SelectItem value="__all">

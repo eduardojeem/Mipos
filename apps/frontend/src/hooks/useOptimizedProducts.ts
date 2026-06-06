@@ -16,6 +16,7 @@ interface ProductFilters {
   stockStatus?: string;
   minPrice?: number;
   maxPrice?: number;
+  showDeleted?: boolean;
 }
 
 type ProductsListResponse = {
@@ -65,6 +66,7 @@ function normalizeFilters(filters: ProductFilters) {
     stockStatus: filters.stockStatus || undefined,
     minPrice: filters.minPrice != null && filters.minPrice > 0 ? filters.minPrice : undefined,
     maxPrice: filters.maxPrice != null && filters.maxPrice > 0 ? filters.maxPrice : undefined,
+    showDeleted: filters.showDeleted || false,
   };
 }
 
@@ -80,6 +82,7 @@ export function useOptimizedProducts(filters: ProductFilters = {}): UseOptimized
     filters.stockStatus,
     filters.minPrice,
     filters.maxPrice,
+    filters.showDeleted,
   ]);
 
   const { data, isLoading, error, refetch: refetchQuery } = useQuery({
@@ -97,6 +100,7 @@ export function useOptimizedProducts(filters: ProductFilters = {}): UseOptimized
           stockStatus: normalizedFilters.stockStatus,
           minPrice: normalizedFilters.minPrice,
           maxPrice: normalizedFilters.maxPrice,
+          showDeleted: normalizedFilters.showDeleted || undefined,
         },
       });
 

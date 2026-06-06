@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import NavBar from '@/app/home/components/NavBar';
+import NavBar from '@/components/public-tenant/NavBar';
 import CatalogFiltersOptimized, { type ViewMode } from './components/CatalogFiltersOptimized';
 import ProductGridOptimized from './components/ProductGridOptimized';
 import QuickViewModal from './components/QuickViewModal';
@@ -17,6 +17,7 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/components/ui/use-toast';
 import Breadcrumbs from '@/components/ui/breadcrumbs';
 import Pagination from '@/components/catalog/Pagination';
 import { LoginAccessSection } from '@/components/auth/LoginAccessSection';
@@ -118,6 +119,7 @@ export default function CatalogClientOptimized({
   initialQueryState,
 }: CatalogClientOptimizedProps) {
   const router = useRouter();
+  const { toast } = useToast();
   const { config } = useBusinessConfig();
   const content = getTenantPublicContent(config);
   const { tenantHref, tenantApiPath } = useTenantPublicRouting();
@@ -453,9 +455,32 @@ export default function CatalogClientOptimized({
       return;
     }
 
+    // Validar que los items del carrito siguen disponibles
+    const unavailable = cart.filter((item) => {
+      const stock = Number(item.product.stock_quantity ?? 0);
+      const active = item.product.is_active !== false;
+      return !active || stock <= 0;
+    });
+
+    if (unavailable.length > 0) {
+      const names = unavailable.map((i) => i.product.name).join(', ');
+      // Remover items no disponibles automáticamente
+      unavailable.forEach((i) => removeFromCart(i.product.id));
+      toast({
+        title: 'Productos no disponibles',
+        description: `Se removieron del carrito: ${names}`,
+        variant: 'destructive',
+        duration: 4000,
+      });
+      // Si quedó vacío, no abrir checkout
+      if (cartItemsCount - unavailable.reduce((s, i) => s + i.quantity, 0) <= 0) {
+        return;
+      }
+    }
+
     setShowCheckout(true);
     logCheckoutStart(cartTotal, cartItemsCount);
-  }, [cartItemsCount, cartTotal, logCheckoutStart]);
+  }, [cart, cartItemsCount, cartTotal, logCheckoutStart, removeFromCart]);
 
   const handleOrderSuccess = useCallback((orderData: OrderConfirmationData) => {
     setShowCheckout(false);

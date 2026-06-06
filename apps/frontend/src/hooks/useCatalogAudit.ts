@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 let catalogAuditUnavailable = false;
 
@@ -110,7 +110,10 @@ export function useCatalogAudit(options: UseCatalogAuditOptions = {}) {
     if (flushTimeoutRef.current) {
       clearTimeout(flushTimeoutRef.current);
     }
-    flushTimeoutRef.current = setTimeout(flushEvents, flushInterval);
+    flushTimeoutRef.current = setTimeout(() => {
+      flushTimeoutRef.current = null;
+      flushEvents();
+    }, flushInterval);
   }, [flushEvents, flushInterval]);
 
   const logEvent = useCallback((event: Omit<CatalogAuditEvent, 'timestamp' | 'sessionId'>) => {
@@ -292,6 +295,21 @@ export function useCatalogAudit(options: UseCatalogAuditOptions = {}) {
       details: { platform },
     });
   }, [logEvent]);
+
+  // Cleanup: flush pendiente + cancelar timer al desmontar
+  useEffect(() => {
+    return () => {
+      if (flushTimeoutRef.current) {
+        clearTimeout(flushTimeoutRef.current);
+        flushTimeoutRef.current = null;
+      }
+      // Flush eventos pendientes antes de cerrar
+      if (eventQueue.current.length > 0 && !catalogAuditUnavailable) {
+        // Best-effort: no await porque estamos en cleanup
+        flushEvents();
+      }
+    };
+  }, [flushEvents]);
 
   return {
     logEvent,

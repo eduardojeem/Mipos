@@ -327,16 +327,31 @@ async function fetchCatalogBaseProducts(
 ): Promise<Product[]> {
   const client = await createAdminClient();
 
+  // Límite razonable para evitar cargar catálogos enormes en memoria.
+  // Para organizaciones con >500 productos públicos, la paginación server-side
+  // (order + limit) ya reduce el dataset. El filtrado de ofertas/precio se
+  // hace post-fetch pero acotado a este set.
+  const MAX_CATALOG_PRODUCTS = 500;
+
   const runQuery = async (
     selectClause: string,
-    options?: { fallbackMode?: boolean }
+    options?: { fallbackMode?: boolean; skipDeletedFilter?: boolean; skipPublicFilter?: boolean }
   ) => {
     let query = client
       .from('products')
       .select(selectClause)
       .eq('organization_id', organizationId)
-      .eq('is_active', true)
-      .eq('is_public', true);
+      .eq('is_active', true);
+
+    // is_public puede no existir en la DB — si el primer intento falla
+    // con columna inexistente, se reintenta sin ese filtro.
+    if (!options?.skipPublicFilter) {
+      query = query.eq('is_public', true);
+    }
+
+    if (!options?.skipDeletedFilter) {
+      query = query.is('deleted_at', null);
+    }
 
     query = applyCatalogDatabaseFilters(query, filters, {
       includeRating: !options?.fallbackMode,
@@ -344,12 +359,27 @@ async function fetchCatalogBaseProducts(
 
     return query
       .order('updated_at', { ascending: false })
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(MAX_CATALOG_PRODUCTS);
   };
 
   let result = await runQuery(CATALOG_PRODUCT_SELECT);
-  if (isMissingColumnError(result.error)) {
-    result = await runQuery(CATALOG_PRODUCT_SELECT_FALLBACK, { fallbackMode: true });
+
+  // Fallback 1: columnas faltantes (rating, offer_price, etc.)
+  if (result.error && isMissingColumnError(result.error)) {
+    result = await runQuery(CATALOG_PRODUCT_SELECT_FALLBACK, {
+      fallbackMode: true,
+      skipDeletedFilter: true,
+    });
+  }
+
+  // Fallback 2: si is_public no existe (columna no creada aún), retry sin ella
+  if (result.error && isMissingColumnError(result.error)) {
+    result = await runQuery(CATALOG_PRODUCT_SELECT_FALLBACK, {
+      fallbackMode: true,
+      skipDeletedFilter: true,
+      skipPublicFilter: true,
+    });
   }
 
   if (result.error) {
@@ -411,6 +441,36 @@ export async function fetchPublicCatalogPage(
 
 export async function fetchPublicCatalogCategories(organizationId: string): Promise<Category[]> {
   const client = await createAdminClient();
+
+  // Buscar categorías con al menos un producto activo.
+  // is_public y deleted_at pueden no existir — se manejan con fallback.
+  const runProductsQuery = async (opts?: { skipPublic?: boolean; skipDeleted?: boolean }) => {
+    let q = client
+      .from('products')
+      .select('category_id')
+      .eq('organization_id', organizationId)
+      .eq('is_active', true);
+
+    if (!opts?.skipPublic) q = q.eq('is_public', true);
+    if (!opts?.skipDeleted) q = q.is('deleted_at', null);
+    return q;
+  };
+
+  let productsResult = await runProductsQuery();
+  if (productsResult.error && isMissingColumnError(productsResult.error)) {
+    productsResult = await runProductsQuery({ skipDeleted: true });
+  }
+  if (productsResult.error && isMissingColumnError(productsResult.error)) {
+    productsResult = await runProductsQuery({ skipPublic: true, skipDeleted: true });
+  }
+
+  const activeCategoryIds = new Set<string>();
+  if (!productsResult.error && productsResult.data) {
+    productsResult.data.forEach((p: any) => {
+      if (p.category_id) activeCategoryIds.add(String(p.category_id));
+    });
+  }
+
   const { data, error } = await client
     .from('categories')
     .select('id,name')
@@ -421,7 +481,12 @@ export async function fetchPublicCatalogCategories(organizationId: string): Prom
     throw error;
   }
 
-  return (data || []) as Category[];
+  const categories = (data || []) as Category[];
+  if (activeCategoryIds.size > 0) {
+    return categories.filter((c) => activeCategoryIds.has(c.id));
+  }
+
+  return categories;
 }
 
 export async function fetchPublicCatalogSnapshot(

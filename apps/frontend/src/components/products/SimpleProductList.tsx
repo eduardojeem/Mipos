@@ -11,6 +11,8 @@ interface SimpleProductListProps {
   onEdit?: (product: Product) => void;
   onDelete?: (id: string) => void;
   onView?: (product: Product) => void;
+  onRestore?: (id: string) => void;
+  showDeleted?: boolean;
   loading?: boolean;
   selectedIds?: Set<string>;
   onSelectProduct?: (id: string) => void;
@@ -42,6 +44,8 @@ export const SimpleProductList = memo(function SimpleProductList({
   onEdit,
   onDelete,
   onView,
+  onRestore,
+  showDeleted = false,
   loading = false,
   selectedIds,
   onSelectProduct,
@@ -71,6 +75,8 @@ export const SimpleProductList = memo(function SimpleProductList({
           onEdit={onEdit}
           onDelete={onDelete}
           onView={onView}
+          onRestore={onRestore}
+          showDeleted={showDeleted}
           priority={index < 8}
           isSelected={selectedIds?.has(product.id)}
           onSelect={onSelectProduct}

@@ -12,8 +12,3 @@ export default function CatalogLayout({
     </div>
   );
 }
-
-export const metadata = {
-  title: 'Catálogo de Cosméticos - BeautyPOS',
-  description: 'Explora nuestro catálogo de productos de belleza y cosméticos',
-};

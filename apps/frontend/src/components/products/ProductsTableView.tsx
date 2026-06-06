@@ -10,6 +10,7 @@ import {
   Edit,
   Eye,
   Package,
+  RotateCcw,
   Trash2,
   TrendingUp,
 } from 'lucide-react';
@@ -34,6 +35,8 @@ interface ProductsTableViewProps {
   onEdit?: (product: Product) => void;
   onDelete?: (id: string) => void;
   onView?: (product: Product) => void;
+  onRestore?: (id: string) => void;
+  showDeleted?: boolean;
   onSort?: (field: string, order: 'asc' | 'desc') => void;
   sortField?: string;
   sortOrder?: 'asc' | 'desc';
@@ -140,12 +143,14 @@ function MarginIndicator({ sale, cost }: { sale: number; cost?: number }) {
 
 // ── Product row ──────────────────────────────────────────────────────────────
 const ProductRow = memo(function ProductRow({
-  product, onEdit, onDelete, onView, isSelected, onSelect, index,
+  product, onEdit, onDelete, onView, onRestore, showDeleted = false, isSelected, onSelect, index,
 }: {
   product: Product;
   onEdit?: (product: Product) => void;
   onDelete?: (id: string) => void;
   onView?: (product: Product) => void;
+  onRestore?: (id: string) => void;
+  showDeleted?: boolean;
   isSelected?: boolean;
   onSelect?: (id: string) => void;
   index: number;
@@ -206,7 +211,7 @@ const ProductRow = memo(function ProductRow({
           {/* Status dot */}
           <span className={cn(
             'absolute bottom-0.5 right-0.5 h-2 w-2 rounded-full ring-1 ring-card',
-            product.is_active ? 'bg-emerald-500' : 'bg-slate-400',
+            showDeleted ? 'bg-rose-500' : product.is_active ? 'bg-emerald-500' : 'bg-slate-400',
           )} />
         </div>
       </TableCell>
@@ -281,13 +286,13 @@ const ProductRow = memo(function ProductRow({
         <div className="flex items-center gap-1.5">
           <span className={cn(
             'h-1.5 w-1.5 rounded-full',
-            product.is_active ? 'bg-emerald-500' : 'bg-slate-400',
+            showDeleted ? 'bg-rose-500' : product.is_active ? 'bg-emerald-500' : 'bg-slate-400',
           )} />
           <span className={cn(
             'text-[11px] font-medium',
-            product.is_active ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground',
+            showDeleted ? 'text-rose-700 dark:text-rose-400' : product.is_active ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground',
           )}>
-            {product.is_active ? 'Activo' : 'Inactivo'}
+            {showDeleted ? 'Eliminado' : product.is_active ? 'Activo' : 'Inactivo'}
           </span>
         </div>
       </TableCell>
@@ -304,27 +309,43 @@ const ProductRow = memo(function ProductRow({
           >
             <Eye className="h-3.5 w-3.5" />
           </Button>
-          {onEdit && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => onEdit(product)}
-              className="h-7 w-7 rounded-lg text-muted-foreground hover:text-primary"
-              title="Editar"
-            >
-              <Edit className="h-3.5 w-3.5" />
-            </Button>
-          )}
-          {onDelete && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => onDelete(product.id)}
-              className="h-7 w-7 rounded-lg text-muted-foreground hover:text-destructive"
-              title="Eliminar"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
+          {showDeleted ? (
+            onRestore && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => onRestore(product.id)}
+                className="h-7 w-7 rounded-lg text-muted-foreground hover:text-emerald-600 dark:hover:text-emerald-400"
+                title="Restaurar"
+              >
+                <RotateCcw className="h-3.5 w-3.5 text-emerald-500" />
+              </Button>
+            )
+          ) : (
+            <>
+              {onEdit && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => onEdit(product)}
+                  className="h-7 w-7 rounded-lg text-muted-foreground hover:text-primary"
+                  title="Editar"
+                >
+                  <Edit className="h-3.5 w-3.5" />
+                </Button>
+              )}
+              {onDelete && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => onDelete(product.id)}
+                  className="h-7 w-7 rounded-lg text-muted-foreground hover:text-destructive"
+                  title="Eliminar"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </>
           )}
         </div>
       </TableCell>
@@ -338,6 +359,8 @@ export const ProductsTableView = memo(function ProductsTableView({
   onEdit,
   onDelete,
   onView,
+  onRestore,
+  showDeleted = false,
   onSort,
   sortField,
   sortOrder,
@@ -447,6 +470,8 @@ export const ProductsTableView = memo(function ProductsTableView({
               onEdit={onEdit}
               onDelete={onDelete}
               onView={onView}
+              onRestore={onRestore}
+              showDeleted={showDeleted}
               isSelected={selectedIds.has(product.id)}
               onSelect={onSelectProduct}
               index={index}

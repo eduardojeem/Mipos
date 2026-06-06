@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Building2, MapPin, Search, X } from 'lucide-react';
+import { ArrowRight, Building2, LayoutList, MapPin, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { GlobalOrganizationsSortMode } from '@/lib/public-site/global-organizations-data';
 
@@ -33,6 +33,8 @@ interface OrganizationsFilterBarProps {
   city: string;
   departments: DepartmentOption[];
   cities: CityOption[];
+  /** Total de empresas que coinciden con los filtros actuales */
+  resultCount?: number;
 }
 
 export function OrganizationsFilterBar({
@@ -42,6 +44,7 @@ export function OrganizationsFilterBar({
   city,
   departments,
   cities,
+  resultCount,
 }: OrganizationsFilterBarProps) {
   const router = useRouter();
   const [inputValue, setInputValue] = useState(search);
@@ -80,66 +83,65 @@ export function OrganizationsFilterBar({
     router.push(buildHref({ search: '' }));
   }
 
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white/70 p-5 shadow-sm backdrop-blur-sm dark:border-slate-800 dark:bg-slate-950/70">
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Row 1: search + sort pills */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          {/* Search */}
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              type="search"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              placeholder="Buscar empresa..."
-              className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-10 text-sm text-slate-900 outline-none transition-all focus:border-sky-400 focus:ring-4 focus:ring-sky-500/5 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500"
-            />
-            {inputValue ? (
-              <button
-                type="button"
-                onClick={handleClearSearch}
-                aria-label="Limpiar búsqueda"
-                className="absolute right-3 top-1/2 -translate-y-1/2 rounded text-slate-400 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            ) : null}
-          </div>
+  const resultLabel =
+    resultCount !== undefined
+      ? resultCount === 1
+        ? '1 empresa'
+        : `${resultCount} empresas`
+      : null;
 
-          {/* Sort pills */}
-          <div
-            role="group"
-            aria-label="Ordenar por"
-            className="flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900"
+  return (
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      {/* Header del filtro */}
+      <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-3 dark:border-slate-800">
+        <SlidersHorizontal className="h-4 w-4 text-slate-400" />
+        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          Filtrar directorio
+        </span>
+        {hasActiveFilters && (
+          <Link
+            href="/home/empresas"
+            className="ml-auto flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+            aria-label="Limpiar todos los filtros"
           >
-            {SORT_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => router.push(buildHref({ sortBy: opt.value }))}
-                aria-pressed={sortBy === opt.value}
-                className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-all ${
-                  sortBy === opt.value
-                    ? 'bg-slate-950 text-white shadow-sm dark:bg-sky-500 dark:text-slate-950'
-                    : 'text-slate-500 hover:bg-white hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
+            <X className="h-3 w-3" />
+            Limpiar
+          </Link>
+        )}
+      </div>
+
+      <form onSubmit={handleSubmit} className="p-5 space-y-4">
+        {/* Buscador */}
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            type="search"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            placeholder="Buscá por nombre, rubro o ciudad..."
+            className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 pl-11 pr-12 text-sm text-slate-900 outline-none transition-all focus:border-sky-400 focus:bg-white focus:ring-4 focus:ring-sky-500/8 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-sky-500 dark:focus:bg-slate-800"
+          />
+          {inputValue ? (
+            <button
+              type="button"
+              onClick={handleClearSearch}
+              aria-label="Limpiar búsqueda"
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          ) : null}
         </div>
 
-        {/* Row 2: department + city + buttons */}
+        {/* Segunda fila: ubicación + ordenamiento + buscar */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          {/* Department */}
+          {/* Departamento */}
           <div className="relative flex-1">
             <Building2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <select
               value={department}
               onChange={(e) => router.push(buildHref({ department: e.target.value, city: '' }))}
-              className="h-11 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-10 pr-4 text-sm text-slate-900 outline-none transition-all focus:border-sky-400 focus:ring-4 focus:ring-sky-500/5 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              className="h-11 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm text-slate-900 outline-none transition-all focus:border-sky-400 focus:ring-4 focus:ring-sky-500/5 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
               aria-label="Filtrar por departamento"
             >
               <option value="">Todos los departamentos</option>
@@ -151,13 +153,13 @@ export function OrganizationsFilterBar({
             </select>
           </div>
 
-          {/* City */}
+          {/* Ciudad */}
           <div className="relative flex-1">
             <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <select
               value={city}
               onChange={(e) => router.push(buildHref({ city: e.target.value }))}
-              className="h-11 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-10 pr-4 text-sm text-slate-900 outline-none transition-all focus:border-sky-400 focus:ring-4 focus:ring-sky-500/5 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+              className="h-11 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm text-slate-900 outline-none transition-all focus:border-sky-400 focus:ring-4 focus:ring-sky-500/5 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
               aria-label="Filtrar por ciudad"
             >
               <option value="">Todas las ciudades</option>
@@ -169,29 +171,62 @@ export function OrganizationsFilterBar({
             </select>
           </div>
 
-          {/* Buscar + limpiar */}
-          <div className="flex items-center gap-2">
-            <Button
-              type="submit"
-              className="h-11 rounded-lg bg-slate-950 px-5 text-white hover:bg-sky-700 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white"
+          {/* Botón buscar */}
+          <Button
+            type="submit"
+            className="h-11 shrink-0 rounded-xl bg-slate-950 px-6 text-white hover:bg-sky-700 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white"
+          >
+            Buscar
+          </Button>
+        </div>
+
+        {/* Pills de ordenamiento */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 dark:text-slate-500">
+            <LayoutList className="h-3.5 w-3.5" />
+            Ordenar:
+          </span>
+          {SORT_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => router.push(buildHref({ sortBy: opt.value }))}
+              aria-pressed={sortBy === opt.value}
+              className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all ${
+                sortBy === opt.value
+                  ? 'bg-slate-950 text-white shadow-sm dark:bg-sky-500 dark:text-slate-950'
+                  : 'border border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100'
+              }`}
             >
-              Buscar
-            </Button>
-            {hasActiveFilters ? (
-              <Link href="/home/empresas" aria-label="Limpiar todos los filtros">
-                <Button type="button" variant="outline" size="icon" className="h-11 w-11 rounded-lg">
-                  <X className="h-4 w-4" />
-                </Button>
-              </Link>
-            ) : null}
-          </div>
+              {opt.label}
+            </button>
+          ))}
         </div>
       </form>
 
-      <div className="mt-4 flex justify-end">
+      {/* Footer: resultado + link catálogo */}
+      <div className="flex items-center justify-between border-t border-slate-100 px-5 py-3 dark:border-slate-800">
+        {resultLabel ? (
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            {hasActiveFilters ? (
+              <>
+                <span className="font-bold text-slate-900 dark:text-white">{resultLabel}</span>
+                {' '}encontrada{resultCount === 1 ? '' : 's'}
+              </>
+            ) : (
+              <>
+                <span className="font-bold text-slate-900 dark:text-white">{resultLabel}</span>
+                {' '}en el directorio
+              </>
+            )}
+          </p>
+        ) : (
+          <span />
+        )}
+
         <Link
           href="/home/catalogo"
-          className="flex items-center gap-1.5 text-xs font-medium text-slate-500 transition-colors hover:text-sky-700 dark:text-slate-400 dark:hover:text-sky-300"
+          className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 transition-colors hover:text-sky-700 dark:text-slate-400 dark:hover:text-sky-300"
         >
           Ver catálogo global
           <ArrowRight className="h-3.5 w-3.5" />

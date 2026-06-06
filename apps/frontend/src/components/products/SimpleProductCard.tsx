@@ -2,7 +2,7 @@
 
 import React, { memo, useState } from 'react';
 import Image from 'next/image';
-import { Edit, Eye, Lock, MoreVertical, Package, ShoppingBag, Trash2 } from 'lucide-react';
+import { Edit, Eye, Lock, MoreVertical, Package, RotateCcw, ShoppingBag, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -22,6 +22,8 @@ interface SimpleProductCardProps {
   onEdit?: (product: Product) => void;
   onDelete?: (id: string) => void;
   onView?: (product: Product) => void;
+  onRestore?: (id: string) => void;
+  showDeleted?: boolean;
   priority?: boolean;
   isSelected?: boolean;
   onSelect?: (id: string) => void;
@@ -58,6 +60,8 @@ export const SimpleProductCard = memo(function SimpleProductCard({
   onEdit,
   onDelete,
   onView,
+  onRestore,
+  showDeleted = false,
   priority = false,
   isSelected = false,
   onSelect,
@@ -97,7 +101,7 @@ export const SimpleProductCard = memo(function SimpleProductCard({
         isSelected
           ? 'border-primary/70 ring-2 ring-primary/25 shadow-primary/10'
           : 'border-border/50 hover:border-border/80',
-        !product.is_active && 'opacity-55',
+        (!product.is_active || showDeleted) && 'opacity-55',
       )}
     >
       {/* ── Image area ─────────────────────────────────────────────────── */}
@@ -150,10 +154,18 @@ export const SimpleProductCard = memo(function SimpleProductCard({
         )}
 
         {/* Inactivo overlay */}
-        {!product.is_active && (
+        {!product.is_active && !showDeleted && (
           <div className="absolute inset-0 flex items-center justify-center">
             <span className="rounded-lg bg-black/70 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-white/90 backdrop-blur-sm">
               INACTIVO
+            </span>
+          </div>
+        )}
+
+        {showDeleted && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="rounded-lg bg-rose-950/80 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-rose-200 backdrop-blur-sm border border-rose-500/20">
+              ELIMINADO
             </span>
           </div>
         )}
@@ -213,12 +225,18 @@ export const SimpleProductCard = memo(function SimpleProductCard({
               <DropdownMenuItem onClick={() => onView?.(product)}>
                 <Eye className="mr-2 h-4 w-4" /> Ver detalle
               </DropdownMenuItem>
-              {onEdit && (
+              {!showDeleted && onEdit && (
                 <DropdownMenuItem onClick={() => onEdit(product)}>
                   <Edit className="mr-2 h-4 w-4" /> Editar
                 </DropdownMenuItem>
               )}
-              {onDelete && (
+              {showDeleted && onRestore && (
+                <DropdownMenuItem onClick={() => onRestore(product.id)}>
+                  <RotateCcw className="mr-2 h-4 w-4 text-emerald-500" />
+                  <span className="text-emerald-600 font-medium">Restaurar</span>
+                </DropdownMenuItem>
+              )}
+              {!showDeleted && onDelete && (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -260,16 +278,30 @@ export const SimpleProductCard = memo(function SimpleProductCard({
         </div>
 
         {/* Edit CTA */}
-        {onEdit && (
-          <Button
-            size="sm"
-            variant="secondary"
-            className="mt-0.5 h-7 w-full gap-1.5 text-xs opacity-0 transition-all duration-150 group-hover:opacity-100"
-            onClick={() => onEdit(product)}
-          >
-            <ShoppingBag className="h-3.5 w-3.5" />
-            Editar producto
-          </Button>
+        {showDeleted ? (
+          onRestore && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="mt-0.5 h-7 w-full gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 hover:text-emerald-700 opacity-0 transition-all duration-150 group-hover:opacity-100 border-emerald-500/20"
+              onClick={() => onRestore(product.id)}
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Restaurar producto
+            </Button>
+          )
+        ) : (
+          onEdit && (
+            <Button
+              size="sm"
+              variant="secondary"
+              className="mt-0.5 h-7 w-full gap-1.5 text-xs opacity-0 transition-all duration-150 group-hover:opacity-100"
+              onClick={() => onEdit(product)}
+            >
+              <ShoppingBag className="h-3.5 w-3.5" />
+              Editar producto
+            </Button>
+          )
         )}
       </div>
     </article>
@@ -287,5 +319,6 @@ export const SimpleProductCard = memo(function SimpleProductCard({
   prev.product.image_url === next.product.image_url &&
   JSON.stringify(prev.product.images) === JSON.stringify(next.product.images) &&
   prev.priority === next.priority &&
-  prev.isSelected === next.isSelected
+  prev.isSelected === next.isSelected &&
+  prev.showDeleted === next.showDeleted
 );

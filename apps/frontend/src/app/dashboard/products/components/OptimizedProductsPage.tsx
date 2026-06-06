@@ -163,6 +163,7 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
     stockStatus: undefined as string | undefined,
     minPrice: undefined as number | undefined,
     maxPrice: undefined as number | undefined,
+    showDeleted: false,
   });
 
   // ── UI state ──────────────────────────────────────────────────────────────
@@ -294,6 +295,17 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
     }
   }, [detailsModal.product?.id, refreshProducts]);
 
+  const handleRestore = useCallback(async (productId: string) => {
+    try {
+      await api.patch(`/products/${productId}`, { action: 'restore' });
+      toast.success('Producto restaurado correctamente.');
+      await refreshProducts();
+    } catch (err) {
+      console.error('[handleRestore] Error al restaurar producto:', productId, err);
+      toast.error(getErrorMessage(err));
+    }
+  }, [refreshProducts]);
+
   const executeBulkDelete = useCallback(async () => {
     const ids = [...selected];
     if (!ids.length || isBulkDeleting) return;
@@ -374,7 +386,7 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
 
   const hasActiveFilters = Boolean(
     filters.search || filters.categoryId || filters.stockStatus ||
-    filters.minPrice || filters.maxPrice
+    filters.minPrice || filters.maxPrice || filters.showDeleted
   );
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -595,6 +607,7 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
                 onClearFilters={() => handleFilterChange({
                   search: '', categoryId: '', isActive: true,
                   stockStatus: undefined, minPrice: undefined, maxPrice: undefined,
+                  showDeleted: false,
                 })}
                 onCreate={handleCreate}
               />
@@ -603,6 +616,8 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
                 products={products}
                 onEdit={canEdit ? handleEdit : undefined}
                 onDelete={canDelete ? handleDelete : undefined}
+                onRestore={handleRestore}
+                showDeleted={filters.showDeleted}
                 onView={(p) => setDetailsModal({ open: true, product: p })}
                 loading={loading}
                 selectedIds={selected}
@@ -620,6 +635,8 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
                 products={products}
                 onEdit={canEdit ? handleEdit : undefined}
                 onDelete={canDelete ? handleDelete : undefined}
+                onRestore={handleRestore}
+                showDeleted={filters.showDeleted}
                 onView={(p) => setDetailsModal({ open: true, product: p })}
                 onSort={(field, order) => setFilters((p) => ({ ...p, sortBy: field, sortOrder: order, page: 1 }))}
                 sortField={filters.sortBy}

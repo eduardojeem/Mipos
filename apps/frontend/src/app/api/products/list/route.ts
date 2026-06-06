@@ -98,6 +98,7 @@ function applyProductFilters(
   const maxStock = params.get('maxStock');
   const isActive = params.get('isActive');
   const stockStatus = params.get('stockStatus');
+  const showDeleted = params.get('showDeleted') === 'true';
 
   let scopedQuery = (query as unknown as {
     eq: (column: string, value: unknown) => unknown;
@@ -106,8 +107,13 @@ function applyProductFilters(
   // Siempre filtramos productos con deleted_at (soft-deleted) a menos que
   // la columna no exista en el esquema (el caller pasa applyDeletedFilter=false)
   if (options?.applyDeletedFilter !== false) {
-    scopedQuery = (scopedQuery as unknown as { is: (column: string, value: null) => unknown })
-      .is('deleted_at', null);
+    if (showDeleted) {
+      scopedQuery = (scopedQuery as unknown as { not: (column: string, op: string, value: null) => unknown })
+        .not('deleted_at', 'is', null);
+    } else {
+      scopedQuery = (scopedQuery as unknown as { is: (column: string, value: null) => unknown })
+        .is('deleted_at', null);
+    }
   }
 
   if (search) {
@@ -147,7 +153,7 @@ function applyProductFilters(
 
   // Filtro de estado activo/inactivo: simple eq sobre is_active.
   // Cuando isActive es null (no enviado) no aplicamos ningún filtro de estado.
-  if (isActive !== null) {
+  if (isActive !== null && !showDeleted) {
     scopedQuery = (scopedQuery as unknown as { eq: (column: string, value: unknown) => unknown })
       .eq('is_active', isActive === 'true');
   }

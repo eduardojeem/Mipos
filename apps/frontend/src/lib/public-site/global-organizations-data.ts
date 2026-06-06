@@ -7,6 +7,12 @@ import { buildTenantHomeUrl } from '@/lib/domain/host-context';
 import type { PublicOrganization } from '@/lib/domain/request-tenant';
 import type { FeaturedOrganizationCard } from '@/lib/public-site/data';
 
+/**
+ * Solo organizaciones ACTIVE y TRIAL se muestran públicamente.
+ * Esto excluye intencionalmente a SUSPENDED, INACTIVE, CANCELLED, etc.
+ * No agregar SUSPENDED aquí — los negocios suspendidos NO deben aparecer
+ * en el directorio público ni en sus productos asociados.
+ */
 const PUBLIC_ORGANIZATION_STATUSES = ['ACTIVE', 'TRIAL'];
 const ORGANIZATION_BATCH_SIZE = 250;
 const PRODUCT_BATCH_SIZE = 500;

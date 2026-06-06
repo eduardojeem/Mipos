@@ -705,3 +705,77 @@ export async function DELETE(
     );
   }
 }
+
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const csrf = assertCsrf(request);
+    if (!csrf.ok) return csrf.response;
+
+    const auth = await requirePOSPermissions(request, [
+      'products.update',
+      'products.edit',
+      'products.write',
+      'products.manage',
+    ]);
+    if (!auth.ok) {
+      return NextResponse.json(auth.body, { status: auth.status });
+    }
+
+    const { id } = await params;
+    const orgId = await requireOrganization(request);
+    const body = await request.json();
+    const { action } = body;
+
+    if (action !== 'restore') {
+      return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+    }
+
+    const supabase = await createAdminClient();
+
+    // Restore product: clear deleted_at, set is_active to true
+    const { data: product, error } = await supabase
+      .from('products')
+      .update({
+        deleted_at: null,
+        is_active: true,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .eq('organization_id', orgId)
+      .select('*')
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    if (!product) {
+      return NextResponse.json({ error: 'Product not found' }, { status: 404 });
+    }
+
+    try {
+      await syncProductToExternal(new URL(request.url).origin, product, orgId);
+    } catch (syncErr) {
+      console.warn('[syncProductToExternal] Failed best-effort sync:', syncErr);
+    }
+
+    return NextResponse.json({
+      success: true,
+      product,
+      message: 'Product restored successfully',
+    });
+  } catch (error) {
+    console.error('Restore product error:', error);
+    return NextResponse.json(
+      {
+        error: 'Failed to restore product',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      },
+      { status: 500 }
+    );
+  }
+}
+
