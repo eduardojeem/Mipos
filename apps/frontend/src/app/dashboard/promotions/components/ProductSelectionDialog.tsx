@@ -190,11 +190,12 @@ export function ProductSelectionDialog({
       const sortColumnMap: Record<string, string> = {
         savings: 'sale_price', price: 'sale_price', name: 'name',
       }
-      const params: Record<string, string | number> = {
+      const params: Record<string, string | number | boolean> = {
         page,
         limit: PAGE_SIZE,
         sortBy: sortColumnMap[sortBy] ?? 'updated_at',
         sortOrder,
+        isActive: true,   // solo productos activos en el selector de promociones
       }
       if (debouncedSearch.trim()) params.search = debouncedSearch.trim()
       if (categoryFilter !== 'all') params.categoryId = categoryFilter
