@@ -365,7 +365,15 @@ async function fetchCatalogBaseProducts(
 
   let result = await runQuery(CATALOG_PRODUCT_SELECT);
 
-  // Fallback 1: columnas faltantes (rating, offer_price, etc.)
+  // Fallback 1: columnas faltantes en select (rating, offer_price, etc.)
+  // Mantener deleted_at y is_public si existen
+  if (result.error && isMissingColumnError(result.error)) {
+    result = await runQuery(CATALOG_PRODUCT_SELECT_FALLBACK, {
+      fallbackMode: true,
+    });
+  }
+
+  // Fallback 2: deleted_at no existe
   if (result.error && isMissingColumnError(result.error)) {
     result = await runQuery(CATALOG_PRODUCT_SELECT_FALLBACK, {
       fallbackMode: true,
@@ -373,7 +381,7 @@ async function fetchCatalogBaseProducts(
     });
   }
 
-  // Fallback 2: si is_public no existe (columna no creada aún), retry sin ella
+  // Fallback 3: is_public tampoco existe
   if (result.error && isMissingColumnError(result.error)) {
     result = await runQuery(CATALOG_PRODUCT_SELECT_FALLBACK, {
       fallbackMode: true,
@@ -509,19 +517,34 @@ export async function fetchPublicCatalogProductById(
 ): Promise<Product | null> {
   const client = await createAdminClient();
 
-  const runQuery = async (selectClause: string) =>
-    client
+  const runQuery = async (
+    selectClause: string,
+    opts?: { skipPublic?: boolean }
+  ) => {
+    let q = client
       .from('products')
       .select(selectClause)
       .eq('organization_id', organizationId)
       .eq('id', productId)
-      .eq('is_active', true)
-      .eq('is_public', true)
-      .maybeSingle();
+      .eq('is_active', true);
+
+    if (!opts?.skipPublic) {
+      q = q.eq('is_public', true);
+    }
+
+    return q.maybeSingle();
+  };
 
   let result = await runQuery(CATALOG_PRODUCT_SELECT);
-  if (isMissingColumnError(result.error)) {
+
+  // Fallback 1: columnas de select faltantes
+  if (result.error && isMissingColumnError(result.error)) {
     result = await runQuery(CATALOG_PRODUCT_SELECT_FALLBACK);
+  }
+
+  // Fallback 2: is_public no existe
+  if (result.error && isMissingColumnError(result.error)) {
+    result = await runQuery(CATALOG_PRODUCT_SELECT_FALLBACK, { skipPublic: true });
   }
 
   if (result.error) {
