@@ -1,27 +1,28 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
-import { Plus, Search, Download, RefreshCw, FileSpreadsheet, FileJson } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Download, FileJson, FileSpreadsheet, History, Plus,
+  RefreshCw, Search, Tag, Zap, TrendingDown, Clock, XCircle, Package,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useToast } from '@/components/ui/use-toast';
 import { UnifiedPermissionGuard } from '@/components/auth/UnifiedPermissionGuard';
 import { useStore } from '@/store';
 import { PromotionFilters } from './components/PromotionFilters';
 import { CreatePromotionDialog } from './components/CreatePromotionDialog';
-import { PromotionStats } from './components/PromotionStats';
 import { PromotionsList } from './components/PromotionsList';
 import { EmptyState } from './components/EmptyState';
 import { ErrorState } from './components/ErrorState';
 import { BulkActionsBar } from './components/BulkActionsBar';
-import { PromotionAlerts } from './components/PromotionAlerts';
 import { Pagination } from './components/Pagination';
 import CarouselEditor from './components/CarouselEditor';
 import CarouselAuditLog from './components/CarouselAuditLog';
 import api from '@/lib/api';
 import { getSelectedOrganizationId } from '@/lib/organization-context';
+import { toast } from '@/lib/toast';
 import * as XLSX from 'xlsx';
 import {
   DropdownMenu,
@@ -48,12 +49,35 @@ interface Promotion {
 const logger = createLogger('PromotionsPage');
 
 function deriveProductCounts(promotions: Promotion[]): Record<string, number> {
-  return promotions.reduce<Record<string, number>>((acc, promotion) => {
-    acc[promotion.id] = Array.isArray(promotion.applicableProducts)
-      ? promotion.applicableProducts.length
-      : 0;
+  return promotions.reduce<Record<string, number>>((acc, p) => {
+    acc[p.id] = Array.isArray(p.applicableProducts) ? p.applicableProducts.length : 0;
     return acc;
   }, {});
+}
+
+// ── Stat pill (inline) ────────────────────────────────────────────────────────
+function StatPill({
+  icon: Icon, label, value, accent = 'default',
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string | number;
+  accent?: 'default' | 'emerald' | 'amber' | 'rose' | 'blue';
+}) {
+  const cls = {
+    default:  'bg-muted/60 text-foreground',
+    emerald:  'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400',
+    amber:    'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400',
+    rose:     'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400',
+    blue:     'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400',
+  }[accent];
+  return (
+    <div className={cn('flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium', cls)}>
+      <Icon className="h-3.5 w-3.5 shrink-0" />
+      <span className="hidden sm:inline text-[11px] opacity-70">{label}</span>
+      <span className="font-semibold">{value}</span>
+    </div>
+  );
 }
 
 export default function PromotionsPage() {
@@ -64,185 +88,141 @@ export default function PromotionsPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showAuditLog, setShowAuditLog] = useState(false);
+  const [showCarousel, setShowCarousel] = useState(false);
   const [carouselVersion, setCarouselVersion] = useState(0);
-
-  // ✅ Nuevo estado para product counts
   const [productCounts, setProductCounts] = useState<Record<string, number>>({});
   const [loadingCounts, setLoadingCounts] = useState(false);
-
-  // ✅ Estados de paginación
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(12);
 
-  const { toast } = useToast();
-  const storeItems = useStore(s => s.items);
-  const fetchStorePromotions = useStore(s => s.fetchPromotions);
-  const storeLoading = useStore(s => s.loading);
-  const storeError = useStore(s => s.error);
+  const storeItems = useStore((s) => s.items);
+  const fetchStorePromotions = useStore((s) => s.fetchPromotions);
+  const storeLoading = useStore((s) => s.loading);
+  const storeError = useStore((s) => s.error);
 
-  // ✅ Declarar fetchProductCounts antes de usarla
   const fetchProductCounts = useCallback(async () => {
     try {
       setLoadingCounts(true);
-
       const ids = storeItems.map((p: Promotion) => p.id);
       const fallbackCounts = deriveProductCounts(storeItems);
-      if (ids.length === 0) {
-        setProductCounts(fallbackCounts);
-        return;
-      }
-      logger.log('Fetching counts for IDs:', ids);
+      if (ids.length === 0) { setProductCounts(fallbackCounts); return; }
 
-      try {
-        const orgId = getSelectedOrganizationId();
-        const headers = orgId ? { 'x-organization-id': orgId } : {};
-        const chunkSize = 100;
-        const chunks = Array.from(
-          { length: Math.ceil(ids.length / chunkSize) },
-          (_, index) => ids.slice(index * chunkSize, (index + 1) * chunkSize),
-        );
+      const orgId = getSelectedOrganizationId();
+      const headers = orgId ? { 'x-organization-id': orgId } : {};
+      const chunkSize = 100;
+      const chunks = Array.from(
+        { length: Math.ceil(ids.length / chunkSize) },
+        (_, i) => ids.slice(i * chunkSize, (i + 1) * chunkSize),
+      );
 
-        const responses = await Promise.all(
-          chunks.map((chunk) => api.post(
-            '/promotions/batch/product-counts',
-            { ids: chunk },
-            { headers },
-          ))
-        );
+      const responses = await Promise.all(
+        chunks.map((chunk) => api.post('/promotions/batch/product-counts', { ids: chunk }, { headers }))
+      );
 
-        const mergedCounts = responses.reduce<Record<string, number>>((acc, response) => {
-          if (response.data?.success && response.data?.counts) {
-            Object.assign(acc, response.data.counts);
-          }
-          return acc;
-        }, {});
+      const merged = responses.reduce<Record<string, number>>((acc, r) => {
+        if (r.data?.success && r.data?.counts) Object.assign(acc, r.data.counts);
+        return acc;
+      }, {});
 
-        if (Object.keys(mergedCounts).length > 0) {
-          setProductCounts(mergedCounts);
-          logger.log('Counts set:', mergedCounts);
-          return;
-        }
-        setProductCounts(fallbackCounts);
-      } catch (batchError: unknown) {
-        logger.log('Batch endpoint failed, using promotion payload counts', batchError);
-        // No usar datos mock; mantener counts vacíos para reflejar estado real
-        setProductCounts(fallbackCounts);
-      }
-    } catch (error) {
-      logger.error('Failed to fetch:', error);
-      // No mostrar toast para no molestar al usuario
+      setProductCounts(Object.keys(merged).length > 0 ? merged : fallbackCounts);
+    } catch (err) {
+      logger.log('Batch counts failed, using fallback', err);
+      setProductCounts(deriveProductCounts(storeItems));
     } finally {
       setLoadingCounts(false);
     }
   }, [storeItems]);
 
   useEffect(() => {
-    fetchStorePromotions().catch(() => { });
+    fetchStorePromotions().catch(() => {});
   }, [fetchStorePromotions]);
 
-  // ✅ Fetch product counts después de cargar promociones
   useEffect(() => {
-    fetchProductCounts().catch(console.error);
+    let cancelled = false;
+    const run = async () => { try { await fetchProductCounts(); } catch { /**/ } };
+    if (!cancelled) run();
+    return () => { cancelled = true; };
   }, [storeItems, fetchProductCounts]);
 
-  // ✅ Memoizar función de status para evitar recalcular
-  const getPromotionStatus = useCallback((promo: Promotion) => {
+  const getStatus = useCallback((p: Promotion) => {
     const now = new Date();
-    const start = new Date(promo.startDate);
-    const end = new Date(promo.endDate);
-    if (!promo.isActive) return 'inactive';
-    if (now < start) return 'scheduled';
-    if (now > end) return 'expired';
+    if (!p.isActive) return 'inactive';
+    if (now < new Date(p.startDate)) return 'scheduled';
+    if (now > new Date(p.endDate)) return 'expired';
     return 'active';
   }, []);
 
   const filteredPromotions = useMemo(() => {
-    const filtered = storeItems.filter((promo: Promotion) => {
-      const matchesSearch = promo.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (promo.description || '').toLowerCase().includes(searchTerm.toLowerCase());
-
-      if (!matchesSearch) return false;
-
-      if (statusFilter === 'all') return true;
-      return getPromotionStatus(promo) === statusFilter;
+    const filtered = storeItems.filter((p: Promotion) => {
+      const q = searchTerm.toLowerCase();
+      if (q && !p.name.toLowerCase().includes(q) && !(p.description || '').toLowerCase().includes(q)) return false;
+      if (statusFilter !== 'all' && getStatus(p) !== statusFilter) return false;
+      return true;
     });
-
-    // Sort
-    filtered.sort((a: Promotion, b: Promotion) => {
-      if (sortBy === 'name') {
-        return a.name.localeCompare(b.name);
-      } else if (sortBy === 'date') {
-        return new Date(b.startDate).getTime() - new Date(a.startDate).getTime();
-      } else if (sortBy === 'discount') {
-        return b.discountValue - a.discountValue;
-      }
-      return 0;
+    return filtered.sort((a: Promotion, b: Promotion) => {
+      if (sortBy === 'name') return a.name.localeCompare(b.name);
+      if (sortBy === 'date') return new Date(b.startDate).getTime() - new Date(a.startDate).getTime();
+      return b.discountValue - a.discountValue;
     });
+  }, [storeItems, searchTerm, statusFilter, sortBy, getStatus]);
 
-    return filtered;
-  }, [storeItems, searchTerm, statusFilter, sortBy, getPromotionStatus]);
+  // Stats
+  const stats = useMemo(() => {
+    const all = storeItems as Promotion[];
+    return {
+      total: all.length,
+      active: all.filter((p) => getStatus(p) === 'active').length,
+      scheduled: all.filter((p) => getStatus(p) === 'scheduled').length,
+      expired: all.filter((p) => getStatus(p) === 'expired').length,
+    };
+  }, [storeItems, getStatus]);
 
-  // ✅ Paginación
   const totalPages = Math.ceil(filteredPromotions.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedPromotions = filteredPromotions.slice(startIndex, endIndex);
+  const paginatedPromotions = filteredPromotions.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage,
+  );
 
-  // Reset a página 1 cuando cambian los filtros
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, statusFilter, sortBy]);
-
-  // Only show the empty toast once per session, and only if there are truly no promotions
-  // (not just filtered results) — removed to avoid annoying users on every load
+  useEffect(() => { setCurrentPage(1); }, [searchTerm, statusFilter, sortBy]);
 
   const exportToExcel = () => {
     const data = filteredPromotions.map((p: Promotion) => ({
-      Nombre: p.name,
-      Descripción: p.description,
+      Nombre: p.name, Descripción: p.description,
       Tipo: p.discountType === 'PERCENTAGE' ? 'Porcentaje' : 'Monto Fijo',
-      Valor: p.discountValue,
-      Inicio: p.startDate,
-      Fin: p.endDate,
-      Estado: getPromotionStatus(p),
-      Activa: p.isActive ? 'Sí' : 'No',
-      Usos: p.usageCount || 0,
-      Límite: p.usageLimit || 'Ilimitado',
+      Valor: p.discountValue, Inicio: p.startDate, Fin: p.endDate,
+      Estado: getStatus(p), Activa: p.isActive ? 'Sí' : 'No',
+      Usos: p.usageCount || 0, Límite: p.usageLimit || 'Ilimitado',
     }));
-
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Promociones');
     XLSX.writeFile(wb, `promociones-${new Date().toISOString().split('T')[0]}.xlsx`);
-    toast({ title: 'Exportado', description: 'Archivo Excel descargado exitosamente' });
+    toast.success('Archivo Excel descargado');
   };
 
   const exportToJSON = () => {
-    const data = JSON.stringify(filteredPromotions, null, 2);
-    const blob = new Blob([data], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(filteredPromotions, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `promociones-${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    const a = Object.assign(document.createElement('a'), {
+      href: url,
+      download: `promociones-${new Date().toISOString().split('T')[0]}.json`,
+    });
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    toast({ title: 'Exportado', description: 'Archivo JSON descargado exitosamente' });
+    toast.success('Archivo JSON descargado');
   };
 
   const handleToggleSelect = (id: string) => {
-    const newSelected = new Set(selectedIds);
-    if (newSelected.has(id)) {
-      newSelected.delete(id);
-    } else {
-      newSelected.add(id);
-    }
-    setSelectedIds(newSelected);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
   };
 
-  const handleClearSelection = () => {
-    setSelectedIds(new Set());
+  const refreshAll = () => {
+    fetchStorePromotions();
+    fetchProductCounts();
   };
 
   return (
@@ -251,226 +231,205 @@ export default function PromotionsPage() {
       action="view"
       fallback={<div className="p-6"><h1 className="text-xl font-semibold">Acceso denegado</h1></div>}
     >
-      <div className="min-h-screen bg-slate-50/50 dark:bg-slate-950">
-        <div className="container mx-auto px-4 py-8 max-w-7xl space-y-8">
-          {/* Header Section Moderno */}
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-slate-200 dark:border-slate-800">
-            <div className="space-y-2">
-              <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
-                Promociones
-              </h1>
-              <p className="text-slate-500 dark:text-slate-400 text-lg max-w-2xl">
-                Gestiona tus campañas de descuentos y ofertas especiales desde un solo lugar.
-              </p>
+      <div className="flex flex-col gap-5 p-4 sm:p-6">
+        {/* ═══ HEADER ══════════════════════════════════════════════════════════ */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          {/* Izquierda: título + stats inline */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 ring-1 ring-indigo-500/20">
+              <Tag className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
             </div>
+            <h1 className="text-xl font-bold tracking-tight">Promociones</h1>
 
-            <div className="flex flex-wrap gap-3">
-              <Button
-                variant="outline"
-                size="default"
-                onClick={() => fetchStorePromotions()}
-                className="gap-2 bg-white dark:bg-slate-900"
-                aria-label="Actualizar promociones"
-              >
-                <RefreshCw className={cn("h-4 w-4", storeLoading ? "animate-spin" : "")} />
-                <span className="hidden sm:inline">Actualizar</span>
-              </Button>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="default"
-                    className="gap-2 bg-white dark:bg-slate-900"
-                    aria-label="Exportar promociones"
-                  >
-                    <Download className="h-4 w-4" />
-                    <span className="hidden sm:inline">Exportar</span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
-                  <DropdownMenuItem onClick={exportToExcel} className="cursor-pointer">
-                    <FileSpreadsheet className="h-4 w-4 mr-2 text-green-600" />
-                    Excel (.xlsx)
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={exportToJSON} className="cursor-pointer">
-                    <FileJson className="h-4 w-4 mr-2 text-orange-600" />
-                    JSON (.json)
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              <Button
-                size="default"
-                onClick={() => setIsCreateDialogOpen(true)}
-                className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white shadow-md hover:shadow-lg transition-all"
-              >
-                <Plus className="h-4 w-4" />
-                Nueva Promoción
-              </Button>
-            </div>
+            {/* Stat pills */}
+            {!storeLoading && stats.total > 0 && (
+              <>
+                <StatPill icon={Zap} label="Total" value={stats.total} />
+                {stats.active > 0 && <StatPill icon={TrendingDown} label="Activas" value={stats.active} accent="emerald" />}
+                {stats.scheduled > 0 && <StatPill icon={Clock} label="Programadas" value={stats.scheduled} accent="blue" />}
+                {stats.expired > 0 && <StatPill icon={XCircle} label="Expiradas" value={stats.expired} accent="rose" />}
+              </>
+            )}
           </div>
 
-          {/* Stats Cards - Integrado */}
-          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <PromotionStats promotions={storeItems} productCounts={productCounts} />
+          {/* Derecha: acciones */}
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {/* Historial / Carrusel (acceso rápido) */}
+            <Button
+              variant="ghost" size="icon"
+              onClick={() => setShowAuditLog((v) => !v)}
+              className={cn('h-9 w-9 text-muted-foreground', showAuditLog && 'bg-muted text-foreground')}
+              title="Historial de cambios"
+            >
+              <History className="h-4 w-4" />
+            </Button>
+
+            <Button
+              variant="ghost" size="icon"
+              onClick={() => refreshAll()}
+              disabled={storeLoading}
+              className="h-9 w-9 text-muted-foreground"
+              title="Actualizar"
+            >
+              <RefreshCw className={cn('h-4 w-4', storeLoading && 'animate-spin')} />
+            </Button>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9 gap-1.5">
+                  <Download className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Exportar</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuItem onClick={exportToExcel} className="cursor-pointer">
+                  <FileSpreadsheet className="h-4 w-4 mr-2 text-green-600" /> Excel (.xlsx)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={exportToJSON} className="cursor-pointer">
+                  <FileJson className="h-4 w-4 mr-2 text-orange-600" /> JSON (.json)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <Button
+              size="sm"
+              onClick={() => setIsCreateDialogOpen(true)}
+              className="h-9 gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white"
+            >
+              <Plus className="h-4 w-4" />
+              Nueva Promoción
+            </Button>
           </div>
+        </div>
 
-          {/* Alerts */}
-          <PromotionAlerts promotions={storeItems} />
-
-          {/* Carousel Editor */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
-              <h3 className="font-semibold text-slate-900 dark:text-slate-200">Carrusel de Ofertas</h3>
-            </div>
-            <div className="p-4">
+        {/* ═══ CARRUSEL (colapsable) ════════════════════════════════════════════ */}
+        <div className="overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm">
+          <button
+            onClick={() => setShowCarousel((v) => !v)}
+            className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium text-foreground hover:bg-muted/30 transition-colors"
+          >
+            <span className="flex items-center gap-2">
+              <Package className="h-4 w-4 text-indigo-500" />
+              Carrusel de Ofertas
+            </span>
+            <Badge variant="outline" className="text-[11px]">
+              {showCarousel ? 'Ocultar' : 'Mostrar'}
+            </Badge>
+          </button>
+          {showCarousel && (
+            <div className="border-t border-border/40 p-4">
               <CarouselEditor
                 key={`carousel-v${carouselVersion}`}
                 promotions={storeItems}
                 isLoading={storeLoading}
               />
             </div>
-          </div>
+          )}
+        </div>
 
-          {/* Audit Log (Collapsible) */}
-          <div className="space-y-2">
-            <Button
-              variant="ghost"
-              onClick={() => setShowAuditLog(!showAuditLog)}
-              className="w-full justify-between text-slate-500 hover:text-slate-900 dark:hover:text-slate-200"
-            >
-              <span>Historial de Cambios</span>
-              <span className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-full">{showAuditLog ? 'Ocultar' : 'Mostrar'}</span>
-            </Button>
-            {showAuditLog && (
-              <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                <CarouselAuditLog
-                  onRevert={() => {
-                    // Refresh promotions after revert
-                    fetchStorePromotions();
-                    // Force CarouselEditor refresh
-                    setCarouselVersion(v => v + 1);
-                  }}
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Search and Filters */}
-          <div className="sticky top-4 z-30 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md rounded-xl border border-slate-200/60 dark:border-slate-800/60 shadow-sm p-4">
-            <div className="flex flex-col lg:flex-row gap-4">
-              <div className="flex-1 relative group">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
-                <Input
-                  placeholder="Buscar por nombre, código o descripción..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 h-10 bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-indigo-500/20 transition-all"
-                  aria-label="Buscar promociones"
-                />
-              </div>
-
-              <PromotionFilters
-                statusFilter={statusFilter}
-                setStatusFilter={setStatusFilter}
-                sortBy={sortBy}
-                setSortBy={setSortBy}
-                viewMode={viewMode}
-                setViewMode={setViewMode}
+        {/* ═══ HISTORIAL (colapsable) ══════════════════════════════════════════ */}
+        {showAuditLog && (
+          <div className="overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm">
+            <div className="border-b border-border/40 px-4 py-3">
+              <h3 className="text-sm font-medium">Historial de Cambios</h3>
+            </div>
+            <div className="p-4">
+              <CarouselAuditLog
+                onRevert={() => {
+                  fetchStorePromotions();
+                  setCarouselVersion((v) => v + 1);
+                }}
               />
             </div>
           </div>
+        )}
 
-          {/* Promotions Display */}
-          <div className="min-h-[400px]">
-            {storeError ? (
-              <div className="max-w-2xl mx-auto py-12">
-                <ErrorState
-                  error={storeError}
-                  onRetry={() => fetchStorePromotions()}
-                  additionalInfo="Verifica tu conexión o contacta a soporte si el problema persiste."
-                />
-              </div>
-            ) : storeLoading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {[...Array(6)].map((_, i) => (
-                  <Card key={i} className="animate-pulse border-slate-200 dark:border-slate-800">
-                    <CardContent className="p-6 space-y-4">
-                      <div className="h-6 bg-slate-200 dark:bg-slate-800 rounded w-3/4" />
-                      <div className="h-4 bg-slate-100 dark:bg-slate-800/60 rounded w-full" />
-                      <div className="flex gap-2 pt-2">
-                        <div className="h-8 w-20 bg-slate-200 dark:bg-slate-800 rounded" />
-                        <div className="h-8 w-20 bg-slate-200 dark:bg-slate-800 rounded" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            ) : filteredPromotions.length === 0 ? (
-              <div className="py-12">
-                <EmptyState
-                  type={storeItems.length === 0 ? 'no-promotions' : 'no-results'}
-                  onCreateClick={storeItems.length === 0 ? () => setIsCreateDialogOpen(true) : undefined}
-                  onClearFilters={() => {
-                    setSearchTerm('');
-                    setStatusFilter('all');
-                  }}
-                />
-              </div>
-            ) : (
-              <div className="space-y-6 animate-in fade-in duration-500">
-                <PromotionsList
-                  promotions={paginatedPromotions}
-                  viewMode={viewMode}
-                  onRefresh={() => {
-                    fetchStorePromotions();
-                    fetchProductCounts();
-                  }}
-                  selectedIds={selectedIds}
-                  onToggleSelect={handleToggleSelect}
-                  productCounts={productCounts}
-                  loadingCounts={loadingCounts}
-                />
-
-                <div className="flex justify-center py-8">
-                  <Pagination
-                    currentPage={currentPage}
-                    totalPages={totalPages}
-                    totalItems={filteredPromotions.length}
-                    itemsPerPage={itemsPerPage}
-                    onPageChange={setCurrentPage}
-                    onItemsPerPageChange={(items) => {
-                      setItemsPerPage(items);
-                      setCurrentPage(1);
-                    }}
-                  />
-                </div>
-              </div>
-            )}
+        {/* ═══ BÚSQUEDA Y FILTROS ══════════════════════════════════════════════ */}
+        <div className="sticky top-4 z-30 overflow-hidden rounded-2xl border border-border/50 bg-background/90 p-3 shadow-sm backdrop-blur-md">
+          <div className="flex flex-col gap-3 lg:flex-row">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nombre o descripción..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="h-9 rounded-xl pl-9 text-sm"
+                aria-label="Buscar promociones"
+              />
+            </div>
+            <PromotionFilters
+              statusFilter={statusFilter}
+              setStatusFilter={setStatusFilter}
+              sortBy={sortBy}
+              setSortBy={setSortBy}
+              viewMode={viewMode}
+              setViewMode={setViewMode}
+            />
           </div>
         </div>
 
-        {/* Bulk Actions Bar */}
-        <BulkActionsBar
-          selectedIds={selectedIds}
-          onClearSelection={handleClearSelection}
-          onRefresh={() => fetchStorePromotions()}
-        />
-
-        {/* Create Dialog */}
-        <CreatePromotionDialog
-          open={isCreateDialogOpen}
-          onOpenChange={setIsCreateDialogOpen}
-          onSuccess={() => {
-            fetchStorePromotions();
-            toast({
-              title: 'Promoción creada',
-              description: 'La promoción se ha creado exitosamente',
-            });
-          }}
-        />
+        {/* ═══ LISTA / ESTADOS ═════════════════════════════════════════════════ */}
+        <div className="min-h-[400px]">
+          {storeError ? (
+            <ErrorState
+              error={storeError}
+              onRetry={refreshAll}
+              additionalInfo="Verifica tu conexión o contacta a soporte."
+            />
+          ) : storeLoading && storeItems.length === 0 ? (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="h-48 animate-pulse rounded-2xl border border-border/50 bg-muted/40" />
+              ))}
+            </div>
+          ) : filteredPromotions.length === 0 ? (
+            <EmptyState
+              type={storeItems.length === 0 ? 'no-promotions' : 'no-results'}
+              onCreateClick={storeItems.length === 0 ? () => setIsCreateDialogOpen(true) : undefined}
+              onClearFilters={() => { setSearchTerm(''); setStatusFilter('all'); }}
+            />
+          ) : (
+            <div className="space-y-5">
+              <PromotionsList
+                promotions={paginatedPromotions}
+                viewMode={viewMode}
+                onRefresh={refreshAll}
+                selectedIds={selectedIds}
+                onToggleSelect={handleToggleSelect}
+                productCounts={productCounts}
+                loadingCounts={loadingCounts}
+              />
+              {totalPages > 1 && (
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  totalItems={filteredPromotions.length}
+                  itemsPerPage={itemsPerPage}
+                  onPageChange={setCurrentPage}
+                  onItemsPerPageChange={(n) => { setItemsPerPage(n); setCurrentPage(1); }}
+                />
+              )}
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* ═══ BARRA FLOTANTE ══════════════════════════════════════════════════════ */}
+      <BulkActionsBar
+        selectedIds={selectedIds}
+        onClearSelection={() => setSelectedIds(new Set())}
+        onRefresh={refreshAll}
+      />
+
+      {/* ═══ MODAL CREAR ══════════════════════════════════════════════════════════ */}
+      <CreatePromotionDialog
+        open={isCreateDialogOpen}
+        onOpenChange={setIsCreateDialogOpen}
+        onSuccess={() => {
+          fetchStorePromotions();
+          toast.success('Promoción creada exitosamente');
+        }}
+      />
     </UnifiedPermissionGuard>
   );
 }

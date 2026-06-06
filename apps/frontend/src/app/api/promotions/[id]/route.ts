@@ -96,6 +96,32 @@ export async function PATCH(
       }
     }
 
+    // ── Validación de negocio en PATCH ────────────────────────────────────────
+    if (body.name !== undefined) {
+      const nameStr = typeof body.name === 'string' ? body.name.trim() : ''
+      if (nameStr.length < 2) {
+        return NextResponse.json({ success: false, message: 'El nombre debe tener al menos 2 caracteres' }, { status: 400 })
+      }
+    }
+    if (body.discountValue !== undefined) {
+      const dv = Number(body.discountValue)
+      if (isNaN(dv) || dv < 0) {
+        return NextResponse.json({ success: false, message: 'El valor del descuento debe ser >= 0' }, { status: 400 })
+      }
+      const dtype = (body.discountType ?? 'PERCENTAGE') as string
+      if (dtype === 'PERCENTAGE' && dv > 100) {
+        return NextResponse.json({ success: false, message: 'El porcentaje de descuento no puede superar 100%' }, { status: 400 })
+      }
+    }
+    if (body.startDate !== undefined && body.endDate !== undefined) {
+      const s = new Date(body.startDate as string)
+      const e = new Date(body.endDate as string)
+      if (!isNaN(s.getTime()) && !isNaN(e.getTime()) && e <= s) {
+        return NextResponse.json({ success: false, message: 'La fecha de fin debe ser posterior a la fecha de inicio' }, { status: 400 })
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     const updatePayload: Record<string, unknown> = {}
     if (body.name !== undefined) updatePayload.name = body.name
     if (body.description !== undefined) updatePayload.description = body.description

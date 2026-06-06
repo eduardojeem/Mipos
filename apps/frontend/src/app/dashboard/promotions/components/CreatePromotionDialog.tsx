@@ -110,16 +110,29 @@ export function CreatePromotionDialog({
   }, [open, reset, today]);
 
   const onSubmit = async (data: FormData) => {
-    // Validate dates
+    // Validar nombre
+    if (!data.name || data.name.trim().length < 2) {
+      toast({ title: 'Error', description: 'El nombre debe tener al menos 2 caracteres', variant: 'destructive' });
+      return;
+    }
+    // Validar porcentaje
+    if (data.discountType === 'PERCENTAGE' && Number(data.discountValue) > 100) {
+      toast({ title: 'Error', description: 'El porcentaje no puede superar el 100%', variant: 'destructive' });
+      return;
+    }
+    // Validar fechas
+    if (!data.endDate) {
+      toast({ title: 'Error', description: 'La fecha de fin es requerida', variant: 'destructive' });
+      return;
+    }
     const start = new Date(data.startDate);
     const end = new Date(data.endDate);
-
-    if (end < start) {
-      toast({
-        title: 'Error de validación',
-        description: 'La fecha de fin no puede ser anterior a la fecha de inicio',
-        variant: 'destructive',
-      });
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      toast({ title: 'Error', description: 'Las fechas ingresadas no son válidas', variant: 'destructive' });
+      return;
+    }
+    if (end <= start) {
+      toast({ title: 'Error', description: 'La fecha de fin debe ser posterior a la fecha de inicio', variant: 'destructive' });
       return;
     }
 

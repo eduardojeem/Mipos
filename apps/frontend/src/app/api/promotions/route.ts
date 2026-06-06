@@ -236,6 +236,28 @@ export async function POST(request: NextRequest) {
 
     rollbackOrganizationId = orgId
 
+    // ── Validación de negocio ─────────────────────────────────────────────────
+    const nameStr = typeof body.name === 'string' ? body.name.trim() : ''
+    if (nameStr.length < 2) {
+      return NextResponse.json({ success: false, message: 'El nombre debe tener al menos 2 caracteres' }, { status: 400 })
+    }
+    const discountVal = Number(body.discountValue)
+    if (isNaN(discountVal) || discountVal < 0) {
+      return NextResponse.json({ success: false, message: 'El valor del descuento debe ser un número mayor o igual a 0' }, { status: 400 })
+    }
+    if (body.discountType === 'PERCENTAGE' && discountVal > 100) {
+      return NextResponse.json({ success: false, message: 'El porcentaje de descuento no puede ser mayor a 100%' }, { status: 400 })
+    }
+    const startDate = body.startDate ? new Date(body.startDate as string) : null
+    const endDate   = body.endDate   ? new Date(body.endDate as string)   : null
+    if (!startDate || isNaN(startDate.getTime()) || !endDate || isNaN(endDate.getTime())) {
+      return NextResponse.json({ success: false, message: 'Fechas de inicio y fin son requeridas y deben ser válidas' }, { status: 400 })
+    }
+    if (endDate <= startDate) {
+      return NextResponse.json({ success: false, message: 'La fecha de fin debe ser posterior a la fecha de inicio' }, { status: 400 })
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     if (!isSupabaseActive()) {
       if (process.env.NODE_ENV === 'production') {
         return NextResponse.json({ success: false, message: 'Database connection not available' }, { status: 503 })

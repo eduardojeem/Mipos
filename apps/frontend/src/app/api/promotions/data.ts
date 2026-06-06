@@ -25,6 +25,9 @@ function validateInput(input: Partial<PromotionCreateInput>) {
   if (typeof input.discountValue !== 'number' || input.discountValue < 0) {
     throw new Error('El valor del descuento debe ser un número mayor o igual a cero');
   }
+  if (input.discountType === 'PERCENTAGE' && input.discountValue > 100) {
+    throw new Error('El porcentaje de descuento no puede ser mayor a 100%');
+  }
   if (!input.startDate || !input.endDate || !isValidDateString(input.startDate) || !isValidDateString(input.endDate)) {
     throw new Error('Fechas inválidas');
   }

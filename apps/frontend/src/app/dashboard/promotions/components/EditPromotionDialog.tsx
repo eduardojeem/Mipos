@@ -125,28 +125,41 @@ export function EditPromotionDialog({
   const onSubmit = async (data: FormData) => {
     if (!promotion) return
 
-    // ✅ Validar fechas
+    // Validar nombre
+    if (!data.name || data.name.trim().length < 2) {
+      toast({ title: 'Error', description: 'El nombre debe tener al menos 2 caracteres', variant: 'destructive' });
+      return;
+    }
+    // Validar porcentaje
+    if (data.discountType === 'PERCENTAGE' && Number(data.discountValue) > 100) {
+      toast({ title: 'Error', description: 'El porcentaje no puede superar el 100%', variant: 'destructive' });
+      return;
+    }
+    // Validar fechas
+    if (!data.startDate || !data.endDate) {
+      toast({ title: 'Error', description: 'Las fechas de inicio y fin son requeridas', variant: 'destructive' });
+      return;
+    }
     const start = new Date(data.startDate);
     const end = new Date(data.endDate);
-    
-    if (end < start) {
-      toast({
-        title: 'Error de validación',
-        description: 'La fecha de fin no puede ser anterior a la fecha de inicio',
-        variant: 'destructive',
-      });
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      toast({ title: 'Error', description: 'Las fechas ingresadas no son válidas', variant: 'destructive' });
+      return;
+    }
+    if (end <= start) {
+      toast({ title: 'Error', description: 'La fecha de fin debe ser posterior a la fecha de inicio', variant: 'destructive' });
       return;
     }
 
     setLoading(true)
     try {
       const payload = {
-        name: data.name,
-        description: data.description,
+        name: data.name.trim(),
+        description: data.description ?? '',
         discountType: data.discountType,
         discountValue: Number(data.discountValue),
-        startDate: data.startDate || null,
-        endDate: data.endDate || null,
+        startDate: data.startDate,
+        endDate: data.endDate,
         minPurchaseAmount: Number(data.minPurchaseAmount) || 0,
         maxDiscountAmount: Number(data.maxDiscountAmount) || 0,
         usageLimit: Number(data.usageLimit) || 0,
