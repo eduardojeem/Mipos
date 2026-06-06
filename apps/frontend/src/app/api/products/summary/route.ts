@@ -2,10 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { getValidatedOrganizationId } from '@/lib/organization';
 
-// TTL en segundos para Cache-Control (60 s).
-// Funciona correctamente en multi-instancia / serverless porque el caché
-// vive en el cliente HTTP, no en memoria del proceso del servidor.
-const CACHE_TTL_SECONDS = 60;
+function isMissingColumnError(error: unknown, column: string): boolean {
+  const message = String((error as { message?: unknown })?.message || '').toLowerCase();
+  const normalized = String(column || '').trim().toLowerCase();
+  if (!message || !normalized) return false;
+  if (message.includes(`column "${normalized}"`) && message.includes('does not exist')) return true;
+  if (message.includes(`could not find`) && message.includes(normalized) && message.includes('schema cache')) return true;
+  if (message.includes(`could not find the '${normalized}' column`)) return true;
+  if (message.includes('pgrst204') && message.includes(normalized)) return true;
+  return false;
+}
+
 
 const FALLBACK_SUMMARY = {
   totalProducts: 0,
@@ -33,17 +40,34 @@ export async function GET(request: NextRequest) {
     const normalizedIsActive =
       isActiveParam === 'true' ? true : isActiveParam === 'false' ? false : null;
 
-    // Fetch solo los campos necesarios para las métricas
-    let query = supabase
-      .from('products')
-      .select('id, stock_quantity, min_stock, sale_price, cost_price, category_id, created_at')
-      .eq('organization_id', orgId);
+    // Siempre excluimos soft-deleted. Cuando isActive=false, solo contamos
+    // productos con is_active=false (no mezclamos con deleted_at).
+    const runQuery = async (applyDeletedFilter: boolean) => {
+      let query = supabase
+        .from('products')
+        .select('id, stock_quantity, min_stock, sale_price, cost_price, category_id, created_at')
+        .eq('organization_id', orgId);
 
-    if (normalizedIsActive !== null) {
-      query = query.eq('is_active', normalizedIsActive);
+      if (applyDeletedFilter) {
+        query = query.is('deleted_at', null);
+      }
+
+      if (normalizedIsActive !== null) {
+        query = query.eq('is_active', normalizedIsActive);
+      }
+
+      return query;
+    };
+
+    let { data: scopedProducts, error: scopedError } = await runQuery(true);
+
+    if (scopedError && isMissingColumnError(scopedError, 'deleted_at')) {
+      // La columna deleted_at no existe — reintentamos sin ese filtro
+      const retry = await runQuery(false);
+      scopedProducts = retry.data;
+      scopedError = retry.error;
     }
 
-    const { data: scopedProducts, error: scopedError } = await query;
     if (scopedError) throw scopedError;
 
     const allProducts = scopedProducts || [];
@@ -58,20 +82,18 @@ export async function GET(request: NextRequest) {
           recentlyAdded: number;
           categoryCounts: Record<string, number>;
         },
-        product: any,
+        product: Record<string, unknown>,
       ) => {
-        const stock = Number(product.stock_quantity || 0);
-        // Usar min_stock real del producto, sin threshold hardcodeado
-        const minStock = Number(product.min_stock ?? 0);
-        const price = Number(product.cost_price || product.sale_price || 0);
-        const createdAt = new Date(product.created_at || 0).getTime();
+        const stock = Number(product['stock_quantity'] || 0);
+        const minStock = Number(product['min_stock'] ?? 0);
+        const price = Number(product['cost_price'] || product['sale_price'] || 0);
+        const createdAt = new Date(String(product['created_at'] || 0)).getTime();
 
         acc.totalValue += stock * price;
 
         if (stock === 0) {
           acc.outOfStock++;
         } else if (stock <= minStock) {
-          // Bajo stock = stock positivo pero <= min_stock del producto
           acc.lowStock++;
         }
 
@@ -79,9 +101,9 @@ export async function GET(request: NextRequest) {
           acc.recentlyAdded++;
         }
 
-        if (product.category_id) {
-          acc.categoryCounts[product.category_id] =
-            (acc.categoryCounts[product.category_id] || 0) + 1;
+        const categoryId = typeof product['category_id'] === 'string' ? product['category_id'] : null;
+        if (categoryId) {
+          acc.categoryCounts[categoryId] = (acc.categoryCounts[categoryId] || 0) + 1;
         }
 
         return acc;
@@ -121,13 +143,7 @@ export async function GET(request: NextRequest) {
       lastUpdated: new Date().toISOString(),
     };
 
-    // Cache-Control funciona correctamente en entornos multi-instancia y
-    // serverless, a diferencia de un Map en memoria del proceso del servidor.
-    return NextResponse.json(summary, {
-      headers: {
-        'Cache-Control': `private, max-age=${CACHE_TTL_SECONDS}, stale-while-revalidate=${CACHE_TTL_SECONDS * 2}`,
-      },
-    });
+    return NextResponse.json(summary);
   } catch (error) {
     console.error('Products summary error:', error);
 

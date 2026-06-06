@@ -4,6 +4,19 @@ import { getOperationalContextHeaders } from './operational-context';
 // NOTE: Do not import the UI store at module scope. It is client-only and
 // importing it on the server can crash SSR/API routes due to localStorage usage.
 
+type RetryableRequestConfig = {
+  headers?: Record<string, unknown>;
+  method?: string;
+  _retryCount?: number;
+  _noRetry?: boolean;
+  _maxRetries?: number;
+};
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
 function isMissingOrPlaceholder(value?: string | null): boolean {
   if (!value) return true;
   const v = value.trim();
@@ -105,13 +118,14 @@ const api = axios.create({
 // Request interceptor to add auth token and toggle global loading
 api.interceptors.request.use(
   async (config) => {
-    const safeConfig: any = { ...config, headers: { ...(config.headers || {}) } };
+    const headers = { ...((config.headers as Record<string, unknown> | undefined) || {}) };
+    const safeConfig = { ...config, headers } as typeof config & { headers: Record<string, unknown> };
     try {
       const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
 
       if (session?.access_token) {
-        safeConfig.headers.Authorization = `Bearer ${session.access_token}`;
+        safeConfig.headers['Authorization'] = `Bearer ${session.access_token}`;
       }
     } catch (error: unknown) {
       console.error('Error getting session:', error);
@@ -131,20 +145,20 @@ api.interceptors.request.use(
             orgId = raw;
           }
           if (orgId && String(orgId).trim()) {
-            (safeConfig.headers as any)['x-organization-id'] = String(orgId).trim();
+            safeConfig.headers['x-organization-id'] = String(orgId).trim();
           }
         }
-        if (!(safeConfig.headers as any)['x-organization-id']) {
+        if (!safeConfig.headers['x-organization-id']) {
           const cookieMatch = document.cookie.match(/(?:^|; )x-organization-id=([^;]*)/);
           const cookieOrg = cookieMatch ? decodeURIComponent(cookieMatch[1]) : '';
           if (cookieOrg && cookieOrg.trim()) {
-            (safeConfig.headers as any)['x-organization-id'] = cookieOrg.trim();
+            safeConfig.headers['x-organization-id'] = cookieOrg.trim();
           }
         }
 
         const operationalHeaders = getOperationalContextHeaders();
         Object.entries(operationalHeaders).forEach(([key, value]) => {
-          (safeConfig.headers as any)[key] = value;
+          safeConfig.headers[key] = value;
         });
       }
     } catch {}
@@ -157,12 +171,13 @@ api.interceptors.request.use(
           return m ? decodeURIComponent(m[1]) : '';
         };
         let csrf = getCookie('csrf-token');
-        if (!csrf && (window as any).crypto && typeof (window as any).crypto.randomUUID === 'function') {
-          csrf = (window as any).crypto.randomUUID();
+        const maybeCrypto = window as unknown as { crypto?: { randomUUID?: () => string } };
+        if (!csrf && maybeCrypto.crypto && typeof maybeCrypto.crypto.randomUUID === 'function') {
+          csrf = maybeCrypto.crypto.randomUUID();
           document.cookie = `csrf-token=${csrf}; path=/; SameSite=Lax`;
         }
         if (csrf) {
-          (safeConfig.headers as any)['x-csrf-token'] = csrf;
+          safeConfig.headers['x-csrf-token'] = csrf;
         }
       }
     } catch { }
@@ -171,8 +186,8 @@ api.interceptors.request.use(
     try {
       if (typeof window !== 'undefined') {
         const mod = await import('@/store');
-        const { useUIStore } = mod as any;
-        const { startLoading } = useUIStore.getState();
+        const useStore = (mod as unknown as { useStore: { getState: () => { startLoading: (message?: string) => void } } }).useStore;
+        const { startLoading } = useStore.getState();
         startLoading('Cargando datos...');
       }
     } catch (e) {
@@ -193,8 +208,8 @@ api.interceptors.response.use(
     try {
       if (typeof window !== 'undefined') {
         const mod = await import('@/store');
-        const { useUIStore } = mod as any;
-        const { stopLoading } = useUIStore.getState();
+        const useStore = (mod as unknown as { useStore: { getState: () => { stopLoading: () => void } } }).useStore;
+        const { stopLoading } = useStore.getState();
         stopLoading();
       }
     } catch (e) { }
@@ -205,31 +220,33 @@ api.interceptors.response.use(
     try {
       if (typeof window !== 'undefined') {
         const mod = await import('@/store');
-        const { useUIStore } = mod as any;
-        const { stopLoading } = useUIStore.getState();
+        const useStore = (mod as unknown as { useStore: { getState: () => { stopLoading: () => void } } }).useStore;
+        const { stopLoading } = useStore.getState();
         stopLoading();
       }
     } catch (e) { }
 
-    const baseConfig: any = error.config || {};
-    const originalRequest: any = { ...baseConfig, headers: { ...(baseConfig.headers || {}) } };
+    const baseConfig = (error.config || {}) as RetryableRequestConfig;
+    const originalRequest: RetryableRequestConfig = {
+      ...baseConfig,
+      headers: { ...(baseConfig.headers || {}) },
+    };
 
     // Initialize retry count and resolve limits/flags
-    if (!originalRequest._retryCount) {
-      originalRequest._retryCount = 0;
-    }
-    const noRetry = Boolean(originalRequest._noRetry) || Boolean((originalRequest.headers || {})['X-No-Retry']);
+    if (!originalRequest._retryCount) originalRequest._retryCount = 0;
+    const headers = originalRequest.headers || {};
+    const noRetry = Boolean(originalRequest._noRetry) || Boolean(headers['X-No-Retry']);
     const maxRetries = typeof originalRequest._maxRetries === 'number'
       ? originalRequest._maxRetries
       : DEFAULT_RETRY_CONFIG.maxRetries;
 
     // Handle retryable errors (429, 5xx, network errors)
     if (!noRetry && shouldRetry(error, originalRequest._retryCount, maxRetries)) {
-      originalRequest._retryCount++;
+      originalRequest._retryCount += 1;
 
       const delay = addJitter(calculateDelay(originalRequest._retryCount - 1, DEFAULT_RETRY_CONFIG));
       await new Promise(resolve => setTimeout(resolve, delay));
-      return api(originalRequest);
+      return api(originalRequest as unknown as Parameters<typeof api>[0]);
     }
 
     return Promise.reject(error);
@@ -259,13 +276,22 @@ export const productsAPI = {
   }) => {
     try {
       const response = await api.get('/products', { params });
-      const raw: any = response.data || {};
-      const products = Array.isArray(raw?.data) ? raw.data : Array.isArray(raw?.products) ? raw.products : Array.isArray(raw) ? raw : [];
-      const pagination = raw?.pagination || {
+      const raw = response.data as unknown;
+      const record = asRecord(raw);
+      const products = Array.isArray(record?.data)
+        ? (record?.data as unknown[])
+        : Array.isArray(record?.products)
+          ? (record?.products as unknown[])
+          : Array.isArray(raw)
+            ? raw
+            : [];
+      const pagination = (record?.pagination && typeof record.pagination === 'object')
+        ? record.pagination
+        : {
         page: params?.page || 1,
         pageSize: params?.pageSize || 20,
-        total: raw?.total || products.length,
-        totalPages: Math.max(1, Math.ceil((raw?.total || products.length) / (params?.pageSize || 20))),
+        total: Number(record?.total ?? products.length),
+        totalPages: Math.max(1, Math.ceil(Number(record?.total ?? products.length) / (params?.pageSize || 20))),
         hasMore: false
       };
       return { products, pagination };
@@ -273,7 +299,7 @@ export const productsAPI = {
       throw new Error(getErrorMessage(error));
     }
   },
-  create: async (payload: any) => {
+  create: async (payload: Record<string, unknown>) => {
     try {
       const response = await api.post('/products', payload);
       return response.data;
@@ -281,11 +307,14 @@ export const productsAPI = {
       throw new Error(getErrorMessage(error));
     }
   },
-  update: async (id: string, updates: any) => {
+  update: async (id: string, updates: Record<string, unknown>) => {
     try {
       const response = await api.put('/products', { updates, filters: { id } });
-      const raw = response.data || {};
-      const updated = Array.isArray(raw?.data) ? raw.data[0] : raw?.product || raw;
+      const raw = response.data as unknown;
+      const record = asRecord(raw);
+      const updated = Array.isArray(record?.data)
+        ? (record?.data as unknown[])[0]
+        : record?.product ?? raw;
       return updated;
     } catch (error) {
       throw new Error(getErrorMessage(error));
@@ -317,15 +346,18 @@ export const inventoryAPI = {
   }) => {
     try {
       const response = await api.get('/inventory/movements', { params });
-      const raw: any = response.data;
+      const raw = response.data as unknown;
+      const record = asRecord(raw);
       const movements = Array.isArray(raw)
         ? raw
-        : Array.isArray(raw?.movements)
-          ? raw.movements
-          : Array.isArray(raw?.data)
-            ? raw.data
+        : Array.isArray(record?.movements)
+          ? (record?.movements as unknown[])
+          : Array.isArray(record?.data)
+            ? (record?.data as unknown[])
             : [];
-      const pagination = raw?.pagination || {
+      const pagination = (record?.pagination && typeof record.pagination === 'object')
+        ? record.pagination
+        : {
         page: params?.page || 1,
         limit: params?.limit || 50,
         total: movements.length,
@@ -341,8 +373,9 @@ export const inventoryAPI = {
   getStats: async () => {
     try {
       const response = await api.get('/inventory/summary');
-      const raw: any = response.data;
-      return raw?.data ?? raw;
+      const raw = response.data as unknown;
+      const record = asRecord(raw);
+      return record?.data ?? raw;
     } catch (error) {
       throw new Error(getErrorMessage(error));
     }
@@ -352,15 +385,18 @@ export const inventoryAPI = {
   getProductMovements: async (productId: string, params?: { page?: number; limit?: number }) => {
     try {
       const response = await api.get(`/inventory/movements/${productId}`, { params });
-      const raw: any = response.data;
+      const raw = response.data as unknown;
+      const record = asRecord(raw);
       const movements = Array.isArray(raw)
         ? raw
-        : Array.isArray(raw?.movements)
-          ? raw.movements
-          : Array.isArray(raw?.data)
-            ? raw.data
+        : Array.isArray(record?.movements)
+          ? (record?.movements as unknown[])
+          : Array.isArray(record?.data)
+            ? (record?.data as unknown[])
             : [];
-      const pagination = raw?.pagination || {
+      const pagination = (record?.pagination && typeof record.pagination === 'object')
+        ? record.pagination
+        : {
         page: params?.page || 1,
         limit: params?.limit || 50,
         total: movements.length,
@@ -398,42 +434,50 @@ export const inventoryAPI = {
 };
 
 // Helper function to handle API errors
-export function getErrorMessage(error: AxiosError | Error | any): string {
-  if (error.response?.data?.message) {
-    return error.response.data.message;
+export function getErrorMessage(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    const data = error.response?.data;
+    const record = asRecord(data);
+    if (record && typeof record.message === 'string' && record.message) return record.message;
+    if (record && typeof record.error === 'string' && record.error) return record.error;
+    if (record && typeof record.details === 'string' && record.details) return record.details;
+    if (record && record.errors && typeof record.errors === 'object') {
+      const first = Object.values(record.errors as Record<string, unknown>)[0];
+      if (Array.isArray(first) && typeof first[0] === 'string') return first[0];
+    }
+    if (typeof data === 'string' && data) return data;
+    if (typeof error.message === 'string' && error.message) return error.message;
+    return 'Error desconocido';
   }
 
-  if (error.response?.data?.errors) {
-    const errors = error.response.data.errors;
-    const firstError = Object.values(errors)[0] as string[];
-    return firstError?.[0] || 'Error desconocido';
-  }
-
-  if (error.message) {
-    return error.message;
-  }
-
+  if (error instanceof Error) return error.message;
   return 'Error desconocido';
 }
 
 // Helper function to check if error is network error
-export function isNetworkError(error: AxiosError | Error | any): boolean {
-  return !error.response && error.code === 'NETWORK_ERROR';
+export function isNetworkError(error: unknown): boolean {
+  return axios.isAxiosError(error) && !error.response && error.code === 'NETWORK_ERROR';
 }
 
 // Helper function to check if error is timeout
-export function isTimeoutError(error: AxiosError | Error | any): boolean {
-  return error.code === 'ECONNABORTED' || error.message?.includes('timeout');
+export function isTimeoutError(error: unknown): boolean {
+  return axios.isAxiosError(error)
+    ? error.code === 'ECONNABORTED' || Boolean(error.message?.includes('timeout'))
+    : error instanceof Error
+      ? Boolean(error.message.includes('timeout'))
+      : false;
 }
 
 // Helper function to check if error is server error
-export function isServerError(error: AxiosError | Error | any): boolean {
-  return error.response?.status >= 500;
+export function isServerError(error: unknown): boolean {
+  return axios.isAxiosError(error) && (error.response?.status || 0) >= 500;
 }
 
 // Helper function to check if error is client error
-export function isClientError(error: AxiosError | Error | any): boolean {
-  return error.response?.status >= 400 && error.response?.status < 500;
+export function isClientError(error: unknown): boolean {
+  if (!axios.isAxiosError(error)) return false;
+  const status = error.response?.status || 0;
+  return status >= 400 && status < 500;
 }
 
 // ============================================================================

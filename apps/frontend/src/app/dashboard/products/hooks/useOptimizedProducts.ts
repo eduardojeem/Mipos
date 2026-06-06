@@ -2,6 +2,7 @@
 
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { useToast } from '@/components/ui/use-toast';
+import api from '@/lib/api';
 
 export interface ProductFilters {
   search?: string;
@@ -92,13 +93,8 @@ export function useProductMutations() {
 
   const createProduct = useMutation({
     mutationFn: async (productData: any) => {
-      const response = await fetch('/api/products', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(productData),
-      });
-      if (!response.ok) throw new Error('Failed to create product');
-      return response.json();
+      const response = await api.post('/products', productData);
+      return response.data;
     },
     onSuccess: () => {
       // Invalidate and refetch products data
@@ -120,13 +116,8 @@ export function useProductMutations() {
 
   const updateProduct = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      const response = await fetch(`/api/products/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      if (!response.ok) throw new Error('Failed to update product');
-      return response.json();
+      const response = await api.put(`/products/${id}`, data);
+      return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products-list'] });
@@ -147,15 +138,20 @@ export function useProductMutations() {
 
   const deleteProduct = useMutation({
     mutationFn: async (id: string) => {
-      const response = await fetch(`/api/products/${id}`, {
-        method: 'DELETE',
-      });
-      if (!response.ok) throw new Error('Failed to delete product');
-      return response.json();
+      const response = await api.delete(`/products/${id}`);
+      return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['products-list'] });
       queryClient.invalidateQueries({ queryKey: ['products-summary'] });
+      const wasDeactivated = data?.action === 'deactivated';
+      if (wasDeactivated) {
+        toast({
+          title: 'Producto desactivado',
+          description: 'Tiene historial relacionado y se marco como inactivo',
+        });
+        return;
+      }
       toast({
         title: 'Éxito',
         description: 'Producto eliminado correctamente',
@@ -172,17 +168,21 @@ export function useProductMutations() {
 
   const bulkDelete = useMutation({
     mutationFn: async (ids: string[]) => {
-      const response = await fetch('/api/products/bulk-delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids }),
-      });
-      if (!response.ok) throw new Error('Failed to delete products');
-      return response.json();
+      const response = await api.post('/products/bulk-delete', { ids });
+      return response.data;
     },
-    onSuccess: (_, ids) => {
+    onSuccess: (data, ids) => {
       queryClient.invalidateQueries({ queryKey: ['products-list'] });
       queryClient.invalidateQueries({ queryKey: ['products-summary'] });
+      const deleted = Number(data?.results?.deleted || 0);
+      const deactivated = Number(data?.results?.deactivated || 0);
+      if (deleted || deactivated) {
+        toast({
+          title: 'Exito',
+          description: `${deleted} eliminados, ${deactivated} desactivados`,
+        });
+        return;
+      }
       toast({
         title: 'Éxito',
         description: `${ids.length} productos eliminados correctamente`,

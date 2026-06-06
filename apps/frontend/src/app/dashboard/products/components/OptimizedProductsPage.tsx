@@ -10,33 +10,27 @@ import { ProductDetailsModal } from '@/components/products/ProductDetailsModal';
 import { ProductEditModal } from '@/components/products/ProductEditModal';
 import { Pagination, PaginationInfo, PageSizeSelector } from '@/components/ui/Pagination';
 import { ProductsFilters } from '@/components/products/ProductsFilters';
-import { ProductsStats } from '@/components/products/ProductsStats';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+import { DeleteProductDialog, BulkDeleteDialog } from '@/components/products/DeleteProductDialog';
 import {
   AlertTriangle,
+  ArrowUpDown,
   CheckSquare,
   Download,
-  Eye,
-  EyeOff,
   LayoutGrid,
   List,
   Loader2,
   Package,
+  PackageX,
   Plus,
   RefreshCw,
+  ShoppingBag,
+  Sparkles,
+  TrendingUp,
   Trash2,
+  Warehouse,
 } from 'lucide-react';
 import api, { getErrorMessage } from '@/lib/api';
 import { toast } from '@/lib/toast';
@@ -51,34 +45,21 @@ import { useProductsStore } from '@/store/products-store';
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface OptimizedProductsPageProps { className?: string }
 interface CategoryOption { id: string; name: string }
-interface ConfirmState {
-  open: boolean;
-  title: string;
-  description: string;
-  actionLabel: string;
-  variant: 'default' | 'destructive';
-  onConfirm: () => void | Promise<void>;
-}
 
-const CONFIRM_CLOSED: ConfirmState = {
-  open: false, title: '', description: '',
-  actionLabel: 'Confirmar', variant: 'default', onConfirm: () => {},
-};
-
-// ── Framer ────────────────────────────────────────────────────────────────────
+// ── Animations ────────────────────────────────────────────────────────────────
 const fadeUp: Variants = {
-  hidden: { opacity: 0, y: 10 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.25, ease: 'easeOut' } },
+  hidden: { opacity: 0, y: 16 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] } },
 };
 const stagger: Variants = {
   hidden: {},
-  visible: { transition: { staggerChildren: 0.05 } },
+  visible: { transition: { staggerChildren: 0.06 } },
 };
 
 // ── CSV ───────────────────────────────────────────────────────────────────────
 function esc(v: unknown) { return `"${String(v ?? '').replace(/"/g, '""')}"`; }
 function downloadCsv(name: string, rows: string[]) {
-  const blob = new Blob([`﻿${rows.join('\n')}`], { type: 'text/csv;charset=utf-8;' });
+  const blob = new Blob([`\uFEFF${rows.join('\n')}`], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = Object.assign(document.createElement('a'), { href: url });
   a.setAttribute('download', name);
@@ -86,19 +67,66 @@ function downloadCsv(name: string, rows: string[]) {
   URL.revokeObjectURL(url);
 }
 
-// ── Message helpers ───────────────────────────────────────────────────────────
-function getDeleteMsg(d: any) {
-  if (d?.action === 'deactivated') return 'Producto desactivado (tiene historial de ventas). Visible filtrando por Inactivos.';
-  if (d?.action === 'deleted') return 'Producto eliminado permanentemente.';
-  return d?.message || 'Producto procesado';
-}
-function getBulkMsg(d: any) {
-  const del = Number(d?.results?.deleted || 0);
-  const deact = Number(d?.results?.deactivated || 0);
+function getBulkMsg(d: unknown) {
+  const obj = (d && typeof d === 'object') ? (d as Record<string, unknown>) : {};
+  const results = (obj.results && typeof obj.results === 'object') ? (obj.results as Record<string, unknown>) : {};
+  const del = Number(results.deleted || 0);
+  const deact = Number(results.deactivated || 0);
   const parts = [];
   if (del) parts.push(`${del} eliminado${del !== 1 ? 's' : ''}`);
-  if (deact) parts.push(`${deact} desactivado${deact !== 1 ? 's' : ''} (con historial)`);
-  return parts.length ? `${parts.join(', ')}. Los desactivados se ven en "Inactivos".` : d?.message || 'Procesados';
+  if (deact) parts.push(`${deact} desactivado${deact !== 1 ? 's' : ''}`);
+  const msg = typeof obj.message === 'string' ? obj.message : '';
+  return parts.length ? parts.join(', ') : msg || 'Procesados';
+}
+
+// ── Stat Card ────────────────────────────────────────────────────────────────
+function StatCard({
+  label, value, sub, icon: Icon, accent, loading,
+}: {
+  label: string;
+  value: string | number;
+  sub?: string;
+  icon: React.ElementType;
+  accent: 'blue' | 'emerald' | 'amber' | 'rose';
+  loading?: boolean;
+}) {
+  const accentMap = {
+    blue:    'from-blue-500/10 to-indigo-500/10 ring-blue-500/20 text-blue-600 dark:text-blue-400',
+    emerald: 'from-emerald-500/10 to-teal-500/10 ring-emerald-500/20 text-emerald-600 dark:text-emerald-400',
+    amber:   'from-amber-500/10 to-orange-500/10 ring-amber-500/20 text-amber-600 dark:text-amber-400',
+    rose:    'from-rose-500/10 to-red-500/10 ring-rose-500/20 text-rose-600 dark:text-rose-400',
+  };
+  const iconBg = {
+    blue:    'bg-blue-500/10',
+    emerald: 'bg-emerald-500/10',
+    amber:   'bg-amber-500/10',
+    rose:    'bg-rose-500/10',
+  };
+
+  return (
+    <motion.div
+      variants={fadeUp}
+      className={cn(
+        'relative overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br p-5 ring-1 transition-shadow hover:shadow-md',
+        accentMap[accent],
+      )}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">{label}</p>
+          {loading ? (
+            <div className="mt-2 h-7 w-20 animate-pulse rounded-md bg-muted" />
+          ) : (
+            <p className="mt-1 text-2xl font-bold tracking-tight text-foreground">{value}</p>
+          )}
+          {sub && <p className="mt-1 truncate text-xs text-muted-foreground">{sub}</p>}
+        </div>
+        <div className={cn('shrink-0 rounded-xl p-2.5', iconBg[accent])}>
+          <Icon className={cn('h-5 w-5', accentMap[accent].split(' ')[2])} />
+        </div>
+      </div>
+    </motion.div>
+  );
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -107,14 +135,9 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
   const { user } = useAuth();
 
   // ── Permisos ──────────────────────────────────────────────────────────────
-  // IMPORTANTE: `loading = true` mientras los permisos se cargan desde la API.
-  // Durante ese período mostramos los botones de forma optimista (si el usuario
-  // está autenticado) y dejamos que la API haga la validación final.
   const pctx = usePermissionsContext();
   const permsReady = !pctx.loading;
 
-  // Permiso calculado: true si está listo Y tiene el permiso, o si aún está
-  // cargando pero el usuario está autenticado (optimistic).
   const canCreate = permsReady
     ? canCreateProducts({ permissions: pctx.permissions, roles: pctx.roles, hasPermission: pctx.hasPermission })
     : !!user;
@@ -126,7 +149,7 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
     : !!user;
   const canExport = permsReady ? pctx.hasPermission('products', 'read') : !!user;
 
-  // ── Preferencias (Zustand) ────────────────────────────────────────────────
+  // ── Preferencias ──────────────────────────────────────────────────────────
   const storedView    = useProductsStore((s) => s.currentView);
   const storedLimit   = useProductsStore((s) => s.itemsPerPage);
   const setStoredView  = useProductsStore((s) => s.setCurrentView);
@@ -136,7 +159,10 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
   const [filters, setFilters] = useState({
     search: '', categoryId: '', page: 1, limit: storedLimit,
     sortBy: 'updated_at', sortOrder: 'desc' as 'asc' | 'desc',
-    isActive: true as boolean | undefined,   // true = solo activos (default)
+    isActive: true as boolean | undefined,
+    stockStatus: undefined as string | undefined,
+    minPrice: undefined as number | undefined,
+    maxPrice: undefined as number | undefined,
   });
 
   // ── UI state ──────────────────────────────────────────────────────────────
@@ -149,11 +175,18 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
   const [isExporting, setIsExporting] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Set<string>>(new Set());
   const [loginModal, setLoginModal] = useState(false);
-  const [confirmState, setConfirmState] = useState<ConfirmState>(CONFIRM_CLOSED);
-  const [detailsModal, setDetailsModal] = useState<{ open: boolean; product: Product | null }>
-    ({ open: false, product: null });
-  const [editModal, setEditModal] = useState<{ open: boolean; product: Product | null }>
-    ({ open: false, product: null });
+  const [deleteDialog, setDeleteDialog] = useState<{
+    open: boolean;
+    product: Product | null;
+    productId: string | null;
+  }>({ open: false, product: null, productId: null });
+  const [bulkDeleteDialog, setBulkDeleteDialog] = useState(false);
+  const [detailsModal, setDetailsModal] = useState<{ open: boolean; product: Product | null }>(
+    { open: false, product: null }
+  );
+  const [editModal, setEditModal] = useState<{ open: boolean; product: Product | null }>(
+    { open: false, product: null }
+  );
 
   // ── Data ──────────────────────────────────────────────────────────────────
   const { products, loading, error, total, currentPage, totalPages, itemsPerPage } =
@@ -172,7 +205,7 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
     staleTime: 5 * 60 * 1000, refetchOnWindowFocus: false, retry: 1,
   });
 
-  // Sincronizar selección con productos visibles
+  // Sincronizar selección
   useEffect(() => {
     setSelected((prev) => {
       if (!prev.size) return prev;
@@ -187,16 +220,25 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
     [products, selected]
   );
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
-  const refreshAll = useCallback(async () => {
-    await queryClient.invalidateQueries({ queryKey: ['products-list'] });
-    await queryClient.invalidateQueries({ queryKey: ['products-summary'] });
-    await refetchCategories();
-  }, [queryClient, refetchCategories]);
+  // ── Computed stats ────────────────────────────────────────────────────────
+  const lowStock   = stats?.lowStockProducts  ?? 0;
+  const outOfStock = stats?.outOfStockProducts ?? 0;
+  const totalValue = stats?.totalValue ?? 0;
+  // Usamos `total` de la query de lista: siempre está en sincronía con lo que
+  // se renderiza y se actualiza inmediatamente tras crear/eliminar/editar.
+  const totalCount = total;
+  const alertCount = lowStock + outOfStock;
 
-  const openConfirm = useCallback((s: Omit<ConfirmState, 'open'>) => {
-    setConfirmState({ ...s, open: true });
-  }, []);
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  const refreshProducts = useCallback(async () => {
+    await queryClient.invalidateQueries({ queryKey: ['products-list'], exact: false });
+    await queryClient.invalidateQueries({ queryKey: ['products-summary'], exact: false });
+  }, [queryClient]);
+
+  const refreshAll = useCallback(async () => {
+    await refreshProducts();
+    await refetchCategories();
+  }, [refreshProducts, refetchCategories]);
 
   const handleFilterChange = useCallback((f: Partial<typeof filters>) => {
     setFilters((prev) => ({ ...prev, ...f, page: typeof f.page === 'number' ? f.page : 1 }));
@@ -206,16 +248,6 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
     setViewMode(mode);
     setStoredView(mode === 'grid' ? 'grid' : 'table');
   }, [setStoredView]);
-
-  const toggleShowInactive = useCallback(() => {
-    setFilters((prev) => ({
-      ...prev,
-      isActive: prev.isActive === false ? true : false,
-      page: 1,
-    }));
-  }, []);
-
-  const showInactive = filters.isActive === false;
 
   // ── Export ────────────────────────────────────────────────────────────────
   const exportCsv = useCallback(async (items: Product[], label: string) => {
@@ -245,13 +277,22 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
       const r = await api.delete(`/products/${productId}`);
       setSelected((p) => { const n = new Set(p); n.delete(productId); return n; });
       if (detailsModal.product?.id === productId) setDetailsModal({ open: false, product: null });
-      await refreshAll();
-      toast.success(getDeleteMsg(r.data));
-    } catch (err) { toast.error(getErrorMessage(err)); }
-    finally {
+      await refreshProducts();
+      const action = r.data?.action;
+      if (action === 'deactivated') {
+        toast.warning('Producto desactivado — tiene historial de ventas y no puede eliminarse permanentemente.');
+      } else if (action === 'deleted') {
+        toast.success('Producto eliminado correctamente.');
+      } else {
+        toast.success(r.data?.message || 'Producto procesado.');
+      }
+    } catch (err) {
+      console.error('[executeDelete] Error al eliminar producto:', productId, err);
+      toast.error(getErrorMessage(err));
+    } finally {
       setPendingDelete((p) => { const n = new Set(p); n.delete(productId); return n; });
     }
-  }, [detailsModal.product?.id, refreshAll]);
+  }, [detailsModal.product?.id, refreshProducts]);
 
   const executeBulkDelete = useCallback(async () => {
     const ids = [...selected];
@@ -259,12 +300,14 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
     setIsBulkDeleting(true);
     try {
       const r = await api.post('/products/bulk-delete', { ids });
-      await refreshAll();
+      await refreshProducts();
       setSelected(new Set());
+      const hasErrors = Array.isArray(r.data?.errors) && r.data.errors.length > 0;
       toast.success(getBulkMsg(r.data));
+      if (hasErrors) toast.warning('Algunos productos no pudieron procesarse.');
     } catch (err) { toast.error(getErrorMessage(err)); }
     finally { setIsBulkDeleting(false); }
-  }, [isBulkDeleting, refreshAll, selected]);
+  }, [isBulkDeleting, refreshProducts, selected]);
 
   const handleEdit = useCallback((product: Product) => {
     if (permsReady && !canEdit) { toast.error('Sin permisos para editar'); return; }
@@ -274,24 +317,14 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
   const handleDelete = useCallback((productId: string) => {
     if (permsReady && !canDelete) { toast.error('Sin permisos para eliminar'); return; }
     if (pendingDelete.has(productId)) return;
-    openConfirm({
-      title: 'Eliminar producto',
-      description: 'Si tiene historial de ventas se desactivará en lugar de eliminarse permanentemente.',
-      actionLabel: 'Sí, eliminar',
-      variant: 'destructive',
-      onConfirm: () => executeDelete(productId),
-    });
-  }, [canDelete, pendingDelete, openConfirm, executeDelete, permsReady]);
+    const product = products.find((p) => p.id === productId) ?? null;
+    setDeleteDialog({ open: true, product, productId });
+  }, [canDelete, pendingDelete, permsReady, products]);
 
   const handleBulkDelete = useCallback(() => {
     if (permsReady && !canDelete) { toast.error('Sin permisos para eliminar'); return; }
-    openConfirm({
-      title: `Eliminar ${selected.size} producto${selected.size !== 1 ? 's' : ''}`,
-      description: 'Los que tengan ventas se desactivarán. Esta acción no se puede deshacer.',
-      actionLabel: 'Sí, eliminar', variant: 'destructive',
-      onConfirm: executeBulkDelete,
-    });
-  }, [canDelete, openConfirm, selected.size, executeBulkDelete, permsReady]);
+    setBulkDeleteDialog(true);
+  }, [canDelete, permsReady]);
 
   const handleCreate = useCallback(() => {
     if (!user) { setLoginModal(true); return; }
@@ -309,13 +342,13 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
         await api.post('/products', data);
         toast.success('Producto creado');
       }
-      await refreshAll();
+      await refreshProducts();
     } catch (err) {
       throw new Error(getErrorMessage(err));
     } finally {
       setIsSaving(false);
     }
-  }, [editModal.product, refreshAll]);
+  }, [editModal.product, refreshProducts]);
 
   const handleRefresh = useCallback(async () => {
     try { await refreshAll(); toast.success('Catálogo actualizado'); }
@@ -339,95 +372,158 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
     );
   }
 
+  const hasActiveFilters = Boolean(
+    filters.search || filters.categoryId || filters.stockStatus ||
+    filters.minPrice || filters.maxPrice
+  );
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <>
       <motion.div
-        className={cn('flex flex-col gap-4 p-4 sm:p-6', className)}
+        className={cn('flex flex-col gap-6 p-4 sm:p-6 lg:p-8', className)}
         initial="hidden"
         animate="visible"
         variants={stagger}
       >
-        {/* ═══ HEADER ═══════════════════════════════════════════════════════ */}
-        <motion.div variants={fadeUp}
-          className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-        >
-          {/* Izquierda: título + stats inline */}
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/20">
-              <Package className="h-5 w-5 text-primary" />
-            </div>
-            <h1 className="text-xl font-bold tracking-tight">Productos</h1>
+        {/* ═══ HERO HEADER ════════════════════════════════════════════════ */}
+        <motion.div variants={fadeUp}>
+          <div className="relative overflow-hidden rounded-3xl border border-border/60 bg-gradient-to-br from-background via-background to-primary/5 px-6 py-8 shadow-sm">
+            {/* Decorative orb */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-primary/10 blur-3xl"
+            />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute -bottom-12 left-1/3 h-48 w-48 rounded-full bg-violet-500/8 blur-3xl"
+            />
 
-            <ProductsStats products={products} total={total} loading={statsLoading} summary={stats} />
+            <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+              {/* Izquierda */}
+              <div className="flex items-center gap-4">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/20 to-primary/10 ring-1 ring-primary/30 shadow-inner">
+                  <Package className="h-7 w-7 text-primary" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Productos</h1>
+                    {(isSaving || pendingDelete.size > 0) && (
+                      <Badge className="animate-pulse gap-1 bg-primary/90 text-xs text-primary-foreground">
+                        <RefreshCw className="h-3 w-3 animate-spin" />
+                        {isSaving ? 'Guardando…' : 'Procesando…'}
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Gestioná tu catálogo, precios e inventario desde un solo lugar.
+                  </p>
+                </div>
+              </div>
 
-            {(isSaving || pendingDelete.size > 0) && (
-              <Badge className="animate-pulse gap-1 bg-primary/90 text-[11px] text-primary-foreground">
-                <RefreshCw className="h-3 w-3 animate-spin" />
-                {isSaving ? 'Guardando…' : 'Procesando…'}
-              </Badge>
-            )}
-          </div>
+              {/* Derecha: acciones */}
+              <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+                {/* Selector vista */}
+                <div className="flex items-center gap-0.5 rounded-xl border border-border bg-muted/50 p-1">
+                  {(['grid', 'list'] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      onClick={() => switchView(mode)}
+                      className={cn(
+                        'flex h-7 w-8 items-center justify-center rounded-lg transition-all duration-150',
+                        viewMode === mode
+                          ? 'bg-background text-primary shadow-sm ring-1 ring-border/60'
+                          : 'text-muted-foreground hover:text-foreground',
+                      )}
+                      title={mode === 'grid' ? 'Vista tarjetas' : 'Vista tabla'}
+                    >
+                      {mode === 'grid' ? <LayoutGrid className="h-3.5 w-3.5" /> : <List className="h-3.5 w-3.5" />}
+                    </button>
+                  ))}
+                </div>
 
-          {/* Derecha: acciones */}
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            {/* Toggle: mostrar inactivos */}
-            <Button
-              variant={showInactive ? 'secondary' : 'outline'}
-              size="sm"
-              onClick={toggleShowInactive}
-              className={cn('h-9 gap-1.5 text-xs', showInactive && 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-400')}
-              title={showInactive ? 'Mostrando inactivos — clic para ver activos' : 'Ver productos inactivos'}
-            >
-              {showInactive ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-              <span className="hidden sm:inline">{showInactive ? 'Inactivos' : 'Ver inactivos'}</span>
-            </Button>
+                {canExport && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => exportCsv(products, 'vista')}
+                    disabled={isExporting || !products.length}
+                    className="h-9 gap-1.5 rounded-xl text-xs"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">{isExporting ? 'Exportando…' : 'Exportar CSV'}</span>
+                  </Button>
+                )}
 
-            {/* Vista grid / lista */}
-            <div className="flex items-center rounded-lg border border-border bg-background p-0.5">
-              {(['grid', 'list'] as const).map((mode) => (
-                <button
-                  key={mode}
-                  onClick={() => switchView(mode)}
-                  className={cn(
-                    'flex h-7 w-8 items-center justify-center rounded-md transition-all',
-                    viewMode === mode
-                      ? 'bg-primary text-primary-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground',
-                  )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRefresh}
+                  className="h-9 gap-1.5 rounded-xl text-xs"
+                  title="Actualizar catálogo"
                 >
-                  {mode === 'grid' ? <LayoutGrid className="h-3.5 w-3.5" /> : <List className="h-3.5 w-3.5" />}
-                </button>
-              ))}
+                  <RefreshCw className="h-3.5 w-3.5" />
+                </Button>
+
+                {user && (
+                  <Button
+                    size="sm"
+                    onClick={handleCreate}
+                    disabled={pctx.loading}
+                    className="h-9 gap-1.5 rounded-xl bg-primary text-sm font-semibold shadow-sm"
+                  >
+                    {pctx.loading
+                      ? <Loader2 className="h-4 w-4 animate-spin" />
+                      : <Plus className="h-4 w-4" />
+                    }
+                    Nuevo Producto
+                  </Button>
+                )}
+              </div>
             </div>
-
-            {canExport && (
-              <Button variant="outline" size="sm"
-                onClick={() => exportCsv(products, 'vista')}
-                disabled={isExporting || !products.length}
-                className="h-9 gap-1.5"
-              >
-                <Download className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">{isExporting ? 'Exportando…' : 'Exportar'}</span>
-              </Button>
-            )}
-
-            {/* Crear producto — visible para todos los usuarios autenticados */}
-            {user && (
-              <Button size="sm" onClick={handleCreate} className="h-9 gap-1.5"
-                disabled={pctx.loading}
-              >
-                {pctx.loading
-                  ? <Loader2 className="h-4 w-4 animate-spin" />
-                  : <Plus className="h-4 w-4" />
-                }
-                Nuevo Producto
-              </Button>
-            )}
           </div>
         </motion.div>
 
-        {/* ═══ FILTROS ══════════════════════════════════════════════════════ */}
+        {/* ═══ STAT CARDS ═════════════════════════════════════════════════ */}
+        <motion.div
+          variants={stagger}
+          className="grid grid-cols-2 gap-4 lg:grid-cols-4"
+        >
+          <StatCard
+            label="Total productos"
+            value={totalCount}
+            sub={`${stats?.recentlyAdded ?? 0} añadidos esta semana`}
+            icon={ShoppingBag}
+            accent="blue"
+            loading={loading && totalCount === 0}
+          />
+          <StatCard
+            label="Valor inventario"
+            value={statsLoading ? '—' : `Gs ${totalValue.toLocaleString('es-PY')}`}
+            sub="Basado en precio de costo"
+            icon={TrendingUp}
+            accent="emerald"
+            loading={statsLoading}
+          />
+          <StatCard
+            label="Sin stock"
+            value={outOfStock}
+            sub={outOfStock > 0 ? 'Requieren reposición urgente' : 'Todo con stock disponible'}
+            icon={PackageX}
+            accent={outOfStock > 0 ? 'rose' : 'emerald'}
+            loading={statsLoading}
+          />
+          <StatCard
+            label="Stock bajo"
+            value={alertCount}
+            sub={alertCount > 0 ? 'Revisar antes de agotar' : 'Niveles de stock normales'}
+            icon={Warehouse}
+            accent={alertCount > 0 ? 'amber' : 'emerald'}
+            loading={statsLoading}
+          />
+        </motion.div>
+
+        {/* ═══ FILTROS ════════════════════════════════════════════════════ */}
         <motion.div variants={fadeUp}>
           <ProductsFilters
             filters={filters}
@@ -438,47 +534,68 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
           />
         </motion.div>
 
-        {/* ═══ CONTENIDO ════════════════════════════════════════════════════ */}
-        <motion.div variants={fadeUp}
-          className="overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm"
+        {/* ═══ TABLA / GRID ═══════════════════════════════════════════════ */}
+        <motion.div
+          variants={fadeUp}
+          className="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm"
         >
-          {/* Toolbar: info de paginación + tamaño de página */}
-          <div className="flex items-center justify-between gap-3 border-b border-border/40 px-4 py-2.5">
-            <div className="flex items-center gap-2">
+          {/* Toolbar */}
+          <div className="flex items-center justify-between gap-3 border-b border-border/50 bg-muted/20 px-5 py-3">
+            <div className="flex items-center gap-3">
               <PaginationInfo currentPage={currentPage} itemsPerPage={itemsPerPage} totalItems={total} />
-              {showInactive && (
-                <Badge variant="outline" className="gap-1 border-amber-300 bg-amber-50 text-[11px] text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-400">
-                  <EyeOff className="h-3 w-3" /> Mostrando inactivos
+              {filters.search && (
+                <Badge variant="secondary" className="gap-1 text-xs">
+                  <Sparkles className="h-3 w-3" /> &quot;{filters.search}&quot;
                 </Badge>
               )}
             </div>
-            <PageSizeSelector
-              pageSize={itemsPerPage}
-              onPageSizeChange={(limit) => {
-                setFilters((p) => ({ ...p, limit, page: 1 }));
-                setStoredLimit(limit);
-              }}
-              options={[10, 25, 50, 100]}
-            />
+            <div className="flex items-center gap-2">
+              {viewMode === 'list' && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1 text-xs text-muted-foreground"
+                  onClick={() => setFilters((p) => ({
+                    ...p,
+                    sortOrder: p.sortOrder === 'asc' ? 'desc' : 'asc',
+                  }))}
+                >
+                  <ArrowUpDown className="h-3 w-3" />
+                  {filters.sortOrder === 'asc' ? 'Asc' : 'Desc'}
+                </Button>
+              )}
+              <PageSizeSelector
+                pageSize={itemsPerPage}
+                onPageSizeChange={(limit) => {
+                  setFilters((p) => ({ ...p, limit, page: 1 }));
+                  setStoredLimit(limit);
+                }}
+                options={[10, 25, 50, 100]}
+              />
+            </div>
           </div>
 
-          {/* Lista / Tabla / Loading / Empty */}
-          <div className="relative min-h-[400px]">
+          {/* Contenido */}
+          <div className="relative min-h-[440px]">
             {loading && products.length === 0 ? (
               <div className="absolute inset-0 flex items-center justify-center">
-                <div className="flex flex-col items-center gap-3">
-                  <div className="h-9 w-9 animate-spin rounded-full border-4 border-border border-t-primary" />
+                <div className="flex flex-col items-center gap-4">
+                  <div className="relative">
+                    <div className="h-12 w-12 animate-spin rounded-full border-4 border-border border-t-primary" />
+                    <Package className="absolute inset-0 m-auto h-5 w-5 text-muted-foreground" />
+                  </div>
                   <p className="text-sm text-muted-foreground">Cargando catálogo…</p>
                 </div>
               </div>
             ) : products.length === 0 ? (
               <EmptyState
-                hasFilters={Boolean(filters.search || filters.categoryId)}
-                showInactive={showInactive}
+                hasFilters={hasActiveFilters}
                 canCreate={canCreate}
                 permissionsLoading={pctx.loading}
-                onClearFilters={() => handleFilterChange({ search: '', categoryId: '', isActive: true })}
-                onShowInactive={toggleShowInactive}
+                onClearFilters={() => handleFilterChange({
+                  search: '', categoryId: '', isActive: true,
+                  stockStatus: undefined, minPrice: undefined, maxPrice: undefined,
+                })}
                 onCreate={handleCreate}
               />
             ) : viewMode === 'grid' ? (
@@ -490,7 +607,12 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
                 loading={loading}
                 selectedIds={selected}
                 onSelectProduct={(id) => {
-                  setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+                  setSelected((prev) => {
+                    const n = new Set(prev);
+                    if (n.has(id)) n.delete(id);
+                    else n.add(id);
+                    return n;
+                  });
                 }}
               />
             ) : (
@@ -505,7 +627,12 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
                 loading={loading}
                 selectedIds={selected}
                 onSelectProduct={(id) => {
-                  setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+                  setSelected((prev) => {
+                    const n = new Set(prev);
+                    if (n.has(id)) n.delete(id);
+                    else n.add(id);
+                    return n;
+                  });
                 }}
                 onSelectAll={(ids) => setSelected(new Set(ids))}
               />
@@ -514,9 +641,10 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
 
           {/* Paginación */}
           {totalPages > 1 && (
-            <div className="flex flex-col items-center justify-between gap-3 border-t border-border/40 px-4 py-3 sm:flex-row">
+            <div className="flex flex-col items-center justify-between gap-3 border-t border-border/50 bg-muted/10 px-5 py-3 sm:flex-row">
               <span className="text-xs text-muted-foreground">
-                Página <strong className="text-foreground">{currentPage}</strong> de <strong className="text-foreground">{totalPages}</strong>
+                Página <strong className="text-foreground">{currentPage}</strong> de{' '}
+                <strong className="text-foreground">{totalPages}</strong>
               </span>
               <Pagination
                 currentPage={currentPage}
@@ -529,19 +657,21 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
         </motion.div>
       </motion.div>
 
-      {/* ═══ BARRA FLOTANTE DE SELECCIÓN MASIVA ════════════════════════════ */}
+      {/* ═══ BARRA FLOTANTE SELECCIÓN MASIVA ════════════════════════════════ */}
       <AnimatePresence>
         {selected.size > 0 && (
           <motion.div
-            initial={{ opacity: 0, y: 64 }}
+            initial={{ opacity: 0, y: 80 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 64 }}
-            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-            className="fixed bottom-6 left-1/2 z-50 w-full max-w-lg -translate-x-1/2 px-4"
+            exit={{ opacity: 0, y: 80 }}
+            transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+            className="fixed bottom-6 left-1/2 z-50 w-full max-w-md -translate-x-1/2 px-4"
           >
-            <div className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-background/95 px-4 py-3 shadow-2xl backdrop-blur-lg">
-              <div className="flex items-center gap-2">
-                <CheckSquare className="h-5 w-5 text-primary" />
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-border/80 bg-background/95 px-5 py-3.5 shadow-2xl shadow-black/20 backdrop-blur-xl ring-1 ring-border/40">
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10">
+                  <CheckSquare className="h-4 w-4 text-primary" />
+                </div>
                 <div>
                   <p className="text-sm font-semibold leading-none">
                     {selected.size} seleccionado{selected.size !== 1 ? 's' : ''}
@@ -550,18 +680,27 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
                 </div>
               </div>
               <div className="flex items-center gap-1.5">
-                <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}
-                  className="h-8 text-xs">
+                <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())} className="h-8 rounded-lg text-xs">
                   Cancelar
                 </Button>
-                <Button size="sm" variant="outline" disabled={isExporting}
-                  onClick={() => exportCsv(selectedVisible, 'seleccion')} className="h-8 gap-1">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={isExporting}
+                  onClick={() => exportCsv(selectedVisible, 'seleccion')}
+                  className="h-8 gap-1 rounded-lg"
+                >
                   <Download className="h-3.5 w-3.5" />
-                  Exportar
+                  CSV
                 </Button>
                 {canDelete && (
-                  <Button size="sm" variant="destructive" disabled={isBulkDeleting}
-                    onClick={handleBulkDelete} className="h-8 gap-1">
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    disabled={isBulkDeleting}
+                    onClick={handleBulkDelete}
+                    className="h-8 gap-1 rounded-lg"
+                  >
                     <Trash2 className="h-3.5 w-3.5" />
                     {isBulkDeleting ? 'Procesando…' : 'Eliminar'}
                   </Button>
@@ -589,90 +728,94 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
       />
       <LoginModal open={loginModal} onOpenChange={setLoginModal} />
 
-      {/* ═══ CONFIRM DIALOG ═════════════════════════════════════════════════ */}
-      <AlertDialog open={confirmState.open} onOpenChange={(o) => !o && setConfirmState(CONFIRM_CLOSED)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{confirmState.title}</AlertDialogTitle>
-            <AlertDialogDescription>{confirmState.description}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setConfirmState(CONFIRM_CLOSED)}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={async () => {
-                const run = confirmState.onConfirm;
-                setConfirmState(CONFIRM_CLOSED);
-                await run();
-              }}
-              className={confirmState.variant === 'destructive'
-                ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : ''}
-            >
-              {confirmState.actionLabel}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* ═══ DELETE DIALOG (individual) ═════════════════════════════════════ */}
+      <DeleteProductDialog
+        open={deleteDialog.open}
+        product={deleteDialog.product}
+        isDeleting={deleteDialog.productId ? pendingDelete.has(deleteDialog.productId) : false}
+        onConfirm={() => {
+          const id = deleteDialog.productId;
+          setDeleteDialog({ open: false, product: null, productId: null });
+          if (id) {
+            executeDelete(id);
+          } else {
+            console.warn('[DeleteProduct] onConfirm: productId en estado es null');
+          }
+        }}
+        onCancel={() => {
+          setDeleteDialog({ open: false, product: null, productId: null });
+        }}
+      />
+
+      {/* ═══ BULK DELETE DIALOG ═════════════════════════════════════════════ */}
+      <BulkDeleteDialog
+        open={bulkDeleteDialog}
+        count={selected.size}
+        isDeleting={isBulkDeleting}
+        onConfirm={() => {
+          setBulkDeleteDialog(false);
+          executeBulkDelete();
+        }}
+        onCancel={() => setBulkDeleteDialog(false)}
+      />
     </>
   );
 }
 
 // ── Empty state ────────────────────────────────────────────────────────────────
 function EmptyState({
-  hasFilters, showInactive, canCreate, permissionsLoading,
-  onClearFilters, onShowInactive, onCreate,
+  hasFilters, canCreate, permissionsLoading,
+  onClearFilters, onCreate,
 }: {
   hasFilters: boolean;
-  showInactive: boolean;
   canCreate: boolean;
   permissionsLoading: boolean;
   onClearFilters: () => void;
-  onShowInactive: () => void;
   onCreate: () => void;
 }) {
   return (
-    <div className="flex h-[440px] flex-col items-center justify-center gap-5 p-8 text-center">
-      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted/60">
-        <Package className="h-8 w-8 text-muted-foreground/40" />
+    <div className="flex h-[480px] flex-col items-center justify-center gap-6 p-8 text-center">
+      <div className="relative">
+        <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-muted to-muted/60 ring-1 ring-border/40">
+          <Package className="h-9 w-9 text-muted-foreground/50" />
+        </div>
+        {hasFilters && (
+          <div className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full bg-amber-500/90 ring-2 ring-background">
+            <span className="text-[10px] font-bold text-white">!</span>
+          </div>
+        )}
       </div>
 
       <div>
-        <h3 className="text-base font-semibold">
-          {showInactive ? 'No hay productos inactivos' : 'No se encontraron productos'}
+        <h3 className="text-lg font-semibold">
+          {hasFilters ? 'Sin resultados' : 'Tu catálogo está vacío'}
         </h3>
-        <p className="mt-1 max-w-xs text-sm text-muted-foreground">
+        <p className="mt-2 max-w-xs text-sm text-muted-foreground">
           {hasFilters
-            ? 'Ajusta la búsqueda o limpia los filtros.'
-            : showInactive
-              ? 'Todos los productos están activos.'
-              : 'No hay productos activos. Puedes ver los inactivos o crear uno nuevo.'}
+            ? 'No encontramos productos con esos filtros. Probá ajustando la búsqueda.'
+            : 'Empezá añadiendo tu primer producto al catálogo.'}
         </p>
       </div>
 
       <div className="flex flex-wrap justify-center gap-2">
         {hasFilters && (
-          <Button variant="outline" size="sm" onClick={onClearFilters}>
+          <Button variant="outline" size="sm" onClick={onClearFilters} className="rounded-xl">
             Limpiar filtros
           </Button>
         )}
-        {!showInactive && !hasFilters && (
-          <Button variant="outline" size="sm" onClick={onShowInactive} className="gap-1.5">
-            <EyeOff className="h-3.5 w-3.5" />
-            Ver inactivos
+        {!hasFilters && canCreate && (
+          <Button
+            size="sm"
+            onClick={onCreate}
+            disabled={permissionsLoading}
+            className="gap-1.5 rounded-xl shadow-sm"
+          >
+            {permissionsLoading
+              ? <Loader2 className="h-4 w-4 animate-spin" />
+              : <Plus className="h-4 w-4" />}
+            Nuevo Producto
           </Button>
         )}
-        {showInactive && (
-          <Button variant="outline" size="sm" onClick={onShowInactive} className="gap-1.5">
-            <Eye className="h-3.5 w-3.5" />
-            Ver activos
-          </Button>
-        )}
-        <Button size="sm" onClick={onCreate} className="gap-1.5"
-          disabled={permissionsLoading}>
-          {permissionsLoading
-            ? <Loader2 className="h-4 w-4 animate-spin" />
-            : <Plus className="h-4 w-4" />}
-          Nuevo Producto
-        </Button>
       </div>
     </div>
   );

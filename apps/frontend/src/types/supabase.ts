@@ -125,6 +125,7 @@ export interface Product {
   barcode?: string;
   image_url?: string;
   is_active: boolean;
+  is_public?: boolean; // visible en el catálogo/tienda pública (independiente de is_active)
   // Campos adicionales usados en el frontend
   regular_price?: number;
   discount_percentage?: number;

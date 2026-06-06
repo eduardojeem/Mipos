@@ -13,6 +13,9 @@ interface ProductFilters {
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
   isActive?: boolean;
+  stockStatus?: string;
+  minPrice?: number;
+  maxPrice?: number;
 }
 
 type ProductsListResponse = {
@@ -59,6 +62,9 @@ function normalizeFilters(filters: ProductFilters) {
     sortBy: filters.sortBy || 'updated_at',
     sortOrder: filters.sortOrder || ('desc' as const),
     isActive: typeof filters.isActive === 'boolean' ? filters.isActive : undefined,
+    stockStatus: filters.stockStatus || undefined,
+    minPrice: filters.minPrice != null && filters.minPrice > 0 ? filters.minPrice : undefined,
+    maxPrice: filters.maxPrice != null && filters.maxPrice > 0 ? filters.maxPrice : undefined,
   };
 }
 
@@ -71,6 +77,9 @@ export function useOptimizedProducts(filters: ProductFilters = {}): UseOptimized
     filters.sortBy,
     filters.sortOrder,
     filters.isActive,
+    filters.stockStatus,
+    filters.minPrice,
+    filters.maxPrice,
   ]);
 
   const { data, isLoading, error, refetch: refetchQuery } = useQuery({
@@ -85,6 +94,9 @@ export function useOptimizedProducts(filters: ProductFilters = {}): UseOptimized
           sortBy: normalizedFilters.sortBy,
           sortOrder: normalizedFilters.sortOrder,
           isActive: normalizedFilters.isActive,
+          stockStatus: normalizedFilters.stockStatus,
+          minPrice: normalizedFilters.minPrice,
+          maxPrice: normalizedFilters.maxPrice,
         },
       });
 
@@ -105,7 +117,8 @@ export function useOptimizedProducts(filters: ProductFilters = {}): UseOptimized
       };
     },
     placeholderData: keepPreviousData,
-    staleTime: 2 * 60 * 1000,
+    // 30 s — se revalida rápido tras mutaciones (delete/edit/create)
+    staleTime: 30 * 1000,
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
     retry: 1,
@@ -116,7 +129,7 @@ export function useOptimizedProducts(filters: ProductFilters = {}): UseOptimized
   const totalPages = data?.totalPages || 1;
 
   const loadMore = useCallback(async () => {
-    // Pagination is handled by page increments from the parent — loadMore is unused.
+    // Paginación manejada por page desde el padre — loadMore no se usa.
   }, []);
 
   const refetch = useCallback(async () => {
@@ -158,7 +171,8 @@ export function useProductStats(filters: Pick<ProductFilters, 'isActive'> = {}) 
       });
       return response.data;
     },
-    staleTime: 5 * 60 * 1000,
+    // 60 s — estadísticas pueden ser un poco menos frescas
+    staleTime: 60 * 1000,
     gcTime: 15 * 60 * 1000,
     refetchOnWindowFocus: false,
     retry: 1,

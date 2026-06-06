@@ -19,12 +19,20 @@ const productSchema = z.object({
   stock_quantity: z.coerce.number().int().min(0, 'La cantidad en stock debe ser mayor o igual a 0'),
   min_stock: z.coerce.number().int().min(0, 'El stock mínimo debe ser mayor o igual a 0'),
   max_stock: z.coerce.number().int().min(0).optional(),
-  category_id: z.string().uuid('ID de categoría inválido'),
-  supplier_id: z.string().uuid().optional(),
+  category_id: z.string().trim().min(1, 'La categoría es obligatoria'),
+  supplier_id: z.preprocess(
+    (value) => {
+      if (value === undefined || value === null) return undefined;
+      const normalized = String(value).trim();
+      return normalized && normalized !== 'none' ? normalized : undefined;
+    },
+    z.string().trim().min(1).optional()
+  ),
   barcode: z.string().optional(),
   image_url: z.string().optional(),
   images: z.array(z.string()).optional(),
   is_active: z.boolean().default(true),
+  is_public: z.boolean().optional(),
   iva_included: z.boolean().optional(),
   iva_rate: z.coerce.number().min(0).max(100).optional(),
   brand: z.string().optional(),
@@ -50,6 +58,42 @@ const VALID_SORT_COLUMNS = new Set([
   'created_at',
   'sku',
 ]);
+
+function isSchemaMismatchError(error: unknown) {
+  const err = error as { code?: string; message?: string; details?: string } | null;
+  const message = `${err?.message || ''} ${err?.details || ''}`.toLowerCase();
+
+  return (
+    err?.code === 'PGRST204' ||
+    err?.code === '42703' ||
+    message.includes('schema cache') ||
+    (message.includes('column') && message.includes('does not exist')) ||
+    message.includes('malformed array literal') ||
+    message.includes('could not find')
+  );
+}
+
+function pickLegacyProductInsertData(productData: Record<string, unknown>, orgId: string) {
+  const legacyColumns = new Set([
+    'name',
+    'sku',
+    'description',
+    'cost_price',
+    'sale_price',
+    'stock_quantity',
+    'min_stock',
+    'category_id',
+  ]);
+
+  return {
+    ...Object.fromEntries(
+      Object.entries(productData).filter(([key]) => legacyColumns.has(key))
+    ),
+    organization_id: orgId,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+}
 
 // GET - Obtener productos
 // Redirige internamente a /api/products/list para mantener una única
@@ -225,23 +269,48 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: newProduct, error: insertError } = await adminClient
+    const insertPayload = {
+      ...productData,
+      organization_id: orgId,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    let usedSchemaFallback = false;
+    let { data: newProduct, error: insertError } = await adminClient
       .from('products')
-      .insert([
-        {
-          ...productData,
-          organization_id: orgId,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        },
-      ])
+      .insert([insertPayload])
       .select('*')
       .single();
+
+    if (insertError && isSchemaMismatchError(insertError)) {
+      usedSchemaFallback = true;
+      console.warn('[products/create] Full insert failed because the products schema is missing optional columns; retrying legacy insert:', {
+        code: insertError.code,
+        message: insertError.message,
+      });
+
+      const fallbackResult = await adminClient
+        .from('products')
+        .insert([pickLegacyProductInsertData(productData, orgId)])
+        .select('*')
+        .single();
+
+      newProduct = fallbackResult.data;
+      insertError = fallbackResult.error;
+    }
 
     if (insertError) {
       console.error('Error creating product:', insertError);
       return NextResponse.json(
         { error: 'Error al crear producto', details: insertError.message },
+        { status: 500 },
+      );
+    }
+
+    if (!newProduct) {
+      return NextResponse.json(
+        { error: 'Error al crear producto', details: 'No product was returned after insert' },
         { status: 500 },
       );
     }
@@ -275,7 +344,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { product: newProduct, message: 'Producto creado exitosamente' },
+      { product: newProduct, schemaFallback: usedSchemaFallback, message: 'Producto creado exitosamente' },
       { status: 201 },
     );
   } catch (error) {

@@ -16,16 +16,20 @@ interface SimpleProductListProps {
   onSelectProduct?: (id: string) => void;
 }
 
-const ProductSkeltonGrid = memo(function ProductSkeletonGrid() {
+const ProductSkeletonGrid = memo(function ProductSkeletonGrid() {
   return (
-    <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+    <div className="grid grid-cols-2 gap-4 p-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
       {Array.from({ length: 12 }).map((_, i) => (
-        <div key={i} className="overflow-hidden rounded-lg border border-border/40">
+        <div key={i} className="overflow-hidden rounded-2xl border border-border/40 bg-card">
           <Skeleton className="aspect-[4/3] w-full" />
-          <div className="space-y-2 p-3">
-            <Skeleton className="h-3 w-full" />
-            <Skeleton className="h-3 w-3/4" />
-            <Skeleton className="h-4 w-1/2" />
+          <div className="space-y-2.5 p-3.5">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-3/4" />
+            <div className="flex justify-between">
+              <Skeleton className="h-5 w-20" />
+              <Skeleton className="h-3.5 w-12" />
+            </div>
+            <Skeleton className="h-6 w-full rounded-lg" />
           </div>
         </div>
       ))}
@@ -43,7 +47,7 @@ export const SimpleProductList = memo(function SimpleProductList({
   onSelectProduct,
 }: SimpleProductListProps) {
   if (loading) {
-    return <ProductSkeltonGrid />;
+    return <ProductSkeletonGrid />;
   }
 
   if (products.length === 0) {
@@ -59,7 +63,7 @@ export const SimpleProductList = memo(function SimpleProductList({
   }
 
   return (
-    <div className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+    <div className="grid grid-cols-2 gap-4 p-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
       {products.map((product, index) => (
         <SimpleProductCard
           key={product.id}

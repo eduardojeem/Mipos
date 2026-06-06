@@ -335,7 +335,8 @@ async function fetchCatalogBaseProducts(
       .from('products')
       .select(selectClause)
       .eq('organization_id', organizationId)
-      .eq('is_active', true);
+      .eq('is_active', true)
+      .eq('is_public', true);
 
     query = applyCatalogDatabaseFilters(query, filters, {
       includeRating: !options?.fallbackMode,
@@ -450,6 +451,7 @@ export async function fetchPublicCatalogProductById(
       .eq('organization_id', organizationId)
       .eq('id', productId)
       .eq('is_active', true)
+      .eq('is_public', true)
       .maybeSingle();
 
   let result = await runQuery(CATALOG_PRODUCT_SELECT);

@@ -20,6 +20,8 @@ import {
   Trash2,
   Sparkles,
   ChevronDown,
+  Globe,
+  Lock,
 } from 'lucide-react';
 import {
   Dialog,
@@ -77,6 +79,7 @@ interface ProductFormData {
   supplier_id?: string;
   barcode?: string;
   is_active: boolean;
+  is_public: boolean;
   image_url?: string;
   // IVA
   iva_included?: boolean;
@@ -366,6 +369,7 @@ export const ProductEditModal = memo(function ProductEditModal({
   } = useForm<ProductFormData>();
 
   const isActive = watch('is_active');
+  const isPublic = watch('is_public');
   const hasOffer = watch('has_offer');
   const categoryId = watch('category_id');
   const productName = watch('name');
@@ -480,6 +484,7 @@ export const ProductEditModal = memo(function ProductEditModal({
         supplier_id: product.supplier_id || 'none',
         barcode: product.barcode || '',
         is_active: product.is_active ?? true,
+        is_public: product.is_public ?? true,
         image_url: product.image_url || '',
         iva_included: product.iva_included ?? false,
         iva_rate: product.iva_rate ?? 0,
@@ -502,7 +507,7 @@ export const ProductEditModal = memo(function ProductEditModal({
       reset({
         name: '', sku: '', description: '', sale_price: 0, cost_price: 0,
         offer_price: 0, has_offer: false, stock_quantity: 0, min_stock: 5,
-        category_id: '', supplier_id: 'none', is_active: true,
+        category_id: '', supplier_id: 'none', is_active: true, is_public: true,
       });
       setImagePreview(null);
     }
@@ -616,8 +621,16 @@ export const ProductEditModal = memo(function ProductEditModal({
     // Find first available sequence number (max 50 iterations)
     for (let n = 1; n <= 50; n++) {
       const candidate = `${base}-${String(n).padStart(3, '0')}`;
-      const { error } = await supabase.from('products').select('id').eq('sku', candidate).single();
-      if (error?.code === 'PGRST116') return candidate; // not found = available
+      const { data, error } = await supabase
+        .from('products')
+        .select('id')
+        .eq('sku', candidate)
+        .maybeSingle();
+      if (!data && !error) return candidate;
+      if (error) {
+        console.warn('[ProductEditModal] SKU availability check failed:', error);
+        return candidate;
+      }
     }
     return `${base}-${Date.now().toString().slice(-4)}`;
   }, [categories, supabase]);
@@ -730,6 +743,7 @@ export const ProductEditModal = memo(function ProductEditModal({
         min_stock: Number(data.min_stock),
         category_id: data.category_id,
         is_active: data.is_active,
+        is_public: data.is_public,
         description: data.description?.trim() || undefined,
         offer_price: data.has_offer && data.offer_price ? Number(data.offer_price) : undefined,
         wholesale_price: data.wholesale_price ? Number(data.wholesale_price) : undefined,
@@ -836,13 +850,40 @@ export const ProductEditModal = memo(function ProductEditModal({
               <Separator />
               <div className="flex items-center justify-between rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
                 <div>
-                  <p className="text-sm font-medium">Estado</p>
-                  <p className="text-xs text-muted-foreground">Visible en catálogo</p>
+                  <p className="text-sm font-medium">Activo</p>
+                  <p className="text-xs text-muted-foreground">Disponible en el sistema (POS)</p>
                 </div>
                 <Switch
                   id="is_active"
                   checked={isActive}
                   onCheckedChange={(v) => setValue('is_active', v)}
+                />
+              </div>
+
+              {/* Public toggle */}
+              <div className={cn(
+                'flex items-center justify-between rounded-xl border px-3 py-2.5 transition-colors',
+                isPublic
+                  ? 'border-emerald-300/60 bg-emerald-50/60 dark:border-emerald-800/60 dark:bg-emerald-950/20'
+                  : 'border-border/50 bg-muted/20',
+              )}>
+                <div className="flex items-center gap-2">
+                  {isPublic
+                    ? <Globe className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    : <Lock className="h-4 w-4 text-muted-foreground" />}
+                  <div>
+                    <p className="text-sm font-medium">
+                      {isPublic ? 'Público' : 'Privado'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {isPublic ? 'Visible en la tienda online' : 'Oculto del catálogo público'}
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  id="is_public"
+                  checked={isPublic}
+                  onCheckedChange={(v) => setValue('is_public', v)}
                 />
               </div>
             </div>

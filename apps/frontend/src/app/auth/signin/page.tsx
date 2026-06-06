@@ -278,9 +278,11 @@ export default function SignInPage() {
       if (!orgsData.length) {
         toast({
           title: 'Sin organizaciones',
-          description: 'No perteneces a ninguna organizacion. Contacta al administrador.',
-          variant: 'destructive',
+          description: 'Tu cuenta no tiene una empresa asociada. Crea una empresa para poder entrar al dashboard.',
+          variant: 'default',
         });
+        router.replace('/inicio/registro');
+        router.refresh();
         return;
       }
 

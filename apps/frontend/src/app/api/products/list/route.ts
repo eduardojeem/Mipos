@@ -16,6 +16,7 @@ const RICH_PRODUCT_SELECT = `
   min_stock,
   max_stock,
   is_active,
+  is_public,
   created_at,
   updated_at,
   image_url,
@@ -34,12 +35,23 @@ const RICH_PRODUCT_SELECT = `
   )
 `;
 
-type ProductRow = Record<string, any>;
+type ProductRow = Record<string, unknown>;
 const STOCK_STATUS_CANDIDATE_LIMIT = 10000;
 
 function parsePositiveInt(value: string | null, fallback: number) {
   const parsed = Number.parseInt(value || '', 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function isMissingColumnError(error: unknown, column: string): boolean {
+  const message = String((error as { message?: unknown })?.message || '').toLowerCase();
+  const normalized = String(column || '').trim().toLowerCase();
+  if (!message || !normalized) return false;
+  if (message.includes(`column "${normalized}"`) && message.includes('does not exist')) return true;
+  if (message.includes(`could not find`) && message.includes(normalized) && message.includes('schema cache')) return true;
+  if (message.includes(`could not find the '${normalized}' column`)) return true;
+  if (message.includes('pgrst204') && message.includes(normalized)) return true;
+  return false;
 }
 
 function normalizeImages(value: unknown): string[] {
@@ -71,7 +83,12 @@ function normalizeImages(value: unknown): string[] {
     .filter(Boolean);
 }
 
-function applyProductFilters(query: any, params: URLSearchParams, orgId: string) {
+function applyProductFilters(
+  query: unknown,
+  params: URLSearchParams,
+  orgId: string,
+  options?: { applyDeletedFilter?: boolean }
+) {
   const search = params.get('search')?.trim();
   const categoryId = params.get('categoryId')?.trim();
   const supplierId = params.get('supplierId')?.trim();
@@ -82,60 +99,76 @@ function applyProductFilters(query: any, params: URLSearchParams, orgId: string)
   const isActive = params.get('isActive');
   const stockStatus = params.get('stockStatus');
 
-  let scopedQuery = query.eq('organization_id', orgId);
+  let scopedQuery = (query as unknown as {
+    eq: (column: string, value: unknown) => unknown;
+  }).eq('organization_id', orgId) as unknown;
+
+  // Siempre filtramos productos con deleted_at (soft-deleted) a menos que
+  // la columna no exista en el esquema (el caller pasa applyDeletedFilter=false)
+  if (options?.applyDeletedFilter !== false) {
+    scopedQuery = (scopedQuery as unknown as { is: (column: string, value: null) => unknown })
+      .is('deleted_at', null);
+  }
 
   if (search) {
-    scopedQuery = scopedQuery.or(`name.ilike.%${search}%,sku.ilike.%${search}%,description.ilike.%${search}%`);
+    scopedQuery = (scopedQuery as unknown as { or: (filters: string) => unknown })
+      .or(`name.ilike.%${search}%,sku.ilike.%${search}%,description.ilike.%${search}%`);
   }
 
   if (categoryId) {
-    scopedQuery = scopedQuery.eq('category_id', categoryId);
+    scopedQuery = (scopedQuery as unknown as { eq: (column: string, value: unknown) => unknown })
+      .eq('category_id', categoryId);
   }
 
   if (supplierId) {
-    scopedQuery = scopedQuery.eq('supplier_id', supplierId);
+    scopedQuery = (scopedQuery as unknown as { eq: (column: string, value: unknown) => unknown })
+      .eq('supplier_id', supplierId);
   }
 
   if (minPrice) {
-    scopedQuery = scopedQuery.gte('sale_price', Number.parseFloat(minPrice));
+    scopedQuery = (scopedQuery as unknown as { gte: (column: string, value: number) => unknown })
+      .gte('sale_price', Number.parseFloat(minPrice));
   }
 
   if (maxPrice) {
-    scopedQuery = scopedQuery.lte('sale_price', Number.parseFloat(maxPrice));
+    scopedQuery = (scopedQuery as unknown as { lte: (column: string, value: number) => unknown })
+      .lte('sale_price', Number.parseFloat(maxPrice));
   }
 
   if (minStock) {
-    scopedQuery = scopedQuery.gte('stock_quantity', Number.parseInt(minStock, 10));
+    scopedQuery = (scopedQuery as unknown as { gte: (column: string, value: number) => unknown })
+      .gte('stock_quantity', Number.parseInt(minStock, 10));
   }
 
   if (maxStock) {
-    scopedQuery = scopedQuery.lte('stock_quantity', Number.parseInt(maxStock, 10));
+    scopedQuery = (scopedQuery as unknown as { lte: (column: string, value: number) => unknown })
+      .lte('stock_quantity', Number.parseInt(maxStock, 10));
   }
 
+  // Filtro de estado activo/inactivo: simple eq sobre is_active.
+  // Cuando isActive es null (no enviado) no aplicamos ningún filtro de estado.
   if (isActive !== null) {
-    scopedQuery = scopedQuery.eq('is_active', isActive === 'true');
+    scopedQuery = (scopedQuery as unknown as { eq: (column: string, value: unknown) => unknown })
+      .eq('is_active', isActive === 'true');
   }
 
   if (stockStatus) {
     switch (stockStatus) {
       case 'out_of_stock':
-        // stock_quantity = 0
-        scopedQuery = scopedQuery.eq('stock_quantity', 0);
+        scopedQuery = (scopedQuery as unknown as { eq: (column: string, value: unknown) => unknown })
+          .eq('stock_quantity', 0);
         break;
       case 'low_stock':
-        // 0 < stock_quantity <= min_stock
-        // Supabase JS client no soporta comparación entre columnas; filtramos
-        // stock > 0 en DB y post-procesamos en normalizeProduct si es necesario.
-        // La comparación exacta se aplica en el endpoint con los datos retornados.
-        scopedQuery = scopedQuery.gt('stock_quantity', 0);
+        scopedQuery = (scopedQuery as unknown as { gt: (column: string, value: number) => unknown })
+          .gt('stock_quantity', 0);
         break;
       case 'in_stock':
-        // stock_quantity > min_stock (post-procesado)
-        scopedQuery = scopedQuery.gt('stock_quantity', 0);
+        scopedQuery = (scopedQuery as unknown as { gt: (column: string, value: number) => unknown })
+          .gt('stock_quantity', 0);
         break;
       case 'critical':
-        // stock_quantity <= min_stock / 2 (post-procesado)
-        scopedQuery = scopedQuery.gt('stock_quantity', 0);
+        scopedQuery = (scopedQuery as unknown as { gt: (column: string, value: number) => unknown })
+          .gt('stock_quantity', 0);
         break;
     }
   }
@@ -147,49 +180,63 @@ function normalizeProduct(
   product: ProductRow,
   categoryMap: Map<string, ProductRow>
 ) {
-  const images = normalizeImages(product.images);
-  const category = product.categories || product.category || categoryMap.get(product.category_id);
-  const supplier = product.suppliers || product.supplier || null;
+  const id = String(product['id'] ?? '');
+  const categoryId = String(product['category_id'] ?? '');
+  const images = normalizeImages(product['images']);
+  const categoryCandidate =
+    product['categories'] ||
+    product['category'] ||
+    (categoryId ? categoryMap.get(categoryId) : null);
+  const supplierCandidate = product['suppliers'] || product['supplier'] || null;
+  const category =
+    categoryCandidate && typeof categoryCandidate === 'object'
+      ? (categoryCandidate as Record<string, unknown>)
+      : null;
+  const supplier =
+    supplierCandidate && typeof supplierCandidate === 'object'
+      ? (supplierCandidate as Record<string, unknown>)
+      : null;
 
   return {
-    id: product.id,
-    name: product.name,
-    sku: product.sku,
-    description: product.description,
-    cost_price: Number(product.cost_price || 0),
-    sale_price: Number(product.sale_price || 0),
-    offer_price: product.offer_price ?? undefined,
-    wholesale_price: product.wholesale_price ?? undefined,
-    min_wholesale_quantity: product.min_wholesale_quantity ?? undefined,
-    stock_quantity: Number(product.stock_quantity || 0),
-    min_stock: Number(product.min_stock || 0),
-    max_stock: product.max_stock ?? undefined,
-    is_active: product.is_active !== false,
-    created_at: product.created_at,
-    updated_at: product.updated_at,
-    image_url: product.image_url || images[0] || null,
+    id,
+    name: String(product['name'] ?? ''),
+    sku: String(product['sku'] ?? ''),
+    description: String(product['description'] ?? ''),
+    cost_price: Number(product['cost_price'] || 0),
+    sale_price: Number(product['sale_price'] || 0),
+    offer_price: (product['offer_price'] as unknown) ?? undefined,
+    wholesale_price: (product['wholesale_price'] as unknown) ?? undefined,
+    min_wholesale_quantity: (product['min_wholesale_quantity'] as unknown) ?? undefined,
+    stock_quantity: Number(product['stock_quantity'] || 0),
+    min_stock: Number(product['min_stock'] || 0),
+    max_stock: (product['max_stock'] as unknown) ?? undefined,
+    is_active: product['is_active'] !== false,
+    is_public: product['is_public'] !== false,
+    created_at: String(product['created_at'] ?? ''),
+    updated_at: String(product['updated_at'] ?? ''),
+    image_url: (product['image_url'] as unknown as string | null) || images[0] || null,
     images,
-    barcode: product.barcode ?? undefined,
-    discount_percentage: product.discount_percentage || 0,
-    category_id: product.category_id,
-    supplier_id: product.supplier_id ?? undefined,
+    barcode: (product['barcode'] as unknown) ?? undefined,
+    discount_percentage: Number(product['discount_percentage'] || 0),
+    category_id: categoryId,
+    supplier_id: (product['supplier_id'] as unknown) ?? undefined,
     category: category ? {
-      id: category.id,
-      name: category.name,
-      description: category.description || '',
-      is_active: category.is_active !== false,
-      created_at: category.created_at || product.created_at,
-      updated_at: category.updated_at || product.updated_at,
+      id: String(category['id'] ?? ''),
+      name: String(category['name'] ?? ''),
+      description: String(category['description'] ?? ''),
+      is_active: category['is_active'] !== false,
+      created_at: String(category['created_at'] ?? product['created_at'] ?? ''),
+      updated_at: String(category['updated_at'] ?? product['updated_at'] ?? ''),
     } : null,
     supplier: supplier ? {
-      id: supplier.id,
-      name: supplier.name,
-      email: supplier.email || '',
-      phone: supplier.phone || '',
-      address: supplier.address || '',
-      is_active: supplier.is_active !== false,
-      created_at: supplier.created_at || product.created_at,
-      updated_at: supplier.updated_at || product.updated_at,
+      id: String(supplier['id'] ?? ''),
+      name: String(supplier['name'] ?? ''),
+      email: String(supplier['email'] ?? ''),
+      phone: String(supplier['phone'] ?? ''),
+      address: String(supplier['address'] ?? ''),
+      is_active: supplier['is_active'] !== false,
+      created_at: String(supplier['created_at'] ?? product['created_at'] ?? ''),
+      updated_at: String(supplier['updated_at'] ?? product['updated_at'] ?? ''),
     } : null,
   };
 }
@@ -217,13 +264,19 @@ export async function GET(request: NextRequest) {
     const supabase = await createAdminClient();
 
     const stockStatus = searchParams.get('stockStatus');
+    // Siempre filtramos los registros con deleted_at para no mostrar productos
+    // eliminados. Cuando isActive=false solo mostramos is_active=false.
+    const applyDeletedFilter = true;
 
-    const buildQuery = (select: string) => {
+    const buildQuery = (
+      select: string,
+      options?: { applyDeletedFilter?: boolean }
+    ) => {
       let query = supabase
         .from('products')
         .select(select, { count: 'estimated' });
 
-      query = applyProductFilters(query, searchParams, orgId);
+      query = applyProductFilters(query, searchParams, orgId, options) as typeof query;
       const orderedQuery = query.order(sortField, { ascending: sortOrder === 'asc' });
 
       if (stockStatus) {
@@ -233,7 +286,19 @@ export async function GET(request: NextRequest) {
       return orderedQuery.range(from, to);
     };
 
-    let { data: products, error, count } = await buildQuery(RICH_PRODUCT_SELECT);
+    let { data: products, error, count } = await buildQuery(RICH_PRODUCT_SELECT, {
+      applyDeletedFilter,
+    });
+
+    if (error && isMissingColumnError(error, 'deleted_at')) {
+      // La columna deleted_at no existe — reintentamos sin ese filtro
+      const retry = await buildQuery(RICH_PRODUCT_SELECT, {
+        applyDeletedFilter: false,
+      });
+      products = retry.data;
+      error = retry.error;
+      count = retry.count;
+    }
 
     if (error) {
       console.warn('[products/list] Rich select failed, retrying with legacy select:', {
@@ -241,7 +306,9 @@ export async function GET(request: NextRequest) {
         message: error.message,
       });
 
-      const fallback = await buildQuery('*');
+      const fallback = await buildQuery('*', {
+        applyDeletedFilter,
+      });
       products = fallback.data;
       error = fallback.error;
       count = fallback.count;
@@ -251,12 +318,12 @@ export async function GET(request: NextRequest) {
       throw error;
     }
 
-    const rows = (products || []) as ProductRow[];
+    const rows = (products || []) as unknown as ProductRow[];
     const categoryIds = Array.from(new Set(
       rows
-        .map((product) => product.category_id)
-        .filter(Boolean)
-    ));
+        .map((product) => String(product['category_id'] ?? '').trim())
+        .filter((id) => Boolean(id))
+    )) as string[];
     const categoryMap = new Map<string, ProductRow>();
 
     if (categoryIds.length > 0) {
@@ -268,7 +335,8 @@ export async function GET(request: NextRequest) {
 
       if (!categoriesError) {
         (categories || []).forEach((category: ProductRow) => {
-          categoryMap.set(category.id, category);
+          const id = String(category['id'] ?? '').trim();
+          if (id) categoryMap.set(id, category);
         });
       }
     }

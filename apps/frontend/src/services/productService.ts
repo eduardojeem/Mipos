@@ -111,6 +111,7 @@ function normalizeProduct(raw: Record<string, unknown>): Product {
     barcode: toStr(raw.barcode),
     image_url: toStr(raw.image_url ?? raw.image),
     is_active: Boolean(raw.is_active ?? raw.isActive ?? true),
+    is_public: Boolean(raw.is_public ?? raw.isPublic ?? true),
     regular_price: toNum(raw.regular_price),
     discount_percentage: toNum(raw.discount_percentage),
     rating: toNum(raw.rating),

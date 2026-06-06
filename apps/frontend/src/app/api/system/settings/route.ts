@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
 import { createAdminClient } from '@/lib/supabase/server';
-import { assertAdmin } from '@/app/api/_utils/auth';
 import {
   COMPANY_PERMISSIONS,
   requireCompanyAccess,
@@ -91,6 +90,20 @@ function mergeBusinessConfig(input?: Partial<BusinessConfig> | null): BusinessCo
   const systemSettings = (isObject(raw.systemSettings) ? raw.systemSettings : {}) as Record<string, unknown>;
   const security = (isObject(systemSettings.security) ? systemSettings.security : {}) as Record<string, unknown>;
   const email = (isObject(systemSettings.email) ? systemSettings.email : {}) as Record<string, unknown>;
+  const rawCarousel = isObject(raw.carousel) ? raw.carousel : null;
+  const rawCarouselImages = rawCarousel ? (rawCarousel as Record<string, unknown>).images : undefined;
+  const normalizedCarouselImages = Array.isArray(rawCarouselImages)
+    ? rawCarouselImages
+        .map((item) => {
+          if (!isObject(item)) return null;
+          const id = stringValue(item.id, '');
+          const url = stringValue(item.url, '');
+          if (!id || !url) return null;
+          const alt = typeof item.alt === 'string' ? item.alt : undefined;
+          return alt ? { id, url, alt } : { id, url };
+        })
+        .filter((item): item is { id: string; url: string; alt?: string } => Boolean(item))
+    : null;
 
   return {
     ...defaultBusinessConfig,
@@ -139,8 +152,8 @@ function mergeBusinessConfig(input?: Partial<BusinessConfig> | null): BusinessCo
     carousel: {
       ...defaultBusinessConfig.carousel,
       ...(isObject(raw.carousel) ? raw.carousel : {}),
-      images: Array.isArray(raw.carousel?.images)
-        ? raw.carousel.images
+      images: normalizedCarouselImages && normalizedCarouselImages.length > 0
+        ? normalizedCarouselImages
         : defaultBusinessConfig.carousel.images,
     },
     homeOffersCarousel: {
@@ -599,12 +612,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(access.body, { status: access.status });
     }
 
-    const authResult = await assertAdmin(request);
-    if (!authResult.ok) {
-      return NextResponse.json(authResult.body, { status: authResult.status });
-    }
-
-    const { userId, organizationId: orgFromAuth, isSuperAdmin } = authResult;
+    const { userId, companyId: orgFromAuth, isSuperAdmin } = access.context;
     const adminClient = await createAdminClient();
     const resolvedOrg = await resolveOrganizationId(request, userId, orgFromAuth, isSuperAdmin, adminClient);
 
@@ -650,12 +658,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json(access.body, { status: access.status });
     }
 
-    const authResult = await assertAdmin(request);
-    if (!authResult.ok) {
-      return NextResponse.json(authResult.body, { status: authResult.status });
-    }
-
-    const { userId, organizationId: orgFromAuth, isSuperAdmin } = authResult;
+    const { userId, companyId: orgFromAuth, isSuperAdmin } = access.context;
     const adminClient = await createAdminClient();
     const settings = await request.json();
     const resolvedOrg = await resolveOrganizationId(request, userId, orgFromAuth, isSuperAdmin, adminClient);

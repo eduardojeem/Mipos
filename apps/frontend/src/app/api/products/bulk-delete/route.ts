@@ -1,8 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient } from '@/lib/supabase/server';
+import { createAdminClient, createClient } from '@/lib/supabase/server';
 import { requireOrganization } from '@/lib/organization';
 import { requirePOSPermissions } from '@/app/api/_utils/role-validation';
 import { assertCsrf } from '@/app/api/_utils/csrf';
+
+function isForeignKeyViolation(error: unknown) {
+  const err = error as { code?: string; message?: string; details?: string } | null;
+  const message = `${err?.message || ''} ${err?.details || ''}`.toLowerCase();
+
+  return err?.code === '23503' || message.includes('foreign key constraint');
+}
+
+function isMissingRpcFunctionError(error: unknown) {
+  const err = error as { code?: string; message?: string; details?: string; hint?: string } | null;
+  const message = `${err?.message || ''} ${err?.details || ''} ${err?.hint || ''}`.toLowerCase();
+  return (
+    err?.code === 'PGRST202' ||
+    message.includes('could not find the function') ||
+    (message.includes('function') && message.includes('does not exist'))
+  );
+}
+
+function shouldFallbackFromRpc(error: unknown) {
+  const err = error as { code?: string; message?: string; details?: string } | null;
+  const message = `${err?.message || ''} ${err?.details || ''}`.toLowerCase();
+  return isMissingRpcFunctionError(error) || err?.code === '22P02' || message.includes('invalid input syntax for type uuid');
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -39,7 +62,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = await createAdminClient();
+    const supabase = await createClient();
 
     const { data: existingProducts, error: existingProductsError } = await supabase
       .from('products')
@@ -60,18 +83,24 @@ export async function POST(request: NextRequest) {
 
     const existingIds = existingProducts.map((product: { id: string }) => product.id);
 
-    const { data: productsWithSales, error: productsWithSalesError } = await supabase
-      .from('sale_items')
-      .select('product_id')
-      .in('product_id', existingIds);
-
-    if (productsWithSalesError) {
-      throw productsWithSalesError;
+    let idsWithSales = new Set<string>();
+    const rpc = await supabase.rpc('get_products_with_sales', { product_ids: existingIds as unknown as string[] });
+    if (rpc.error) {
+      if (!shouldFallbackFromRpc(rpc.error)) {
+        throw rpc.error;
+      }
+      const fallback = await supabase
+        .from('sale_items')
+        .select('product_id')
+        .in('product_id', existingIds);
+      if (fallback.error) {
+        throw fallback.error;
+      }
+      idsWithSales = new Set((fallback.data || []).map((item: { product_id: string }) => item.product_id));
+    } else {
+      idsWithSales = new Set((rpc.data || []).map((row: { product_id: string }) => row.product_id));
     }
 
-    const idsWithSales = new Set(
-      (productsWithSales || []).map((item: { product_id: string }) => item.product_id)
-    );
     const idsToDeactivate = existingIds.filter((id: string) => idsWithSales.has(id));
     const idsToDelete = existingIds.filter((id: string) => !idsWithSales.has(id));
 
@@ -82,41 +111,122 @@ export async function POST(request: NextRequest) {
     };
 
     if (idsToDeactivate.length > 0) {
-      const { error: deactivateError } = await supabase
+      const { count: deactivatedCount, error: deactivateError } = await supabase
         .from('products')
-        .update({
-          is_active: false,
-          updated_at: new Date().toISOString(),
-        })
+        .update(
+          {
+            is_active: false,
+            updated_at: new Date().toISOString(),
+          },
+          { count: 'exact' }
+        )
         .eq('organization_id', orgId)
-        .in('id', idsToDeactivate);
+        .in('id', idsToDeactivate)
+        ;
 
       if (deactivateError) {
         results.errors.push(`Failed to deactivate products: ${deactivateError.message}`);
       } else {
-        results.deactivated = idsToDeactivate.length;
+        results.deactivated = deactivatedCount || 0;
       }
     }
 
     if (idsToDelete.length > 0) {
-      const { error: deleteError } = await supabase
+      const { count: deletedCount, error: deleteError } = await supabase
         .from('products')
-        .delete()
+        .delete({ count: 'exact' })
         .eq('organization_id', orgId)
-        .in('id', idsToDelete);
+        .in('id', idsToDelete)
+        ;
 
       if (deleteError) {
-        results.errors.push(`Failed to delete products: ${deleteError.message}`);
+        if (isForeignKeyViolation(deleteError)) {
+          const { count: fallbackCount, error: fallbackDeactivateError } = await supabase
+            .from('products')
+            .update(
+              {
+                is_active: false,
+                updated_at: new Date().toISOString(),
+              },
+              { count: 'exact' }
+            )
+            .eq('organization_id', orgId)
+            .in('id', idsToDelete)
+            ;
+
+          if (fallbackDeactivateError) {
+            results.errors.push(`Failed to deactivate products: ${fallbackDeactivateError.message}`);
+          } else {
+            results.deactivated += fallbackCount || 0;
+          }
+        } else {
+          results.errors.push(`Failed to delete products: ${deleteError.message}`);
+        }
       } else {
-        results.deleted = idsToDelete.length;
+        results.deleted = deletedCount || 0;
       }
     }
 
     const totalProcessed = results.deleted + results.deactivated;
     const hasErrors = results.errors.length > 0;
 
+    if (totalProcessed === 0) {
+      const adminSupabase = await createAdminClient();
+
+      if (idsToDeactivate.length > 0) {
+        const { count, error } = await adminSupabase
+          .from('products')
+          .update(
+            {
+              is_active: false,
+              updated_at: new Date().toISOString(),
+            },
+            { count: 'exact' }
+          )
+          .eq('organization_id', orgId)
+          .in('id', idsToDeactivate);
+
+        if (!error) {
+          results.deactivated = count || 0;
+        }
+      }
+
+      if (idsToDelete.length > 0) {
+        const { count, error } = await adminSupabase
+          .from('products')
+          .delete({ count: 'exact' })
+          .eq('organization_id', orgId)
+          .in('id', idsToDelete);
+
+        if (!error) {
+          results.deleted = count || 0;
+        }
+      }
+
+      const retryTotal = results.deleted + results.deactivated;
+      if (retryTotal > 0) {
+        return NextResponse.json({
+          success: true,
+          results,
+          message: `Processed ${retryTotal} products. ${results.deleted} deleted, ${results.deactivated} deactivated.`,
+          ...(hasErrors ? { errors: results.errors } : {}),
+        });
+      }
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'No se pudo eliminar/desactivar ningún producto. Actualiza y vuelve a intentar.',
+          code: 'PRODUCT_BULK_DELETE_NOOP',
+          results,
+          ...(hasErrors ? { errors: results.errors } : {}),
+        },
+        { status: 409 }
+      );
+    }
+
     return NextResponse.json({
-      success: !hasErrors || totalProcessed > 0,
+      success: true,
       results,
       message: `Processed ${totalProcessed} products. ${results.deleted} deleted, ${results.deactivated} deactivated.`,
       ...(hasErrors ? { errors: results.errors } : {}),

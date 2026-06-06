@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { shouldBypassNextImageOptimizer } from '@/lib/images/next-image';
 import { cn } from '@/lib/utils';
 import type { Product } from '@/types';
 import { format } from 'date-fns';
@@ -151,6 +152,7 @@ export const ProductDetailsModal = memo(function ProductDetailsModal({
                       fill
                       className="object-cover"
                       sizes="(max-width: 768px) 100vw, 400px"
+                      unoptimized={shouldBypassNextImageOptimizer(product.image_url)}
                     />
                   ) : (
                     <div className="flex items-center justify-center h-full">

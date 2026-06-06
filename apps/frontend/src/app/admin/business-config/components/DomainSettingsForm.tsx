@@ -95,14 +95,14 @@ export function DomainSettingsForm({
         { path: '/home', always: true },
         { path: '/catalog', always: false, flag: sections?.showCatalog },
         { path: '/offers', always: false, flag: sections?.showOffers },
+        { path: '/orders/track', always: false, flag: sections?.showOrderTracking },
       ]
         .filter((r) => r.always || r.flag)
         .map(({ path }) => ({
           path,
           url: publicBaseUrl ? `${publicBaseUrl}${path}` : path,
         })),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [publicBaseUrl, sections?.showCatalog, sections?.showOffers]
+    [publicBaseUrl, sections?.showCatalog, sections?.showOffers, sections?.showOrderTracking]
   );
 
   const handleSave = async () => {
@@ -200,8 +200,6 @@ export function DomainSettingsForm({
           ? 'La pagina publica ya usa la configuracion de dominio mas reciente.'
           : 'La ruta publica quedo actualizada correctamente.',
       });
-
-      onUpdate?.({});
     } catch (error: unknown) {
       toast({
         title: 'Error',
@@ -370,17 +368,17 @@ export function DomainSettingsForm({
             </div>
 
             {allowCustomDomain ? (
-              <Alert className="border-violet-200 bg-violet-50 text-violet-950 dark:border-violet-900/40 dark:bg-violet-950/20 dark:text-violet-100">
-                <ShieldCheck className="h-4 w-4" />
-                <AlertDescription>
-                  Luego de guardar, apunta tu DNS al proveedor indicado por soporte para activar el dominio.
+              <Alert className="border-emerald-200 bg-emerald-50 text-emerald-950 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-100 shadow-sm ring-1 ring-emerald-500/10">
+                <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <AlertDescription className="font-medium">
+                  Dominio Personalizado Habilitado: Luego de guardar, apunta tu DNS al proveedor indicado por soporte para activar el dominio.
                 </AlertDescription>
               </Alert>
             ) : (
-              <Alert className="border-amber-200 bg-amber-50 text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  Tu plan actual ({planName}) opera con ruta publica compartida. El dominio personalizado se habilita en Professional.
+              <Alert className="border-destructive/20 bg-destructive/5 text-destructive dark:border-destructive/30 dark:bg-destructive/10 shadow-sm">
+                <AlertCircle className="h-4 w-4 text-destructive" />
+                <AlertDescription className="font-medium">
+                  Dominio Personalizado Bloqueado: Tu plan actual ({planName}) opera con ruta pública compartida. El dominio personalizado se habilita en el plan Professional.
                 </AlertDescription>
               </Alert>
             )}

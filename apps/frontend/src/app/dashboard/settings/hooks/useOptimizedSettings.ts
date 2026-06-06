@@ -253,6 +253,15 @@ export function useUserSettings() {
 
 export function useSystemSettings() {
   const organizationId = useCurrentOrganizationId();
+  const { user, hasRole } = useAuth();
+  const canViewSystemSettings = Boolean(user) && (
+    hasRole('OWNER') ||
+    hasRole('ADMIN') ||
+    hasRole('SUPER_ADMIN') ||
+    hasRole('owner') ||
+    hasRole('admin') ||
+    hasRole('super_admin')
+  );
   return useQuery({
     queryKey: ['system-settings', organizationId],
     queryFn: async (): Promise<SystemSettings> => {
@@ -270,16 +279,16 @@ export function useSystemSettings() {
         if (status === 401) {
           throw error; // sesión expirada — dejar que react-query marque el error
         }
-        // 403 = usuario sin permiso de admin (esperado para CASHIER/SELLER)
-        // cualquier otro error → usar defaults silenciosamente
-        logger.warn('Failed to load system settings, using defaults', { status });
+        if (status && status !== 403) {
+          logger.warn('Failed to load system settings, using defaults', { status });
+        }
         return DEFAULT_SYSTEM_SETTINGS;
       }
     },
     staleTime: 10 * 60 * 1000, // 10 minutes
     gcTime: 30 * 60 * 1000, // 30 minutes
     retry: 1,
-    enabled: !!organizationId,
+    enabled: !!organizationId && canViewSystemSettings,
   });
 }
 

@@ -3,14 +3,15 @@
 import React, { memo, useMemo } from 'react';
 import Image from 'next/image';
 import {
-  Package,
-  Edit,
-  Trash2,
-  Eye,
   AlertTriangle,
-  ArrowUpDown,
-  ArrowUp,
   ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Edit,
+  Eye,
+  Package,
+  Trash2,
+  TrendingUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -24,6 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { shouldBypassNextImageOptimizer } from '@/lib/images/next-image';
 import { cn } from '@/lib/utils';
 import type { Product } from '@/types';
 
@@ -50,13 +52,9 @@ interface SortableHeaderProps {
   className?: string;
 }
 
+// ── Sortable header ──────────────────────────────────────────────────────────
 const SortableHeader = memo(function SortableHeader({
-  field,
-  label,
-  sortField,
-  sortOrder,
-  onSort,
-  className,
+  field, label, sortField, sortOrder, onSort, className,
 }: SortableHeaderProps) {
   const isActive = sortField === field;
 
@@ -67,19 +65,25 @@ const SortableHeader = memo(function SortableHeader({
 
   return (
     <TableHead
-      className={cn('cursor-pointer select-none', className)}
+      className={cn(
+        'select-none whitespace-nowrap',
+        onSort && 'cursor-pointer',
+        className,
+      )}
       onClick={handleSort}
     >
-      <div className="flex items-center gap-1 hover:text-foreground transition-colors">
-        <span>{label}</span>
+      <div className={cn(
+        'flex items-center gap-1.5 transition-colors',
+        onSort && 'hover:text-foreground',
+        isActive ? 'text-primary' : 'text-muted-foreground',
+      )}>
+        <span className={isActive ? 'font-semibold text-foreground' : ''}>{label}</span>
         {onSort && (
-          <span className="text-muted-foreground">
+          <span className="opacity-70">
             {isActive ? (
-              sortOrder === 'asc' ? (
-                <ArrowUp className="h-3 w-3 text-primary" />
-              ) : (
-                <ArrowDown className="h-3 w-3 text-primary" />
-              )
+              sortOrder === 'asc'
+                ? <ArrowUp className="h-3 w-3 text-primary" />
+                : <ArrowDown className="h-3 w-3 text-primary" />
             ) : (
               <ArrowUpDown className="h-3 w-3" />
             )}
@@ -90,28 +94,26 @@ const SortableHeader = memo(function SortableHeader({
   );
 });
 
+// ── Loading skeleton ─────────────────────────────────────────────────────────
 function TableLoadingSkeleton() {
   return (
-    <div className="space-y-1 p-1">
+    <div className="divide-y divide-border/40">
       {Array.from({ length: 8 }).map((_, i) => (
-        <div
-          key={i}
-          className="flex items-center gap-3 rounded-lg px-4 py-2"
-        >
+        <div key={i} className={cn('flex items-center gap-4 px-5 py-3', i % 2 === 0 && 'bg-muted/20')}>
           <Skeleton className="h-4 w-4 rounded" />
-          <Skeleton className="h-10 w-10 rounded-md flex-shrink-0" />
+          <Skeleton className="h-11 w-11 shrink-0 rounded-xl" />
           <div className="flex-1 space-y-1.5">
             <Skeleton className="h-3.5 w-48" />
-            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-3 w-20" />
           </div>
-          <Skeleton className="h-5 w-24 rounded-full" />
-          <Skeleton className="h-4 w-20" />
+          <Skeleton className="hidden h-5 w-24 rounded-full sm:block" />
+          <Skeleton className="hidden h-4 w-20 lg:block" />
           <Skeleton className="h-5 w-16 rounded-full" />
           <Skeleton className="h-5 w-14 rounded-full" />
           <div className="flex gap-1">
-            <Skeleton className="h-7 w-7 rounded-md" />
-            <Skeleton className="h-7 w-7 rounded-md" />
-            <Skeleton className="h-7 w-7 rounded-md" />
+            <Skeleton className="h-7 w-7 rounded-lg" />
+            <Skeleton className="h-7 w-7 rounded-lg" />
+            <Skeleton className="h-7 w-7 rounded-lg" />
           </div>
         </div>
       ))}
@@ -119,13 +121,26 @@ function TableLoadingSkeleton() {
   );
 }
 
+// ── Margin indicator ─────────────────────────────────────────────────────────
+function MarginIndicator({ sale, cost }: { sale: number; cost?: number }) {
+  if (!cost || cost <= 0 || !sale) return null;
+  const pct = Math.round(((sale - cost) / sale) * 100);
+  const color =
+    pct >= 40 ? 'text-emerald-600 dark:text-emerald-400'
+    : pct >= 20 ? 'text-sky-600 dark:text-sky-400'
+    : 'text-rose-600 dark:text-rose-400';
+
+  return (
+    <div className={cn('flex items-center gap-0.5 text-[11px] font-medium tabular-nums', color)}>
+      <TrendingUp className="h-2.5 w-2.5" />
+      {pct}%
+    </div>
+  );
+}
+
+// ── Product row ──────────────────────────────────────────────────────────────
 const ProductRow = memo(function ProductRow({
-  product,
-  onEdit,
-  onDelete,
-  onView,
-  isSelected,
-  onSelect,
+  product, onEdit, onDelete, onView, isSelected, onSelect, index,
 }: {
   product: Product;
   onEdit?: (product: Product) => void;
@@ -133,129 +148,158 @@ const ProductRow = memo(function ProductRow({
   onView?: (product: Product) => void;
   isSelected?: boolean;
   onSelect?: (id: string) => void;
+  index: number;
 }) {
-  const stock = product.stock_quantity || 0;
+  const stock    = product.stock_quantity || 0;
   const minStock = product.min_stock || 5;
-  const isLowStock = stock > 0 && stock <= minStock;
+  const isLowStock   = stock > 0 && stock <= minStock;
   const isOutOfStock = stock === 0;
 
   const categoryName =
     typeof product.category === 'object'
       ? product.category?.name
-      : 'Sin categoría';
+      : undefined;
+
+  const salePrice = product.sale_price || 0;
+  const costPrice = product.cost_price || undefined;
 
   return (
     <TableRow
       className={cn(
         'group transition-colors duration-100',
         isSelected
-          ? 'bg-primary/5 hover:bg-primary/8'
-          : 'hover:bg-muted/40'
+          ? 'bg-primary/5 hover:bg-primary/8 dark:bg-primary/8'
+          : index % 2 === 0
+            ? 'bg-transparent hover:bg-muted/40'
+            : 'bg-muted/15 hover:bg-muted/40',
       )}
     >
-      <TableCell className="w-10">
+      {/* Checkbox */}
+      <TableCell className="w-10 pr-0">
         {onSelect && (
           <Checkbox
             checked={isSelected}
             onCheckedChange={() => onSelect(product.id)}
             aria-label={`Seleccionar ${product.name}`}
+            className="transition-opacity group-hover:opacity-100"
           />
         )}
       </TableCell>
 
-      <TableCell className="w-14">
-        <div className="relative h-10 w-10 overflow-hidden rounded-md bg-muted">
+      {/* Thumbnail */}
+      <TableCell className="w-14 py-2">
+        <div className="relative h-11 w-11 overflow-hidden rounded-xl bg-muted/60 ring-1 ring-border/40">
           {product.image_url ? (
             <Image
               src={product.image_url}
               alt={product.name || 'Producto'}
               fill
-              className="object-cover"
-              sizes="40px"
+              className="object-cover transition-transform duration-300 group-hover:scale-110"
+              sizes="44px"
+              unoptimized={shouldBypassNextImageOptimizer(product.image_url)}
             />
           ) : (
             <div className="flex h-full items-center justify-center">
               <Package className="h-5 w-5 text-muted-foreground/40" />
             </div>
           )}
+          {/* Status dot */}
+          <span className={cn(
+            'absolute bottom-0.5 right-0.5 h-2 w-2 rounded-full ring-1 ring-card',
+            product.is_active ? 'bg-emerald-500' : 'bg-slate-400',
+          )} />
         </div>
       </TableCell>
 
-      <TableCell>
-        <div className="space-y-0.5">
-          <div className="max-w-[220px] truncate text-sm font-medium">
+      {/* Name + SKU */}
+      <TableCell className="min-w-0 py-2">
+        <div>
+          <button
+            className="max-w-[200px] truncate text-left text-sm font-medium text-foreground hover:text-primary hover:underline underline-offset-2 transition-colors"
+            onClick={() => onView?.(product)}
+          >
             {product.name || 'Sin nombre'}
-          </div>
-          <div className="font-mono text-xs text-muted-foreground">
-            {product.sku || '—'}
+          </button>
+          <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+            {product.sku || <span className="italic opacity-60">sin SKU</span>}
           </div>
         </div>
       </TableCell>
 
-      <TableCell>
-        <Badge variant="outline" className="text-xs">
-          {categoryName || 'Sin categoría'}
-        </Badge>
+      {/* Category */}
+      <TableCell className="hidden sm:table-cell">
+        {categoryName ? (
+          <Badge
+            variant="outline"
+            className="rounded-lg border-border/60 bg-muted/40 text-[11px] font-normal text-foreground"
+          >
+            {categoryName}
+          </Badge>
+        ) : (
+          <span className="text-[11px] italic text-muted-foreground/60">—</span>
+        )}
       </TableCell>
 
+      {/* Price */}
       <TableCell className="text-right">
         <div className="space-y-0.5">
-          <div className="text-sm font-semibold tabular-nums">
-            Gs {(product.sale_price || 0).toLocaleString('es-PY')}
+          <div className="text-sm font-semibold tabular-nums text-foreground">
+            Gs {salePrice.toLocaleString('es-PY')}
           </div>
-          {product.cost_price ? (
-            <div className="text-xs tabular-nums text-muted-foreground">
-              Costo: Gs {product.cost_price.toLocaleString('es-PY')}
+          {costPrice ? (
+            <div className="flex items-center justify-end gap-1">
+              <div className="text-[11px] tabular-nums text-muted-foreground line-through">
+                {costPrice.toLocaleString('es-PY')}
+              </div>
+              <MarginIndicator sale={salePrice} cost={costPrice} />
             </div>
           ) : null}
         </div>
       </TableCell>
 
+      {/* Stock */}
       <TableCell>
         {isOutOfStock ? (
-          <Badge variant="destructive" className="gap-1 text-xs">
-            <AlertTriangle className="h-3 w-3" />
+          <Badge className="gap-1 rounded-lg border-rose-200 bg-rose-50 text-[11px] text-rose-700 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-400" variant="outline">
+            <AlertTriangle className="h-2.5 w-2.5" />
             Sin stock
           </Badge>
         ) : isLowStock ? (
-          <Badge
-            variant="secondary"
-            className="gap-1 border-amber-200 bg-amber-50 text-amber-700 text-xs dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400"
-          >
-            <AlertTriangle className="h-3 w-3" />
-            {stock} uds bajo
+          <Badge className="gap-1 rounded-lg border-amber-200 bg-amber-50 text-[11px] text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400" variant="outline">
+            <AlertTriangle className="h-2.5 w-2.5" />
+            {stock} uds
           </Badge>
         ) : (
-          <Badge
-            variant="secondary"
-            className="border-emerald-200 bg-emerald-50 text-emerald-700 text-xs dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400"
-          >
+          <Badge className="rounded-lg border-emerald-200 bg-emerald-50 text-[11px] text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400" variant="outline">
             {stock} uds
           </Badge>
         )}
       </TableCell>
 
-      <TableCell>
-        <Badge
-          variant={product.is_active ? 'default' : 'secondary'}
-          className={cn(
-            'text-xs',
-            product.is_active
-              ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400'
-              : ''
-          )}
-        >
-          {product.is_active ? 'Activo' : 'Inactivo'}
-        </Badge>
+      {/* Estado */}
+      <TableCell className="hidden lg:table-cell">
+        <div className="flex items-center gap-1.5">
+          <span className={cn(
+            'h-1.5 w-1.5 rounded-full',
+            product.is_active ? 'bg-emerald-500' : 'bg-slate-400',
+          )} />
+          <span className={cn(
+            'text-[11px] font-medium',
+            product.is_active ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground',
+          )}>
+            {product.is_active ? 'Activo' : 'Inactivo'}
+          </span>
+        </div>
       </TableCell>
 
-      <TableCell>
-        <div className="flex items-center gap-1 opacity-0 transition-opacity duration-100 group-hover:opacity-100">
+      {/* Acciones */}
+      <TableCell className="w-28 py-2">
+        <div className="flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
           <Button
             variant="ghost"
             size="icon"
             onClick={() => onView?.(product)}
-            className="h-7 w-7 text-muted-foreground hover:text-foreground"
+            className="h-7 w-7 rounded-lg text-muted-foreground hover:text-foreground"
             title="Ver detalles"
           >
             <Eye className="h-3.5 w-3.5" />
@@ -265,7 +309,7 @@ const ProductRow = memo(function ProductRow({
               variant="ghost"
               size="icon"
               onClick={() => onEdit(product)}
-              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+              className="h-7 w-7 rounded-lg text-muted-foreground hover:text-primary"
               title="Editar"
             >
               <Edit className="h-3.5 w-3.5" />
@@ -276,7 +320,7 @@ const ProductRow = memo(function ProductRow({
               variant="ghost"
               size="icon"
               onClick={() => onDelete(product.id)}
-              className="h-7 w-7 text-destructive/70 hover:text-destructive"
+              className="h-7 w-7 rounded-lg text-muted-foreground hover:text-destructive"
               title="Eliminar"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -288,6 +332,7 @@ const ProductRow = memo(function ProductRow({
   );
 });
 
+// ── Main component ───────────────────────────────────────────────────────────
 export const ProductsTableView = memo(function ProductsTableView({
   products,
   onEdit,
@@ -306,6 +351,9 @@ export const ProductsTableView = memo(function ProductsTableView({
     return products.every((p) => selectedIds.has(p.id));
   }, [products, selectedIds]);
 
+  const someSelected = useMemo(() =>
+    products.some((p) => selectedIds.has(p.id)), [products, selectedIds]);
+
   const handleSelectAll = (checked: boolean) => {
     onSelectAll?.(checked ? products.map((p) => p.id) : []);
   };
@@ -314,31 +362,39 @@ export const ProductsTableView = memo(function ProductsTableView({
 
   if (products.length === 0) {
     return (
-      <div className="flex h-64 flex-col items-center justify-center text-center">
-        <Package className="mb-4 h-12 w-12 text-muted-foreground/30" />
-        <h3 className="mb-1 text-lg font-semibold">No hay productos</h3>
-        <p className="text-sm text-muted-foreground">
-          No se encontraron productos para mostrar
-        </p>
+      <div className="flex h-64 flex-col items-center justify-center gap-4 text-center">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted/60">
+          <Package className="h-7 w-7 text-muted-foreground/40" />
+        </div>
+        <div>
+          <h3 className="text-base font-semibold">Sin resultados</h3>
+          <p className="mt-1 text-sm text-muted-foreground">No se encontraron productos</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="rounded-md border border-border/50">
+    <div className="w-full overflow-x-auto">
       <Table>
         <TableHeader>
-          <TableRow className="bg-muted/30 hover:bg-muted/30">
-            <TableHead className="w-10">
-              {onSelectAll ? (
+          <TableRow className="border-border/50 bg-muted/30 hover:bg-muted/30">
+            {/* Select-all */}
+            <TableHead className="w-10 pr-0">
+              {onSelectAll && (
                 <Checkbox
                   checked={allVisibleSelected}
                   onCheckedChange={handleSelectAll}
                   aria-label="Seleccionar todos"
+                  data-state={someSelected && !allVisibleSelected ? 'indeterminate' : undefined}
                 />
-              ) : null}
+              )}
             </TableHead>
-            <TableHead className="w-14">Img.</TableHead>
+
+            {/* Img */}
+            <TableHead className="w-14 text-xs font-medium text-muted-foreground">Img</TableHead>
+
+            {/* Producto */}
             <SortableHeader
               field="name"
               label="Producto"
@@ -346,7 +402,13 @@ export const ProductsTableView = memo(function ProductsTableView({
               sortOrder={sortOrder}
               onSort={onSort}
             />
-            <TableHead>Categoría</TableHead>
+
+            {/* Categoría */}
+            <TableHead className="hidden text-xs font-medium text-muted-foreground sm:table-cell">
+              Categoría
+            </TableHead>
+
+            {/* Precio */}
             <SortableHeader
               field="sale_price"
               label="Precio"
@@ -355,6 +417,8 @@ export const ProductsTableView = memo(function ProductsTableView({
               onSort={onSort}
               className="text-right"
             />
+
+            {/* Stock */}
             <SortableHeader
               field="stock_quantity"
               label="Stock"
@@ -362,12 +426,21 @@ export const ProductsTableView = memo(function ProductsTableView({
               sortOrder={sortOrder}
               onSort={onSort}
             />
-            <TableHead>Estado</TableHead>
-            <TableHead className="w-28">Acciones</TableHead>
+
+            {/* Estado */}
+            <TableHead className="hidden text-xs font-medium text-muted-foreground lg:table-cell">
+              Estado
+            </TableHead>
+
+            {/* Acciones */}
+            <TableHead className="w-28 text-xs font-medium text-muted-foreground">
+              Acciones
+            </TableHead>
           </TableRow>
         </TableHeader>
+
         <TableBody>
-          {products.map((product) => (
+          {products.map((product, index) => (
             <ProductRow
               key={product.id}
               product={product}
@@ -376,6 +449,7 @@ export const ProductsTableView = memo(function ProductsTableView({
               onView={onView}
               isSelected={selectedIds.has(product.id)}
               onSelect={onSelectProduct}
+              index={index}
             />
           ))}
         </TableBody>

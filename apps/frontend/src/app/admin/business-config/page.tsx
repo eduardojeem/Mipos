@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -176,14 +176,10 @@ function getTabHealth(
     }
     case 'commerce':
       return config.storeSettings?.currency && config.storeSettings?.currencySymbol ? 'complete' : 'empty'
+
     case 'publication': {
       const hasIdentifier = Boolean(extras?.organizationIdentifier)
-      const hasSections = Boolean(
-        config.publicSite?.sections?.showCatalog || config.publicSite?.sections?.showOffers
-      )
-      if (hasIdentifier && hasSections) return 'complete'
-      if (hasIdentifier || hasSections) return 'partial'
-      return 'empty'
+      return hasIdentifier ? 'complete' : 'empty'
     }
     case 'preview':
       return 'complete'
@@ -684,7 +680,6 @@ export default function BusinessConfigPage() {
             allowCustomDomain={canUseCustomBranding}
             planName={getCanonicalPlanDisplayName(currentPlan)}
             config={currentConfig}
-            onUpdate={handleConfigUpdate}
           />
         )
       case 'preview':
