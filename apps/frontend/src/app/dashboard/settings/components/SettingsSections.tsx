@@ -43,7 +43,6 @@ import { PermissionGuard } from '@/components/ui/permission-guard';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
 import { useCurrentOrganizationId } from '@/hooks/use-current-organization';
-import { CompanySettings } from './CompanySettings';
 import { SecuritySettingsTab } from './SecuritySettingsTab';
 import {
   useChangePassword,
@@ -605,13 +604,6 @@ export function GeneralSettings() {
     </div>
   );
 }
-
-
-export function CompanyProfileSettings() {
-  return <CompanySettings />;
-}
-
-
 
 
 export function SalesBillingSettings() {

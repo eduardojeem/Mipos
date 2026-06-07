@@ -1,6 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
 import {
-  Building2,
   PackageSearch,
   Palette,
   Receipt,
@@ -10,7 +9,6 @@ import {
 
 export type SettingsTab =
   | 'general'
-  | 'company'
   | 'sales'
   | 'inventory'
   | 'appearance'
@@ -31,13 +29,6 @@ export const SETTINGS_NAVIGATION: SettingsNavigationItem[] = [
     description: 'Preferencias, idioma y region',
     group: 'Core',
     icon: Settings2,
-  },
-  {
-    id: 'company',
-    name: 'Empresa',
-    description: 'Perfil, contacto y marca',
-    group: 'Core',
-    icon: Building2,
   },
   {
     id: 'sales',
@@ -73,8 +64,6 @@ export const SETTINGS_NAVIGATION: SettingsNavigationItem[] = [
 const TAB_ALIASES: Record<string, SettingsTab> = {
   profile: 'general',
   preferences: 'general',
-  business: 'company',
-  empresa: 'company',
   pos: 'sales',
   sales: 'sales',
   ventas: 'sales',

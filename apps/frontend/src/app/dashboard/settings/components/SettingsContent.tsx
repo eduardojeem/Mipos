@@ -10,7 +10,6 @@ import { SettingsLoadingSkeleton } from './SettingsLoadingSkeleton'
 import { Badge } from '@/components/ui/badge'
 import { normalizeSettingsTab, getSettingsTabMeta } from './settings-navigation'
 import {
-  CompanyProfileSettings,
   GeneralSettings,
   InventorySettings,
   SalesBillingSettings,
@@ -39,7 +38,7 @@ export function SettingsContent({ activeTab }: SettingsContentProps) {
     const isNewUser = !company.name || !company.industry || !company.size
     const isFreePlan = company.plan_type === 'free'
 
-    if (isNewUser && isFreePlan && !['general', 'company'].includes(normalizedTab)) {
+    if (isNewUser && isFreePlan && normalizedTab !== 'general') {
       router.replace(`${basePath}?tab=general`)
     }
   }, [company, isLoading, normalizedTab, router, basePath])
@@ -50,8 +49,6 @@ export function SettingsContent({ activeTab }: SettingsContentProps) {
     switch (normalizedTab) {
       case 'general':
         return <GeneralSettings />
-      case 'company':
-        return <CompanyProfileSettings />
       case 'sales':
         return <SalesBillingSettings />
       case 'inventory':

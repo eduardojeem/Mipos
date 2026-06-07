@@ -7,6 +7,9 @@ import { SettingsLoadingSkeleton } from '@/app/dashboard/settings/components/Set
 import { normalizeSettingsTab } from '@/app/dashboard/settings/components/settings-navigation';
 
 const MOVED_SETTINGS_TABS: Record<string, string> = {
+  company: '/admin/business-config',
+  business: '/admin/business-config',
+  empresa: '/admin/business-config',
   billing: '/admin/subscriptions',
   branches: '/admin/sucursal',
   plan: '/admin/subscriptions',
