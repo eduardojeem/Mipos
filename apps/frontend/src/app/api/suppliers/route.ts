@@ -226,6 +226,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Name is required' }, { status: 400 })
     }
 
+    // Evitar duplicados: mismo nombre (case-insensitive) en la organización
+    const trimmedName = String(body.name).trim()
+    if (trimmedName) {
+      const { data: existing } = await sessionClient
+        .from('suppliers')
+        .select('id')
+        .eq('organization_id', orgId)
+        .ilike('name', trimmedName)
+        .maybeSingle()
+      if (existing) {
+        return NextResponse.json(
+          { error: `Ya existe un proveedor con el nombre "${trimmedName}"` },
+          { status: 409 }
+        )
+      }
+    }
+
     const contactInfo = body.contactInfo || {}
     const contact_info = {
       email: contactInfo.email || null,

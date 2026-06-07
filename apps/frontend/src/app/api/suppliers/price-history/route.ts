@@ -1,11 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createServerClient } from '@/lib/supabase';
+import { getValidatedOrganizationId } from '@/lib/organization';
+
+const EMPTY_RESULT = {
+  items: [],
+  total: 0,
+  trends: [],
+  stats: { avgChange: 0, totalEntries: 0, activeAlerts: 0, monitoredProducts: 0 },
+};
+
+// La tabla puede no existir (42P01) o no tener la columna organization_id (42703)
+function isMissingTableOrColumn(error: { code?: string } | null) {
+  return error?.code === '42P01' || error?.code === '42703';
+}
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const search = searchParams.get('search');
     const supplierId = searchParams.get('supplierId');
     const productId = searchParams.get('productId');
     const dateRange = searchParams.get('dateRange'); // days
@@ -13,17 +25,23 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = (page - 1) * limit;
 
+    const orgId = (await getValidatedOrganizationId(request)) || '';
+    if (!orgId) {
+      return NextResponse.json(EMPTY_RESULT);
+    }
+
     const cookieStore = await cookies();
     const supabase = await createServerClient(cookieStore);
 
-    // Build query
+    // Build query — SIEMPRE filtrado por organización (multi-tenant)
     let query = supabase
       .from('product_price_history')
       .select(`
         *,
         product:products (id, name),
         supplier:suppliers (id, name)
-      `, { count: 'exact' });
+      `, { count: 'exact' })
+      .eq('organization_id', orgId);
 
     if (supplierId) {
       query = query.eq('supplier_id', supplierId);
@@ -52,14 +70,9 @@ export async function GET(request: NextRequest) {
     const { data, error, count } = await query;
 
     if (error) {
-      // If table doesn't exist yet, return empty structure
-      if (error.code === '42P01') {
-        return NextResponse.json({ 
-          items: [], 
-          total: 0,
-          trends: [],
-          stats: { avgChange: 0, totalEntries: 0, activeAlerts: 0, monitoredProducts: 0 }
-        });
+      // Si la tabla no existe o aún no tiene organization_id, devolver vacío
+      if (isMissingTableOrColumn(error)) {
+        return NextResponse.json(EMPTY_RESULT);
       }
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
@@ -113,12 +126,33 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+
+    const orgId = (await getValidatedOrganizationId(request)) || '';
+    if (!orgId) {
+      return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
+    }
+
     const cookieStore = await cookies();
     const supabase = await createServerClient(cookieStore);
 
-    // Basic validation
-    if (!body.productId || !body.supplierId || !body.price) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    // Validación
+    if (!body.productId || !body.supplierId) {
+      return NextResponse.json({ error: 'productId y supplierId son requeridos' }, { status: 400 });
+    }
+    const price = Number(body.price);
+    if (!Number.isFinite(price) || price < 0) {
+      return NextResponse.json({ error: 'El precio debe ser un número mayor o igual a 0' }, { status: 400 });
+    }
+
+    // Verificar que el proveedor pertenece a la organización (multi-tenant)
+    const { data: supplier } = await supabase
+      .from('suppliers')
+      .select('id')
+      .eq('id', body.supplierId)
+      .eq('organization_id', orgId)
+      .maybeSingle();
+    if (!supplier) {
+      return NextResponse.json({ error: 'Proveedor no encontrado en la organización' }, { status: 400 });
     }
 
     const { data, error } = await supabase
@@ -126,15 +160,16 @@ export async function POST(request: NextRequest) {
       .insert({
         product_id: body.productId,
         supplier_id: body.supplierId,
-        price: body.price,
-        currency: body.currency || 'MXN',
+        price,
+        currency: body.currency || 'PYG',
         effective_date: body.effectiveDate || new Date().toISOString(),
         source: body.source || 'manual',
         document_ref: body.documentRef,
         notes: body.notes,
         status: body.status || 'active',
         unit: body.unit || 'unit',
-        min_order_quantity: body.minOrderQuantity
+        min_order_quantity: body.minOrderQuantity,
+        organization_id: orgId,
       })
       .select()
       .single();

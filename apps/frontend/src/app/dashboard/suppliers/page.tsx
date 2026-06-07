@@ -144,7 +144,7 @@ const SuppliersPageContent = memo(function SuppliersPageContent() {
     exportSuppliersToCSV(suppliers as Supplier[]);
     toast({
       title: 'Éxito',
-      description: `Se exportaron ${suppliers.length} proveedores. (Nota: Esto expota la página actual)`,
+      description: `Se exportaron ${suppliers.length} proveedores de la página actual.`,
     });
   }, [suppliers, toast]);
 
