@@ -513,9 +513,14 @@ export default function SupplierComparisonPage() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
+      {/* Aviso: datos de demostración */}
+      <div className="flex items-center gap-2 rounded-xl border border-amber-300/60 bg-amber-50 px-4 py-2.5 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-400">
+        <span className="font-semibold">Datos de demostración:</span>
+        Los datos de comparación son simulados. La comparación con métricas reales de proveedores está en desarrollo.
+      </div>
       <div>
-        <Button 
-          variant="ghost" 
+        <Button
+          variant="ghost"
           className="pl-0 hover:bg-transparent text-muted-foreground hover:text-foreground transition-colors"
           onClick={() => router.back()}
         >

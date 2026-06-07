@@ -551,6 +551,12 @@ export default function PerformancePage() {
 
   return (
     <div className="space-y-6">
+      {/* Aviso: datos de demostración */}
+      <div className="flex items-center gap-2 rounded-xl border border-amber-300/60 bg-amber-50 px-4 py-2.5 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/30 dark:text-amber-400">
+        <span className="font-semibold">Datos de demostración:</span>
+        Las métricas de rendimiento (entregas, defectos, calidad) son simuladas. El módulo de evaluación de proveedores con datos reales está en desarrollo.
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
