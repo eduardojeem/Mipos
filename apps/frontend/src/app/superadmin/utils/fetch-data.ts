@@ -23,12 +23,12 @@ export async function checkSuperAdminPermission() {
   if (hasRole) return { authorized: true, user };
 
   // Check 2: users table
-  const { data: userData } = await supabase.from('users').select('role').eq('id', user.id).single();
+  const { data: userData } = await adminClient.from('users').select('role').eq('id', user.id).single();
   if (userData?.role === 'SUPER_ADMIN') return { authorized: true, user };
 
-  // Check 3: metadata
-  const userMetadata = user.user_metadata as { role?: string } | undefined;
-  if (userMetadata?.role === 'SUPER_ADMIN') return { authorized: true, user };
+  // Check 3: app_metadata is server-managed. Never trust user_metadata for roles.
+  const appRole = (user.app_metadata as { role?: string } | undefined)?.role?.toUpperCase();
+  if (appRole === 'SUPER_ADMIN') return { authorized: true, user };
 
   return { authorized: false, error: 'Acceso denegado', status: 403 };
 }

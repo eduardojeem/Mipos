@@ -358,7 +358,7 @@ export async function PATCH(
           action: 'PATCH_BASE',
           metadata: { id },
         });
-        return NextResponse.json({ error: updateError?.message || 'No se pudo actualizar la organizacion' }, { status: 500 });
+        return NextResponse.json({ error: updateError?.message || 'No se pudo actualizar la organización' }, { status: 500 });
       }
 
       latestOrganization = updatedOrganization;

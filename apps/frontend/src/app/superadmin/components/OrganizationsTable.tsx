@@ -202,7 +202,7 @@ export function OrganizationsTable({
                         <DropdownMenuItem asChild>
                           <Link href={`/superadmin/organizations/${org.id}`}>
                             <CreditCard className="mr-2 h-4 w-4" />
-                            Gestionar suscripcion
+                            Gestionar suscripción
                           </Link>
                         </DropdownMenuItem>
                         {(onSuspend || onActivate || onDelete) && <DropdownMenuSeparator />}

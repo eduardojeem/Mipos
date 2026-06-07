@@ -135,7 +135,7 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
 
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.error || 'Error al actualizar organizacion');
+                throw new Error(errorData.error || 'Error al actualizar organización');
             }
 
             return await response.json();
@@ -166,8 +166,8 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
         },
         onSuccess: () => {
             toast({
-                title: 'Actualizacion exitosa',
-                description: 'La organizacion se actualizo correctamente.',
+                title: 'Actualización exitosa',
+                description: 'La organización se actualizó correctamente.',
             });
         },
         onSettled: () => {
@@ -184,7 +184,7 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
 
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.error || 'Error al archivar organizacion');
+                throw new Error(errorData.error || 'Error al suspender organización');
             }
 
             return await response.json();
@@ -208,15 +208,15 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
         onError: (err, _id, context) => {
             queryClient.setQueryData(queryKey, context?.previousData);
             toast({
-                title: 'Error al archivar',
+                title: 'Error al suspender',
                 description: err instanceof Error ? err.message : 'Error desconocido',
                 variant: 'destructive',
             });
         },
         onSuccess: () => {
             toast({
-                title: 'Organizacion archivada',
-                description: 'La organizacion fue suspendida correctamente.',
+                title: 'Organización suspendida',
+                description: 'La organización fue suspendida correctamente.',
             });
         },
         onSettled: () => {
@@ -235,7 +235,7 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
 
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.error || 'Error en actualizacion masiva');
+                throw new Error(errorData.error || 'Error en actualización masiva');
             }
 
             return await response.json();
@@ -271,7 +271,7 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
 
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.error || 'Error en archivado masivo');
+                throw new Error(errorData.error || 'Error en suspensión masiva');
             }
 
             return await response.json();
@@ -282,7 +282,7 @@ export function useOrganizations(options: UseOrganizationsOptions = {}) {
         },
         onSuccess: (_, ids) => {
             toast({
-                title: 'Organizaciones archivadas',
+                title: 'Organizaciones suspendidas',
                 description: `${ids.length} organizaciones fueron suspendidas correctamente.`,
             });
         },

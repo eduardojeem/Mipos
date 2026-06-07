@@ -189,7 +189,7 @@ export default function LandingContentPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-50">
-            Pagina de inicio — /inicio
+            Página de inicio — /inicio
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
             Edita el contenido publico de la pagina de aterrizaje del sistema SaaS.
@@ -237,7 +237,7 @@ export default function LandingContentPage() {
           <Card className="border-slate-200 dark:border-slate-800">
             <CardHeader>
               <CardTitle className="text-base">Textos principales</CardTitle>
-              <CardDescription>Badge, titular, descripcion y botones de accion.</CardDescription>
+              <CardDescription>Badge, titular, descripción y botones de acción.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">

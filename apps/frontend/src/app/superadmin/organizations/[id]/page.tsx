@@ -657,7 +657,7 @@ export default function OrganizationDetailsPage() {
     if (subscriptionDraft.status === 'SUSPENDED') {
       items.push({
         title: 'Suscripcion suspendida',
-        description: 'La organizacion tiene acceso restringido hasta que se reactive.',
+        description: 'La organización tiene acceso restringido hasta que se reactive.',
         tone: 'critical',
       });
     } else if (subscriptionDraft.status === 'CANCELLED') {
@@ -693,7 +693,7 @@ export default function OrganizationDetailsPage() {
     if (managementUsers.length === 0) {
       items.push({
         title: 'Sin responsables activos',
-        description: 'No se detectaron usuarios OWNER o ADMIN vinculados a la organizacion.',
+        description: 'No se detectaron usuarios OWNER o ADMIN vinculados a la organización.',
         tone: 'critical',
       });
     }
@@ -723,7 +723,7 @@ export default function OrganizationDetailsPage() {
     if (items.length === 0) {
       items.push({
         title: 'Sin alertas relevantes',
-        description: 'La organizacion tiene responsables activos, direccion publica y uso dentro del plan.',
+        description: 'La organización tiene responsables activos, dirección pública y uso dentro del plan.',
         tone: 'good',
       });
     }
@@ -856,7 +856,7 @@ export default function OrganizationDetailsPage() {
       <SuperAdminGuard>
         <div className="flex min-h-[520px] flex-col items-center justify-center gap-4">
           <Loader2 className="h-10 w-10 animate-spin text-slate-500" />
-          <p className="text-sm text-slate-500 dark:text-slate-400">Cargando detalle de la organizacion...</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Cargando detalle de la organización...</p>
         </div>
       </SuperAdminGuard>
     );
@@ -870,7 +870,7 @@ export default function OrganizationDetailsPage() {
             <ShieldAlert className="h-9 w-9" />
           </div>
           <div className="space-y-2">
-            <h2 className="text-2xl font-semibold">No se pudo cargar la organizacion</h2>
+            <h2 className="text-2xl font-semibold">No se pudo cargar la organización</h2>
             <p className="text-sm text-slate-500 dark:text-slate-400">{orgError}</p>
           </div>
           <Button onClick={() => refreshOrganization()} className="gap-2">
@@ -971,7 +971,7 @@ export default function OrganizationDetailsPage() {
           <SummaryMetric
             label="Renovacion"
             value={subscription ? `${subscription.daysUntilRenewal} d` : 'N/A'}
-            helper={subscription ? formatDate(subscription.currentPeriodEnd) : 'Sin suscripcion'}
+            helper={subscription ? formatDate(subscription.currentPeriodEnd) : 'Sin suscripción'}
             icon={Calendar}
           />
         </section>
@@ -1073,7 +1073,7 @@ export default function OrganizationDetailsPage() {
                       <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Plan actual</div>
                       <div className="mt-1 text-sm font-medium text-slate-950 dark:text-slate-50">{subscription?.plan.name || planMeta.label}</div>
                       <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                        {subscription ? `Renueva ${formatDate(subscription.currentPeriodEnd)}` : 'Sin suscripcion activa'}
+                        {subscription ? `Renueva ${formatDate(subscription.currentPeriodEnd)}` : 'Sin suscripción activa'}
                       </div>
                     </div>
                   </div>
@@ -1157,7 +1157,7 @@ export default function OrganizationDetailsPage() {
                   <div className="space-y-3">
                     {managementUsers.length === 0 ? (
                       <div className="rounded-2xl border border-slate-200 px-4 py-5 text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                        No hay usuarios OWNER o ADMIN cargados en esta organizacion.
+                        No hay usuarios OWNER o ADMIN cargados en esta organización.
                       </div>
                     ) : (
                       managementUsers.slice(0, 4).map((user) => (
@@ -1321,7 +1321,7 @@ export default function OrganizationDetailsPage() {
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div>
                     <CardTitle>Equipo vinculado</CardTitle>
-                    <CardDescription>{usersCount} miembros asociados a esta organizacion.</CardDescription>
+                    <CardDescription>{usersCount} miembros asociados a esta organización.</CardDescription>
                   </div>
                   <Button variant="outline" className="gap-2" onClick={() => refreshUsers()} disabled={usersFetching}>
                     <RefreshCcw className={cn('h-4 w-4', usersFetching && 'animate-spin')} />
@@ -1454,7 +1454,7 @@ export default function OrganizationDetailsPage() {
               <div>
                 <h2 className="text-xl font-semibold text-slate-950 dark:text-slate-50">Operacion del tenant</h2>
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Vista compacta para editar identidad, suscripcion y configuracion sin ruido tecnico.
+                  Vista compacta para editar identidad, suscripción y configuración sin ruido técnico.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -1474,7 +1474,7 @@ export default function OrganizationDetailsPage() {
                 <CardHeader className="flex flex-row items-start justify-between gap-4">
                   <div>
                     <CardTitle>Perfil y dominio</CardTitle>
-                    <CardDescription>Nombre comercial, slug e identificador publico de la organizacion.</CardDescription>
+                    <CardDescription>Nombre comercial, slug e identificador público de la organización.</CardDescription>
                   </div>
                   <div className="flex gap-2">
                     <Button variant="outline" size="sm" className="gap-2" onClick={resetProfileDraft} disabled={!profileDirty || orgUpdating}>
@@ -1562,7 +1562,7 @@ export default function OrganizationDetailsPage() {
               <Card className="border-slate-200 dark:border-slate-800">
                 <CardHeader className="flex flex-row items-start justify-between gap-4">
                   <div>
-                    <CardTitle>Plan y facturacion</CardTitle>
+                    <CardTitle>Plan y facturación</CardTitle>
                     <CardDescription>Control unificado sobre `organizations`, `saas_subscriptions` y limites efectivos.</CardDescription>
                   </div>
                   <div className="flex gap-2">
@@ -1606,7 +1606,7 @@ export default function OrganizationDetailsPage() {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label>Ciclo de facturacion</Label>
+                      <Label>Ciclo de facturación</Label>
                       <Select value={subscriptionDraft.billingCycle} onValueChange={(value: BillingCycle) => setSubscriptionDraft((current) => ({ ...current, billingCycle: value }))}>
                         <SelectTrigger>
                           <SelectValue />
@@ -1833,9 +1833,9 @@ export default function OrganizationDetailsPage() {
       <AlertDialog open={suspendDialogOpen} onOpenChange={setSuspendDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Suspender organizacion</AlertDialogTitle>
+            <AlertDialogTitle>Suspender organización</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta accion cambia el estado operativo y sincroniza la capa de suscripcion actual.
+              Esta acción cambia el estado operativo y sincroniza la capa de suscripción actual.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1857,9 +1857,9 @@ export default function OrganizationDetailsPage() {
       <AlertDialog open={reactivateDialogOpen} onOpenChange={setReactivateDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Reactivar organizacion</AlertDialogTitle>
+            <AlertDialogTitle>Reactivar organización</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta accion vuelve a habilitar el acceso operativo de la organizacion. Revisa antes que el plan y la suscripcion sean correctos.
+              Esta acción vuelve a habilitar el acceso operativo de la organización. Revisa antes que el plan y la suscripción sean correctos.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1886,10 +1886,10 @@ export default function OrganizationDetailsPage() {
               {saveConfirmAction === 'profile'
                 ? 'Vas a modificar datos de identidad del tenant como nombre, slug o dominio.'
                 : saveConfirmAction === 'subscription'
-                  ? 'Vas a modificar plan, estado o ciclo de facturacion de esta organizacion.'
+                  ? 'Vas a modificar plan, estado o ciclo de facturación de esta organización.'
                   : saveConfirmAction === 'settings'
                     ? 'Vas a modificar configuraciones operativas y limites del tenant.'
-                    : 'Vas a aplicar todos los cambios pendientes de perfil, suscripcion y configuracion.'}
+                    : 'Vas a aplicar todos los cambios pendientes de perfil, suscripción y configuración.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -1,14 +1,21 @@
 /**
- * Endpoint de diagnóstico para superadmin — SOLO para desarrollo/debugging.
- * Retorna información sobre el estado de autenticación y acceso a la DB.
- * 
- * IMPORTANTE: Este endpoint NO requiere ser super admin para acceder,
- * pero solo devuelve información de diagnóstico (no datos sensibles).
+ * Endpoint de diagnóstico para superadmin.
+ * Disponible solo en desarrollo y con autorización SUPER_ADMIN.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { assertSuperAdmin } from '@/app/api/_utils/auth'
 
 export async function GET(request: NextRequest) {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'No disponible' }, { status: 404 })
+  }
+
+  const auth = await assertSuperAdmin(request)
+  if (!('ok' in auth) || auth.ok === false) {
+    return NextResponse.json(auth.body, { status: auth.status })
+  }
+
   const result: Record<string, unknown> = {
     timestamp: new Date().toISOString(),
     env: {

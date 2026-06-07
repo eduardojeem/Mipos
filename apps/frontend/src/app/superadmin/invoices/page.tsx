@@ -305,7 +305,7 @@ export default function InvoicesPage() {
             {isFetching && !isLoading ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
           </div>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            Control de cobranza para planes MiPOS: vencimientos, pagos, anulaciones y seguimiento por organizacion.
+            Control de cobranza para planes MiPOS: vencimientos, pagos, anulaciones y seguimiento por organización.
           </p>
         </div>
         <Button variant="outline" onClick={() => refetch()} disabled={isFetching} className="w-full gap-2 sm:w-auto">
@@ -340,7 +340,7 @@ export default function InvoicesPage() {
             <div className="relative w-full xl:max-w-md">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Buscar factura u organizacion"
+                placeholder="Buscar factura u organización"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 className="pl-10"
@@ -418,7 +418,7 @@ export default function InvoicesPage() {
                       <div className="mx-auto flex max-w-sm flex-col items-center gap-2 text-muted-foreground">
                         <FileText className="h-8 w-8" />
                         <div className="font-medium text-foreground">Sin facturas para este filtro</div>
-                        <div className="text-sm">Ajusta la busqueda o cambia el estado seleccionado.</div>
+                        <div className="text-sm">Ajusta la búsqueda o cambia el estado seleccionado.</div>
                       </div>
                     </TableCell>
                   </TableRow>

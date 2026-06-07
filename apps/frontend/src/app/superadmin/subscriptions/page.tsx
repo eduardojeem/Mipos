@@ -243,7 +243,7 @@ export default function SubscriptionsPage() {
       queryClient.invalidateQueries({ queryKey: ['subscriptions'] });
       toast({
         title: 'Suscripcion cancelada',
-        description: 'La suscripcion fue desactivada correctamente.'
+        description: 'La suscripción fue desactivada correctamente.'
       });
     }
   });
@@ -260,7 +260,7 @@ export default function SubscriptionsPage() {
       queryClient.invalidateQueries({ queryKey: ['subscriptions'] });
       toast({
         title: 'Suscripcion reactivada',
-        description: 'La organizacion vuelve a tener el plan activo.'
+        description: 'La organización vuelve a tener el plan activo.'
       });
     }
   });
@@ -352,7 +352,7 @@ export default function SubscriptionsPage() {
             {isFetching && !isLoading ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
           </div>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            Control operativo de planes activos, renovaciones, riesgo de pago y consumo por organizacion.
+            Control operativo de planes activos, renovaciones, riesgo de pago y consumo por organización.
           </p>
         </div>
         <Button variant="outline" onClick={() => refetch()} disabled={isFetching} className="w-full gap-2 sm:w-auto">
@@ -387,7 +387,7 @@ export default function SubscriptionsPage() {
             <div className="relative w-full xl:max-w-md">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Buscar organizacion o plan"
+                placeholder="Buscar organización o plan"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 className="pl-10"
@@ -464,7 +464,7 @@ export default function SubscriptionsPage() {
                       <div className="mx-auto flex max-w-sm flex-col items-center gap-2 text-muted-foreground">
                         <Activity className="h-8 w-8" />
                         <div className="font-medium text-foreground">Sin suscripciones para este filtro</div>
-                        <div className="text-sm">Ajusta la busqueda o cambia el estado seleccionado.</div>
+                        <div className="text-sm">Ajusta la búsqueda o cambia el estado seleccionado.</div>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -625,7 +625,7 @@ export default function SubscriptionsPage() {
             </div>
           ) : (
             <div className="py-8 text-center text-sm text-muted-foreground">
-              No hay datos de uso disponibles para esta suscripcion.
+              No hay datos de uso disponibles para esta suscripción.
             </div>
           )}
 
@@ -640,9 +640,9 @@ export default function SubscriptionsPage() {
       <AlertDialog open={Boolean(cancelTarget)} onOpenChange={(open) => !open && setCancelTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Cancelar suscripcion</AlertDialogTitle>
+            <AlertDialogTitle>Cancelar suscripción</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta accion desactiva el plan de {cancelTarget?.organizationName}. Usala solo cuando el cobro o acceso deba cortarse desde superadmin.
+              Esta acción desactiva el plan de {cancelTarget?.organizationName}. Úsala solo cuando el cobro o acceso deba cortarse desde superadmin.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -653,7 +653,7 @@ export default function SubscriptionsPage() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {cancelMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Cancelar suscripcion
+              Cancelar suscripción
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

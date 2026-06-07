@@ -326,7 +326,7 @@ export default function BusinessConfigPage() {
   const [localChanges, setLocalChanges] = useState<Partial<BusinessConfig>>({})
   const [showResetDialog, setShowResetDialog] = useState(false)
   const previousOrganizationId = useRef<string | null>(null)
-  const { validateAll } = useConfigValidation()
+  const { validateAll, getTabErrorCount, errors: validationErrors } = useConfigValidation()
 
   const accessQuery = useCompanyAccess({
     permission: COMPANY_PERMISSIONS.MANAGE_COMPANY,
@@ -495,30 +495,25 @@ export default function BusinessConfigPage() {
     // Validación client-side antes de ir al servidor
     const validationErrors = validateAll(currentConfig)
     if (validationErrors.length > 0) {
-      const firstError = validationErrors[0]
-      // Mapear el campo al tab correspondiente
-      const fieldToTab: Record<string, string> = {
-        businessName: 'content',
-        heroTitle: 'content',
-        heroDescription: 'content',
-        'contact.phone': 'contact',
-        'contact.email': 'contact',
-        'address.street': 'contact',
-        'address.city': 'contact',
-        'address.department': 'contact',
-        'legalInfo.businessType': 'contact',
-        'legalInfo.ruc': 'contact',
-        'branding.primaryColor': 'brand',
-        'branding.secondaryColor': 'brand',
-        'storeSettings.currency': 'commerce',
-        'storeSettings.currencySymbol': 'commerce',
-        'storeSettings.taxRate': 'commerce',
-      }
-      const targetTab = fieldToTab[firstError.field] || activeTab
-      setActiveTab(targetTab)
+      // Agrupar errores por tab para dar feedback claro
+      const requiredErrors = validationErrors.filter((e) => e.required)
+      const tabsWithErrors = [...new Set(validationErrors.map((e) => e.tab))]
+      const firstErrorTab = tabsWithErrors[0] || activeTab
+      setActiveTab(firstErrorTab)
+
+      const errorSummary = requiredErrors.length > 0
+        ? `${requiredErrors.length} campo${requiredErrors.length > 1 ? 's' : ''} obligatorio${requiredErrors.length > 1 ? 's' : ''} sin completar`
+        : validationErrors[0].message
+
+      const errorDetails = validationErrors
+        .slice(0, 4)
+        .map((e) => `• ${e.message}`)
+        .join('\n')
+      const extraCount = validationErrors.length - 4
+
       toast({
-        title: 'Revisá los datos antes de guardar',
-        description: firstError.message,
+        title: `Revisá los datos (${validationErrors.length} ${validationErrors.length === 1 ? 'error' : 'errores'})`,
+        description: errorDetails + (extraCount > 0 ? `\n...y ${extraCount} más` : ''),
         variant: 'destructive',
       })
       return
@@ -876,15 +871,21 @@ export default function BusinessConfigPage() {
                     >
                       <Icon className="mr-2 h-4 w-4" />
                       {tab.label}
-                      <span
-                        className={`ml-2 h-2 w-2 rounded-full ${
-                          health === 'complete'
-                            ? 'bg-emerald-500'
-                            : health === 'partial'
-                              ? 'bg-amber-500'
-                              : 'bg-slate-300'
-                        }`}
-                      />
+                      {getTabErrorCount(tab.id) > 0 ? (
+                        <span className="ml-2 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
+                          {getTabErrorCount(tab.id)}
+                        </span>
+                      ) : (
+                        <span
+                          className={`ml-2 h-2 w-2 rounded-full ${
+                            health === 'complete'
+                              ? 'bg-emerald-500'
+                              : health === 'partial'
+                                ? 'bg-amber-500'
+                                : 'bg-slate-300'
+                          }`}
+                        />
+                      )}
                     </TabsTrigger>
                   )
                 })}

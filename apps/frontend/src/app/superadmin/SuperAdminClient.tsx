@@ -60,7 +60,7 @@ export function SuperAdminClient({ initialOrganizations, initialStats }: SuperAd
     await refresh();
 
     toast({
-      title: 'Actualizacion completa',
+      title: 'Actualización completa',
       description: 'Los datos se actualizaron correctamente.',
     });
   };
@@ -68,10 +68,10 @@ export function SuperAdminClient({ initialOrganizations, initialStats }: SuperAd
   const handleAutoRefreshToggle = (checked: boolean) => {
     setAutoRefresh(checked);
     toast({
-      title: checked ? 'Auto-actualizacion activada' : 'Auto-actualizacion desactivada',
+      title: checked ? 'Auto-actualización activada' : 'Auto-actualización desactivada',
       description: checked
-        ? 'Los datos se actualizaran cada 5 minutos.'
-        : 'La actualizacion automatica esta desactivada.',
+        ? 'Los datos se actualizarán cada 5 minutos.'
+        : 'La actualización automática está desactivada.',
     });
   };
 
@@ -92,10 +92,10 @@ export function SuperAdminClient({ initialOrganizations, initialStats }: SuperAd
         <div className="space-y-6 p-8">
           <div className="space-y-1">
             <h2 className="text-3xl font-bold tracking-tight text-slate-950 dark:text-slate-50">
-              Panel de Administracion SaaS
+              Panel de Administración SaaS
             </h2>
             <p className="text-sm text-muted-foreground">
-              Gestiona organizaciones, usuarios y metricas de tu plataforma
+              Gestiona organizaciones, usuarios y métricas de tu plataforma
             </p>
           </div>
 
@@ -112,7 +112,7 @@ export function SuperAdminClient({ initialOrganizations, initialStats }: SuperAd
               <AdminStats stats={cachedData.stats} />
               <Card>
                 <CardHeader>
-                  <CardTitle>Organizaciones registradas (datos en cache)</CardTitle>
+                  <CardTitle>Organizaciones registradas (datos en caché)</CardTitle>
                   <CardDescription>Mostrando datos guardados localmente</CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -120,7 +120,7 @@ export function SuperAdminClient({ initialOrganizations, initialStats }: SuperAd
                     <div className="flex flex-col items-center justify-center py-12 text-center">
                       <Building2 className="mb-4 h-12 w-12 text-muted-foreground" />
                       <h3 className="mb-2 text-lg font-semibold">No hay organizaciones</h3>
-                      <p className="text-sm text-muted-foreground">No hay datos de organizaciones en cache.</p>
+                      <p className="text-sm text-muted-foreground">No hay datos de organizaciones en caché.</p>
                     </div>
                   ) : (
                     <OrganizationsTable organizations={cachedData.organizations.slice(0, 8)} compact />
@@ -140,7 +140,7 @@ export function SuperAdminClient({ initialOrganizations, initialStats }: SuperAd
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
             <h2 className="text-3xl font-bold tracking-tight text-slate-950 dark:text-slate-50">
-              Panel de Administracion SaaS
+              Panel de Administración SaaS
             </h2>
             <p className="text-sm text-muted-foreground">
               Gestiona organizaciones, usuarios, planes y salud comercial de tu plataforma
@@ -149,12 +149,12 @@ export function SuperAdminClient({ initialOrganizations, initialStats }: SuperAd
 
           <div className="flex items-center gap-2">
             <span className="hidden text-sm text-muted-foreground sm:inline">
-              Ultima actualizacion: {formatLastUpdated()}
+              Última actualización: {formatLastUpdated()}
             </span>
             <Button asChild variant="outline" size="sm" className="gap-2">
               <Link href="/superadmin/analytics">
                 <BarChart3 className="h-4 w-4" />
-                <span className="hidden sm:inline">Analiticas</span>
+                <span className="hidden sm:inline">Analíticas</span>
               </Link>
             </Button>
             <Button
@@ -173,10 +173,10 @@ export function SuperAdminClient({ initialOrganizations, initialStats }: SuperAd
         <div className="flex items-center justify-between rounded-md border bg-muted/50 p-4">
           <div className="space-y-0.5">
             <Label htmlFor="auto-refresh" className="text-base font-medium">
-              Actualizacion automatica
+              Actualización automática
             </Label>
             <p className="text-sm text-muted-foreground">
-              Actualiza los datos cada 5 minutos automaticamente.
+              Actualiza los datos cada 5 minutos automáticamente.
             </p>
           </div>
           <Switch id="auto-refresh" checked={autoRefresh} onCheckedChange={handleAutoRefreshToggle} />
@@ -210,7 +210,7 @@ export function SuperAdminClient({ initialOrganizations, initialStats }: SuperAd
                   <div>
                     <CardTitle>Organizaciones recientes</CardTitle>
                     <CardDescription>
-                      Vista rapida de las ultimas organizaciones registradas
+                      Vista rápida de las últimas organizaciones registradas
                     </CardDescription>
                   </div>
                   <Button asChild variant="outline" size="sm" className="gap-2">
@@ -227,12 +227,12 @@ export function SuperAdminClient({ initialOrganizations, initialStats }: SuperAd
                     <Building2 className="mb-4 h-12 w-12 text-muted-foreground" />
                     <h3 className="mb-2 text-lg font-semibold">No hay organizaciones</h3>
                     <p className="mb-4 text-sm text-muted-foreground">
-                      Aun no se han registrado organizaciones en la plataforma.
+                      Aún no se han registrado organizaciones en la plataforma.
                     </p>
                     <Button asChild>
                       <Link href="/superadmin/organizations/create">
                         <Building2 className="mr-2 h-4 w-4" />
-                        Crear primera organizacion
+                        Crear primera organización
                       </Link>
                     </Button>
                   </div>

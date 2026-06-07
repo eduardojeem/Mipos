@@ -160,7 +160,7 @@ export const SystemOverview = memo(function SystemOverview({ stats, organization
             <Button asChild variant="outline" className="justify-start">
               <Link href="/superadmin/analytics">
                 <BarChart3 className="mr-2 h-4 w-4" />
-                Analiticas
+                Analíticas
               </Link>
             </Button>
             <Button asChild variant="outline" className="justify-start">

@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 
 const sections = [
   {
-    title: 'Pagina de inicio',
+    title: 'Página de inicio',
     description: 'Administra el contenido de /inicio: hero principal, pasos de activacion, beneficios y textos del sistema.',
     href: '/superadmin/web-content/landing',
     icon: LayoutTemplate,

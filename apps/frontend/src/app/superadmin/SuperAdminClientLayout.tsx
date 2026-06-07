@@ -98,7 +98,7 @@ const NAV_ITEMS: NavItem[] = [
     section: "overview",
   },
   {
-    title: "Analiticas",
+    title: "Analíticas",
     href: "/superadmin/analytics",
     icon: Activity,
     description: "Crecimiento, ingresos y actividad SaaS",
@@ -178,11 +178,11 @@ const NAV_ITEMS: NavItem[] = [
     title: "Contenido web",
     href: "/superadmin/web-content",
     icon: Globe,
-    description: "Paginas publicas del sistema SaaS",
+    description: "Páginas públicas del sistema SaaS",
     section: "content",
     children: [
       {
-        title: "Pagina de inicio",
+        title: "Página de inicio",
         href: "/superadmin/web-content/landing",
         icon: LayoutTemplate,
         description: "Contenido de /inicio",

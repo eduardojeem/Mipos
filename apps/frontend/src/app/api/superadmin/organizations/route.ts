@@ -319,7 +319,7 @@ export async function POST(request: NextRequest) {
     if (inviteError) {
       structuredLogger.error('Error inviting admin user', inviteError, { component: COMPONENT, action: 'POST_INVITE', metadata: { orgId: organization.id } });
       await cleanupProvisionedOrganization(adminClient, organization.id);
-      return NextResponse.json({ error: 'No se pudo invitar al administrador. La organizacion no fue creada.' }, { status: 500 });
+      return NextResponse.json({ error: 'No se pudo invitar al administrador. La organización no fue creada.' }, { status: 500 });
     }
 
     if (adminUser?.user) {
@@ -331,7 +331,7 @@ export async function POST(request: NextRequest) {
           metadata: { orgId: organization.id, userId: adminUser.user.id },
         });
         await cleanupProvisionedOrganization(adminClient, organization.id, adminUser.user.id);
-        return NextResponse.json({ error: 'No se pudo asignar el rol base del administrador. La organizacion no fue creada.' }, { status: 500 });
+        return NextResponse.json({ error: 'No se pudo asignar el rol base del administrador. La organización no fue creada.' }, { status: 500 });
       }
 
       const { error: membershipError } = await adminClient.from('organization_members').insert({
@@ -343,7 +343,7 @@ export async function POST(request: NextRequest) {
       if (membershipError) {
         structuredLogger.error('Error creating admin membership', membershipError, { component: COMPONENT, action: 'POST_MEMBERSHIP', metadata: { orgId: organization.id } });
         await cleanupProvisionedOrganization(adminClient, organization.id, adminUser.user.id);
-        return NextResponse.json({ error: 'No se pudo vincular el administrador. La organizacion no fue creada.' }, { status: 500 });
+        return NextResponse.json({ error: 'No se pudo vincular el administrador. La organización no fue creada.' }, { status: 500 });
       }
     }
 
@@ -478,7 +478,7 @@ export async function DELETE(request: NextRequest) {
     const { error } = await query;
 
     if (error) {
-      structuredLogger.error('Error deleting organization(s)', error, { component: COMPONENT, action: 'DELETE', metadata: { id, ids } });
+      structuredLogger.error('Error suspending organization(s)', error, { component: COMPONENT, action: 'DELETE', metadata: { id, ids } });
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 

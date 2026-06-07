@@ -442,7 +442,7 @@ export default function OrganizationsPage() {
                   Organizaciones
                 </h1>
                 <p className="max-w-3xl text-sm text-slate-500 dark:text-slate-400">
-                  Vista operativa de tenants, estados de suscripcion y salud general del ecosistema.
+                  Vista operativa de tenants, estados de suscripción y salud general del ecosistema.
                 </p>
               </div>
             </div>
@@ -493,7 +493,7 @@ export default function OrganizationsPage() {
 
               <Button onClick={() => router.push('/superadmin/organizations/create')} className="gap-2">
                 <Plus className="h-4 w-4" />
-                Nueva organizacion
+                Nueva organización
               </Button>
             </div>
           </header>
@@ -535,7 +535,7 @@ export default function OrganizationsPage() {
             <StatCard
               title="Suspendidas"
               value={metrics.suspended}
-              helper="Requieren accion"
+              helper="Requieren acción"
               active={statusFilter === 'SUSPENDED'}
               icon={XCircle}
               onClick={() => {
@@ -634,7 +634,7 @@ export default function OrganizationsPage() {
                     <div className="space-y-1">
                       <h3 className="text-lg font-semibold">Sin resultados</h3>
                       <p className="text-sm text-slate-500 dark:text-slate-400">
-                        Ajusta la busqueda o limpia filtros para ver mas organizaciones.
+                        Ajusta la búsqueda o limpia filtros para ver más organizaciones.
                       </p>
                     </div>
                     {hasActiveFilters && (
@@ -751,7 +751,7 @@ export default function OrganizationsPage() {
                               <div className="space-y-1">
                                 <h3 className="text-lg font-semibold">Sin resultados para esta vista</h3>
                                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                                  Cambia filtros, orden o busqueda para recuperar organizaciones.
+                                  Cambia filtros, orden o búsqueda para recuperar organizaciones.
                                 </p>
                               </div>
                               {hasActiveFilters && (

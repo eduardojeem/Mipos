@@ -1,139 +1,130 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { BusinessConfig } from '@/types/business-config';
 
-interface ValidationError {
+export interface ValidationError {
   field: string;
   message: string;
+  tab: string;
+  required: boolean;
 }
+
+const TAB_MAP: Record<string, string> = {
+  businessName: 'content',
+  heroTitle: 'content',
+  heroDescription: 'content',
+  heroHighlight: 'content',
+  'contact.phone': 'contact',
+  'contact.email': 'contact',
+  'contact.whatsapp': 'contact',
+  'address.street': 'contact',
+  'address.city': 'contact',
+  'address.department': 'contact',
+  'legalInfo.businessType': 'contact',
+  'legalInfo.ruc': 'contact',
+  'branding.primaryColor': 'brand',
+  'branding.secondaryColor': 'brand',
+  'branding.logo': 'brand',
+  'storeSettings.currency': 'commerce',
+  'storeSettings.currencySymbol': 'commerce',
+  'storeSettings.taxRate': 'commerce',
+};
 
 export function useConfigValidation() {
   const [errors, setErrors] = useState<ValidationError[]>([]);
 
-  const validateBusinessInfo = useCallback((config: Partial<BusinessConfig>) => {
-    const newErrors: ValidationError[] = [];
+  const validateAll = useCallback((config: Partial<BusinessConfig>): ValidationError[] => {
+    const allErrors: ValidationError[] = [];
 
+    // ── Contenido (requeridos) ──
     if (!config.businessName?.trim()) {
-      newErrors.push({ field: 'businessName', message: 'El nombre del negocio es requerido' });
+      allErrors.push({ field: 'businessName', message: 'Nombre del negocio es obligatorio', tab: 'content', required: true });
     }
-
     if (!config.heroTitle?.trim()) {
-      newErrors.push({ field: 'heroTitle', message: 'El título principal es requerido' });
+      allErrors.push({ field: 'heroTitle', message: 'Título principal es obligatorio', tab: 'content', required: true });
+    }
+    if (!config.heroDescription?.trim()) {
+      allErrors.push({ field: 'heroDescription', message: 'Descripción comercial es obligatoria', tab: 'content', required: true });
     }
 
-    return newErrors;
-  }, []);
-
-  const validateLegalInfo = useCallback((config: Partial<BusinessConfig>) => {
-    const newErrors: ValidationError[] = [];
-
-    if (config.legalInfo?.ruc && !/^\d{8}-\d$/.test(config.legalInfo.ruc)) {
-      newErrors.push({ field: 'legalInfo.ruc', message: 'El RUC debe tener el formato 12345678-9' });
-    }
-
-    if (!config.legalInfo?.businessType?.trim()) {
-      newErrors.push({ field: 'legalInfo.businessType', message: 'El tipo de empresa es requerido' });
-    }
-
-    return newErrors;
-  }, []);
-
-  const validateContact = useCallback((config: Partial<BusinessConfig>) => {
-    const newErrors: ValidationError[] = [];
-
+    // ── Contacto (requeridos) ──
     if (!config.contact?.phone?.trim()) {
-      newErrors.push({ field: 'contact.phone', message: 'El teléfono es requerido' });
+      allErrors.push({ field: 'contact.phone', message: 'Teléfono público es obligatorio', tab: 'contact', required: true });
+    } else if (config.contact.phone.replace(/\D/g, '').length < 6) {
+      allErrors.push({ field: 'contact.phone', message: 'Teléfono debe tener al menos 6 dígitos', tab: 'contact', required: true });
     }
+
+    // ── Contacto (opcionales con formato) ──
     if (config.contact?.email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(config.contact.email)) {
-      newErrors.push({ field: 'contact.email', message: 'El email no tiene un formato válido' });
+      allErrors.push({ field: 'contact.email', message: 'Email no tiene formato válido', tab: 'contact', required: false });
     }
 
-    return newErrors;
-  }, []);
-
-  const validateAddress = useCallback((config: Partial<BusinessConfig>) => {
-    const newErrors: ValidationError[] = [];
-
-    if (!config.address?.street?.trim()) {
-      newErrors.push({ field: 'address.street', message: 'La dirección es requerida' });
-    }
-
+    // ── Dirección (requeridos para publicación) ──
     if (!config.address?.city?.trim()) {
-      newErrors.push({ field: 'address.city', message: 'La ciudad es requerida' });
+      allErrors.push({ field: 'address.city', message: 'Ciudad es obligatoria', tab: 'contact', required: true });
     }
 
-    if (!config.address?.department?.trim()) {
-      newErrors.push({ field: 'address.department', message: 'El departamento es requerido' });
+    // ── Legal (opcionales con formato) ──
+    if (config.legalInfo?.ruc && !/^\d{6,}/.test(config.legalInfo.ruc.replace(/\D/g, ''))) {
+      allErrors.push({ field: 'legalInfo.ruc', message: 'RUC debe tener al menos 6 dígitos', tab: 'contact', required: false });
     }
 
-    return newErrors;
-  }, []);
-
-  const validateBranding = useCallback((config: Partial<BusinessConfig>) => {
-    const newErrors: ValidationError[] = [];
-
+    // ── Branding (requeridos) ──
     const colorRegex = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/;
-
-    if (!config.branding?.primaryColor || !colorRegex.test(config.branding.primaryColor)) {
-      newErrors.push({ field: 'branding.primaryColor', message: 'El color primario debe ser un color hexadecimal válido' });
+    if (config.branding?.primaryColor && !colorRegex.test(config.branding.primaryColor)) {
+      allErrors.push({ field: 'branding.primaryColor', message: 'Color primario debe ser hexadecimal (#RRGGBB)', tab: 'brand', required: true });
+    }
+    if (config.branding?.secondaryColor && !colorRegex.test(config.branding.secondaryColor)) {
+      allErrors.push({ field: 'branding.secondaryColor', message: 'Color secundario debe ser hexadecimal (#RRGGBB)', tab: 'brand', required: true });
     }
 
-    if (!config.branding?.secondaryColor || !colorRegex.test(config.branding.secondaryColor)) {
-      newErrors.push({ field: 'branding.secondaryColor', message: 'El color secundario debe ser un color hexadecimal válido' });
-    }
-
-    return newErrors;
-  }, []);
-
-  const validateStoreSettings = useCallback((config: Partial<BusinessConfig>) => {
-    const newErrors: ValidationError[] = [];
-
+    // ── Comercio (requeridos) ──
     if (!config.storeSettings?.currency?.trim()) {
-      newErrors.push({ field: 'storeSettings.currency', message: 'La moneda es requerida' });
+      allErrors.push({ field: 'storeSettings.currency', message: 'Código de moneda es obligatorio (ej: PYG, COP)', tab: 'commerce', required: true });
     }
-
     if (!config.storeSettings?.currencySymbol?.trim()) {
-      newErrors.push({ field: 'storeSettings.currencySymbol', message: 'El símbolo de moneda es requerido' });
+      allErrors.push({ field: 'storeSettings.currencySymbol', message: 'Símbolo de moneda es obligatorio (ej: Gs., $)', tab: 'commerce', required: true });
     }
-
-    if (config.storeSettings?.taxRate !== undefined && (config.storeSettings.taxRate < 0 || config.storeSettings.taxRate > 1)) {
-      newErrors.push({ field: 'storeSettings.taxRate', message: 'La tasa de impuesto debe estar entre 0 y 1' });
+    if (config.storeSettings?.taxRate !== undefined) {
+      if (config.storeSettings.taxRate < 0 || config.storeSettings.taxRate > 1) {
+        allErrors.push({ field: 'storeSettings.taxRate', message: 'IVA debe estar entre 0 y 1 (ej: 0.10 para 10%)', tab: 'commerce', required: true });
+      }
     }
-
-    return newErrors;
-  }, []);
-
-  const validateAll = useCallback((config: Partial<BusinessConfig>) => {
-    const allErrors = [
-      ...validateBusinessInfo(config),
-      ...validateLegalInfo(config),
-      ...validateContact(config),
-      ...validateAddress(config),
-      ...validateBranding(config),
-      ...validateStoreSettings(config),
-    ];
 
     setErrors(allErrors);
     return allErrors;
-  }, [validateBusinessInfo, validateLegalInfo, validateContact, validateAddress, validateBranding, validateStoreSettings]);
+  }, []);
 
-  const getFieldError = useCallback((field: string) => {
-    return errors.find(error => error.field === field)?.message;
+  const getFieldError = useCallback((field: string): string | undefined => {
+    return errors.find((e) => e.field === field)?.message;
   }, [errors]);
 
+  const getTabErrors = useCallback((tab: string): ValidationError[] => {
+    return errors.filter((e) => e.tab === tab);
+  }, [errors]);
+
+  const getTabErrorCount = useCallback((tab: string): number => {
+    return errors.filter((e) => e.tab === tab).length;
+  }, [errors]);
+
+  const clearErrors = useCallback(() => {
+    setErrors([]);
+  }, []);
+
   const hasErrors = errors.length > 0;
+  const requiredErrors = useMemo(() => errors.filter((e) => e.required), [errors]);
+  const optionalErrors = useMemo(() => errors.filter((e) => !e.required), [errors]);
 
   return {
     errors,
+    requiredErrors,
+    optionalErrors,
     validateAll,
-    validateBusinessInfo,
-    validateLegalInfo,
-    validateContact,
-    validateAddress,
-    validateBranding,
-    validateStoreSettings,
     getFieldError,
+    getTabErrors,
+    getTabErrorCount,
+    clearErrors,
     hasErrors,
   };
 }

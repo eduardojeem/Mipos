@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
 
       if (error) {
         console.error('[superadmin/users] Organization members query error:', error)
-        return NextResponse.json({ error: 'Error listando miembros de la organizacion', details: error.message }, { status: 500 })
+        return NextResponse.json({ error: 'Error listando miembros de la organización', details: error.message }, { status: 500 })
       }
 
       // Enriquecer last_sign_in_at desde auth.admin.listUsers

@@ -13,7 +13,7 @@ export default function SuperAdminAnalyticsPage() {
           </div>
           <div className="space-y-1">
             <h1 className="text-3xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
-              Analiticas
+              Analíticas
             </h1>
             <p className="max-w-3xl text-sm text-slate-500 dark:text-slate-400">
               Indicadores para revisar crecimiento, ingresos recurrentes, distribucion de planes y actividad de la plataforma.

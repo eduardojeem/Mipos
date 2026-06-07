@@ -281,7 +281,7 @@ export default function PlansPage() {
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <SummaryCard label="Planes activos" value={String(summary.activePlans)} helper={`${processedPlans.length} planes canonicos`} />
-          <SummaryCard label="Tenants asignados" value={String(summary.tenants)} helper="Segun suscripciones SaaS" />
+          <SummaryCard label="Tenants asignados" value={String(summary.tenants)} helper="Según suscripciones SaaS" />
           <SummaryCard label="Suscripciones activas" value={String(summary.activeSubscriptions)} helper="Tenants activos o en prueba" />
           <SummaryCard label="MRR estimado" value={formatMoney(summary.mrr, processedPlans[0]?.currency || 'PYG')} helper="Suscripciones activas por plan" />
         </div>

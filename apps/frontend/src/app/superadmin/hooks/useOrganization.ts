@@ -66,7 +66,7 @@ export function useOrganization(id: string) {
             const response = await fetch(`/api/superadmin/organizations/${id}`);
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.error || 'Error al cargar la organizacion');
+                throw new Error(errorData.error || 'Error al cargar la organización');
             }
             const result = await response.json();
             return result.organization as OrganizationDetail;
@@ -113,7 +113,7 @@ export function useOrganization(id: string) {
 
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.error || 'Error al actualizar organizacion');
+                throw new Error(errorData.error || 'Error al actualizar organización');
             }
 
             const result = await response.json();
@@ -145,8 +145,8 @@ export function useOrganization(id: string) {
         onSuccess: (updatedOrganization) => {
             queryClient.setQueryData(queryKey, updatedOrganization);
             toast({
-                title: 'Actualizacion exitosa',
-                description: 'La organizacion se actualizo correctamente.',
+                title: 'Actualización exitosa',
+                description: 'La organización se actualizó correctamente.',
             });
             queryClient.invalidateQueries({ queryKey: ['admin', 'organizations'] });
         },
