@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertTriangle, Wallet, Banknote, Activity } from "lucide-react";
 import { createClient } from "@/lib/supabase";
+import { getSelectedOrganizationId } from "@/lib/organization-context";
 import { useCurrencyFormatter } from "@/contexts/BusinessConfigContext";
 import type { Database, CashAlert } from "@/types/supabase";
 import { useReactToPrint } from "react-to-print";
@@ -57,20 +58,32 @@ export default function CashExecutivePage() {
     let isMounted = true;
     const load = async () => {
       setLoading(true);
+
+      // Filtro multi-tenant explícito (defensa en profundidad, además de RLS).
+      const orgId = getSelectedOrganizationId();
+      if (!orgId) {
+        if (isMounted) {
+          setBankAccounts([]); setAlerts([]); setPendingRecons([]);
+          setCurrentSession(null); setSessionMovements([]); setLoading(false);
+        }
+        return;
+      }
+
       // Bank accounts
-      const { data: ba } = await supabase.from("bank_accounts").select("*").limit(50);
+      const { data: ba } = await supabase.from("bank_accounts").select("*").eq("organization_id", orgId).limit(50);
       if (isMounted && ba) setBankAccounts(ba as BankAccountRow[]);
       // Alerts
-      const { data: al } = await supabase.from("cash_alerts").select("*").eq("status", "ACTIVE").order("severity", { ascending: false });
+      const { data: al } = await supabase.from("cash_alerts").select("*").eq("organization_id", orgId).eq("status", "ACTIVE").order("severity", { ascending: false });
       if (isMounted && al) setAlerts(al as CashAlert[]);
       // Pending reconciliations
       const { data: cr } = await supabase
         .from("cash_reconciliations")
         .select("*")
+        .eq("organization_id", orgId)
         .in("status", ["PENDING", "DISPUTED"]) as any;
       if (isMounted && cr) setPendingRecons(cr as CashReconciliationRow[]);
       // Current open session
-      const { data: cs } = await supabase.from("cash_sessions").select("*").eq("status", "OPEN").order("opening_time", { ascending: false }).limit(1).maybeSingle();
+      const { data: cs } = await supabase.from("cash_sessions").select("*").eq("organization_id", orgId).eq("status", "OPEN").order("opening_time", { ascending: false }).limit(1).maybeSingle();
       const session = cs ?? null;
       if (isMounted) setCurrentSession(session as CashSessionRow | null);
       if (session) {

@@ -229,7 +229,10 @@ export async function POST(request: NextRequest) {
 
     const discrepancyAmount = closingAmount - systemExpected;
 
-    const { error: updateError } = await writer
+    // Guard de concurrencia: solo cerrar si SIGUE abierta (status='OPEN').
+    // Si otro request la cerró primero, el update afecta 0 filas → evitamos
+    // el doble cierre y el doble registro de discrepancia.
+    const { data: updatedRows, error: updateError } = await writer
       .from('cash_sessions')
       .update({
         closing_amount: closingAmount,
@@ -241,12 +244,21 @@ export async function POST(request: NextRequest) {
         notes: notes || openSession.notes || null,
       })
       .eq('id', openSession.id)
-      .eq('organization_id', organizationId);
+      .eq('organization_id', organizationId)
+      .eq('status', 'OPEN')
+      .select('id');
 
     if (updateError) {
       return NextResponse.json(
         { error: 'Failed to close session', details: updateError.message, code: updateError.code },
         { status: 500 },
+      );
+    }
+
+    if (!Array.isArray(updatedRows) || updatedRows.length === 0) {
+      return NextResponse.json(
+        { error: 'La caja ya fue cerrada por otra operación.', code: 'SESSION_ALREADY_CLOSED' },
+        { status: 409 },
       );
     }
 

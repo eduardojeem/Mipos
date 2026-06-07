@@ -102,13 +102,22 @@ function endOfMonth(date: Date): Date {
   return endOfDay(new Date(date.getFullYear(), date.getMonth() + 1, 0));
 }
 
+// Clave de fecha en hora LOCAL (no UTC) para que una operación nocturna no
+// salte al día siguiente al usar toISOString().
+function localDateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 function buildBucketKey(date: Date, reportType: ReportPeriod): string {
   if (reportType === "daily") {
-    return date.toISOString().split("T")[0];
+    return localDateKey(date);
   }
 
   if (reportType === "weekly") {
-    return startOfWeek(date).toISOString().split("T")[0];
+    return localDateKey(startOfWeek(date));
   }
 
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
