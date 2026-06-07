@@ -82,9 +82,11 @@ export async function GET(request: NextRequest) {
       is_active
     `;
 
-    const buildQuery = (selectClause: string) => {
+    const buildQuery = (selectClause: string, withDeletedFilter = true) => {
       let q = supabase.from('products').select(selectClause).order('name');
       q = q.eq('organization_id', organizationId);
+      // Nunca vender productos en la papelera (deleted_at != null).
+      if (withDeletedFilter) q = q.is('deleted_at', null);
       if (activeOnly) q = q.eq('is_active', true);
       if (search) q = q.or(`name.ilike.%${search}%,sku.ilike.%${search}%,barcode.ilike.%${search}%`);
       if (categoryId && categoryId !== 'all') q = q.eq('category_id', categoryId);
@@ -107,7 +109,9 @@ export async function GET(request: NextRequest) {
           '[POS products] rich select failed (schema mismatch), falling back to minimal:',
           msg
         );
-        const minimalResult = await buildQuery(MINIMAL_SELECT);
+        // Si la columna ausente es deleted_at, el minimal tampoco debe filtrar por ella.
+        const deletedAtMissing = /deleted_at/i.test(msg);
+        const minimalResult = await buildQuery(MINIMAL_SELECT, !deletedAtMissing);
         if (minimalResult.error) throw minimalResult.error;
         products = minimalResult.data as unknown[] | null;
         usedMinimalFallback = true;
