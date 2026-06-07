@@ -226,7 +226,7 @@ export default function CategoriesPage() {
         onOpenChange={setShowModal}
         category={editingCategory}
         allCategories={categories}
-        onSuccess={loadCategories}
+        onSuccess={() => { void loadCategories(); }}
         getOrgId={getOrgId}
       />
     </div>

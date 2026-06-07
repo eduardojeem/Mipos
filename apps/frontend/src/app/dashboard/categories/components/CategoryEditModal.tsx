@@ -20,7 +20,9 @@ interface CategoryEditModalProps {
   onOpenChange: (open: boolean) => void;
   category: CategoryWithCount | null;
   allCategories: CategoryWithCount[];
-  onSuccess: () => void;
+  /** Recibe la categoría creada/actualizada (cuando está disponible) para que
+   *  el consumidor pueda, por ejemplo, auto-seleccionarla. */
+  onSuccess: (created?: { id: string; name: string }) => void;
   getOrgId: () => string | null;
 }
 
@@ -90,6 +92,8 @@ export function CategoryEditModal({ open, onOpenChange, category, allCategories,
         parent_id: formData.parent_id,
       };
 
+      let created: { id: string; name: string } | undefined;
+
       if (category) {
         const res = await api.put(`/categories/${category.id}`, payload);
         if (!res.data?.success) {
@@ -101,10 +105,12 @@ export function CategoryEditModal({ open, onOpenChange, category, allCategories,
         if (!res.data?.success) {
           throw new Error(res.data?.error || 'No se pudo crear la categoría');
         }
+        const d = res.data?.data;
+        if (d?.id) created = { id: String(d.id), name: String(d.name ?? name) };
         toast({ title: 'Categoría creada' });
       }
 
-      onSuccess();
+      onSuccess(created);
       onOpenChange(false);
     } catch (error: unknown) {
       toast({ title: 'Error', description: getErrorMessage(error), variant: 'destructive' });

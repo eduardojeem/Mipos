@@ -15,7 +15,6 @@ import {
   Building2,
   RefreshCw,
   Boxes,
-  CheckCircle2,
   ImageOff,
   Trash2,
   Sparkles,
@@ -47,10 +46,12 @@ import { Separator } from '@/components/ui/separator';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { toast } from '@/lib/toast';
 import { createClient } from '@/lib/supabase/client';
+import api, { getErrorMessage as getApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import type { Product } from '@/types';
-import type { Database } from '@/types/supabase';
 import NextImage from 'next/image';
+import { CategoryEditModal } from '@/app/dashboard/categories/components/CategoryEditModal';
+import { SupplierFormDialog } from '@/components/suppliers/SupplierFormDialog';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -190,60 +191,6 @@ function SectionHeader({
         <Icon className="h-4 w-4" />
       </div>
       <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-    </div>
-  );
-}
-
-// ── Inline create form ────────────────────────────────────────────────────────
-function InlineCreate({
-  placeholder,
-  value,
-  onChange,
-  onSave,
-  onCancel,
-  loading,
-}: {
-  placeholder: string;
-  value: string;
-  onChange: (v: string) => void;
-  onSave: () => void;
-  onCancel: () => void;
-  loading: boolean;
-}) {
-  // Fila compacta: input + guardar + cancelar. Misma altura (h-10) que el Select
-  // hermano para mantener las columnas alineadas.
-  return (
-    <div className="flex items-center gap-1.5">
-      <Input
-        placeholder={placeholder}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        disabled={loading}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') { e.preventDefault(); onSave(); }
-          if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
-        }}
-        className="h-10 flex-1 text-sm"
-        autoFocus
-      />
-      <Button
-        type="button" size="icon" onClick={onSave}
-        disabled={loading || !value.trim()}
-        className="h-10 w-10 shrink-0"
-        title="Guardar"
-      >
-        {loading
-          ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-          : <CheckCircle2 className="h-4 w-4" />}
-      </Button>
-      <Button
-        type="button" variant="ghost" size="icon" onClick={onCancel}
-        disabled={loading}
-        className="h-10 w-10 shrink-0 text-muted-foreground"
-        title="Cancelar"
-      >
-        <X className="h-4 w-4" />
-      </Button>
     </div>
   );
 }
@@ -411,12 +358,9 @@ export const ProductEditModal = memo(function ProductEditModal({
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploading, setUploading] = useState(false);
 
-  // Inline create forms
-  const [showCreateCategory, setShowCreateCategory] = useState(false);
-  const [showCreateSupplier, setShowCreateSupplier] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState('');
-  const [newSupplierName, setNewSupplierName] = useState('');
-  const [creatingCategory, setCreatingCategory] = useState(false);
+  // Modales reutilizados para crear categoría / proveedor
+  const [showCatModal, setShowCatModal] = useState(false);
+  const [showSupModal, setShowSupModal] = useState(false);
   const [creatingSupplier, setCreatingSupplier] = useState(false);
 
   // SKU
@@ -468,10 +412,8 @@ export const ProductEditModal = memo(function ProductEditModal({
   // ── Reset on close ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!open) {
-      setShowCreateCategory(false);
-      setShowCreateSupplier(false);
-      setNewCategoryName('');
-      setNewSupplierName('');
+      setShowCatModal(false);
+      setShowSupModal(false);
       setAutoGenerateSku(true);
       setPendingFile(null);
       if (imageBlobUrl) { URL.revokeObjectURL(imageBlobUrl); setImageBlobUrl(null); }
@@ -675,67 +617,46 @@ export const ProductEditModal = memo(function ProductEditModal({
   }, [productName, categoryId, autoGenerateSku, product, generateSku, setValue]);
 
   // ── Create category/supplier ──────────────────────────────────────────────
-  const handleCreateCategory = useCallback(async () => {
-    if (!newCategoryName.trim()) return;
-    const orgId = getOrgId();
-    if (!orgId) { toast.error('Selecciona una organización'); return; }
-    setCreatingCategory(true);
-    try {
-      const payload: Database['public']['Tables']['categories']['Insert'] = {
-        name: newCategoryName.trim(),
-        description: `Categoría creada desde productos`,
-        is_active: true,
-        organization_id: orgId,
-      };
-      const { data, error } = await supabase.from('categories')
-        .insert(payload as unknown as never).select('id, name').single();
-      if (error) {
-        if (error.code === '23505') toast.error('Ya existe una categoría con ese nombre');
-        else toast.error('Error al crear categoría: ' + error.message);
-        return;
-      }
-      const newCat = data as { id: string; name: string };
-      setCategories((prev) => [...prev, newCat].sort((a, b) => a.name.localeCompare(b.name)));
-      setValue('category_id', newCat.id, { shouldValidate: true });
-      clearErrors('category_id');
-      setNewCategoryName('');
-      setShowCreateCategory(false);
-      toast.success('Categoría creada');
-      onTaxonomyChange?.(); // sincronizar con el componente padre (filtros, etc.)
-    } finally {
-      setCreatingCategory(false);
-    }
-  }, [newCategoryName, supabase, setValue, clearErrors, onTaxonomyChange]);
+  // Categoría creada desde el modal reutilizado (CategoryEditModal)
+  const handleCategoryCreated = useCallback((created?: { id: string; name: string }) => {
+    if (!created) return;
+    setCategories((prev) =>
+      prev.some((c) => c.id === created.id)
+        ? prev
+        : [...prev, created].sort((a, b) => a.name.localeCompare(b.name))
+    );
+    setValue('category_id', created.id, { shouldValidate: true });
+    clearErrors('category_id');
+    onTaxonomyChange?.();
+  }, [setValue, clearErrors, onTaxonomyChange]);
 
-  const handleCreateSupplier = useCallback(async () => {
-    if (!newSupplierName.trim()) return;
-    const orgId = getOrgId();
-    if (!orgId) { toast.error('Selecciona una organización'); return; }
+  // Proveedor creado desde el modal reutilizado (SupplierFormDialog).
+  // El SupplierFormDialog delega el insert: lo hacemos vía API y auto-seleccionamos.
+  const handleSupplierSubmit = useCallback(async (payload: Record<string, unknown>) => {
     setCreatingSupplier(true);
     try {
-      const payload: Database['public']['Tables']['suppliers']['Insert'] = {
-        name: newSupplierName.trim(),
-        is_active: true,
-        organization_id: orgId,
-      };
-      const { data, error } = await supabase.from('suppliers')
-        .insert(payload as unknown as never).select('id, name').single();
-      if (error) {
-        if (error.code === '23505') toast.error('Ya existe un proveedor con ese nombre');
-        else toast.error('Error al crear proveedor: ' + error.message);
-        return;
+      const orgId = getOrgId();
+      const res = await api.post('/suppliers', payload, {
+        headers: orgId ? { 'x-organization-id': orgId } : {},
+      });
+      const created = res.data?.data as { id: string; name: string } | undefined;
+      if (created?.id) {
+        setSuppliers((prev) =>
+          prev.some((s) => s.id === created.id)
+            ? prev
+            : [...prev, { id: created.id, name: created.name }].sort((a, b) => a.name.localeCompare(b.name))
+        );
+        setValue('supplier_id', created.id);
+        onTaxonomyChange?.();
       }
-      const newSup = data as { id: string; name: string };
-      setSuppliers((prev) => [...prev, newSup].sort((a, b) => a.name.localeCompare(b.name)));
-      setValue('supplier_id', newSup.id);
-      setNewSupplierName('');
-      setShowCreateSupplier(false);
       toast.success('Proveedor creado');
-      onTaxonomyChange?.(); // sincronizar con el componente padre
+      setShowSupModal(false);
+    } catch (err) {
+      toast.error(getApiError(err) || 'No se pudo crear el proveedor');
     } finally {
       setCreatingSupplier(false);
     }
-  }, [newSupplierName, supabase, setValue, onTaxonomyChange]);
+  }, [setValue, onTaxonomyChange]);
 
   // ── Submit ───────────────────────────────────────────────────────────────
   const onSubmit = async (data: ProductFormData) => {
@@ -988,89 +909,61 @@ export const ProductEditModal = memo(function ProductEditModal({
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
                       <Label htmlFor="category_id" className="text-sm">Categoría <span className="text-destructive">*</span></Label>
-                      {!showCreateCategory && (
-                        <Button
-                          type="button" variant="ghost" size="sm"
-                          onClick={() => setShowCreateCategory(true)}
-                          className="h-5 gap-1 px-1 text-xs text-muted-foreground hover:text-foreground"
-                          disabled={loadingData}
-                        >
-                          <Plus className="h-3 w-3" /> Nueva
-                        </Button>
-                      )}
+                      <Button
+                        type="button" variant="ghost" size="sm"
+                        onClick={() => setShowCatModal(true)}
+                        className="h-5 gap-1 px-1 text-xs text-muted-foreground hover:text-foreground"
+                        disabled={loadingData}
+                      >
+                        <Plus className="h-3 w-3" /> Nueva
+                      </Button>
                     </div>
-                    {showCreateCategory ? (
-                      <InlineCreate
-                        placeholder="Nombre de la categoría"
-                        value={newCategoryName}
-                        onChange={setNewCategoryName}
-                        onSave={handleCreateCategory}
-                        onCancel={() => { setShowCreateCategory(false); setNewCategoryName(''); }}
-                        loading={creatingCategory}
-                      />
-                    ) : (
-                      <>
-                        <Select
-                          value={watch('category_id')}
-                          onValueChange={(v) => { setValue('category_id', v); clearErrors('category_id'); }}
-                          disabled={loadingData}
-                        >
-                          <SelectTrigger className={cn('text-sm', errors.category_id && 'border-destructive')}>
-                            <SelectValue placeholder={loadingData ? 'Cargando...' : 'Seleccionar'} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {categories.map((c) => (
-                              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <input type="hidden" {...register('category_id', { required: 'Selecciona una categoría' })} />
-                        {errors.category_id && <p className="text-xs text-destructive">{errors.category_id.message}</p>}
-                      </>
-                    )}
+                    <Select
+                      value={watch('category_id')}
+                      onValueChange={(v) => { setValue('category_id', v); clearErrors('category_id'); }}
+                      disabled={loadingData}
+                    >
+                      <SelectTrigger className={cn('text-sm', errors.category_id && 'border-destructive')}>
+                        <SelectValue placeholder={loadingData ? 'Cargando...' : 'Seleccionar'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categories.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <input type="hidden" {...register('category_id', { required: 'Selecciona una categoría' })} />
+                    {errors.category_id && <p className="text-xs text-destructive">{errors.category_id.message}</p>}
                   </div>
 
                   {/* Supplier */}
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
                       <Label htmlFor="supplier_id" className="text-sm">Proveedor</Label>
-                      {!showCreateSupplier && (
-                        <Button
-                          type="button" variant="ghost" size="sm"
-                          onClick={() => setShowCreateSupplier(true)}
-                          className="h-5 gap-1 px-1 text-xs text-muted-foreground hover:text-foreground"
-                          disabled={loadingData}
-                        >
-                          <Building2 className="h-3 w-3" /> Nuevo
-                        </Button>
-                      )}
-                    </div>
-                    {showCreateSupplier ? (
-                      <InlineCreate
-                        placeholder="Nombre del proveedor"
-                        value={newSupplierName}
-                        onChange={setNewSupplierName}
-                        onSave={handleCreateSupplier}
-                        onCancel={() => { setShowCreateSupplier(false); setNewSupplierName(''); }}
-                        loading={creatingSupplier}
-                      />
-                    ) : (
-                      <Select
-                        value={watch('supplier_id') || 'none'}
-                        onValueChange={(v) => setValue('supplier_id', v === 'none' ? undefined : v)}
+                      <Button
+                        type="button" variant="ghost" size="sm"
+                        onClick={() => setShowSupModal(true)}
+                        className="h-5 gap-1 px-1 text-xs text-muted-foreground hover:text-foreground"
                         disabled={loadingData}
                       >
-                        <SelectTrigger className="text-sm">
-                          <SelectValue placeholder={loadingData ? 'Cargando...' : 'Sin proveedor'} />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Sin proveedor</SelectItem>
-                          {suppliers.map((s) => (
-                            <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
+                        <Building2 className="h-3 w-3" /> Nuevo
+                      </Button>
+                    </div>
+                    <Select
+                      value={watch('supplier_id') || 'none'}
+                      onValueChange={(v) => setValue('supplier_id', v === 'none' ? undefined : v)}
+                      disabled={loadingData}
+                    >
+                      <SelectTrigger className="text-sm">
+                        <SelectValue placeholder={loadingData ? 'Cargando...' : 'Sin proveedor'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Sin proveedor</SelectItem>
+                        {suppliers.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 
@@ -1369,6 +1262,23 @@ export const ProductEditModal = memo(function ProductEditModal({
           </div>
         </div>
       </DialogContent>
+
+      {/* ── Modales reutilizados para crear categoría / proveedor ── */}
+      <CategoryEditModal
+        open={showCatModal}
+        onOpenChange={setShowCatModal}
+        category={null}
+        allCategories={[]}
+        getOrgId={getOrgId}
+        onSuccess={handleCategoryCreated}
+      />
+      <SupplierFormDialog
+        open={showSupModal}
+        onOpenChange={setShowSupModal}
+        initialData={null}
+        isSubmitting={creatingSupplier}
+        onSubmit={(data) => handleSupplierSubmit(data as Record<string, unknown>)}
+      />
     </Dialog>
   );
 });
