@@ -12,6 +12,40 @@ import { requireOrganization } from '@/lib/organization';
  *   eliminado por ser una vulnerabilidad crítica de seguridad.
  */
 
+function isMissingColumnError(error: unknown, column: string): boolean {
+  const message = String((error as { message?: unknown })?.message || '').toLowerCase();
+  const normalized = column.trim().toLowerCase();
+  if (!message || !normalized) return false;
+  if (message.includes(`column "${normalized}"`) && message.includes('does not exist')) return true;
+  if (message.includes(`could not find`) && message.includes(normalized) && message.includes('schema cache')) return true;
+  if (message.includes(`could not find the '${normalized}' column`)) return true;
+  if (String((error as { code?: unknown })?.code || '').toLowerCase() === 'pgrst204' && message.includes(normalized)) return true;
+  return false;
+}
+
+async function countVisibleActiveProducts(orgId: string): Promise<number | null> {
+  const admin = await createAdminClient();
+  const baseQuery = () =>
+    admin
+      .from('products')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
+      .eq('is_active', true);
+
+  let result = await baseQuery().is('deleted_at', null);
+
+  if (result.error && isMissingColumnError(result.error, 'deleted_at')) {
+    result = await baseQuery();
+  }
+
+  if (result.error) {
+    console.warn('[dashboard/fast-summary] Could not count visible active products:', result.error.message);
+    return null;
+  }
+
+  return Number(result.count ?? 0);
+}
+
 export async function GET(request: NextRequest) {
   try {
     const orgId = await requireOrganization(request);
@@ -23,10 +57,15 @@ export async function GET(request: NextRequest) {
       today.getMonth(),
       today.getDate(),
     ).toISOString();
+    const monthStart = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      1,
+    ).toISOString();
 
     // Queries paralelas — RPC para ventas y pedidos, query directa para
     // productos activos (el RPC get_dashboard_counts no filtra is_active).
-    const [todayStats, basicCounts, ordersStats, activeProductsCount] =
+    const [todayStats, basicCounts, ordersStats, activeProductsCount, monthSalesRows] =
       await Promise.all([
         supabase
           .rpc('get_today_sales_summary', {
@@ -39,14 +78,16 @@ export async function GET(request: NextRequest) {
 
         supabase.rpc('get_orders_dashboard_stats', { org_id: orgId }).single(),
 
-        // Conteo de productos ACTIVOS directamente — evita depender del RPC
-        // que no distingue is_active y generaba discrepancia con la lista.
+        // Conteo de productos visibles activos: misma regla que /api/products/list.
+        countVisibleActiveProducts(orgId),
+
         createAdminClient().then((admin) =>
           admin
-            .from('products')
-            .select('id', { count: 'estimated', head: true })
+            .from('sales')
+            .select('total')
             .eq('organization_id', orgId)
-            .eq('is_active', true),
+            .gte('created_at', monthStart)
+            .limit(10000),
         ),
       ]);
 
@@ -86,14 +127,24 @@ export async function GET(request: NextRequest) {
     // Preferir el conteo directo de activos; caer en el del RPC como último
     // recurso (puede incluir inactivos, pero es mejor que mostrar 0).
     const totalProducts =
-      activeProductsCount.count !== null && activeProductsCount.count !== undefined
-        ? activeProductsCount.count
+      activeProductsCount !== null && activeProductsCount !== undefined
+        ? activeProductsCount
         : countsData.products_count || 0;
 
     const averageTicket =
       todayData.sales_count > 0
         ? todayData.total_sales / todayData.sales_count
         : 0;
+    const monthSales = Array.isArray(monthSalesRows.data)
+      ? monthSalesRows.data.reduce((sum, row: { total?: number | string | null }) => {
+          const total = Number(row.total ?? 0);
+          return Number.isFinite(total) ? sum + total : sum;
+        }, 0)
+      : todayData.total_sales || 0;
+    const activeOrders =
+      (ordersData.pending_orders || 0) +
+      (ordersData.confirmed_orders || 0) +
+      (ordersData.preparing_orders || 0);
 
     const summary = {
       todaySales: todayData.total_sales || 0,
@@ -102,8 +153,8 @@ export async function GET(request: NextRequest) {
       totalCustomers: countsData.customers_count || 0,
       totalProducts,
       lowStockCount: countsData.low_stock_count || 0,
-      monthSales: todayData.total_sales || 0,
-      activeOrders: ordersData.pending_orders || 0,
+      monthSales,
+      activeOrders,
       recentSales: [],
       webOrders: {
         pending: ordersData.pending_orders || 0,

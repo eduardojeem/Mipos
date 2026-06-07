@@ -73,11 +73,12 @@ export async function fetchCategoryOrgsSnapshot(
 
   const orgIds = orgList.map((o) => o.id);
 
-  // 3. Count products per org in a single query
+  // 3. Count products per org in a single query (solo activos, no eliminados)
   const { data: products } = await (client as any)
     .from('products')
     .select('organization_id')
-    .in('organization_id', orgIds);
+    .in('organization_id', orgIds)
+    .eq('is_active', true);
 
   const productCountMap = new Map<string, number>();
   for (const p of (products || []) as Array<{ organization_id: string }>) {

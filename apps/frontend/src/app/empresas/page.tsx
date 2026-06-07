@@ -158,25 +158,7 @@ export default async function EmpresasPage() {
         </div>
       </section>
 
-      {/* Featured organizations grid */}
-      <section className="py-16 sm:py-20">
-        <div className="landing-container">
-          {featuredOrganizations.length > 0 ? (
-            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-              {featuredOrganizations.map((organization) => (
-                <OrganizationCard key={organization.id} organization={organization} />
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-lg border border-dashed border-white/10 bg-white/[0.03] px-6 py-16 text-center">
-              <p className="text-xl font-semibold text-white">Aun no hay empresas para destacar.</p>
-              <p className="mt-3 text-sm leading-6 text-slate-400">
-                Cuando existan organizaciones visibles, esta seccion se completa automaticamente.
-              </p>
-            </div>
-          )}
-        </div>
-      </section>
+
 
       <Footer />
     </main>

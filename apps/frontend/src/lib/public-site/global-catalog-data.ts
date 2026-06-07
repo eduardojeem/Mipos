@@ -14,7 +14,7 @@ import type { GlobalProductCard } from "@/lib/public-site/data";
 const PUBLIC_ORGANIZATION_STATUSES = ["ACTIVE", "TRIAL"];
 const ORGANIZATION_BASE_COLUMNS = ["id", "name", "slug", "subscription_status", "marketplace_category_id"];
 const ORGANIZATION_OPTIONAL_COLUMNS: string[] = [];
-const PRODUCT_BASE_COLUMNS = ["id", "name", "sale_price", "organization_id"];
+const PRODUCT_BASE_COLUMNS = ["id", "name", "sale_price", "organization_id", "is_active"];
 const PRODUCT_OPTIONAL_COLUMNS = [
   "description",
   "offer_price",
@@ -27,10 +27,10 @@ const PRODUCT_OPTIONAL_COLUMNS = [
   "updated_at",
   "created_at",
   "rating",
-  "is_active",
 ];
 const ORGANIZATION_BATCH_SIZE = 250;
 const PRODUCT_BATCH_SIZE = 500;
+const MAX_TOTAL_PRODUCTS = 2000;
 const CATEGORY_BATCH_SIZE = 500;
 
 type ProductRow = {
@@ -49,6 +49,7 @@ type ProductRow = {
   updated_at?: string | null;
   created_at?: string | null;
   rating?: number | null;
+  is_active?: boolean | null;
 };
 
 type CategoryRow = {
@@ -416,10 +417,15 @@ async function fetchMatchingProducts(
     let query = client
       .from("products")
       .select(selectValue)
-      .in("organization_id", organizationIds);
+      .in("organization_id", organizationIds)
+      .eq("is_active", true);
 
-    if (!unavailableColumns.has("is_active")) {
-      query = query.eq("is_active", true);
+    if (!unavailableColumns.has("deleted_at")) {
+      query = query.is("deleted_at", null);
+    }
+
+    if (!unavailableColumns.has("is_public")) {
+      query = query.eq("is_public", true);
     }
 
     if (search) {
@@ -444,17 +450,39 @@ async function fetchMatchingProducts(
       query = query.gte("rating", input.rating);
     }
 
-    // Apply price filters at DB level for performance
+    // Filtros de precio: consideran tanto sale_price como offer_price.
+    // Un producto con sale_price=50000 y offer_price=30000 debe aparecer
+    // cuando maxPrice=40000 porque su precio efectivo (30000) califica.
+    const hasOfferColumn = !unavailableColumns.has("offer_price");
+
     if (input.minPrice > 0) {
-      query = query.gte("sale_price", input.minPrice);
+      // El precio efectivo debe ser >= minPrice.
+      // sale_price >= minPrice O offer_price >= minPrice (si existe la columna)
+      if (hasOfferColumn) {
+        query = query.or(
+          `sale_price.gte.${input.minPrice},offer_price.gte.${input.minPrice}`
+        );
+      } else {
+        query = query.gte("sale_price", input.minPrice);
+      }
     }
 
     if (input.maxPrice !== null && input.maxPrice > 0) {
-      query = query.lte("sale_price", input.maxPrice);
+      // Al menos uno de los precios debe ser <= maxPrice para que califique.
+      // Incluimos productos donde offer_price <= maxPrice (aunque sale_price sea mayor)
+      if (hasOfferColumn) {
+        query = query.or(
+          `sale_price.lte.${input.maxPrice},offer_price.lte.${input.maxPrice}`
+        );
+      } else {
+        query = query.lte("sale_price", input.maxPrice);
+      }
     }
 
-    // Filter products with active offers at DB level
-    if (input.onSale && !unavailableColumns.has("offer_price")) {
+    // onSale: verificar que offer_price > 0 Y que sea menor a sale_price.
+    // Supabase no soporta comparación entre columnas directamente, así que
+    // filtramos offer_price > 0 en DB y el post-fetch valida offer < sale.
+    if (input.onSale && hasOfferColumn) {
       query = query.gt("offer_price", 0);
     }
 
@@ -490,7 +518,7 @@ async function fetchMatchingProducts(
 
       if (
         missingColumn &&
-        [...PRODUCT_OPTIONAL_COLUMNS, "created_at", "updated_at"].includes(
+        [...PRODUCT_OPTIONAL_COLUMNS, "created_at", "updated_at", "deleted_at", "is_public"].includes(
           missingColumn,
         ) &&
         !missingColumns.has(missingColumn)
@@ -507,7 +535,7 @@ async function fetchMatchingProducts(
       const rows = (result.data || []) as unknown as ProductRow[];
       products.push(...rows);
 
-      if (rows.length < PRODUCT_BATCH_SIZE) {
+      if (rows.length < PRODUCT_BATCH_SIZE || products.length >= MAX_TOTAL_PRODUCTS) {
         break;
       }
     }
@@ -672,6 +700,12 @@ function mapProductsToCards(
         : null;
 
       if (!organization) {
+        return null;
+      }
+
+      // Filtro de seguridad: descartar productos inactivos que hayan
+      // escapado la query (ej: is_active era NULL, tipo text, o cache stale)
+      if (product.is_active === false) {
         return null;
       }
 
@@ -1024,7 +1058,9 @@ export async function fetchGlobalCatalogSnapshot(
     const matchingOrganizations = new Set(
       filteredProducts.map((product) => product.organizationId).filter(Boolean),
     ).size;
-    const productsForMaxPrice = mappedProducts;
+    // maxPrice se calcula sobre los productos post-filtro de categoría/ubicación
+    // (no sobre todos) para que el slider sea relevante al contexto actual.
+    const productsForMaxPrice = filteredProducts.length > 0 ? filteredProducts : mappedProducts;
 
     return {
       products: sortedProducts.slice(start, start + input.itemsPerPage),

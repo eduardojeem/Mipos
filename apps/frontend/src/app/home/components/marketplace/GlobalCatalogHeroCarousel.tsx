@@ -70,7 +70,7 @@ function resolveAccentLabel(product: GlobalProductCard, tone: SlideTone): string
   return null;
 }
 
-const AUTOPLAY_INTERVAL = 7000;
+const AUTOPLAY_INTERVAL = 5000;
 
 const contentVariants = {
   enter: (dir: number) => ({ opacity: 0, y: dir * 16 }),

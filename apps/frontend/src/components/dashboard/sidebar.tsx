@@ -39,6 +39,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { NavCategory } from './NavCategory';
 import { useBusinessConfig } from '@/contexts/BusinessConfigContext';
 import { useSystemSettings } from '@/app/dashboard/settings/hooks/useOptimizedSettings';
+import { canAccessDashboardItem } from './navigation-access';
 
 export type NavItem = {
   name: string;
@@ -298,15 +299,7 @@ export function Sidebar() {
     const userRole = resolvedRole || 'CASHIER';
     
     return navigation.filter(item => {
-      // Check role access
-      const hasRole = !item.roles || item.roles.includes(userRole) || (userRole === 'SUPER_ADMIN' && item.roles.includes('ADMIN'));
-      if (!hasRole) return false;
-
-      // Check plan permissions
-      if (isPlanResolved && item.href === '/dashboard/reports' && !permissions.can_access_analytics) return false;
-      if (isPlanResolved && item.category === 'admin' && !permissions.can_access_admin_panel && userRole !== 'SUPER_ADMIN') {
-        return false;
-      }
+      if (!canAccessDashboardItem(item, { userRole, permissions, isPlanResolved })) return false;
       
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
@@ -322,7 +315,7 @@ export function Sidebar() {
       
       return true;
     });
-  }, [resolvedRole, permissions.can_access_analytics, permissions.can_access_admin_panel, isPlanResolved, searchQuery]);
+  }, [resolvedRole, permissions, isPlanResolved, searchQuery]);
 
   const groupedNavigation = useMemo(() => filteredNavigation.reduce((acc, item) => {
     const category = item.category || 'other';
@@ -520,10 +513,10 @@ export function Sidebar() {
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                   </div>
-                  <span>Sistema Operativo</span>
+                  <span>Sistema en linea</span>
                 </div>
                 <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
-                  © 2024 BeautyPOS v2.0
+                  © {new Date().getFullYear()} MiPOS
                 </p>
               </div>
             </div>

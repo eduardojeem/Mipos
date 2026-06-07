@@ -343,19 +343,19 @@ export const defaultBusinessConfig: BusinessConfig = {
     transitionMs: 800,
     images: [
       {
-        id: "demo-1",
-        url: "https://images.unsplash.com/photo-1512428559087-560fa5ceab42?auto=format&fit=crop&w=1600&q=80",
-        alt: "Promocion destacada 1"
+        id: "default-1",
+        url: "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=1600&q=80",
+        alt: "Bienvenido a nuestra tienda"
       },
       {
-        id: "demo-2",
-        url: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=1600&q=80",
-        alt: "Promocion destacada 2"
+        id: "default-2",
+        url: "https://images.unsplash.com/photo-1556740758-90de374c12ad?auto=format&fit=crop&w=1600&q=80",
+        alt: "Compra con confianza"
       },
       {
-        id: "demo-3",
-        url: "https://images.unsplash.com/photo-1503602642458-232111445657?auto=format&fit=crop&w=1600&q=80",
-        alt: "Promocion destacada 3"
+        id: "default-3",
+        url: "https://images.unsplash.com/photo-1607082349566-187342175e2f?auto=format&fit=crop&w=1600&q=80",
+        alt: "Ofertas y promociones"
       }
     ]
   },

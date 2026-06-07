@@ -10,6 +10,8 @@ import { Header } from '@/components/dashboard/header';
 import { KeyboardShortcuts } from '@/components/keyboard/keyboard-shortcuts';
 import { ResponsiveLayout } from '@/components/ui/responsive-layout';
 import { DashboardErrorBoundary } from '@/components/error/DashboardErrorBoundary';
+import { usePlanPermissions } from '@/hooks/use-plan-permissions';
+import { filterDashboardNavigation } from '@/components/dashboard/navigation-access';
 
 const ConnectionIndicator = dynamic<{ size?: 'sm' | 'md' | 'lg' }>(
   () => import('@/components/ui/connection-indicator').then((module) => module.ConnectionIndicator),
@@ -23,6 +25,7 @@ export default function DashboardClientLayout({
 }) {
   const { isAuthenticated, loading } = useIsAuthenticated();
   const resolvedRole = useResolvedRole();
+  const { permissions, isPlanResolved } = usePlanPermissions();
 
   // Refs persist across re-renders so we can avoid restarting the sync
   // coordinator every time `isAuthenticated` flips. The coordinator already
@@ -122,14 +125,12 @@ export default function DashboardClientLayout({
   }, [isAuthenticated]);
 
   const navigationItems = useMemo(() => {
-    const items: SidebarNavItem[] = sidebarNavigation;
-    const userRole = resolvedRole || 'CASHIER';
-
-    return items.filter((item) => {
-      if (!item.roles) return true;
-      return item.roles.includes(userRole) || (userRole === 'SUPER_ADMIN' && item.roles.includes('ADMIN'));
+    return filterDashboardNavigation(sidebarNavigation as SidebarNavItem[], {
+      userRole: resolvedRole || 'CASHIER',
+      permissions,
+      isPlanResolved,
     });
-  }, [resolvedRole]);
+  }, [isPlanResolved, permissions, resolvedRole]);
 
   if (loading) {
     return (

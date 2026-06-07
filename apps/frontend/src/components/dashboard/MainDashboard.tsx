@@ -9,6 +9,8 @@ import {
   BarChart3,
   Clock3,
   DollarSign,
+  ExternalLink,
+  Globe,
   Package,
   Plus,
   RefreshCw,
@@ -34,6 +36,9 @@ import {
   useCurrentOrganizationId,
   useCurrentOrganizationName,
 } from "@/hooks/use-current-organization";
+import { useResolvedRole } from "@/hooks/use-auth";
+import { usePlanPermissions } from "@/hooks/use-plan-permissions";
+import { canAccessDashboardItem } from "@/components/dashboard/navigation-access";
 import {
   useOptimizedDashboard,
   type DashboardSummary,
@@ -75,6 +80,8 @@ interface QuickAction {
   href: string;
   icon: LucideIcon;
   accent: string;
+  roles?: string[];
+  category?: string;
 }
 
 const quickActions: QuickAction[] = [
@@ -85,6 +92,8 @@ const quickActions: QuickAction[] = [
     href: "/dashboard/pos",
     icon: ShoppingCart,
     accent: "bg-emerald-600",
+    roles: ["ADMIN", "CASHIER", "SUPER_ADMIN", "OWNER"],
+    category: "sales",
   },
   {
     id: "product",
@@ -93,6 +102,8 @@ const quickActions: QuickAction[] = [
     href: "/dashboard/products",
     icon: Plus,
     accent: "bg-blue-600",
+    roles: ["ADMIN", "CASHIER", "SUPER_ADMIN", "OWNER"],
+    category: "inventory",
   },
   {
     id: "customer",
@@ -101,6 +112,8 @@ const quickActions: QuickAction[] = [
     href: "/dashboard/customers",
     icon: Users,
     accent: "bg-violet-600",
+    roles: ["ADMIN", "CASHIER", "SUPER_ADMIN", "OWNER"],
+    category: "management",
   },
   {
     id: "orders",
@@ -109,6 +122,8 @@ const quickActions: QuickAction[] = [
     href: "/dashboard/orders",
     icon: ShoppingBag,
     accent: "bg-amber-600",
+    roles: ["ADMIN", "CASHIER", "SUPER_ADMIN", "OWNER"],
+    category: "sales",
   },
   {
     id: "reports",
@@ -117,6 +132,8 @@ const quickActions: QuickAction[] = [
     href: "/dashboard/reports",
     icon: BarChart3,
     accent: "bg-slate-700",
+    roles: ["ADMIN", "SUPER_ADMIN", "OWNER"],
+    category: "analytics",
   },
 ];
 
@@ -197,6 +214,25 @@ export default function MainDashboard({
   const formatCurrency = useCurrencyFormatter();
   const organizationId = useCurrentOrganizationId();
   const organizationName = useCurrentOrganizationName();
+  const resolvedRole = useResolvedRole();
+
+  // Slug de la org para construir la URL pública del tenant
+  const organizationSlug = useMemo(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      // Cookie seteada por el middleware
+      const cookieMatch = document.cookie.match(/(?:^|; )x-organization-slug=([^;]*)/);
+      if (cookieMatch) return decodeURIComponent(cookieMatch[1]) || null;
+      // Fallback: localStorage
+      const raw = window.localStorage.getItem('selected_organization');
+      if (raw?.startsWith('{')) {
+        const parsed = JSON.parse(raw);
+        return parsed?.slug || null;
+      }
+    } catch {}
+    return null;
+  }, [organizationId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const { permissions, isPlanResolved } = usePlanPermissions();
   const { data, isLoading, isFetching, error, refetch } = useOptimizedDashboard(
     { initialData },
   );
@@ -312,6 +348,18 @@ export default function MainDashboard({
     return items;
   }, [stats]);
 
+  const visibleQuickActions = useMemo(
+    () =>
+      quickActions.filter((action) =>
+        canAccessDashboardItem(action, {
+          userRole: resolvedRole || "CASHIER",
+          permissions,
+          isPlanResolved,
+        }),
+      ),
+    [isPlanResolved, permissions, resolvedRole],
+  );
+
   if (!organizationId) {
     return (
       <Card className="border-dashed border-slate-300 bg-white shadow-none dark:border-slate-700 dark:bg-slate-950">
@@ -366,7 +414,25 @@ export default function MainDashboard({
             </span>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {organizationSlug ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => window.open(`/${organizationSlug}/home`, '_blank')}
+            >
+              <ExternalLink className="mr-2 h-4 w-4" />
+              <span className="hidden sm:inline">Ver tienda</span>
+            </Button>
+          ) : null}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => window.open('/home/catalogo', '_blank')}
+          >
+            <Globe className="mr-2 h-4 w-4" />
+            <span className="hidden sm:inline">Marketplace</span>
+          </Button>
           <Button
             size="sm"
             variant="outline"
@@ -562,7 +628,7 @@ export default function MainDashboard({
               </CardTitle>
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-2">
-              {quickActions.map((action) => {
+              {visibleQuickActions.map((action) => {
                 const Icon = action.icon;
                 return (
                   <button

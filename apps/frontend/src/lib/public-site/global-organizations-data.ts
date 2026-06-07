@@ -18,8 +18,8 @@ const ORGANIZATION_BATCH_SIZE = 250;
 const PRODUCT_BATCH_SIZE = 500;
 const ORGANIZATION_BASE_COLUMNS = ['id', 'name', 'slug', 'created_at'];
 const ORGANIZATION_OPTIONAL_COLUMNS = ['branding'];
-const PRODUCT_BASE_COLUMNS = ['id', 'organization_id', 'category_id'];
-const PRODUCT_OPTIONAL_COLUMNS = ['is_active'];
+const PRODUCT_BASE_COLUMNS = ['id', 'organization_id', 'category_id', 'is_active'];
+const PRODUCT_OPTIONAL_COLUMNS: string[] = [];
 
 type SettingsRow = {
   organization_id: string | null;
@@ -259,10 +259,15 @@ async function fetchProductStats(organizationIds: string[]): Promise<ProductStat
     let query = client
       .from('products')
       .select(selectClause)
-      .in('organization_id', organizationIds);
+      .in('organization_id', organizationIds)
+      .eq('is_active', true);
 
-    if (!unavailableColumns.has('is_active')) {
-      query = query.eq('is_active', true);
+    if (!unavailableColumns.has('deleted_at')) {
+      query = query.is('deleted_at', null);
+    }
+
+    if (!unavailableColumns.has('is_public')) {
+      query = query.eq('is_public', true);
     }
 
     return query.range(from, to);

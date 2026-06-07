@@ -166,7 +166,8 @@ export function MarketplaceHeader({ searchQuery = '' }: MarketplaceHeaderProps) 
                 </Link>
                 <Link href="/inicio#como-funciona">
                   <Button className="h-10 rounded-full bg-slate-950 px-6 text-white transition-all hover:bg-emerald-700 hover:shadow-lg hover:shadow-emerald-500/20 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white">
-                    Crear empresa
+                    <Store className="mr-2 h-4 w-4" />
+                    ¿Tenés un negocio?
                   </Button>
                 </Link>
               </>
@@ -271,8 +272,9 @@ export function MarketplaceHeader({ searchQuery = '' }: MarketplaceHeaderProps) 
                           </Button>
                         </Link>
                         <Link href="/inicio#como-funciona" onClick={() => setIsMobileMenuOpen(false)}>
-                          <Button className="h-14 w-full rounded-2xl bg-slate-950 text-lg font-bold dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white">
-                            Crear empresa
+                          <Button className="h-14 w-full gap-2 rounded-2xl bg-slate-950 text-lg font-bold dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white">
+                            <Store className="h-5 w-5" />
+                            ¿Tenés un negocio?
                           </Button>
                         </Link>
                       </>

@@ -72,23 +72,13 @@ export function ResponsiveLayout({
     );
   };
 
-  // Background decorations component
-  const BackgroundDecorations = () => (
-    <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
-      <div className="absolute -top-40 -right-40 w-96 h-96 bg-gradient-to-br from-blue-400/10 via-violet-400/10 to-purple-400/10 dark:from-blue-500/5 dark:via-violet-500/5 dark:to-purple-500/5 rounded-full blur-3xl" />
-      <div className="absolute top-1/3 -left-40 w-80 h-80 bg-gradient-to-br from-emerald-400/10 to-teal-400/10 dark:from-emerald-500/5 dark:to-teal-500/5 rounded-full blur-3xl" />
-      <div className="absolute -bottom-40 right-1/4 w-96 h-96 bg-gradient-to-br from-indigo-400/10 to-blue-400/10 dark:from-indigo-500/5 dark:to-blue-500/5 rounded-full blur-3xl" />
-    </div>
-  );
-
   // Mobile Layout
   if (deviceType === 'mobile') {
     return (
       <div className={cn(
-        "min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-violet-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950",
+        "min-h-screen bg-slate-50 dark:bg-slate-950",
         className
       )}>
-        <BackgroundDecorations />
         <DeviceIndicator />
 
         {/* Mobile Header */}
@@ -139,7 +129,7 @@ export function ResponsiveLayout({
           </div>
         </div>
 
-        <main className="relative z-10 p-4">
+        <main id="main-content" className="relative z-10 p-4">
           <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-200">
             {children}
           </div>
@@ -152,10 +142,9 @@ export function ResponsiveLayout({
   if (deviceType === 'tablet') {
     return (
       <div className={cn(
-        "min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-violet-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950",
+        "min-h-screen bg-slate-50 dark:bg-slate-950",
         className
       )}>
-        <BackgroundDecorations />
         <DeviceIndicator />
 
         <div className="relative flex h-screen">
@@ -176,7 +165,7 @@ export function ResponsiveLayout({
             )}
 
             {/* Tablet Content */}
-            <main className="relative z-10 flex-1 overflow-y-auto p-6">
+            <main id="main-content" className="relative z-10 flex-1 overflow-y-auto p-6">
               <div className="max-w-full animate-in fade-in slide-in-from-bottom-4 duration-200">
                 {children}
               </div>
@@ -192,7 +181,7 @@ export function ResponsiveLayout({
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                       <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                     </div>
-                    <span>Sistema Operativo</span>
+                    <span>Sistema en linea</span>
                   </div>
                 </div>
               </div>
@@ -206,10 +195,9 @@ export function ResponsiveLayout({
   // Desktop Layout
   return (
     <div className={cn(
-      "min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-violet-50/30 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950",
+      "min-h-screen bg-slate-50 dark:bg-slate-950",
       className
     )}>
-      <BackgroundDecorations />
       <DeviceIndicator />
 
       <div className="relative flex h-screen">
@@ -230,7 +218,7 @@ export function ResponsiveLayout({
           )}
 
           {/* Desktop Content */}
-          <main className="relative z-10 flex-1 overflow-y-auto p-8">
+          <main id="main-content" className="relative z-10 flex-1 overflow-y-auto p-8">
             <div className="max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-200">
               {children}
             </div>
@@ -247,9 +235,9 @@ export function ResponsiveLayout({
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                       <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                     </div>
-                    <span>Sistema Operativo</span>
+                    <span>Sistema en linea</span>
                   </div>
-                  <span>v2.0.0</span>
+                  <span>MiPOS</span>
                 </div>
               </div>
             </div>

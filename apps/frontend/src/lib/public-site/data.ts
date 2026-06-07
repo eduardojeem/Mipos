@@ -11,7 +11,7 @@ const MARKETPLACE_ORGANIZATION_SELECT =
   'id,name,slug,subscription_status,created_at,marketplace_category_id';
 const MARKETPLACE_ORGANIZATION_SELECT_FALLBACK =
   'id,name,slug,subscription_status,created_at,marketplace_category_id';
-const PRODUCT_BASE_COLUMNS = ['id', 'name', 'sale_price', 'organization_id'];
+const PRODUCT_BASE_COLUMNS = ['id', 'name', 'sale_price', 'organization_id', 'is_active'];
 const PRODUCT_OPTIONAL_COLUMNS = [
   'description',
   'offer_price',
@@ -24,7 +24,6 @@ const PRODUCT_OPTIONAL_COLUMNS = [
   'updated_at',
   'created_at',
   'rating',
-  'is_active',
 ];
 const CATEGORY_BASE_COLUMNS = ['id', 'name'];
 
@@ -377,11 +376,16 @@ async function getGlobalMarketplaceHomeDataUncached(
       .from('products')
       .select(selectClause)
       .in('organization_id', organizationIds)
+      .eq('is_active', true)
       .order(orderColumn, { ascending: orderAscending })
       .limit(72);
 
-    if (!missingProductColumns.has('is_active')) {
-      productsQuery = productsQuery.eq('is_active', true);
+    if (!missingProductColumns.has('deleted_at')) {
+      productsQuery = productsQuery.is('deleted_at', null);
+    }
+
+    if (!missingProductColumns.has('is_public')) {
+      productsQuery = productsQuery.eq('is_public', true);
     }
 
     if (search) {
@@ -539,7 +543,7 @@ async function getGlobalMarketplaceHomeDataUncached(
       };
     })
     .filter(isPresent)
-    .slice(0, 12);
+    .slice(0, 48);
 
   return {
     stats: {
@@ -608,7 +612,9 @@ async function _getGlobalMarketplaceHomeDataLegacy(
       .from('products')
       .select('id', { count: 'exact', head: true })
       .in('organization_id', organizationIds)
-      .eq('is_active', true),
+      .eq('is_active', true)
+      .eq('is_public', true)
+      .is('deleted_at', null),
     adminClient
       .from('categories')
       .select('id', { count: 'exact', head: true })
@@ -625,6 +631,8 @@ async function _getGlobalMarketplaceHomeDataLegacy(
     .select('id,name,description,sale_price,offer_price,image_url,images,category_id,brand,organization_id,updated_at')
     .in('organization_id', organizationIds)
     .eq('is_active', true)
+    .eq('is_public', true)
+    .is('deleted_at', null)
     .order('updated_at', { ascending: false })
     .limit(72);
 
@@ -749,7 +757,7 @@ async function _getGlobalMarketplaceHomeDataLegacy(
       };
     })
     .filter(isPresent)
-    .slice(0, 12);
+    .slice(0, 48);
 
   return {
     stats: {

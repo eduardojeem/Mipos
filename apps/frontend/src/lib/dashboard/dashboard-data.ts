@@ -13,7 +13,7 @@ import type {
 // 6+ queries to potentially-missing tables (sales, sale_items, ...) and
 // before this we logged each one on every request.
 const loggedMissingRelations = new Set<string>();
-const OVERVIEW_CACHE_TTL_MS = 15_000;
+const OVERVIEW_CACHE_TTL_MS = process.env.NODE_ENV === 'development' ? 0 : 15_000;
 const SUMMARY_CACHE_TTL_MS = 30_000;
 
 // Hard ceiling for fallback queries that compute aggregates client-side.
@@ -43,6 +43,17 @@ function isMissingRelationError(err: { message?: string } | null | undefined): b
   return Boolean(err?.message && /relation .* does not exist/i.test(err.message));
 }
 
+function isMissingColumnError(err: { message?: string; code?: string } | null | undefined, column: string): boolean {
+  const message = String(err?.message || '').toLowerCase();
+  const normalized = column.trim().toLowerCase();
+  if (!message || !normalized) return false;
+  if (message.includes(`column "${normalized}"`) && message.includes('does not exist')) return true;
+  if (message.includes(`could not find`) && message.includes(normalized) && message.includes('schema cache')) return true;
+  if (message.includes(`could not find the '${normalized}' column`)) return true;
+  if (String(err?.code || '').toLowerCase() === 'pgrst204' && message.includes(normalized)) return true;
+  return false;
+}
+
 function warnQueryError(label: string, err: { message?: string } | null | undefined) {
   if (!err) return;
   if (isMissingRelationError(err)) {
@@ -64,6 +75,27 @@ function warnQueryError(label: string, err: { message?: string } | null | undefi
     return;
   }
   console.warn(`[dashboard] ${label}:`, err.message);
+}
+
+async function countVisibleActiveProducts(
+  supabase: Awaited<ReturnType<typeof createAdminClient>>,
+  organizationId: string
+): Promise<number> {
+  const baseQuery = () =>
+    supabase
+      .from('products')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', organizationId)
+      .eq('is_active', true);
+
+  let result = await baseQuery().is('deleted_at', null);
+
+  if (result.error && isMissingColumnError(result.error, 'deleted_at')) {
+    result = await baseQuery();
+  }
+
+  warnQueryError('active visible products count', result.error);
+  return toNumber(result.count);
 }
 
 function getCachedValue<T>(cache: Map<string, CacheEntry<T>>, key: string): T | null {
@@ -378,19 +410,21 @@ export async function fetchDashboardOverview(
   if (!overviewRpc.error) {
     const mapped = mapOverviewPayload(overviewRpc.data);
     if (mapped) {
-      // El RPC puede devolver totalProducts sin filtrar is_active.
-      // Sobreescribimos con una query directa de solo activos para
-      // mantener consistencia con la sección de productos del dashboard.
-      const { count: activeCount } = await supabase
-        .from('products')
-        .select('id', { count: 'estimated', head: true })
-        .eq('organization_id', organizationId)
-        .eq('is_active', true);
+      // NUNCA confiar en totalProducts del RPC — cuenta todos sin filtrar is_active.
+      // Dejamos totalProducts en 0 para que el fallback de abajo lo llene con la
+      // query directa que SÍ filtra is_active=true.
+      mapped.totalProducts = 0;
+    }
+  }
 
-      if (activeCount !== null && activeCount !== undefined) {
-        mapped.totalProducts = activeCount;
-      }
+  // Query directa de productos visibles activos — es la fuente de verdad para el conteo.
+  const activeProductCount = await countVisibleActiveProducts(supabase, organizationId);
 
+  // Si el RPC funcionó, usamos sus datos pero con el conteo corregido
+  if (!overviewRpc.error) {
+    const mapped = mapOverviewPayload(overviewRpc.data);
+    if (mapped) {
+      mapped.totalProducts = activeProductCount;
       return setCachedValue(overviewCache, organizationId, mapped, OVERVIEW_CACHE_TTL_MS);
     }
   }
@@ -425,11 +459,7 @@ export async function fetchDashboardOverview(
       .from('customers')
       .select('id', { count: 'estimated', head: true })
       .eq('organization_id', organizationId),
-    supabase
-      .from('products')
-      .select('id', { count: 'estimated', head: true })
-      .eq('organization_id', organizationId)
-      .eq('is_active', true),
+    countVisibleActiveProducts(supabase, organizationId).then((count) => ({ count, error: null })),
     supabase
       .from('products')
       .select('stock_quantity, min_stock')

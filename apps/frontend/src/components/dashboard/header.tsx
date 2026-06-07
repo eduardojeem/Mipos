@@ -3,9 +3,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/hooks/use-auth';
+import { useAuth, useResolvedRole } from '@/hooks/use-auth';
 import { useGlobalSearch } from '@/hooks/use-global-search';
 import { useNotifications } from '@/hooks/use-notifications';
+import { usePlanPermissions } from '@/hooks/use-plan-permissions';
 import { useDeviceType } from '@/components/ui/responsive-layout';
 import { useBusinessConfig } from '@/contexts/BusinessConfigContext';
 import { 
@@ -47,6 +48,7 @@ import { OrganizationSwitcher } from './OrganizationSwitcher';
 import { BranchSelector } from './BranchSelector';
 import { useUserOrganizations } from '@/hooks/use-user-organizations';
 import { useSystemSettings } from '@/app/dashboard/settings/hooks/useOptimizedSettings';
+import { canAccessAdminSettings } from './navigation-access';
 
 interface HeaderProps {
   compact?: boolean;
@@ -55,6 +57,8 @@ interface HeaderProps {
 export function Header({ compact = false }: HeaderProps) {
   const router = useRouter();
   const { user, signOut } = useAuth();
+  const resolvedRole = useResolvedRole();
+  const { permissions, isPlanResolved } = usePlanPermissions();
   const { config } = useBusinessConfig();
   const { selectedOrganization } = useUserOrganizations(user?.id);
   const { data: systemSettings } = useSystemSettings();
@@ -192,6 +196,7 @@ export function Header({ compact = false }: HeaderProps) {
     selectedOrganization.name.trim() !== businessName
       ? selectedOrganization.name.trim()
       : null;
+  const showAdminSettings = canAccessAdminSettings(resolvedRole || user?.role, permissions, isPlanResolved);
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -367,7 +372,7 @@ export function Header({ compact = false }: HeaderProps) {
             </Popover>
 
             {/* Settings (desktop) */}
-            {!isMobile && (
+            {!isMobile && showAdminSettings && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -452,14 +457,16 @@ export function Header({ compact = false }: HeaderProps) {
                   </Link>
                 </DropdownMenuItem>
                 
-                <DropdownMenuItem asChild className="rounded-lg gap-3 py-2.5">
-                  <Link href="/admin/settings">
-                    <Settings className="h-4 w-4 text-slate-500" />
-                    <span>Configuración</span>
-                  </Link>
-                </DropdownMenuItem>
+                {showAdminSettings && (
+                  <DropdownMenuItem asChild className="rounded-lg gap-3 py-2.5">
+                    <Link href="/admin/settings">
+                      <Settings className="h-4 w-4 text-slate-500" />
+                      <span>Configuración</span>
+                    </Link>
+                  </DropdownMenuItem>
+                )}
 
-                {(user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
+                {showAdminSettings && (
                   <>
                     <DropdownMenuSeparator className="my-2" />
                     <DropdownMenuItem asChild className="rounded-lg gap-3 py-2.5">

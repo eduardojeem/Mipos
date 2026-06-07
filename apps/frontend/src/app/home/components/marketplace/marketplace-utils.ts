@@ -15,6 +15,11 @@ export function normalizeMarketplaceHref(href: string): string {
 }
 
 export function buildProductDetailHref(product: GlobalProductCard): string {
-  const baseUrl = normalizeMarketplaceHref(String(product.organizationHref || '')).replace(/\/home\/?$/, '');
+  const raw = normalizeMarketplaceHref(String(product.organizationHref || ''));
+  const baseUrl = raw.replace(/\/home\/?$/, '');
+  // Si no hay href de organización válido, linkeamos al catálogo global
+  if (!baseUrl || baseUrl === '/') {
+    return `/home/catalogo`;
+  }
   return `${baseUrl}/catalog/${encodeURIComponent(product.id)}`;
 }

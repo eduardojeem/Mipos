@@ -337,17 +337,24 @@ async function fetchOffersDataset(
     };
   }
 
-  const runProductsQuery = async (selectClause: string) =>
-    supabase
+  const runProductsQuery = async (selectClause: string, opts?: { skipDeleted?: boolean }) => {
+    let q = supabase
       .from('products')
       .select(selectClause)
       .eq('organization_id', organizationId)
       .eq('is_active', true)
       .in('id', productIds);
 
+    if (!opts?.skipDeleted) {
+      q = q.is('deleted_at', null);
+    }
+
+    return q;
+  };
+
   let productsResult = await runProductsQuery(OFFERS_PRODUCT_SELECT);
   if (isMissingColumnError(productsResult.error)) {
-    productsResult = await runProductsQuery(OFFERS_PRODUCT_SELECT_FALLBACK);
+    productsResult = await runProductsQuery(OFFERS_PRODUCT_SELECT_FALLBACK, { skipDeleted: true });
   }
 
   const { data: products, error: productsError } = productsResult;

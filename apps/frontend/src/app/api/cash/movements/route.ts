@@ -160,14 +160,18 @@ export async function GET(request: NextRequest) {
 
         if (from) query = query.gte('created_at', from);
         if (to) query = query.lte('created_at', to);
-        if (amountMin) {
-            const v = Number(amountMin);
-            if (!Number.isNaN(v)) query = query.gte('amount', v);
+        // Rango de montos: validamos que min <= max para evitar un filtro
+        // contradictorio que devuelve 0 resultados sin avisar.
+        const minVal = amountMin != null && amountMin !== '' && !Number.isNaN(Number(amountMin)) ? Number(amountMin) : null;
+        const maxVal = amountMax != null && amountMax !== '' && !Number.isNaN(Number(amountMax)) ? Number(amountMax) : null;
+        if (minVal != null && maxVal != null && minVal > maxVal) {
+            return NextResponse.json(
+                { error: 'amountMin no puede ser mayor que amountMax' },
+                { status: 400 }
+            );
         }
-        if (amountMax) {
-            const v = Number(amountMax);
-            if (!Number.isNaN(v)) query = query.lte('amount', v);
-        }
+        if (minVal != null) query = query.gte('amount', minVal);
+        if (maxVal != null) query = query.lte('amount', maxVal);
         if (search && search.trim().length > 0) {
             query = query.ilike('reason', `%${search}%`);
         }

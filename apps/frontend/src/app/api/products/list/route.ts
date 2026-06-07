@@ -280,7 +280,7 @@ export async function GET(request: NextRequest) {
     ) => {
       let query = supabase
         .from('products')
-        .select(select, { count: 'estimated' });
+        .select(select, { count: 'exact' });
 
       query = applyProductFilters(query, searchParams, orgId, options) as typeof query;
       const orderedQuery = query.order(sortField, { ascending: sortOrder === 'asc' });
