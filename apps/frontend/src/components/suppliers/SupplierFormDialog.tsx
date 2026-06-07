@@ -4,14 +4,15 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { createSupplierFormSchema, CreateSupplierFormData } from '@/lib/validation-schemas';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { ChevronDown, Truck } from 'lucide-react';
 import { SupplierWithStats } from '@/types/suppliers';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
+import { cn } from '@/lib/utils';
 
 interface SupplierFormDialogProps {
   open: boolean;
@@ -21,6 +22,12 @@ interface SupplierFormDialogProps {
   isSubmitting?: boolean;
 }
 
+const EMPTY_VALUES: CreateSupplierFormData = {
+  name: '', phone: '', email: '', address: '', contactPerson: '',
+  website: '', taxId: '', notes: '', status: 'active', category: 'regular',
+  paymentTerms: '30', creditLimit: 0, discount: 0, categoriesInput: '',
+};
+
 export function SupplierFormDialog({
   open,
   onOpenChange,
@@ -28,24 +35,11 @@ export function SupplierFormDialog({
   initialData,
   isSubmitting = false,
 }: SupplierFormDialogProps) {
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
   const form = useForm<CreateSupplierFormData>({
     resolver: zodResolver(createSupplierFormSchema),
-    defaultValues: {
-      name: '',
-      phone: '',
-      email: '',
-      address: '',
-      contactPerson: '',
-      website: '',
-      taxId: '',
-      notes: '',
-      status: 'active',
-      category: 'regular',
-      paymentTerms: '30',
-      creditLimit: 0,
-      discount: 0,
-      categoriesInput: ''
-    }
+    defaultValues: EMPTY_VALUES,
   });
 
   useEffect(() => {
@@ -66,35 +60,20 @@ export function SupplierFormDialog({
         discount: initialData.commercialConditions?.discount || 0,
         categoriesInput: Array.isArray((initialData.contactInfo as Record<string, unknown>)?.categories)
           ? ((initialData.contactInfo as Record<string, unknown>).categories as string[]).join(', ')
-          : ''
+          : '',
       });
+      setShowAdvanced(true); // al editar, mostramos todo
     } else {
-      form.reset({
-        name: '',
-        phone: '',
-        email: '',
-        address: '',
-        contactPerson: '',
-        website: '',
-        taxId: '',
-        notes: '',
-        status: 'active',
-        category: 'regular',
-        paymentTerms: '30',
-        creditLimit: 0,
-        discount: 0,
-        categoriesInput: ''
-      });
+      form.reset(EMPTY_VALUES);
+      setShowAdvanced(false);
     }
   }, [initialData, open, form]);
 
   const handleSubmit = (data: CreateSupplierFormData) => {
     const categories = (data.categoriesInput || '')
-      .split(',')
-      .map(c => c.trim())
-      .filter(Boolean);
+      .split(',').map((c) => c.trim()).filter(Boolean);
 
-    const supplierData = {
+    onSubmit({
       name: data.name,
       contactInfo: {
         phone: data.phone,
@@ -102,296 +81,275 @@ export function SupplierFormDialog({
         address: data.address,
         contactPerson: data.contactPerson,
         website: data.website,
-        ...(categories.length ? { categories } : {})
+        ...(categories.length ? { categories } : {}),
       },
       taxId: data.taxId,
       notes: data.notes,
       status: data.status,
       category: data.category,
       commercialConditions: {
-        paymentTerms: parseInt(data.paymentTerms),
+        paymentTerms: parseInt(data.paymentTerms) || 0,
         creditLimit: data.creditLimit,
         discount: data.discount,
       },
-    };
-
-    onSubmit(supplierData);
+    });
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
-        <div className="h-2 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 w-full" />
-        <DialogHeader className="p-6 pb-2">
-          <DialogTitle className="text-xl">{initialData ? 'Editar Proveedor' : 'Nuevo Proveedor'}</DialogTitle>
-          <DialogDescription>
-            {initialData 
-              ? 'Modifica la información del proveedor existente.' 
-              : 'Completa los datos para registrar un nuevo proveedor en el sistema.'}
-          </DialogDescription>
+      <DialogContent className="flex max-h-[90vh] max-w-lg flex-col gap-0 overflow-hidden p-0">
+        {/* Header */}
+        <DialogHeader className="flex-shrink-0 border-b border-border/50 px-6 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/10 ring-1 ring-amber-500/20">
+              <Truck className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div>
+              <DialogTitle className="text-base font-semibold">
+                {initialData ? 'Editar Proveedor' : 'Nuevo Proveedor'}
+              </DialogTitle>
+              <DialogDescription className="text-xs">
+                {initialData ? 'Modifica los datos del proveedor.' : 'Solo el nombre es obligatorio.'}
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
-        
-        <Separator />
-        
+
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-1 overflow-hidden">
-            <ScrollArea className="flex-1 p-6 pt-2">
-              <Tabs defaultValue="general" className="w-full">
-                <TabsList className="grid w-full grid-cols-4 mb-6">
-                  <TabsTrigger value="general">General</TabsTrigger>
-                  <TabsTrigger value="contact">Contacto</TabsTrigger>
-                  <TabsTrigger value="commercial">Comercial</TabsTrigger>
-                  <TabsTrigger value="notes">Notas</TabsTrigger>
-                </TabsList>
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-1 flex-col overflow-hidden">
+            <ScrollArea className="flex-1">
+              <div className="space-y-4 p-6">
+                {/* ── Esenciales ── */}
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nombre <span className="text-destructive">*</span></FormLabel>
+                      <FormControl>
+                        <Input placeholder="Ej: Distribuidora Central S.A." {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-                {/* Tab: General Info */}
-                <TabsContent value="general" className="space-y-4 mt-0">
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="name"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Nombre Comercial *</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Ej: Distribuidora Central S.A." {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="taxId"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>RUC / NIT</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Ej: 80012345-6" {...field} value={field.value || ''} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <FormField
+                    control={form.control}
+                    name="phone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Teléfono</FormLabel>
+                        <FormControl>
+                          <Input placeholder="+595 21 123456" {...field} value={field.value || ''} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input type="email" placeholder="contacto@empresa.com" {...field} value={field.value || ''} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="category"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Categoría Principal</FormLabel>
+                <div className="grid grid-cols-2 gap-3">
+                  <FormField
+                    control={form.control}
+                    name="category"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Categoría</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Ej: Tecnología" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="status"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Estado</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
                           <FormControl>
-                            <Input placeholder="Ej: Tecnología" {...field} />
+                            <SelectTrigger><SelectValue /></SelectTrigger>
                           </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="status"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Estado</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <SelectContent>
+                            <SelectItem value="active">Activo</SelectItem>
+                            <SelectItem value="inactive">Inactivo</SelectItem>
+                            <SelectItem value="pending">Pendiente</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {/* ── Avanzado (colapsable) ── */}
+                <Collapsible open={showAdvanced} onOpenChange={setShowAdvanced}>
+                  <CollapsibleTrigger className="flex w-full items-center justify-between rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5 text-sm font-medium transition-colors hover:bg-muted/40">
+                    <span>Más detalles (opcional)</span>
+                    <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', showAdvanced && 'rotate-180')} />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="space-y-4 pt-4">
+                    {/* Identificación */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <FormField
+                        control={form.control}
+                        name="taxId"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>RUC / NIT</FormLabel>
                             <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Seleccionar estado" />
-                              </SelectTrigger>
+                              <Input placeholder="80012345-6" {...field} value={field.value || ''} />
                             </FormControl>
-                            <SelectContent>
-                              <SelectItem value="active">Activo</SelectItem>
-                              <SelectItem value="inactive">Inactivo</SelectItem>
-                              <SelectItem value="pending">Pendiente</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  
-                  <FormField
-                    control={form.control}
-                    name="categoriesInput"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Otras Categorías (opcional)</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Separadas por comas (Ej: Hardware, Software, Servicios)" {...field} value={field.value || ''} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </TabsContent>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="website"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Sitio Web</FormLabel>
+                            <FormControl>
+                              <Input placeholder="https://empresa.com" {...field} value={field.value || ''} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
 
-                {/* Tab: Contact Info */}
-                <TabsContent value="contact" className="space-y-4 mt-0">
-                  <div className="grid grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
-                      name="email"
+                      name="address"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Email</FormLabel>
+                          <FormLabel>Dirección</FormLabel>
                           <FormControl>
-                            <Input type="email" placeholder="contacto@empresa.com" {...field} value={field.value || ''} />
+                            <Input placeholder="Av. Principal 123, Asunción" {...field} value={field.value || ''} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
-                    <FormField
-                      control={form.control}
-                      name="phone"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Teléfono</FormLabel>
-                          <FormControl>
-                            <Input placeholder="+595 21 123456" {...field} value={field.value || ''} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
 
-                  <FormField
-                    control={form.control}
-                    name="address"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Dirección Física</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Av. Principal 123, Asunción" {...field} value={field.value || ''} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
+                    <div className="grid grid-cols-2 gap-3">
+                      <FormField
+                        control={form.control}
+                        name="contactPerson"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Persona de Contacto</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Juan Pérez" {...field} value={field.value || ''} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="categoriesInput"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Otras Categorías</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Hardware, Software" {...field} value={field.value || ''} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="contactPerson"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Persona de Contacto</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Juan Pérez" {...field} value={field.value || ''} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="website"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Sitio Web</FormLabel>
-                          <FormControl>
-                            <Input placeholder="https://www.empresa.com" {...field} value={field.value || ''} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                </TabsContent>
+                    {/* Condiciones comerciales */}
+                    <div className="grid grid-cols-3 gap-3">
+                      <FormField
+                        control={form.control}
+                        name="paymentTerms"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Pago (días)</FormLabel>
+                            <FormControl>
+                              <Input type="number" placeholder="30" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="creditLimit"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Crédito</FormLabel>
+                            <FormControl>
+                              <Input type="number" placeholder="0" {...field}
+                                onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="discount"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Desc. (%)</FormLabel>
+                            <FormControl>
+                              <Input type="number" placeholder="0" {...field}
+                                onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
 
-                {/* Tab: Commercial Info */}
-                <TabsContent value="commercial" className="space-y-4 mt-0">
-                  <div className="grid grid-cols-3 gap-4">
+                    {/* Notas */}
                     <FormField
                       control={form.control}
-                      name="paymentTerms"
+                      name="notes"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Términos (Días)</FormLabel>
+                          <FormLabel>Notas internas</FormLabel>
                           <FormControl>
-                            <Input type="number" placeholder="30" {...field} />
+                            <Textarea placeholder="Observaciones, historial..." rows={3}
+                              className="resize-none" {...field} value={field.value || ''} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
-                    <FormField
-                      control={form.control}
-                      name="creditLimit"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Límite de Crédito</FormLabel>
-                          <FormControl>
-                            <Input 
-                              type="number" 
-                              placeholder="0" 
-                              {...field} 
-                              onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="discount"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Descuento (%)</FormLabel>
-                          <FormControl>
-                            <Input 
-                              type="number" 
-                              placeholder="0" 
-                              {...field} 
-                              onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  <div className="p-4 bg-muted/50 rounded-lg text-sm text-muted-foreground">
-                    <p>Configura las condiciones comerciales predeterminadas para este proveedor. Estos valores se utilizarán al crear nuevas órdenes de compra.</p>
-                  </div>
-                </TabsContent>
-
-                {/* Tab: Notes */}
-                <TabsContent value="notes" className="space-y-4 mt-0">
-                  <FormField
-                    control={form.control}
-                    name="notes"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Notas Internas</FormLabel>
-                        <FormControl>
-                          <Textarea 
-                            placeholder="Información adicional relevante, historial, observaciones..." 
-                            className="min-h-[150px]"
-                            {...field} 
-                            value={field.value || ''}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </TabsContent>
-              </Tabs>
+                  </CollapsibleContent>
+                </Collapsible>
+              </div>
             </ScrollArea>
-            
-            <Separator />
-            
-            <DialogFooter className="p-6 pt-4">
+
+            {/* Footer */}
+            <DialogFooter className="flex-shrink-0 border-t border-border/50 px-6 py-4">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isSubmitting}>
+              <Button type="submit" disabled={isSubmitting} className="min-w-[130px]">
                 {isSubmitting ? 'Guardando...' : (initialData ? 'Guardar Cambios' : 'Crear Proveedor')}
               </Button>
             </DialogFooter>
