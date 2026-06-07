@@ -656,9 +656,26 @@ export async function getUsageSnapshot(organizationId: string) {
     }
   }
 
+  // Los productos en la papelera (deleted_at != null) NO cuentan contra el
+  // límite del plan: eliminar debe liberar cupo. Si la columna deleted_at aún
+  // no existe, hacemos fallback al conteo sin ese filtro.
+  const countLiveProducts = async () => {
+    try {
+      const { count, error } = await adminClient
+        .from('products')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', organizationId)
+        .is('deleted_at', null)
+      if (error) throw error
+      return count || 0
+    } catch {
+      return safeCount('products', (query) => query.eq('organization_id', organizationId))
+    }
+  }
+
   const [users, products, locations, transactions] = await Promise.all([
     safeCount('organization_members', (query) => query.eq('organization_id', organizationId)),
-    safeCount('products', (query) => query.eq('organization_id', organizationId)),
+    countLiveProducts(),
     safeCount('branches', (query) => query.eq('organization_id', organizationId)),
     safeCount('sales', (query) => query.eq('organization_id', organizationId).gte('created_at', startOfMonth.toISOString())),
   ])
