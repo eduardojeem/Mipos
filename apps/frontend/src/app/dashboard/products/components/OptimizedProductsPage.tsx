@@ -742,6 +742,7 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
         onOpenChange={(open) => setEditModal({ open, product: open ? editModal.product : null })}
         onSave={handleSave}
         categories={categories}
+        onTaxonomyChange={() => { void refetchCategories(); }}
       />
       <LoginModal open={loginModal} onOpenChange={setLoginModal} />
 

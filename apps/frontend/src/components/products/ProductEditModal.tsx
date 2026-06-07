@@ -61,6 +61,9 @@ interface ProductEditModalProps {
   onSave: (productData: Partial<Product>) => Promise<void>;
   categories?: Array<{ id: string; name: string }>;
   suppliers?: Array<{ id: string; name: string }>;
+  /** Se llama cuando se crea una categoría o proveedor nuevo desde el modal,
+   *  para que el componente padre sincronice sus listas. */
+  onTaxonomyChange?: () => void;
 }
 
 interface ProductFormData {
@@ -193,7 +196,6 @@ function SectionHeader({
 
 // ── Inline create form ────────────────────────────────────────────────────────
 function InlineCreate({
-  label,
   placeholder,
   value,
   onChange,
@@ -201,7 +203,6 @@ function InlineCreate({
   onCancel,
   loading,
 }: {
-  label: string;
   placeholder: string;
   value: string;
   onChange: (v: string) => void;
@@ -209,27 +210,40 @@ function InlineCreate({
   onCancel: () => void;
   loading: boolean;
 }) {
+  // Fila compacta: input + guardar + cancelar. Misma altura (h-10) que el Select
+  // hermano para mantener las columnas alineadas.
   return (
-    <div className="space-y-2 rounded-xl border border-dashed border-border bg-muted/30 p-3">
-      <Label className="text-xs font-medium">{label}</Label>
+    <div className="flex items-center gap-1.5">
       <Input
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={loading}
-        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onSave(); } }}
-        className="h-8 text-sm"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') { e.preventDefault(); onSave(); }
+          if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+        }}
+        className="h-10 flex-1 text-sm"
         autoFocus
       />
-      <div className="flex gap-2">
-        <Button type="button" size="sm" onClick={onSave} disabled={loading || !value.trim()} className="h-7 gap-1 text-xs">
-          {loading ? <div className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <CheckCircle2 className="h-3 w-3" />}
-          Guardar
-        </Button>
-        <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={loading} className="h-7 text-xs">
-          Cancelar
-        </Button>
-      </div>
+      <Button
+        type="button" size="icon" onClick={onSave}
+        disabled={loading || !value.trim()}
+        className="h-10 w-10 shrink-0"
+        title="Guardar"
+      >
+        {loading
+          ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          : <CheckCircle2 className="h-4 w-4" />}
+      </Button>
+      <Button
+        type="button" variant="ghost" size="icon" onClick={onCancel}
+        disabled={loading}
+        className="h-10 w-10 shrink-0 text-muted-foreground"
+        title="Cancelar"
+      >
+        <X className="h-4 w-4" />
+      </Button>
     </div>
   );
 }
@@ -357,6 +371,7 @@ export const ProductEditModal = memo(function ProductEditModal({
   onSave,
   categories: propCategories = [],
   suppliers: propSuppliers = [],
+  onTaxonomyChange,
 }: ProductEditModalProps) {
   const supabaseRef = useRef(createClient());
   const supabase = supabaseRef.current;
@@ -681,14 +696,16 @@ export const ProductEditModal = memo(function ProductEditModal({
       }
       const newCat = data as { id: string; name: string };
       setCategories((prev) => [...prev, newCat].sort((a, b) => a.name.localeCompare(b.name)));
-      setValue('category_id', newCat.id);
+      setValue('category_id', newCat.id, { shouldValidate: true });
+      clearErrors('category_id');
       setNewCategoryName('');
       setShowCreateCategory(false);
       toast.success('Categoría creada');
+      onTaxonomyChange?.(); // sincronizar con el componente padre (filtros, etc.)
     } finally {
       setCreatingCategory(false);
     }
-  }, [newCategoryName, supabase, setValue]);
+  }, [newCategoryName, supabase, setValue, clearErrors, onTaxonomyChange]);
 
   const handleCreateSupplier = useCallback(async () => {
     if (!newSupplierName.trim()) return;
@@ -714,10 +731,11 @@ export const ProductEditModal = memo(function ProductEditModal({
       setNewSupplierName('');
       setShowCreateSupplier(false);
       toast.success('Proveedor creado');
+      onTaxonomyChange?.(); // sincronizar con el componente padre
     } finally {
       setCreatingSupplier(false);
     }
-  }, [newSupplierName, supabase, setValue]);
+  }, [newSupplierName, supabase, setValue, onTaxonomyChange]);
 
   // ── Submit ───────────────────────────────────────────────────────────────
   const onSubmit = async (data: ProductFormData) => {
@@ -983,8 +1001,7 @@ export const ProductEditModal = memo(function ProductEditModal({
                     </div>
                     {showCreateCategory ? (
                       <InlineCreate
-                        label="Nueva categoría"
-                        placeholder="Nombre categoría"
+                        placeholder="Nombre de la categoría"
                         value={newCategoryName}
                         onChange={setNewCategoryName}
                         onSave={handleCreateCategory}
@@ -1030,8 +1047,7 @@ export const ProductEditModal = memo(function ProductEditModal({
                     </div>
                     {showCreateSupplier ? (
                       <InlineCreate
-                        label="Nuevo proveedor"
-                        placeholder="Nombre proveedor"
+                        placeholder="Nombre del proveedor"
                         value={newSupplierName}
                         onChange={setNewSupplierName}
                         onSave={handleCreateSupplier}
