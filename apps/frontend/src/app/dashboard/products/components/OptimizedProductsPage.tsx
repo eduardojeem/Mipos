@@ -297,7 +297,7 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
 
   const handleRestore = useCallback(async (productId: string) => {
     try {
-      await api.patch(`/products/${productId}`, { action: 'restore' });
+      await api.post(`/products/${productId}/restore`);
       toast.success('Producto restaurado correctamente.');
       await refreshProducts();
     } catch (err) {

@@ -390,6 +390,9 @@ export async function DELETE(
     const orgId = await requireOrganization(request);
     const supabase = await createAdminClient();
 
+    // ?hard=true → borrado físico definitivo (solo desde la papelera)
+    const hardDelete = new URL(request.url).searchParams.get('hard') === 'true';
+
     const { data: existingProduct, error: existingProductError } = await supabase
       .from('products')
       .select('id, name, organization_id')
@@ -405,6 +408,49 @@ export async function DELETE(
       return NextResponse.json({ error: 'Product not found' }, { status: 404 });
     }
 
+    // ── SOFT-DELETE (papelera) — comportamiento por defecto ─────────────────────
+    // Eliminar = mover a la papelera (deleted_at = now, is_active = false).
+    // Reversible vía POST /products/:id/restore. No se pierde historial.
+    if (!hardDelete) {
+      const { data: updated, error: softError } = await supabase
+        .from('products')
+        .update({
+          deleted_at: new Date().toISOString(),
+          is_active: false,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .eq('organization_id', orgId)
+        .select('id')
+        .maybeSingle();
+
+      // Fallback: si la columna deleted_at no existe todavía, desactivar.
+      if (softError && isSchemaMismatchError(softError)) {
+        const { error: deactErr } = await supabase
+          .from('products')
+          .update({ is_active: false, updated_at: new Date().toISOString() })
+          .eq('id', id)
+          .eq('organization_id', orgId);
+        if (deactErr) throw deactErr;
+        return NextResponse.json({
+          success: true,
+          action: 'deactivated',
+          message: 'Producto desactivado (falta migrar deleted_at para papelera).',
+        });
+      }
+      if (softError) throw softError;
+      if (!updated) {
+        return NextResponse.json({ error: 'Product not found' }, { status: 404 });
+      }
+
+      return NextResponse.json({
+        success: true,
+        action: 'trashed',
+        message: 'Producto movido a la papelera. Puedes restaurarlo cuando quieras.',
+      });
+    }
+
+    // ── HARD-DELETE definitivo (solo con ?hard=true) ────────────────────────────
     const { data: salesItems, error: salesItemsError } = await supabase
       .from('sale_items')
       .select('id')
