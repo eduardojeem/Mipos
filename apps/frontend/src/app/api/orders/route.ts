@@ -11,7 +11,8 @@ import {
 } from "@/lib/public-site/order-products";
 import { enrichPublicCatalogProductsWithOffers } from "@/lib/public-site/catalog-data";
 import { getConfiguredShippingCost } from "@/lib/pos/calculations";
-import { defaultBusinessConfig, type BusinessConfig } from "@/types/business-config";
+import { notifyOrderConfirmation } from "@/lib/email/order-notifications";
+import { getOrderBusinessConfig } from "@/lib/orders/order-business-config";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const MAX_NOTES_LENGTH = 500;
@@ -233,33 +234,6 @@ async function resolveSellerUserId(
     userError,
   });
   return null;
-}
-
-async function getOrderBusinessConfig(
-  supabase: Awaited<ReturnType<typeof createAdminClient>>,
-  organizationId: string,
-): Promise<BusinessConfig> {
-  const { data, error } = await (supabase as any)
-    .from("settings")
-    .select("value")
-    .eq("key", "business_config")
-    .eq("organization_id", organizationId)
-    .maybeSingle();
-
-  if (error) {
-    console.warn("[orders] failed to load business config for shipping; using defaults", error);
-    return defaultBusinessConfig;
-  }
-
-  const value = (data as { value?: Partial<BusinessConfig> } | null)?.value || {};
-  return {
-    ...defaultBusinessConfig,
-    ...value,
-    storeSettings: {
-      ...defaultBusinessConfig.storeSettings,
-      ...(value.storeSettings || {}),
-    },
-  };
 }
 
 function getOrderStartDate(dateRange: string | null): string | null {
@@ -1080,8 +1054,33 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    console.log("Order created successfully:", order.id);
+
     try {
-      console.log("Order created successfully:", order.id);
+      await notifyOrderConfirmation(
+        {
+          id: String(order.id),
+          order_number: String(order.order_number || orderNumber),
+          customer_name: customerInfo.name,
+          customer_email: customerInfo.email,
+          customer_phone: customerInfo.phone,
+          customer_address: customerInfo.address?.trim() || undefined,
+          subtotal,
+          shipping_cost: serverShippingCost,
+          total,
+          payment_method: paymentMethod,
+          status: "PENDING",
+          notes: safeNotes || undefined,
+          created_at: order.created_at,
+          order_items: validatedItems.map((item) => ({
+            product_name: item.productName,
+            quantity: item.quantity,
+            unit_price: item.unitPrice,
+            subtotal: item.unitPrice * item.quantity,
+          })),
+        },
+        businessConfig,
+      );
     } catch (emailError) {
       console.warn("Email notification failed:", emailError);
     }

@@ -4,6 +4,8 @@ import { assertAdmin } from "@/app/api/_utils/auth";
 import { logAudit } from "@/lib/audit-log";
 import { getValidatedOrganizationId } from "@/lib/organization";
 import { canTransitionOrderStatus } from "@/lib/orders/status-transitions";
+import { notifyOrderStatusUpdate } from "@/lib/email/order-notifications";
+import { getOrderBusinessConfig } from "@/lib/orders/order-business-config";
 
 interface UpdateOrderRequest {
   status?: string;
@@ -277,6 +279,38 @@ export async function PATCH(
         changed_by: user.id,
         organization_id: organizationId,
       });
+
+      const customerEmail = String(updatedOrder.customer_email || "").trim();
+      if (status && customerEmail) {
+        try {
+          const businessConfig = await getOrderBusinessConfig(
+            supabase,
+            organizationId,
+          );
+          await notifyOrderStatusUpdate(
+            {
+              id: String(updatedOrder.id),
+              order_number: String(updatedOrder.order_number || ""),
+              customer_name: String(updatedOrder.customer_name || ""),
+              customer_email: customerEmail,
+              customer_phone: String(updatedOrder.customer_phone || ""),
+              customer_address: updatedOrder.customer_address || undefined,
+              subtotal: Number(updatedOrder.subtotal || 0),
+              shipping_cost: Number(updatedOrder.shipping_cost || 0),
+              total: Number(updatedOrder.total || 0),
+              payment_method: String(updatedOrder.payment_method || ""),
+              status,
+              notes: updatedOrder.notes || undefined,
+              created_at: String(updatedOrder.created_at || ""),
+              order_items: [],
+            },
+            status,
+            businessConfig,
+          );
+        } catch (emailError) {
+          console.warn("Order status email failed:", emailError);
+        }
+      }
     }
 
     if (

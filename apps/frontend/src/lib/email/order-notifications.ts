@@ -1,4 +1,5 @@
 import { BusinessConfig } from '@/types/business-config';
+import { sendEmail } from './resend';
 
 interface OrderItem {
   product_name: string;
@@ -7,7 +8,7 @@ interface OrderItem {
   subtotal: number;
 }
 
-interface Order {
+export interface OrderEmailData {
   id: string;
   order_number: string;
   customer_name: string;
@@ -34,7 +35,7 @@ interface EmailTemplate {
  * Genera el template de email para confirmación de pedido
  */
 export function generateOrderConfirmationEmail(
-  order: Order,
+  order: OrderEmailData,
   config: BusinessConfig
 ): EmailTemplate {
   const businessName = config.businessName || 'Mi Negocio';
@@ -211,7 +212,7 @@ ${config.tagline || 'Gracias por confiar en nosotros'}
  * Genera el template de email para actualización de estado
  */
 export function generateOrderStatusUpdateEmail(
-  order: Order,
+  order: OrderEmailData,
   newStatus: string,
   config: BusinessConfig
 ): EmailTemplate {
@@ -322,47 +323,54 @@ ${config.tagline || 'Gracias por confiar en nosotros'}
 }
 
 /**
- * Envía email usando el servicio configurado
- * Nota: Necesitas configurar un servicio de email como Resend, SendGrid, etc.
+ * Envía email transaccional vía Resend. El `from` siempre es EMAIL_FROM
+ * (dominio verificado en Resend); el email del negocio va como reply-to.
  */
 export async function sendOrderEmail(
   to: string,
   template: EmailTemplate,
   config: BusinessConfig
 ): Promise<boolean> {
+  return sendEmail({
+    to,
+    subject: template.subject,
+    html: template.html,
+    text: template.text,
+    replyTo: config.contact?.email || undefined,
+  });
+}
+
+/**
+ * Genera y envía el email de confirmación de pedido.
+ * Nunca lanza: el envío de email no debe bloquear la creación del pedido.
+ */
+export async function notifyOrderConfirmation(
+  order: OrderEmailData,
+  config: BusinessConfig
+): Promise<boolean> {
   try {
-    // Aquí integrarías con tu servicio de email preferido
-    // Ejemplo con fetch a un endpoint de email:
-    
-    const emailData = {
-      to,
-      from: config.contact?.email || 'noreply@example.com',
-      subject: template.subject,
-      html: template.html,
-      text: template.text,
-    };
-
-    // Ejemplo de integración (descomenta y configura según tu servicio):
-    /*
-    const response = await fetch('/api/email/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(emailData),
-    });
-
-    return response.ok;
-    */
-
-    // Por ahora, solo logueamos el email
-    console.log('📧 Email que se enviaría:', {
-      to,
-      subject: template.subject,
-      preview: template.text.substring(0, 100) + '...'
-    });
-
-    return true;
+    const template = generateOrderConfirmationEmail(order, config);
+    return await sendOrderEmail(order.customer_email, template, config);
   } catch (error) {
-    console.error('Error sending email:', error);
+    console.error('[email] error en confirmación de pedido:', error);
+    return false;
+  }
+}
+
+/**
+ * Genera y envía el email de cambio de estado de pedido.
+ * Nunca lanza: el envío de email no debe bloquear la actualización.
+ */
+export async function notifyOrderStatusUpdate(
+  order: OrderEmailData,
+  newStatus: string,
+  config: BusinessConfig
+): Promise<boolean> {
+  try {
+    const template = generateOrderStatusUpdateEmail(order, newStatus, config);
+    return await sendOrderEmail(order.customer_email, template, config);
+  } catch (error) {
+    console.error('[email] error en actualización de estado:', error);
     return false;
   }
 }
