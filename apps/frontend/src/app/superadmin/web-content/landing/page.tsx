@@ -15,6 +15,17 @@ function deepClone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
 }
 
+// Normaliza el contenido cargado: si viene de una versión anterior sin
+// `tracks` (modos tienda/servicios), los completa desde los defaults.
+function normalizeContent(fetched: LandingContent | null | undefined): LandingContent {
+  const base = deepClone(LANDING_CONTENT_DEFAULTS);
+  if (!fetched) return base;
+  const merged = { ...base, ...fetched } as LandingContent;
+  merged.howItWorks = { ...base.howItWorks, ...fetched.howItWorks };
+  if (!merged.howItWorks.tracks?.length) merged.howItWorks.tracks = base.howItWorks.tracks;
+  return merged;
+}
+
 type Status = 'idle' | 'loading' | 'saving' | 'saved' | 'error';
 
 export default function LandingContentPage() {
@@ -28,7 +39,7 @@ export default function LandingContentPage() {
       const res = await fetch('/api/superadmin/web-content?key=landing_content');
       if (!res.ok) throw new Error(await res.text());
       const { content: fetched } = await res.json();
-      setContent(fetched ?? deepClone(LANDING_CONTENT_DEFAULTS));
+      setContent(normalizeContent(fetched));
       setStatus('idle');
     } catch (err) {
       console.error(err);
@@ -91,59 +102,38 @@ export default function LandingContentPage() {
   const setHowField = (field: string, value: string) =>
     setContent((prev) => ({ ...prev, howItWorks: { ...prev.howItWorks, [field]: value } }));
 
-  const setStep = (index: number, field: 'title' | 'description', value: string) =>
+  // ── Tracks (modos tienda / servicios) ──
+  const setTrackField = (ti: number, field: 'title' | 'tagline' | 'badge', value: string) =>
     setContent((prev) => {
-      const steps = [...prev.howItWorks.steps];
-      steps[index] = { ...steps[index], [field]: value };
-      return { ...prev, howItWorks: { ...prev.howItWorks, steps } };
+      const tracks = prev.howItWorks.tracks.map((t, i) => (i === ti ? { ...t, [field]: value } : t));
+      return { ...prev, howItWorks: { ...prev.howItWorks, tracks } };
     });
 
-  const setCapability = (index: number, field: 'title' | 'description', value: string) =>
+  const setTrackStep = (ti: number, si: number, field: 'title' | 'description', value: string) =>
     setContent((prev) => {
-      const capabilities = [...prev.howItWorks.capabilities];
-      capabilities[index] = { ...capabilities[index], [field]: value };
-      return { ...prev, howItWorks: { ...prev.howItWorks, capabilities } };
+      const tracks = prev.howItWorks.tracks.map((t, i) => {
+        if (i !== ti) return t;
+        const steps = t.steps.map((s, j) => (j === si ? { ...s, [field]: value } : s));
+        return { ...t, steps };
+      });
+      return { ...prev, howItWorks: { ...prev.howItWorks, tracks } };
     });
 
-  const addCapability = () =>
-    setContent((prev) => ({
-      ...prev,
-      howItWorks: {
-        ...prev.howItWorks,
-        capabilities: [...prev.howItWorks.capabilities, { title: '', description: '' }],
-      },
-    }));
-
-  const removeCapability = (index: number) =>
-    setContent((prev) => ({
-      ...prev,
-      howItWorks: {
-        ...prev.howItWorks,
-        capabilities: prev.howItWorks.capabilities.filter((_, i) => i !== index),
-      },
-    }));
-
-  const setFit = (index: number, value: string) =>
+  const addTrackStep = (ti: number) =>
     setContent((prev) => {
-      const fits = [...prev.howItWorks.fits];
-      fits[index] = { label: value };
-      return { ...prev, howItWorks: { ...prev.howItWorks, fits } };
+      const tracks = prev.howItWorks.tracks.map((t, i) =>
+        i === ti ? { ...t, steps: [...t.steps, { title: '', description: '' }] } : t,
+      );
+      return { ...prev, howItWorks: { ...prev.howItWorks, tracks } };
     });
 
-  const addFit = () =>
-    setContent((prev) => ({
-      ...prev,
-      howItWorks: { ...prev.howItWorks, fits: [...prev.howItWorks.fits, { label: '' }] },
-    }));
-
-  const removeFit = (index: number) =>
-    setContent((prev) => ({
-      ...prev,
-      howItWorks: {
-        ...prev.howItWorks,
-        fits: prev.howItWorks.fits.filter((_, i) => i !== index),
-      },
-    }));
+  const removeTrackStep = (ti: number, si: number) =>
+    setContent((prev) => {
+      const tracks = prev.howItWorks.tracks.map((t, i) =>
+        i === ti ? { ...t, steps: t.steps.filter((_, j) => j !== si) } : t,
+      );
+      return { ...prev, howItWorks: { ...prev.howItWorks, tracks } };
+    });
 
   const setBenefitsField = (field: string, value: string) =>
     setContent((prev) => ({ ...prev, benefits: { ...prev.benefits, [field]: value } }));
@@ -362,130 +352,50 @@ export default function LandingContentPage() {
             </CardContent>
           </Card>
 
-          <Card className="border-slate-200 dark:border-slate-800">
-            <CardHeader>
-              <CardTitle className="text-base">Pasos de activacion</CardTitle>
-              <CardDescription>Los 3 pasos para activar MiPOS en un negocio.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {content.howItWorks.steps.map((step, i) => (
-                <div key={i} className="space-y-3 rounded-lg border border-slate-100 p-4 dark:border-slate-800">
-                  <span className="text-xs font-medium uppercase tracking-widest text-slate-400">
-                    Paso {step.number}
-                  </span>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Titulo</Label>
-                      <Input
-                        value={step.title}
-                        onChange={(e) => setStep(i, 'title', e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Descripcion</Label>
-                      <Input
-                        value={step.description}
-                        onChange={(e) => setStep(i, 'description', e.target.value)}
-                      />
-                    </div>
+          {content.howItWorks.tracks.map((track, ti) => (
+            <Card key={ti} className="border-slate-200 dark:border-slate-800">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-base">Modo {ti + 1}: {track.title || (ti === 0 ? 'Tienda' : 'Servicios')}</CardTitle>
+                  <CardDescription>Pasos que se muestran en la columna de este modo.</CardDescription>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => addTrackStep(ti)} className="h-7 gap-1.5">
+                  <Plus className="h-3.5 w-3.5" /> Paso
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Etiqueta del modo</Label>
+                    <Input value={track.badge} onChange={(e) => setTrackField(ti, 'badge', e.target.value)} placeholder="Modo tienda" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Titulo</Label>
+                    <Input value={track.title} onChange={(e) => setTrackField(ti, 'title', e.target.value)} placeholder="Retail y punto de venta" />
                   </div>
                 </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          <Card className="border-slate-200 dark:border-slate-800">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-base">Capacidades clave</CardTitle>
-                <CardDescription>Funcionalidades listadas en la grilla de capacidades.</CardDescription>
-              </div>
-              <Button size="sm" variant="outline" onClick={addCapability} className="gap-2">
-                <Plus className="h-3.5 w-3.5" />
-                Agregar
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="space-y-2">
-                <Label>Titulo de la seccion</Label>
-                <Input
-                  value={content.howItWorks.capabilitiesHeadline}
-                  onChange={(e) => setHowField('capabilitiesHeadline', e.target.value)}
-                />
-              </div>
-              <Separator />
-              {content.howItWorks.capabilities.map((cap, i) => (
-                <div key={i} className="flex items-start gap-3 rounded-lg border border-slate-100 p-3 dark:border-slate-800">
-                  <div className="flex-1 space-y-2">
-                    <Input
-                      value={cap.title}
-                      onChange={(e) => setCapability(i, 'title', e.target.value)}
-                      placeholder="Nombre de la capacidad"
-                    />
-                    <Input
-                      value={cap.description}
-                      onChange={(e) => setCapability(i, 'description', e.target.value)}
-                      placeholder="Descripcion breve"
-                    />
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Bajada</Label>
+                  <Textarea value={track.tagline} onChange={(e) => setTrackField(ti, 'tagline', e.target.value)} rows={2} />
+                </div>
+                <Separator />
+                {track.steps.map((step, si) => (
+                  <div key={si} className="flex items-start gap-2 rounded-lg border border-slate-100 p-3 dark:border-slate-800">
+                    <span className="mt-2 w-4 text-xs font-semibold text-slate-400">{si + 1}</span>
+                    <div className="flex-1 space-y-2">
+                      <Input value={step.title} onChange={(e) => setTrackStep(ti, si, 'title', e.target.value)} placeholder="Titulo del paso" />
+                      <Input value={step.description} onChange={(e) => setTrackStep(ti, si, 'description', e.target.value)} placeholder="Descripcion del paso" />
+                    </div>
+                    {track.steps.length > 1 && (
+                      <Button size="icon" variant="ghost" onClick={() => removeTrackStep(ti, si)} className="mt-1 h-8 w-8 shrink-0 text-rose-500 hover:bg-rose-50 hover:text-rose-600">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
                   </div>
-                  {content.howItWorks.capabilities.length > 1 && (
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => removeCapability(i)}
-                      className="mt-1 h-8 w-8 shrink-0 text-rose-500 hover:bg-rose-50 hover:text-rose-600"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          <Card className="border-slate-200 dark:border-slate-800">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-base">Para quien encaja</CardTitle>
-                <CardDescription>Lista de tipos de negocio ideales.</CardDescription>
-              </div>
-              <Button size="sm" variant="outline" onClick={addFit} className="gap-2">
-                <Plus className="h-3.5 w-3.5" />
-                Agregar
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="space-y-2">
-                <Label>Descripcion introductoria</Label>
-                <Textarea
-                  value={content.howItWorks.fitsDescription}
-                  onChange={(e) => setHowField('fitsDescription', e.target.value)}
-                  rows={2}
-                />
-              </div>
-              <Separator />
-              {content.howItWorks.fits.map((fit, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <Input
-                    value={fit.label}
-                    onChange={(e) => setFit(i, e.target.value)}
-                    placeholder="Tipo de negocio"
-                    className="flex-1"
-                  />
-                  {content.howItWorks.fits.length > 1 && (
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => removeFit(i)}
-                      className="h-9 w-9 shrink-0 text-rose-500 hover:bg-rose-50 hover:text-rose-600"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+                ))}
+              </CardContent>
+            </Card>
+          ))}
         </TabsContent>
 
         {/* ── Beneficios ───────────────────────────────────────────────────── */}

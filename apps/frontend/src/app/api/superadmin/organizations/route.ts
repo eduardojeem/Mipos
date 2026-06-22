@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { structuredLogger } from '@/lib/logger';
 import { getSupabaseAdminConfig } from '@/lib/env';
 import { assertSuperAdmin } from '@/app/api/_utils/auth';
+import { sanitizeSearch } from '@/app/api/_utils/search';
 import { getCanonicalPlanAliases, normalizePlanCode } from '@/lib/plan-catalog';
 import { getPlanRecord, syncOrganizationSubscriptionState } from '../../subscription/_lib';
 
@@ -171,7 +172,7 @@ export async function GET(request: NextRequest) {
       .select('*, members:organization_members(count)', { count: 'exact' });
 
     if (search) {
-      query = query.or(`name.ilike.%${search}%,slug.ilike.%${search}%`);
+      { const s = sanitizeSearch(search); query = query.or(`name.ilike.%${s}%,slug.ilike.%${s}%`); }
     }
     if (status && status !== 'ALL') {
       const normalizedStatus = status.toUpperCase();

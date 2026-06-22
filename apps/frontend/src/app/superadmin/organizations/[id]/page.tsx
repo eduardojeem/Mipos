@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft,
@@ -68,7 +68,7 @@ import { useOrganizationInsights } from '../../hooks/useOrganizationInsights';
 
 type BillingCycle = 'monthly' | 'yearly';
 type SubscriptionStatusValue = 'ACTIVE' | 'TRIAL' | 'SUSPENDED' | 'CANCELLED';
-type PlanValue = 'FREE' | 'STARTER' | 'PROFESSIONAL';
+type PlanValue = 'FREE' | 'STARTER' | 'PROFESSIONAL' | 'ENTERPRISE';
 type DetailTab = 'overview' | 'team' | 'operations';
 type TeamStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
 type HealthTone = 'critical' | 'warning' | 'good' | 'info';
@@ -140,6 +140,11 @@ const DEFAULT_SETTINGS_VIEW: OrganizationSettingsView = {
   apiRateLimit: 60,
   billingCycle: 'monthly',
 };
+
+const PANEL_CLASS = 'rounded-lg border border-slate-200 bg-background shadow-sm dark:border-slate-800';
+const TILE_CLASS = 'rounded-lg border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-900/40';
+const TABLE_ROW_CLASS = 'border-slate-100 transition-colors hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-900/60';
+const SOFT_CARD_CLASS = 'rounded-lg border border-slate-200 bg-slate-50/60 p-4 dark:border-slate-800 dark:bg-slate-900/40';
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -309,6 +314,7 @@ function getPlanMeta(plan: string) {
   const normalized = String(plan || '').toUpperCase();
   if (normalized === 'PROFESSIONAL' || normalized === 'PRO') return { label: 'Professional', className: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300' };
   if (normalized === 'STARTER') return { label: 'Starter', className: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300' };
+  if (normalized === 'ENTERPRISE') return { label: 'Enterprise', className: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300' };
   return { label: 'Gratis', className: 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300' };
 }
 
@@ -326,6 +332,7 @@ function subscriptionPlanToValue(organization: OrganizationDetail | null): PlanV
   const normalized = String(rawPlan).toUpperCase();
   if (normalized === 'STARTER') return 'STARTER';
   if (normalized === 'PROFESSIONAL' || normalized === 'PRO') return 'PROFESSIONAL';
+  if (normalized === 'ENTERPRISE') return 'ENTERPRISE';
   return 'FREE';
 }
 
@@ -341,17 +348,26 @@ function SummaryMetric({
   icon: LucideIcon;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-background p-4 dark:border-slate-800">
-      <div className="flex items-start justify-between gap-3">
+    <div className="rounded-lg border border-slate-200 bg-background p-4 shadow-sm transition-colors hover:border-slate-300 dark:border-slate-800 dark:hover:border-slate-700">
+      <div className="flex min-h-[96px] items-start justify-between gap-3">
         <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</div>
+          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{label}</div>
           <div className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">{value}</div>
           <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">{helper}</div>
         </div>
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+        <div className="flex h-10 w-10 items-center justify-center rounded-md bg-slate-100 text-slate-600 dark:bg-slate-900 dark:text-slate-300">
           <Icon className="h-4 w-4" />
         </div>
       </div>
+    </div>
+  );
+}
+
+function ContextItem({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/50">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">{label}</div>
+      <div className="mt-1 text-sm font-medium text-slate-800 dark:text-slate-200">{value}</div>
     </div>
   );
 }
@@ -905,62 +921,81 @@ export default function OrganizationDetailsPage() {
 
   return (
     <SuperAdminGuard>
-      <div className="mx-auto flex max-w-[1480px] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
-        <header className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-3">
-            <Button
-              variant="ghost"
-              className="w-fit gap-2 px-0 text-slate-500 hover:bg-transparent hover:text-slate-900 dark:hover:text-slate-100"
-              onClick={() => router.push('/superadmin/organizations')}
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Volver a organizaciones
-            </Button>
+      <div className="mx-auto flex max-w-[1480px] flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
+        <header className={cn(PANEL_CLASS, 'overflow-hidden')}>
+          <div className="flex flex-col gap-5 p-5 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-4">
+              <Button
+                variant="ghost"
+                className="w-fit gap-2 px-0 text-slate-500 hover:bg-transparent hover:text-slate-900 dark:hover:text-slate-100"
+                onClick={() => router.push('/superadmin/organizations')}
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Volver a organizaciones
+              </Button>
 
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-3xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
-                  {organization.name}
-                </h1>
-                <Badge variant="outline" className={cn('border px-2.5 py-1 text-xs font-semibold', statusMeta.className)}>
-                  {statusMeta.label}
-                </Badge>
-                <Badge variant="outline" className={cn('border px-2.5 py-1 text-xs font-semibold', planMeta.className)}>
-                  {planMeta.label}
-                </Badge>
-              </div>
-              <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
-                <span>/{organization.slug}</span>
-                <span>{domainLabel}</span>
-                <span>ID {organization.id}</span>
+              <div className="flex items-start gap-4">
+                <div className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 sm:flex">
+                  <Building2 className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 space-y-2">
+                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Detalle de organizacion</div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h1 className="break-words text-3xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+                      {organization.name}
+                    </h1>
+                    <Badge variant="outline" className={cn('border px-2.5 py-1 text-xs font-semibold', statusMeta.className)}>
+                      {statusMeta.label}
+                    </Badge>
+                    <Badge variant="outline" className={cn('border px-2.5 py-1 text-xs font-semibold', planMeta.className)}>
+                      {planMeta.label}
+                    </Badge>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
+                    <span className="font-medium text-slate-700 dark:text-slate-300">/{organization.slug}</span>
+                    <span className="max-w-full truncate">{domainLabel}</span>
+                    <span className="max-w-full truncate">ID {organization.id}</span>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge
-              variant="outline"
-              className={cn(
-                'h-10 rounded-full px-3 text-sm font-medium',
-                orgRealtime || usersRealtime
-                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300'
-                  : 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
-              )}
-            >
-              {orgRealtime || usersRealtime ? <Wifi className="mr-2 h-4 w-4" /> : <WifiOff className="mr-2 h-4 w-4" />}
-              {orgRealtime || usersRealtime ? 'Sincronizado' : 'Sin live sync'}
-            </Badge>
-
-            {pendingChanges > 0 && (
-              <Badge variant="outline" className="h-10 rounded-full border-amber-200 bg-amber-50 px-3 text-sm font-medium text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
-                {pendingChanges} cambios sin guardar
+            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+              <Badge
+                variant="outline"
+                className={cn(
+                  'h-9 rounded-md px-3 text-sm font-medium',
+                  orgRealtime || usersRealtime
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300'
+                    : 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'
+                )}
+              >
+                {orgRealtime || usersRealtime ? <Wifi className="mr-2 h-4 w-4" /> : <WifiOff className="mr-2 h-4 w-4" />}
+                {orgRealtime || usersRealtime ? 'Sincronizado' : 'Sin live sync'}
               </Badge>
-            )}
 
-            <Button variant="outline" className="gap-2" onClick={handleRefreshAll} disabled={orgFetching || usersFetching}>
-              <RefreshCcw className={cn('h-4 w-4', (orgFetching || usersFetching) && 'animate-spin')} />
-              Actualizar
-            </Button>
+              {pendingChanges > 0 && (
+                <Badge variant="outline" className="h-9 rounded-md border-amber-200 bg-amber-50 px-3 text-sm font-medium text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
+                  {pendingChanges} cambios sin guardar
+                </Badge>
+              )}
+
+              {publicAddress && (
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => window.open(publicAddress, '_blank', 'noopener,noreferrer')}
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  Abrir sitio
+                </Button>
+              )}
+
+              <Button variant="outline" className="gap-2" onClick={handleRefreshAll} disabled={orgFetching || usersFetching}>
+                <RefreshCcw className={cn('h-4 w-4', (orgFetching || usersFetching) && 'animate-spin')} />
+                Actualizar
+              </Button>
+            </div>
           </div>
         </header>
 
@@ -976,17 +1011,30 @@ export default function OrganizationDetailsPage() {
           />
         </section>
 
+        <section className={cn(PANEL_CLASS, 'grid gap-4 p-4 lg:grid-cols-[1fr_auto] lg:items-center')}>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <ContextItem label="Contrato" value="Org + SaaS subscription" />
+            <ContextItem label="Cambios" value={pendingChanges === 0 ? 'Sin cambios locales' : `${pendingChanges} bloque(s)`} />
+            <ContextItem label="Facturacion" value={`${statusMeta.label} / ${subscriptionDraft.billingCycle === 'yearly' ? 'Anual' : 'Mensual'}`} />
+            <ContextItem label="Fuentes" value="Detalle, equipo, salud, uso" />
+          </div>
+          <Button onClick={handleSaveAll} disabled={pendingChanges === 0 || orgUpdating} className="gap-2">
+            {orgUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Guardar todo
+          </Button>
+        </section>
+
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as DetailTab)} className="space-y-6">
-          <TabsList className="h-auto w-full flex-wrap justify-start gap-2 rounded-2xl border border-slate-200 bg-background p-2 dark:border-slate-800">
-            <TabsTrigger value="overview" className="rounded-xl px-4 py-2">Resumen</TabsTrigger>
-            <TabsTrigger value="team" className="rounded-xl px-4 py-2">Equipo</TabsTrigger>
-            <TabsTrigger value="operations" className="rounded-xl px-4 py-2">Operacion</TabsTrigger>
+          <TabsList className="h-auto w-full flex-wrap justify-start gap-2 rounded-lg border border-slate-200 bg-background p-2 shadow-sm dark:border-slate-800">
+            <TabsTrigger value="overview" className="rounded-md px-4 py-2">Resumen</TabsTrigger>
+            <TabsTrigger value="team" className="rounded-md px-4 py-2">Equipo</TabsTrigger>
+            <TabsTrigger value="operations" className="rounded-md px-4 py-2">Operacion</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
             <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
-              <Card className="border-slate-200 dark:border-slate-800">
-                <CardHeader className="flex flex-row items-start justify-between gap-4">
+              <Card className={PANEL_CLASS}>
+                <CardHeader className="flex flex-col items-start justify-between gap-4 sm:flex-row">
                   <div>
                     <CardTitle>Identidad y acceso</CardTitle>
                     <CardDescription>Datos base del tenant y accesos publicos efectivos.</CardDescription>
@@ -998,25 +1046,25 @@ export default function OrganizationDetailsPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid gap-3 md:grid-cols-2">
-                    <div className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-900">
+                    <div className={TILE_CLASS}>
                       <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Slug</div>
                       <div className="mt-1 text-sm font-medium text-slate-950 dark:text-slate-50">/{organization.slug}</div>
                     </div>
-                    <div className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-900">
+                    <div className={TILE_CLASS}>
                       <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Direccion publica</div>
                       <div className="mt-1 text-sm font-medium text-slate-950 dark:text-slate-50">{publicAddress || 'Sin configurar'}</div>
                     </div>
-                    <div className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-900">
+                    <div className={TILE_CLASS}>
                       <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Creada</div>
                       <div className="mt-1 text-sm font-medium text-slate-950 dark:text-slate-50">{formatDate(organization.created_at)}</div>
                     </div>
-                    <div className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-900">
+                    <div className={TILE_CLASS}>
                       <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Ultima actualizacion</div>
                       <div className="mt-1 text-sm font-medium text-slate-950 dark:text-slate-50">{formatDateTime(organization.updated_at)}</div>
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-800">
+                  <div className="rounded-lg border border-slate-200 px-4 py-3 dark:border-slate-800">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Identificador</div>
@@ -1048,8 +1096,8 @@ export default function OrganizationDetailsPage() {
                 </CardContent>
               </Card>
 
-              <Card className="border-slate-200 dark:border-slate-800">
-                <CardHeader className="flex flex-row items-start justify-between gap-4">
+              <Card className={PANEL_CLASS}>
+                <CardHeader className="flex flex-col items-start justify-between gap-4 sm:flex-row">
                   <div>
                     <CardTitle>Salud operativa</CardTitle>
                     <CardDescription>Senales utiles para soporte, billing y gobierno del tenant.</CardDescription>
@@ -1064,12 +1112,12 @@ export default function OrganizationDetailsPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-900">
+                    <div className={TILE_CLASS}>
                       <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Suscripcion</div>
                       <div className="mt-1 text-sm font-medium text-slate-950 dark:text-slate-50">{statusMeta.label}</div>
                       <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{subscriptionDraft.billingCycle === 'yearly' ? 'Ciclo anual' : 'Ciclo mensual'}</div>
                     </div>
-                    <div className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-900">
+                    <div className={TILE_CLASS}>
                       <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Plan actual</div>
                       <div className="mt-1 text-sm font-medium text-slate-950 dark:text-slate-50">{subscription?.plan.name || planMeta.label}</div>
                       <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
@@ -1080,7 +1128,7 @@ export default function OrganizationDetailsPage() {
 
                   <div className="space-y-3">
                     {healthItems.map((item: any) => (
-                      <div key={`${item.title}-${item.description}`} className={cn('rounded-2xl border px-4 py-3', getHealthToneClass(item.tone))}>
+                      <div key={`${item.title}-${item.description}`} className={cn('rounded-lg border px-4 py-3', getHealthToneClass(item.tone))}>
                         <div className="flex items-start gap-3">
                           {item.tone === 'good' ? <CheckCircle2 className="mt-0.5 h-4 w-4" /> : <AlertTriangle className="mt-0.5 h-4 w-4" />}
                           <div>
@@ -1117,14 +1165,14 @@ export default function OrganizationDetailsPage() {
             </div>
 
             <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
-              <Card className="border-slate-200 dark:border-slate-800">
+              <Card className={PANEL_CLASS}>
                 <CardHeader>
                   <CardTitle>Responsables y contacto</CardTitle>
                   <CardDescription>Usuarios con rol de gobierno y datos utiles para soporte.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid gap-3 md:grid-cols-2">
-                    <div className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-900">
+                    <div className={TILE_CLASS}>
                       <div className="flex items-start gap-3">
                         <Mail className="mt-0.5 h-4 w-4 text-slate-500" />
                         <div>
@@ -1133,7 +1181,7 @@ export default function OrganizationDetailsPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-900">
+                    <div className={TILE_CLASS}>
                       <div className="flex items-start gap-3">
                         <Phone className="mt-0.5 h-4 w-4 text-slate-500" />
                         <div>
@@ -1142,11 +1190,11 @@ export default function OrganizationDetailsPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-900">
+                    <div className={TILE_CLASS}>
                       <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Industria</div>
                       <div className="mt-1 text-sm font-medium text-slate-950 dark:text-slate-50">{settingsDraft.industry || 'No definida'}</div>
                     </div>
-                    <div className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-900">
+                    <div className={TILE_CLASS}>
                       <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Region</div>
                       <div className="mt-1 text-sm font-medium text-slate-950 dark:text-slate-50">
                         {settingsDraft.regional.currency} / {settingsDraft.regional.timezone}
@@ -1156,12 +1204,12 @@ export default function OrganizationDetailsPage() {
 
                   <div className="space-y-3">
                     {managementUsers.length === 0 ? (
-                      <div className="rounded-2xl border border-slate-200 px-4 py-5 text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                      <div className="rounded-lg border border-slate-200 px-4 py-5 text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
                         No hay usuarios OWNER o ADMIN cargados en esta organización.
                       </div>
                     ) : (
                       managementUsers.slice(0, 4).map((user) => (
-                        <div key={user.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-800">
+                        <div key={user.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 px-4 py-3 dark:border-slate-800">
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
                               <Crown className="h-4 w-4 text-slate-500" />
@@ -1186,7 +1234,7 @@ export default function OrganizationDetailsPage() {
                 </CardContent>
               </Card>
 
-              <Card className="border-slate-200 dark:border-slate-800">
+              <Card className={PANEL_CLASS}>
                 <CardHeader>
                   <CardTitle>Uso actual</CardTitle>
                   <CardDescription>Consumo real comparado con el plan y los overrides vigentes.</CardDescription>
@@ -1196,7 +1244,7 @@ export default function OrganizationDetailsPage() {
                     <UsageRow key={item.label} label={item.label} current={item.current} limit={item.limit} sourceLine={(item as any).sourceLine} />
                   ))}
 
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
+                  <div className={SOFT_CARD_CLASS}>
                     <div className="text-sm font-medium text-slate-950 dark:text-slate-50">Capacidades publicadas</div>
                     <div className="mt-3 flex flex-wrap gap-2">
                       {(subscription?.plan.features || []).length > 0 ? (
@@ -1214,7 +1262,7 @@ export default function OrganizationDetailsPage() {
               </Card>
             </div>
 
-            <Card className="border-slate-200 dark:border-slate-800">
+            <Card className={PANEL_CLASS}>
               <CardHeader>
                 <CardTitle>Cómo se obtiene</CardTitle>
                 <CardDescription>Fuentes y cálculos usados para Salud operativa y Uso actual.</CardDescription>
@@ -1225,7 +1273,7 @@ export default function OrganizationDetailsPage() {
                     <AccordionTrigger>Salud operativa</AccordionTrigger>
                     <AccordionContent>
                       {insights.operationalHealth.error ? (
-                        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300">
+                        <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300">
                           {(insights.operationalHealth.error as any)?.message || 'No se pudo cargar Salud operativa.'}
                         </div>
                       ) : operationalHealth ? (
@@ -1241,7 +1289,7 @@ export default function OrganizationDetailsPage() {
                             </TableHeader>
                             <TableBody>
                               {operationalHealth.indicators.map((i) => (
-                                <TableRow key={i.key} className="border-slate-100 dark:border-slate-800">
+                                <TableRow key={i.key} className={TABLE_ROW_CLASS}>
                                   <TableCell className="font-medium">{i.label}</TableCell>
                                   <TableCell className="text-sm text-slate-600 dark:text-slate-300">{i.source.tableOrView}</TableCell>
                                   <TableCell className="text-sm text-slate-500 dark:text-slate-400">{i.source.filters.join(' · ')}</TableCell>
@@ -1261,7 +1309,7 @@ export default function OrganizationDetailsPage() {
                     <AccordionTrigger>Uso actual</AccordionTrigger>
                     <AccordionContent>
                       {insights.currentUsage.error ? (
-                        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300">
+                        <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300">
                           {(insights.currentUsage.error as any)?.message || 'No se pudo cargar Uso actual.'}
                         </div>
                       ) : currentUsage ? (
@@ -1277,7 +1325,7 @@ export default function OrganizationDetailsPage() {
                             </TableHeader>
                             <TableBody>
                               {currentUsage.metrics.map((m) => (
-                                <TableRow key={m.key} className="border-slate-100 dark:border-slate-800">
+                                <TableRow key={m.key} className={TABLE_ROW_CLASS}>
                                   <TableCell className="font-medium">{m.label}</TableCell>
                                   <TableCell className="text-sm text-slate-600 dark:text-slate-300">{m.source.tableOrView}</TableCell>
                                   <TableCell className="text-sm text-slate-500 dark:text-slate-400">{m.source.filters.join(' · ')}</TableCell>
@@ -1299,24 +1347,24 @@ export default function OrganizationDetailsPage() {
 
           <TabsContent value="team" className="space-y-6">
             <section className="grid gap-4 md:grid-cols-3">
-              <div className="rounded-2xl border border-slate-200 bg-background p-4 dark:border-slate-800">
+              <div className="rounded-lg border border-slate-200 bg-background p-4 shadow-sm dark:border-slate-800">
                 <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Activos</div>
                 <div className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">{activeUsers}</div>
                 <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">Usuarios habilitados</div>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-background p-4 dark:border-slate-800">
+              <div className="rounded-lg border border-slate-200 bg-background p-4 shadow-sm dark:border-slate-800">
                 <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Gobierno</div>
                 <div className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">{managementUsers.length}</div>
                 <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">OWNER y ADMIN</div>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-background p-4 dark:border-slate-800">
+              <div className="rounded-lg border border-slate-200 bg-background p-4 shadow-sm dark:border-slate-800">
                 <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Inactivos</div>
                 <div className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">{Math.max(0, usersCount - activeUsers)}</div>
                 <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">Pendientes de revision</div>
               </div>
             </section>
 
-            <Card className="border-slate-200 dark:border-slate-800">
+            <Card className={PANEL_CLASS}>
               <CardHeader className="flex flex-col gap-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div>
@@ -1361,7 +1409,7 @@ export default function OrganizationDetailsPage() {
               </CardHeader>
               <CardContent>
                 {usersError ? (
-                  <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300">
+                  <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300">
                     {usersError}
                   </div>
                 ) : usersLoading ? (
@@ -1394,7 +1442,7 @@ export default function OrganizationDetailsPage() {
                           const isUpdatingUser = memberActionId === user.id;
 
                           return (
-                            <TableRow key={user.id} className="border-slate-100 dark:border-slate-800">
+                            <TableRow key={user.id} className={TABLE_ROW_CLASS}>
                               <TableCell>
                                 <div className="space-y-1">
                                   <div className="font-medium text-slate-950 dark:text-slate-50">{user.full_name || 'Sin nombre'}</div>
@@ -1450,7 +1498,7 @@ export default function OrganizationDetailsPage() {
           </TabsContent>
 
           <TabsContent value="operations" className="space-y-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className={cn(PANEL_CLASS, 'flex flex-wrap items-center justify-between gap-3 p-4')}>
               <div>
                 <h2 className="text-xl font-semibold text-slate-950 dark:text-slate-50">Operacion del tenant</h2>
                 <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -1470,8 +1518,8 @@ export default function OrganizationDetailsPage() {
             </div>
 
             <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
-              <Card className="border-slate-200 dark:border-slate-800">
-                <CardHeader className="flex flex-row items-start justify-between gap-4">
+              <Card className={PANEL_CLASS}>
+                <CardHeader className="flex flex-col items-start justify-between gap-4 sm:flex-row">
                   <div>
                     <CardTitle>Perfil y dominio</CardTitle>
                     <CardDescription>Nombre comercial, slug e identificador público de la organización.</CardDescription>
@@ -1504,7 +1552,7 @@ export default function OrganizationDetailsPage() {
                     <Label>Dominio personalizado</Label>
                     <Input value={profileDraft.customDomain} onChange={(event) => setProfileDraft((current) => ({ ...current, customDomain: event.target.value }))} placeholder="ventas.midominio.com" />
                   </div>
-                  <div className="md:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
+                  <div className={cn(SOFT_CARD_CLASS, 'md:col-span-2')}>
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Preview publica</div>
@@ -1559,8 +1607,8 @@ export default function OrganizationDetailsPage() {
                 </CardContent>
               </Card>
 
-              <Card className="border-slate-200 dark:border-slate-800">
-                <CardHeader className="flex flex-row items-start justify-between gap-4">
+              <Card className={PANEL_CLASS}>
+                <CardHeader className="flex flex-col items-start justify-between gap-4 sm:flex-row">
                   <div>
                     <CardTitle>Plan y facturación</CardTitle>
                     <CardDescription>Control unificado sobre `organizations`, `saas_subscriptions` y limites efectivos.</CardDescription>
@@ -1588,6 +1636,7 @@ export default function OrganizationDetailsPage() {
                           <SelectItem value="FREE">Gratis</SelectItem>
                           <SelectItem value="STARTER">Starter</SelectItem>
                           <SelectItem value="PROFESSIONAL">Professional</SelectItem>
+                          <SelectItem value="ENTERPRISE">Enterprise</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -1619,18 +1668,18 @@ export default function OrganizationDetailsPage() {
                     </div>
                     <div className="space-y-2">
                       <Label>Renovacion</Label>
-                      <div className="rounded-2xl bg-slate-50 px-4 py-3 text-sm font-medium dark:bg-slate-900">
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium dark:border-slate-800 dark:bg-slate-900">
                         {subscription ? formatDate(subscription.currentPeriodEnd) : 'Sin fecha'}
                       </div>
                     </div>
                   </div>
 
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-900">
+                    <div className={TILE_CLASS}>
                       <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Plan aplicado</div>
                       <div className="mt-1 text-sm font-medium text-slate-950 dark:text-slate-50">{subscription?.plan.name || planMeta.label}</div>
                     </div>
-                    <div className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-900">
+                    <div className={TILE_CLASS}>
                       <div className="text-xs uppercase tracking-[0.12em] text-slate-500">Dias restantes</div>
                       <div className="mt-1 text-sm font-medium text-slate-950 dark:text-slate-50">{subscription ? subscription.daysUntilRenewal : 0}</div>
                     </div>
@@ -1654,8 +1703,8 @@ export default function OrganizationDetailsPage() {
             </div>
 
             <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
-              <Card className="border-slate-200 dark:border-slate-800">
-                <CardHeader className="flex flex-row items-start justify-between gap-4">
+              <Card className={PANEL_CLASS}>
+                <CardHeader className="flex flex-col items-start justify-between gap-4 sm:flex-row">
                   <div>
                     <CardTitle>Contacto y regionalizacion</CardTitle>
                     <CardDescription>Datos empresariales usados por ventas, soporte y capas operativas.</CardDescription>
@@ -1725,8 +1774,8 @@ export default function OrganizationDetailsPage() {
                 </CardContent>
               </Card>
 
-              <Card className="border-slate-200 dark:border-slate-800">
-                <CardHeader className="flex flex-row items-start justify-between gap-4">
+              <Card className={PANEL_CLASS}>
+                <CardHeader className="flex flex-col items-start justify-between gap-4 sm:flex-row">
                   <div>
                     <CardTitle>Capacidades activas</CardTitle>
                     <CardDescription>Solo toggles de negocio que impactan el tenant actual.</CardDescription>
@@ -1749,7 +1798,7 @@ export default function OrganizationDetailsPage() {
                     { key: 'customReports', label: 'Reportes personalizados', description: 'Exportaciones y analitica ampliada' },
                     { key: 'apiAccess', label: 'Acceso API', description: 'Integraciones externas' },
                   ].map((item) => (
-                    <div key={item.key} className="flex items-center justify-between rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-800">
+                    <div key={item.key} className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 px-4 py-3 dark:border-slate-800">
                       <div>
                         <div className="text-sm font-medium text-slate-950 dark:text-slate-50">{item.label}</div>
                         <div className="text-sm text-slate-500 dark:text-slate-400">{item.description}</div>
@@ -1767,7 +1816,7 @@ export default function OrganizationDetailsPage() {
                     </div>
                   ))}
 
-                  <div className="flex items-center justify-between rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-800">
+                  <div className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 px-4 py-3 dark:border-slate-800">
                     <div>
                       <div className="text-sm font-medium text-slate-950 dark:text-slate-50">Notificaciones email</div>
                       <div className="text-sm text-slate-500 dark:text-slate-400">Mensajes operativos por correo</div>
@@ -1775,7 +1824,7 @@ export default function OrganizationDetailsPage() {
                     <Switch checked={settingsDraft.notifications.email} onCheckedChange={(checked) => setSettingsDraft((current) => ({ ...current, notifications: { ...current.notifications, email: checked } }))} />
                   </div>
 
-                  <div className="flex items-center justify-between rounded-2xl border border-slate-200 px-4 py-3 dark:border-slate-800">
+                  <div className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 px-4 py-3 dark:border-slate-800">
                     <div>
                       <div className="text-sm font-medium text-slate-950 dark:text-slate-50">Notificaciones SMS</div>
                       <div className="text-sm text-slate-500 dark:text-slate-400">Alertas por mensaje</div>
@@ -1786,8 +1835,8 @@ export default function OrganizationDetailsPage() {
               </Card>
             </div>
 
-            <Card className="border-slate-200 dark:border-slate-800">
-              <CardHeader className="flex flex-row items-start justify-between gap-4">
+            <Card className={PANEL_CLASS}>
+              <CardHeader className="flex flex-col items-start justify-between gap-4 sm:flex-row">
                 <div>
                   <CardTitle>Limites locales</CardTitle>
                   <CardDescription>Overrides por tenant. El plan sigue siendo la referencia principal del sistema.</CardDescription>
@@ -1831,7 +1880,7 @@ export default function OrganizationDetailsPage() {
       </div>
 
       <AlertDialog open={suspendDialogOpen} onOpenChange={setSuspendDialogOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="border-slate-200 dark:border-slate-800">
           <AlertDialogHeader>
             <AlertDialogTitle>Suspender organización</AlertDialogTitle>
             <AlertDialogDescription>
@@ -1855,7 +1904,7 @@ export default function OrganizationDetailsPage() {
       </AlertDialog>
 
       <AlertDialog open={reactivateDialogOpen} onOpenChange={setReactivateDialogOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="border-slate-200 dark:border-slate-800">
           <AlertDialogHeader>
             <AlertDialogTitle>Reactivar organización</AlertDialogTitle>
             <AlertDialogDescription>
@@ -1879,7 +1928,7 @@ export default function OrganizationDetailsPage() {
       </AlertDialog>
 
       <AlertDialog open={Boolean(saveConfirmAction)} onOpenChange={(open) => !open && setSaveConfirmAction(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className="border-slate-200 dark:border-slate-800">
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmar cambios sensibles</AlertDialogTitle>
             <AlertDialogDescription>

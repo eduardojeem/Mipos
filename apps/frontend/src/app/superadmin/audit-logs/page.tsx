@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 // import { createClient } from '@/lib/supabase/client'; // Removed
 import { toast } from '@/lib/toast';
+import { cn } from '@/lib/utils';
 
 interface AuditLog {
   id: string;
@@ -111,13 +112,14 @@ export default function AuditLogsPage() {
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      const data = await response.json();
+      const result = await response.json();
+      const newLogs = Array.isArray(result) ? result : (result.data || []);
 
-      setLogs(data || []);
+      setLogs(newLogs);
 
       if (isRefresh) {
         toast.success('Logs actualizados', {
-          description: `Se cargaron ${data?.length || 0} registros`
+          description: `Se cargaron ${newLogs.length} registros`
         });
       }
     } catch (error) {
@@ -164,14 +166,14 @@ export default function AuditLogsPage() {
     switch (severity) {
       case 'CRITICAL':
         return (
-          <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 dark:bg-red-950/30 dark:text-red-300">
+          <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/20 backdrop-blur-md shadow-sm dark:text-red-400">
             <AlertTriangle className="h-3 w-3 mr-1" />
             Crítico
           </Badge>
         );
       case 'WARNING':
         return (
-          <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-950/30 dark:text-yellow-300">
+          <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20 backdrop-blur-md shadow-sm dark:text-yellow-400">
             <AlertTriangle className="h-3 w-3 mr-1" />
             Advertencia
           </Badge>
@@ -179,7 +181,7 @@ export default function AuditLogsPage() {
       case 'INFO':
       default:
         return (
-          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300">
+          <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/20 backdrop-blur-md shadow-sm dark:text-blue-400">
             <Info className="h-3 w-3 mr-1" />
             Info
           </Badge>
@@ -189,18 +191,18 @@ export default function AuditLogsPage() {
 
   const getActionBadge = (action: string) => {
     if (action.includes('created')) {
-      return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Creado</Badge>;
+      return <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:text-emerald-400 backdrop-blur-md">Creado</Badge>;
     }
     if (action.includes('updated')) {
-      return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Actualizado</Badge>;
+      return <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/20 dark:text-blue-400 backdrop-blur-md">Actualizado</Badge>;
     }
     if (action.includes('deleted')) {
-      return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Eliminado</Badge>;
+      return <Badge variant="outline" className="bg-rose-500/10 text-rose-600 border-rose-500/20 dark:text-rose-400 backdrop-blur-md">Eliminado</Badge>;
     }
     if (action.includes('login')) {
-      return <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">Login</Badge>;
+      return <Badge variant="outline" className="bg-purple-500/10 text-purple-600 border-purple-500/20 dark:text-purple-400 backdrop-blur-md">Login</Badge>;
     }
-    return <Badge variant="outline">{action}</Badge>;
+    return <Badge variant="outline" className="bg-muted/50 text-muted-foreground border-border/50 backdrop-blur-md">{action}</Badge>;
   };
 
   const formatDate = (dateString: string) => {
@@ -244,80 +246,148 @@ export default function AuditLogsPage() {
 
   return (
     <SuperAdminGuard>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent flex items-center gap-3">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 flex items-center justify-center shadow-2xl shadow-indigo-500/50">
-                <Shield className="h-7 w-7 text-white" />
+      <div className="space-y-8 animate-in fade-in duration-500">
+        
+        {/* Header Hero */}
+        <div className="relative overflow-hidden rounded-3xl bg-background/60 backdrop-blur-xl border border-border/50 shadow-2xl p-8">
+          <div className="absolute top-0 right-0 -mt-20 -mr-20 w-80 h-80 bg-gradient-to-br from-indigo-500/20 via-purple-500/20 to-pink-500/20 rounded-full blur-3xl opacity-50 pointer-events-none" />
+          <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div className="flex items-center gap-5">
+              <div className="relative group">
+                <div className="absolute inset-0 bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 rounded-2xl blur-md opacity-50 group-hover:opacity-75 transition-opacity duration-500" />
+                <div className="relative w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 flex items-center justify-center shadow-xl">
+                  <Shield className="h-8 w-8 text-white" />
+                </div>
               </div>
-              Logs de Auditoría
-            </h1>
-            <p className="text-slate-600 dark:text-slate-400 mt-3 text-lg font-medium">
-              Historial completo de acciones en el sistema
-            </p>
-          </div>
+              <div>
+                <h1 className="text-4xl font-extrabold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
+                  Logs de Auditoría
+                </h1>
+                <p className="text-muted-foreground mt-2 text-lg font-medium">
+                  Historial completo de acciones y seguridad del sistema
+                </p>
+              </div>
+            </div>
 
-          <div className="flex items-center gap-3">
-            <Badge variant="outline" className="px-4 py-2 text-sm bg-blue-50 border-blue-200 text-blue-700">
-              {filteredLogs.length} registros
-            </Badge>
-            <Button
-              onClick={() => loadLogs(true)}
-              disabled={refreshing}
-              variant="outline"
-              className="border-slate-300 dark:border-slate-700"
-            >
-              {refreshing ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Actualizando...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Actualizar
-                </>
-              )}
-            </Button>
-            <Button
-              variant={autoRefresh ? 'default' : 'outline'}
-              onClick={() => setAutoRefresh(!autoRefresh)}
-              className="border-slate-300 dark:border-slate-700"
-            >
-              {autoRefresh ? 'Auto-Refresh: ON' : 'Auto-Refresh: OFF'}
-            </Button>
+            <div className="flex items-center gap-3">
+              <Badge variant="outline" className="px-4 py-2 text-sm bg-background/50 backdrop-blur-md border-border/50 text-foreground shadow-sm">
+                {filteredLogs.length} registros
+              </Badge>
+              <Button
+                onClick={() => loadLogs(true)}
+                disabled={refreshing}
+                variant="outline"
+                className="bg-background/50 backdrop-blur-md border-border/50 hover:bg-muted/50 transition-all shadow-sm hover:shadow-md"
+              >
+                {refreshing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Actualizando...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Actualizar
+                  </>
+                )}
+              </Button>
+              <Button
+                variant={autoRefresh ? 'default' : 'outline'}
+                onClick={() => setAutoRefresh(!autoRefresh)}
+                className={cn(
+                  "transition-all shadow-sm hover:shadow-md",
+                  autoRefresh 
+                    ? "bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white border-0" 
+                    : "bg-background/50 backdrop-blur-md border-border/50 hover:bg-muted/50"
+                )}
+              >
+                {autoRefresh ? 'Auto-Refresh: ON' : 'Auto-Refresh: OFF'}
+              </Button>
+            </div>
           </div>
         </div>
 
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card className="bg-background/60 backdrop-blur-xl border-border/50 shadow-lg hover:shadow-xl transition-all duration-300 group overflow-hidden relative">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-3xl -mr-10 -mt-10 transition-all duration-500 group-hover:bg-blue-500/20" />
+            <CardContent className="p-6">
+              <div className="flex justify-between items-start">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-muted-foreground">Total Eventos Info</p>
+                  <p className="text-3xl font-bold text-foreground">
+                    {logs.filter(l => l.severity === 'INFO').length}
+                  </p>
+                </div>
+                <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400 ring-1 ring-blue-500/20">
+                  <Info className="h-6 w-6" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-background/60 backdrop-blur-xl border-border/50 shadow-lg hover:shadow-xl transition-all duration-300 group overflow-hidden relative">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-500/10 rounded-full blur-3xl -mr-10 -mt-10 transition-all duration-500 group-hover:bg-yellow-500/20" />
+            <CardContent className="p-6">
+              <div className="flex justify-between items-start">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-muted-foreground">Advertencias</p>
+                  <p className="text-3xl font-bold text-foreground">
+                    {logs.filter(l => l.severity === 'WARNING').length}
+                  </p>
+                </div>
+                <div className="w-12 h-12 rounded-xl bg-yellow-500/10 flex items-center justify-center text-yellow-600 dark:text-yellow-400 ring-1 ring-yellow-500/20">
+                  <AlertTriangle className="h-6 w-6" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-background/60 backdrop-blur-xl border-border/50 shadow-lg hover:shadow-xl transition-all duration-300 group overflow-hidden relative">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/10 rounded-full blur-3xl -mr-10 -mt-10 transition-all duration-500 group-hover:bg-red-500/20" />
+            <CardContent className="p-6">
+              <div className="flex justify-between items-start">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-muted-foreground">Críticos</p>
+                  <p className="text-3xl font-bold text-foreground">
+                    {logs.filter(l => l.severity === 'CRITICAL').length}
+                  </p>
+                </div>
+                <div className="w-12 h-12 rounded-xl bg-red-500/10 flex items-center justify-center text-red-600 dark:text-red-400 ring-1 ring-red-500/20">
+                  <Shield className="h-6 w-6" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
         {/* Filters */}
-        <Card className="backdrop-blur-xl bg-white/80 dark:bg-slate-900/80 border-slate-200 dark:border-slate-800 shadow-xl">
-          <CardHeader>
+        <Card className="bg-background/60 backdrop-blur-xl border-border/50 shadow-lg relative overflow-hidden">
+          <CardHeader className="border-b border-border/50 bg-muted/10 pb-4">
             <CardTitle className="flex items-center gap-2 text-lg">
-              <Filter className="h-5 w-5" />
+              <Filter className="h-5 w-5 text-indigo-500" />
               Filtros
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">Búsqueda</label>
+                <label className="text-sm font-medium text-muted-foreground">Búsqueda</label>
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     placeholder="Buscar en logs..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
+                    className="pl-10 bg-background/50 border-border/50 focus:border-indigo-500/50 focus:ring-indigo-500/20 transition-all"
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium">Acción</label>
+                <label className="text-sm font-medium text-muted-foreground">Acción</label>
                 <Select value={actionFilter} onValueChange={setActionFilter}>
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-background/50 border-border/50">
                     <SelectValue placeholder="Todas las acciones" />
                   </SelectTrigger>
                   <SelectContent>
@@ -330,9 +400,9 @@ export default function AuditLogsPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium">Entidad</label>
+                <label className="text-sm font-medium text-muted-foreground">Entidad</label>
                 <Select value={entityFilter} onValueChange={setEntityFilter}>
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-background/50 border-border/50">
                     <SelectValue placeholder="Todas las entidades" />
                   </SelectTrigger>
                   <SelectContent>
@@ -345,9 +415,9 @@ export default function AuditLogsPage() {
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium">Severidad</label>
+                <label className="text-sm font-medium text-muted-foreground">Severidad</label>
                 <Select value={severityFilter} onValueChange={setSeverityFilter}>
-                  <SelectTrigger>
+                  <SelectTrigger className="bg-background/50 border-border/50">
                     <SelectValue placeholder="Todas las severidades" />
                   </SelectTrigger>
                   <SelectContent>
@@ -363,53 +433,55 @@ export default function AuditLogsPage() {
         </Card>
 
         {/* Logs Table */}
-        <Card className="backdrop-blur-xl bg-white/80 dark:bg-slate-900/80 border-slate-200 dark:border-slate-800 shadow-xl">
-          <CardHeader>
+        <Card className="bg-background/60 backdrop-blur-xl border-border/50 shadow-xl overflow-hidden">
+          <CardHeader className="border-b border-border/50 bg-muted/20">
             <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
+              <FileText className="h-5 w-5 text-indigo-500" />
               Registros de Auditoría
             </CardTitle>
             <CardDescription>
-              Últimos 100 eventos del sistema · Info: {logs.filter(l => l.severity === 'INFO').length} · Warn: {logs.filter(l => l.severity === 'WARNING').length} · Critical: {logs.filter(l => l.severity === 'CRITICAL').length}
+              Últimos 100 eventos del sistema registrados
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden">
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
               <Table>
-                <TableHeader>
-                  <TableRow className="bg-slate-50 dark:bg-slate-900/50">
-                    <TableHead className="font-semibold">
+                <TableHeader className="bg-muted/30">
+                  <TableRow className="border-b border-border/50">
+                    <TableHead className="font-semibold text-foreground/80 py-4 px-6">
                       <div className="flex items-center gap-2">
                         <Calendar className="h-4 w-4" />
                         Fecha
                       </div>
                     </TableHead>
-                    <TableHead className="font-semibold">Severidad</TableHead>
-                    <TableHead className="font-semibold">Acción</TableHead>
-                    <TableHead className="font-semibold">Entidad</TableHead>
-                    <TableHead className="font-semibold">
+                    <TableHead className="font-semibold text-foreground/80">Severidad</TableHead>
+                    <TableHead className="font-semibold text-foreground/80">Acción</TableHead>
+                    <TableHead className="font-semibold text-foreground/80">Entidad</TableHead>
+                    <TableHead className="font-semibold text-foreground/80">
                       <div className="flex items-center gap-2">
                         <User className="h-4 w-4" />
                         Usuario
                       </div>
                     </TableHead>
-                    <TableHead className="font-semibold">Organización</TableHead>
-                    <TableHead className="font-semibold">Detalles</TableHead>
+                    <TableHead className="font-semibold text-foreground/80">Organización</TableHead>
+                    <TableHead className="font-semibold text-foreground/80">Detalles</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredLogs.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-12">
+                      <TableCell colSpan={7} className="text-center py-16">
                         <div className="flex flex-col items-center gap-3">
-                          <FileText className="h-12 w-12 text-slate-300 dark:text-slate-700" />
+                          <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center border border-border/50 shadow-inner">
+                            <FileText className="h-8 w-8 text-muted-foreground/50" />
+                          </div>
                           <div>
-                            <p className="text-lg font-semibold text-slate-700 dark:text-slate-300">
+                            <p className="text-lg font-semibold text-foreground">
                               {searchQuery || actionFilter !== 'all' || entityFilter !== 'all' || severityFilter !== 'all'
                                 ? 'No se encontraron logs'
                                 : 'No hay logs de auditoría'}
                             </p>
-                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                            <p className="text-sm text-muted-foreground mt-1">
                               {searchQuery || actionFilter !== 'all' || entityFilter !== 'all' || severityFilter !== 'all'
                                 ? 'Intenta con otros filtros'
                                 : 'Los eventos del sistema aparecerán aquí'}
@@ -422,28 +494,28 @@ export default function AuditLogsPage() {
                     filteredLogs.map((log) => (
                       <TableRow
                         key={log.id}
-                        className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors"
+                        className="border-b border-border/50 transition-colors hover:bg-muted/40"
                       >
-                        <TableCell className="text-sm">
+                        <TableCell className="py-4 px-6">
                           <div className="flex flex-col">
-                            <span className="font-medium">{formatDate(log.created_at)}</span>
-                            <span className="text-xs text-slate-500">{getRelativeTime(log.created_at)}</span>
+                            <span className="font-medium text-foreground">{formatDate(log.created_at)}</span>
+                            <span className="text-xs text-muted-foreground">{getRelativeTime(log.created_at)}</span>
                           </div>
                         </TableCell>
                         <TableCell>{getSeverityBadge(log.severity)}</TableCell>
                         <TableCell>{getActionBadge(log.action)}</TableCell>
                         <TableCell>
-                          <Badge variant="outline" className="text-xs">
+                          <Badge variant="outline" className="text-xs bg-background/50 border-border/50 backdrop-blur-sm">
                             {log.entity_type}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-sm">
-                          {log.user_email || <span className="text-slate-400">Sistema</span>}
+                        <TableCell className="text-sm text-foreground/90 font-medium">
+                          {log.user_email || <span className="text-muted-foreground/70 italic">Sistema</span>}
                         </TableCell>
-                        <TableCell className="text-sm">
-                          {log.organization_name || <span className="text-slate-400">-</span>}
+                        <TableCell className="text-sm text-foreground/90">
+                          {log.organization_name || <span className="text-muted-foreground/70 italic">-</span>}
                         </TableCell>
-                        <TableCell className="text-xs text-slate-500 max-w-xs truncate">
+                        <TableCell className="text-xs text-muted-foreground max-w-[250px] truncate">
                           {log.metadata && Object.keys(log.metadata).length > 0
                             ? JSON.stringify(log.metadata)
                             : '-'}

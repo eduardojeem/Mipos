@@ -1,13 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { assertSuperAdmin } from '@/app/api/_utils/auth'
-import { dedupeCanonicalPlans, getCanonicalPlanDisplayName, isCanonicalPlanSlug, normalizePlanSlug } from '@/lib/plan-catalog'
+import { sanitizeSearch } from '@/app/api/_utils/search'
+import {
+  dedupeCanonicalPlans,
+  getCanonicalPlanDefaults,
+  getCanonicalPlanDisplayName,
+  isCanonicalPlanSlug,
+  normalizePlanSlug,
+  sanitizePlanFeatures,
+  sanitizePlanLimits,
+} from '@/lib/plan-catalog'
 
 interface PlanLimits {
   maxUsers: number
   maxProducts: number
   maxTransactionsPerMonth: number
   maxLocations: number
+  maxServices: number
+  maxAppointmentsPerMonth: number
+  maxStaff: number
 }
 
 type PlanRow = {
@@ -39,10 +51,11 @@ type SupabasePlanError = {
 }
 
 function getMissingColumn(error: SupabasePlanError | null | undefined) {
-  if (!error || error.code !== '42703') return null
+  if (!error || !['42703', 'PGRST204'].includes(String(error.code || ''))) return null
   const message = String(error.message || error.details || '')
   const match = message.match(/column\s+"?([a-zA-Z0-9_]+)"?\s+of relation/i)
     || message.match(/column\s+"?([a-zA-Z0-9_]+)"?\s+does not exist/i)
+    || message.match(/find the ['"]([a-zA-Z0-9_]+)['"] column/i)
   return match?.[1] || null
 }
 
@@ -82,7 +95,7 @@ export async function GET(request: NextRequest) {
 
     if (search) {
       // Optimized search with ilike for better performance
-      query = query.or(`name.ilike.%${search}%,slug.ilike.%${search}%`)
+      { const s = sanitizeSearch(search); query = query.or(`name.ilike.%${s}%,slug.ilike.%${s}%`) }
     }
 
     if (status === 'active') query = query.eq('is_active', true)
@@ -115,12 +128,6 @@ export async function GET(request: NextRequest) {
       }, { status: 500 })
     }
 
-    const DEFAULT_LIMITS: Record<string, PlanLimits> = {
-      free: { maxUsers: 1, maxProducts: 50, maxTransactionsPerMonth: 100, maxLocations: 1 },
-      starter: { maxUsers: 5, maxProducts: 500, maxTransactionsPerMonth: 1000, maxLocations: 3 },
-      professional: { maxUsers: 20, maxProducts: 5000, maxTransactionsPerMonth: 10000, maxLocations: 10 },
-      enterprise: { maxUsers: -1, maxProducts: -1, maxTransactionsPerMonth: -1, maxLocations: -1 },
-    };
     const planRows = (data || []) as PlanRow[]
 
     const planCodes = new Set(planRows.map((plan) => normalizePlanSlug(plan.slug)))
@@ -185,15 +192,14 @@ export async function GET(request: NextRequest) {
 
     // Process plans with optimized mapping
     const plans = dedupeCanonicalPlans(planRows.map((plan) => {
-      if (!plan.limits) {
-        const slug = normalizePlanSlug(String(plan.slug || '').toLowerCase());
-        plan.limits = DEFAULT_LIMITS[slug] || { maxUsers: 2, maxProducts: 50, maxTransactionsPerMonth: 200, maxLocations: 1 };
-      }
-      const usage = usageByPlan.get(normalizePlanSlug(String(plan.slug || '')))
+      const slug = normalizePlanSlug(String(plan.slug || '').toLowerCase());
+      const usage = usageByPlan.get(slug)
       return {
         ...plan,
-        slug: normalizePlanSlug(String(plan.slug || '')),
+        slug,
         name: getCanonicalPlanDisplayName(plan.slug as string),
+        features: sanitizePlanFeatures(plan.features, slug),
+        limits: sanitizePlanLimits(plan.limits, slug),
         organization_count: usage?.organizations.size || 0,
         active_subscription_count: usage?.active || 0,
         mrr: usage?.mrr || 0,
@@ -228,42 +234,30 @@ export async function PATCH(request: NextRequest) {
     const supabase = await createAdminClient()
 
     const defaults = [
-      { 
-        name: 'Free', 
-        slug: 'free', 
-        price_monthly: 0, 
-        price_yearly: 0, 
-        features: ['Soporte por email','Reportes básicos'], 
-        limits: { maxUsers: 2, maxProducts: 50, maxTransactionsPerMonth: 200, maxLocations: 1 },
-        is_active: true 
-      },
-      { 
-        name: 'Starter', 
-        slug: 'starter', 
-        price_monthly: 100000, 
-        price_yearly: 1080000, 
-        features: ['basic_inventory','basic_sales','purchase_module','basic_reports','team_management','admin_panel','advanced_inventory'], 
-        limits: { maxUsers: 5, maxProducts: 500, maxTransactionsPerMonth: 1000, maxLocations: 3 },
-        is_active: true
-      },
-      { 
-        name: 'Professional', 
-        slug: 'professional', 
-        price_monthly: 200000, 
-        price_yearly: 2160000, 
-        features: ['basic_inventory','basic_sales','purchase_module','basic_reports','advanced_reports','multi_branch','audit_logs','unlimited_users','export_reports','team_management','admin_panel','advanced_inventory','loyalty_program','custom_branding'], 
-        limits: { maxUsers: -1, maxProducts: -1, maxTransactionsPerMonth: -1, maxLocations: -1 },
-        is_active: true 
-      },
       {
-        name: 'Enterprise',
-        slug: 'enterprise',
+        ...getCanonicalPlanDefaults('free'),
         price_monthly: 0,
         price_yearly: 0,
-        features: ['basic_inventory','basic_sales','purchase_module','advanced_reports','multi_branch','audit_logs','export_reports','team_management','admin_panel','advanced_inventory','loyalty_program','custom_branding','api_access'],
-        limits: { maxUsers: -1, maxProducts: -1, maxTransactionsPerMonth: -1, maxLocations: -1 },
-        is_active: false
-      }
+        is_active: true,
+      },
+      {
+        ...getCanonicalPlanDefaults('starter'),
+        price_monthly: 100000,
+        price_yearly: 1080000,
+        is_active: true,
+      },
+      {
+        ...getCanonicalPlanDefaults('professional'),
+        price_monthly: 200000,
+        price_yearly: 2160000,
+        is_active: true,
+      },
+      {
+        ...getCanonicalPlanDefaults('enterprise'),
+        price_monthly: 0,
+        price_yearly: 0,
+        is_active: false,
+      },
     ]
 
     let { error } = await supabase
@@ -347,32 +341,30 @@ export async function POST(request: NextRequest) {
       currency: String(body.currency || 'PYG').toUpperCase(),
       trial_days: Math.max(0, Number(body.trial_days ?? 0)),
       is_active: Boolean(body.is_active ?? true),
-      features: Array.isArray(body.features) ? body.features : [],
-      limits: body.limits && typeof body.limits === 'object' ? body.limits : { 
-        maxUsers: 5, 
-        maxProducts: 100, 
-        maxTransactionsPerMonth: 1000, 
-        maxLocations: 1 
-      },
+      features: sanitizePlanFeatures(body.features, normalizedSlug),
+      limits: sanitizePlanLimits(body.limits, normalizedSlug),
     }
 
-    let { data, error } = await supabase
-      .from('saas_plans')
-      .insert(plan)
-      .select('*')
-      .single()
+    let nextPlan: Record<string, unknown> = { ...plan }
+    let data: PlanRow | null = null
+    let error: SupabasePlanError | null = null
 
-    if (error && String(error.code) === '42703') {
-      const minimal = Object.fromEntries(
-        Object.entries(plan).filter(([key]) => key !== 'currency')
-      )
-      const retry = await supabase
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const result = await supabase
         .from('saas_plans')
-        .insert(minimal)
+        .insert(nextPlan)
         .select('*')
         .single()
-      data = retry.data
-      error = retry.error
+
+      data = result.data as PlanRow | null
+      error = result.error as SupabasePlanError | null
+
+      const missingColumn = getMissingColumn(error)
+      if (!missingColumn || !(missingColumn in nextPlan)) break
+
+      console.warn(`saas_plans.${missingColumn} column not found, retrying plan insert without it`)
+      const { [missingColumn]: _removed, ...remainingPlan } = nextPlan
+      nextPlan = remainingPlan
     }
 
     if (error) {
@@ -439,18 +431,29 @@ export async function PUT(request: NextRequest) {
       }, { status: 400 })
     }
 
-    const limits = body.limits && typeof body.limits === 'object' ? body.limits as PlanLimits : undefined
+    let updateSlug = body.slug ? normalizePlanSlug(String(body.slug)) : undefined
+    if (!updateSlug && (body.features !== undefined || body.limits !== undefined)) {
+      const { data: currentPlan } = await supabase
+        .from('saas_plans')
+        .select('slug')
+        .eq('id', id)
+        .maybeSingle()
+      updateSlug = normalizePlanSlug((currentPlan as { slug?: string | null } | null)?.slug)
+    }
+    const limits = body.limits && typeof body.limits === 'object'
+      ? sanitizePlanLimits(body.limits, updateSlug)
+      : undefined
 
     const updates: Record<string, unknown> = {
       name: body.name ? String(body.name).trim() : undefined,
-      slug: body.slug ? normalizePlanSlug(String(body.slug)) : undefined,
+      slug: updateSlug,
       description: body.description !== undefined ? String(body.description).trim() : undefined,
       price_monthly: body.price_monthly !== undefined ? Number(body.price_monthly) : undefined,
       price_yearly: body.price_yearly !== undefined ? Number(body.price_yearly) : undefined,
       currency: body.currency ? String(body.currency).toUpperCase() : undefined,
       trial_days: body.trial_days !== undefined ? Math.max(0, Number(body.trial_days)) : undefined,
       is_active: body.is_active !== undefined ? Boolean(body.is_active) : undefined,
-      features: body.features !== undefined ? (Array.isArray(body.features) ? body.features : []) : undefined,
+      features: body.features !== undefined ? sanitizePlanFeatures(body.features, updateSlug) : undefined,
       limits,
       max_users: limits?.maxUsers,
       max_products: limits?.maxProducts,

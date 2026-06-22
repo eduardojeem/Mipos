@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { BarChart3, Building2, RefreshCw } from 'lucide-react';
+import { BarChart3, Building2, RefreshCw, Crown } from 'lucide-react';
 import { useAdminData, Organization, AdminStats as IAdminStats } from '@/app/superadmin/hooks/useAdminData';
 import { AdminStats } from '@/app/superadmin/components/AdminStats';
 import { ErrorDisplay } from '@/app/superadmin/components/ErrorDisplay';
@@ -136,47 +136,65 @@ export function SuperAdminClient({ initialOrganizations, initialStats }: SuperAd
 
   return (
     <SuperAdminGuard>
-      <div className="flex-1 space-y-6 p-8 pt-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="space-y-1">
-            <h2 className="text-3xl font-bold tracking-tight text-slate-950 dark:text-slate-50">
-              Panel de Administración SaaS
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Gestiona organizaciones, usuarios, planes y salud comercial de tu plataforma
-            </p>
-          </div>
+      <div className="flex-1 space-y-6">
+        
+        {/* Premium Hero Header */}
+        <div className="relative overflow-hidden rounded-2xl border border-border/50 bg-background/60 p-6 md:p-8 backdrop-blur-2xl glass-card">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent opacity-50" />
+          
+          <div className="relative z-10 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                <Crown className="h-3.5 w-3.5" />
+                <span className="tracking-wide">Centro de Control</span>
+              </div>
+              <h2 className="text-3xl font-bold tracking-tight text-foreground md:text-4xl">
+                Panel de Administración SaaS
+              </h2>
+              <p className="max-w-2xl text-base text-muted-foreground">
+                Gestiona organizaciones, usuarios, planes y la salud comercial global de tu plataforma en tiempo real.
+              </p>
+            </div>
 
-          <div className="flex items-center gap-2">
-            <span className="hidden text-sm text-muted-foreground sm:inline">
-              Última actualización: {formatLastUpdated()}
-            </span>
-            <Button asChild variant="outline" size="sm" className="gap-2">
-              <Link href="/superadmin/analytics">
-                <BarChart3 className="h-4 w-4" />
-                <span className="hidden sm:inline">Analíticas</span>
-              </Link>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRefresh}
-              disabled={loading || refreshing}
-              className="gap-2"
-            >
-              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">Actualizar</span>
-            </Button>
+            <div className="flex shrink-0 items-center gap-3">
+              <div className="flex flex-col items-end gap-1">
+                <span className="text-xs font-medium text-muted-foreground/80">
+                  Estado
+                </span>
+                <span className="text-sm font-semibold text-foreground">
+                  {formatLastUpdated()}
+                </span>
+              </div>
+
+              <div className="h-8 w-[1px] bg-border/50" />
+
+              <Button asChild variant="outline" size="sm" className="h-10 gap-2 border-border/50 bg-background/50 hover:bg-muted/50 transition-colors shadow-sm">
+                <Link href="/superadmin/analytics">
+                  <BarChart3 className="h-4 w-4 text-primary" />
+                  <span className="hidden sm:inline">Analíticas</span>
+                </Link>
+              </Button>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={loading || refreshing}
+                className="h-10 gap-2 shadow-sm shadow-primary/20 hover-glow"
+              >
+                <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline">Sincronizar</span>
+              </Button>
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-between rounded-md border bg-muted/50 p-4">
+        <div className="flex items-center justify-between rounded-xl border border-border/50 bg-background/50 backdrop-blur-sm p-4 glass-card shadow-sm">
           <div className="space-y-0.5">
-            <Label htmlFor="auto-refresh" className="text-base font-medium">
+            <Label htmlFor="auto-refresh" className="text-base font-semibold">
               Actualización automática
             </Label>
             <p className="text-sm text-muted-foreground">
-              Actualiza los datos cada 5 minutos automáticamente.
+              Actualiza los datos cada 5 minutos de forma automática.
             </p>
           </div>
           <Switch id="auto-refresh" checked={autoRefresh} onCheckedChange={handleAutoRefreshToggle} />

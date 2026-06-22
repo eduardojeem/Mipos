@@ -63,5 +63,38 @@ describe('Superadmin org summary API', () => {
     expect(json.data.organizationId).toBe('org-1')
     expect(json.data.subscription.planSlug).toBe('starter')
   })
+
+  it('normalizes TRIAL status from organization fallback', async () => {
+    vi.mocked(assertSuperAdmin).mockResolvedValue({ ok: true } as any)
+
+    vi.mocked(supabaseServer.createAdminClient).mockResolvedValue({
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            single: async () => ({
+              data: {
+                id: 'org-1',
+                name: 'Org Uno',
+                slug: 'org-uno',
+                created_at: '2026-01-01T00:00:00.000Z',
+                subscription_plan: 'ENTERPRISE',
+                subscription_status: 'TRIAL',
+              },
+              error: null,
+            }),
+          }),
+        }),
+      }),
+    } as any)
+
+    vi.mocked(subscriptionLib.getSubscriptionSnapshot).mockResolvedValue(null as any)
+
+    const response = await GET(request, { params: Promise.resolve({ id: 'org-1' }) })
+    const json = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(json.data.subscription.status).toBe('trialing')
+    expect(json.data.subscription.planSlug).toBe('ENTERPRISE')
+  })
 })
 

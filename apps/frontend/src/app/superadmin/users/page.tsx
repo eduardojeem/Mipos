@@ -62,6 +62,7 @@ import { useUserStats } from '../hooks/useUserStats';
 import { toast } from '@/lib/toast';
 import { useDebounce } from 'use-debounce';
 import { ROLE_LABELS, ROLE_BADGE_CLASSES, normalizeRole } from '@/lib/roles';
+import { cn } from '@/lib/utils';
 
 export default function SuperAdminUsersPage() {
   const [search, setSearch] = useState('');
@@ -262,21 +263,19 @@ export default function SuperAdminUsersPage() {
     <SuperAdminGuard>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-slate-700 to-slate-900 dark:from-slate-300 dark:to-slate-100 bg-clip-text text-transparent flex items-center gap-3">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center shadow-lg">
-                <Users className="h-7 w-7 text-white" />
-              </div>
-              Gestión de Usuarios
-            </h1>
-            <p className="text-slate-600 dark:text-slate-400 mt-3 text-lg font-medium">
-              Todos los usuarios del sistema SaaS
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+              <Users className="h-3.5 w-3.5" />
+              <span className="tracking-wide">Gestión de Cuentas</span>
+            </div>
+            <h1 className="text-3xl font-bold tracking-tight text-foreground md:text-4xl">Gestión de Usuarios</h1>
+            <p className="max-w-2xl text-sm text-muted-foreground">
+              Todos los usuarios registrados en el sistema SaaS de MiPOS.
             </p>
           </div>
-
           <div className="flex items-center gap-3">
-            <Badge variant="outline" className="px-4 py-2 text-sm bg-slate-50 border-slate-200 text-slate-700 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-300">
+            <Badge variant="outline" className="px-4 py-2 text-sm bg-background/50 border-border/50 text-foreground shadow-sm">
               <Users className="h-4 w-4 mr-2" />
               {stats.total} usuarios
             </Badge>
@@ -285,123 +284,106 @@ export default function SuperAdminUsersPage() {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="backdrop-blur-xl bg-white/95 dark:bg-slate-900/95 border-slate-200 dark:border-slate-700 shadow-lg hover:shadow-xl transition-all duration-300">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-3 text-sm font-medium text-slate-600 dark:text-slate-400">
-                <div className="p-2 rounded-xl bg-gradient-to-br from-slate-500 to-slate-600 shadow-lg">
-                  <Users className="h-4 w-4 text-white" />
-                </div>
-                Total de Usuarios
-              </CardTitle>
+          <Card className="rounded-2xl glass-card hover-lift hover-glow border-border/50 bg-background/60 backdrop-blur-sm transition-all duration-300">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
+              <div className="text-xs font-bold tracking-wider uppercase text-muted-foreground">Total de Usuarios</div>
+              <div className="rounded-xl bg-background/40 p-2.5 border border-border/40 shadow-sm backdrop-blur-sm text-slate-500">
+                <Users className="h-4 w-4" />
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-slate-800 dark:text-slate-200">
-                {stats.total}
-              </div>
+              <div className="text-3xl font-extrabold text-slate-800 dark:text-slate-200">{stats.total}</div>
             </CardContent>
           </Card>
 
-          <Card className="backdrop-blur-xl bg-white/95 dark:bg-slate-900/95 border-slate-200 dark:border-slate-700 shadow-lg hover:shadow-xl transition-all duration-300">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-3 text-sm font-medium text-slate-600 dark:text-slate-400">
-                <div className="p-2 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-lg">
-                  <CheckCircle className="h-4 w-4 text-white" />
-                </div>
-                Con Organizaciones
-              </CardTitle>
+          <Card className="rounded-2xl glass-card hover-lift hover-glow border-border/50 bg-background/60 backdrop-blur-sm transition-all duration-300">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
+              <div className="text-xs font-bold tracking-wider uppercase text-muted-foreground">Con Organizaciones</div>
+              <div className="rounded-xl bg-background/40 p-2.5 border border-border/40 shadow-sm backdrop-blur-sm text-emerald-500">
+                <CheckCircle className="h-4 w-4" />
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-slate-800 dark:text-slate-200">
-                {stats.withOrgs}
-              </div>
+              <div className="text-3xl font-extrabold text-slate-800 dark:text-slate-200">{stats.withOrgs}</div>
             </CardContent>
           </Card>
 
-          <Card className="backdrop-blur-xl bg-white/95 dark:bg-slate-900/95 border-slate-200 dark:border-slate-700 shadow-lg hover:shadow-xl transition-all duration-300">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-3 text-sm font-medium text-slate-600 dark:text-slate-400">
-                <div className="p-2 rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 shadow-lg">
-                  <XCircle className="h-4 w-4 text-white" />
-                </div>
-                Sin Organizaciones
-              </CardTitle>
+          <Card className="rounded-2xl glass-card hover-lift hover-glow border-border/50 bg-background/60 backdrop-blur-sm transition-all duration-300">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
+              <div className="text-xs font-bold tracking-wider uppercase text-muted-foreground">Sin Organizaciones</div>
+              <div className="rounded-xl bg-background/40 p-2.5 border border-border/40 shadow-sm backdrop-blur-sm text-amber-500">
+                <XCircle className="h-4 w-4" />
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-slate-800 dark:text-slate-200">
-                {stats.withoutOrgs}
-              </div>
+              <div className="text-3xl font-extrabold text-slate-800 dark:text-slate-200">{stats.withoutOrgs}</div>
             </CardContent>
           </Card>
         </div>
 
         {/* Main Table Card */}
-        <Card className="backdrop-blur-xl bg-white/95 dark:bg-slate-900/95 border-slate-200 dark:border-slate-800 shadow-lg">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-3 text-xl">
-                  <div className="p-2 rounded-xl bg-gradient-to-br from-slate-500 to-slate-600 shadow-lg">
-                    <Users className="h-5 w-5 text-white" />
-                  </div>
-                  <span className="bg-gradient-to-r from-slate-700 to-slate-900 dark:from-slate-300 dark:to-slate-100 bg-clip-text text-transparent font-bold">
-                    Lista de Usuarios
-                  </span>
-                </CardTitle>
-                <CardDescription className="mt-2">
-                  Gestiona y visualiza todos los usuarios del sistema
-                </CardDescription>
+        {/* Main Table Card */}
+        <Card className="rounded-2xl border-border/50 bg-background/60 backdrop-blur-sm glass-card">
+          <CardHeader className="flex flex-col gap-4 border-b border-border/50 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle className="text-lg font-bold flex items-center gap-2">
+                <Users className="h-5 w-5 text-primary" />
+                <span>Lista de Usuarios</span>
+              </CardTitle>
+              <CardDescription className="mt-1 text-xs text-muted-foreground">
+                Gestiona y visualiza todos los usuarios del sistema
+              </CardDescription>
+            </div>
+            <div className="flex flex-wrap gap-3 items-center">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar usuarios..."
+                  value={search}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  className="pl-10 w-64 border-border/50 bg-background/40 backdrop-blur-sm"
+                />
               </div>
-              <div className="flex gap-3">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                  <Input
-                    placeholder="Buscar usuarios..."
-                    value={search}
-                    onChange={(e) => handleSearchChange(e.target.value)}
-                    className="pl-10 w-64 border-slate-300 dark:border-slate-700"
-                  />
-                </div>
-                <Button
-                  onClick={handleRefresh}
-                  disabled={refreshing || loading}
-                  variant="outline"
-                  className="border-slate-300 dark:border-slate-700"
-                >
-                  {refreshing ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Actualizando...
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Actualizar
-                    </>
-                  )}
-                </Button>
+              <Button
+                onClick={handleRefresh}
+                disabled={refreshing || loading}
+                variant="outline"
+                className="bg-background/50 border-border/50 hover:bg-muted/50 transition-colors h-10 gap-2"
+              >
+                {refreshing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="hidden sm:inline">Actualizando...</span>
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4" />
+                    <span className="hidden sm:inline">Actualizar</span>
+                  </>
+                )}
+              </Button>
 
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className="border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 group"
-                    >
-                      <Download className="h-4 w-4 mr-2 group-hover:translate-y-0.5 transition-transform" />
-                      Exportar
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-48">
-                    <DropdownMenuItem onClick={handleExportCSV} className="cursor-pointer">
-                      <FileText className="h-4 w-4 mr-2 text-blue-500" />
-                      Exportar a CSV
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleExportExcel} className="cursor-pointer">
-                      <FileSpreadsheet className="h-4 w-4 mr-2 text-emerald-500" />
-                      Exportar a Excel
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="bg-background/50 border-border/50 hover:bg-muted/50 transition-colors h-10 gap-2"
+                  >
+                    <Download className="h-4 w-4" />
+                    <span>Exportar</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48 border-border/50 glass-card">
+                  <DropdownMenuItem onClick={handleExportCSV} className="cursor-pointer focus:bg-muted/60">
+                    <FileText className="h-4 w-4 mr-2 text-blue-500" />
+                    Exportar a CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleExportExcel} className="cursor-pointer focus:bg-muted/60">
+                    <FileSpreadsheet className="h-4 w-4 mr-2 text-emerald-500" />
+                    Exportar a Excel
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </CardHeader>
           <CardContent>
@@ -418,11 +400,11 @@ export default function SuperAdminUsersPage() {
                 </div>
               </div>
             ) : (
-              <div className="rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden">
+              <div className="overflow-x-auto">
                 <Table>
-                  <TableHeader>
-                    <TableRow className="bg-slate-50 dark:bg-slate-900/50">
-                      <TableHead className="w-[50px]">
+                  <TableHeader className="bg-muted/40">
+                    <TableRow className="hover:bg-transparent border-b border-border/50">
+                      <TableHead className="w-[50px] pl-6">
                         <Checkbox
                           checked={selectedUsers.length === users.length && users.length > 0}
                           onCheckedChange={toggleSelectAll}
@@ -472,60 +454,63 @@ export default function SuperAdminUsersPage() {
                     {users.map((user) => (
                       <TableRow
                         key={user.id}
-                        className={`hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors ${selectedUsers.includes(user.id) ? 'bg-slate-50/80 dark:bg-slate-900/80' : ''}`}
+                        className={cn(
+                          'border-b border-border/50 transition-colors hover:bg-muted/40',
+                          selectedUsers.includes(user.id) ? 'bg-primary/5 hover:bg-primary/10' : ''
+                        )}
                       >
-                        <TableCell>
+                        <TableCell className="pl-6">
                           <Checkbox
                             checked={selectedUsers.includes(user.id)}
                             onCheckedChange={() => toggleSelectUser(user.id)}
                           />
                         </TableCell>
-                        <TableCell className="font-medium">{user.email}</TableCell>
-                        <TableCell>{user.full_name || '-'}</TableCell>
+                        <TableCell className="font-semibold text-foreground text-sm">{user.email}</TableCell>
+                        <TableCell className="text-sm text-foreground">{user.full_name || '-'}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
                             {user.role === 'SUPER_ADMIN' && (
-                              <Crown className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+                              <Crown className="h-3.5 w-3.5 text-amber-500" />
                             )}
                             {getRoleBadge(user.role)}
                           </div>
                         </TableCell>
                         <TableCell>
                           {user.organization?.name ? (
-                            <Badge variant="outline" className="bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-900/50 dark:border-slate-800 dark:text-slate-400 font-medium">
+                            <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 hover:bg-primary/10 font-semibold text-xs">
                               {user.organization.name}
                             </Badge>
                           ) : (
-                            <span className="text-slate-400 text-xs italic">Individual / Sin Org</span>
+                            <span className="text-muted-foreground/60 text-xs italic">Individual / Sin Org</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-sm text-slate-600 dark:text-slate-400">
+                        <TableCell className="text-xs text-muted-foreground/85">
                           {formatDate(user.created_at)}
                         </TableCell>
-                        <TableCell className="text-sm text-slate-600 dark:text-slate-400">
+                        <TableCell className="text-xs text-muted-foreground/85">
                           {formatDate(user.last_sign_in_at)}
                         </TableCell>
                         <TableCell>
                           {user.is_active ? (
-                            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800 gap-1.5">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                            <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 hover:bg-emerald-500/20 gap-1.5 text-xs font-semibold">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
                               Activo
                             </Badge>
                           ) : (
-                            <Badge variant="outline" className="bg-slate-50 text-slate-500 border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700 gap-1.5">
+                            <Badge variant="outline" className="bg-slate-500/10 text-slate-500 border border-slate-500/20 hover:bg-slate-500/20 gap-1.5 text-xs">
                               <span className="w-1.5 h-1.5 rounded-full bg-slate-400 inline-block" />
                               Inactivo
                             </Badge>
                           )}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right pr-6">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm" disabled={updating}>
+                              <Button variant="ghost" size="icon" disabled={updating} className="hover:bg-muted/60">
                                 <MoreHorizontal className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-44">
+                            <DropdownMenuContent align="end" className="w-44 border-border/50 glass-card">
                               <DropdownMenuItem onClick={() => handleToggleActive(user)}>
                                 {user.is_active ? (
                                   <>
@@ -576,8 +561,8 @@ export default function SuperAdminUsersPage() {
 
             {/* Paginación */}
             {totalPages > 1 && !loading && (
-              <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 dark:border-slate-800">
-                <div className="text-sm text-slate-600 dark:text-slate-400">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-6 py-4 border-t border-border/50">
+                <div className="text-xs text-muted-foreground">
                   Página {currentPage} de {totalPages} · Mostrando {users.length} de {totalCount} usuarios
                 </div>
                 <div className="flex items-center gap-2">
@@ -586,7 +571,7 @@ export default function SuperAdminUsersPage() {
                     size="sm"
                     onClick={() => setCurrentPage(p => p - 1)}
                     disabled={!hasPrevPage || loading}
-                    className="gap-2"
+                    className="gap-2 h-8 bg-background/50 border-border/50 hover:bg-muted/50"
                   >
                     <ChevronLeft className="h-4 w-4" />
                     Anterior
@@ -596,7 +581,7 @@ export default function SuperAdminUsersPage() {
                     size="sm"
                     onClick={() => setCurrentPage(p => p + 1)}
                     disabled={!hasNextPage || loading}
-                    className="gap-2"
+                    className="gap-2 h-8 bg-background/50 border-border/50 hover:bg-muted/50"
                   >
                     Siguiente
                     <ChevronRight className="h-4 w-4" />
@@ -609,12 +594,12 @@ export default function SuperAdminUsersPage() {
         {/* Bulk Actions Floating Bar */}
         {selectedUsers.length > 0 && (
           <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-4 duration-300">
-            <Card className="bg-slate-900 dark:bg-slate-800 text-white shadow-2xl border-slate-700 h-16 flex items-center px-6 gap-6 rounded-2xl min-w-[500px]">
-              <div className="flex items-center gap-3 pr-6 border-r border-slate-700">
-                <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center font-bold text-sm">
+            <Card className="bg-slate-950/90 dark:bg-slate-900/90 backdrop-blur-md text-white shadow-2xl border-border/40 h-16 flex items-center px-6 gap-6 rounded-2xl min-w-[500px]">
+              <div className="flex items-center gap-3 pr-6 border-r border-white/10">
+                <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/40 text-primary flex items-center justify-center font-bold text-sm">
                   {selectedUsers.length}
                 </div>
-                <span className="font-medium text-slate-300">seleccionados</span>
+                <span className="font-medium text-slate-300 text-sm">seleccionados</span>
               </div>
 
               <div className="flex items-center gap-2">
@@ -665,7 +650,7 @@ export default function SuperAdminUsersPage() {
 
       {/* Bulk Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="border-border/50 glass-card">
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar {selectedUsers.length} usuario{selectedUsers.length !== 1 ? 's' : ''}?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -673,11 +658,11 @@ export default function SuperAdminUsersPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={updating}>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel disabled={updating} className="border-border/50 bg-background/50 hover:bg-muted/50">Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmBulkDelete}
               disabled={updating}
-              className="bg-rose-600 hover:bg-rose-700 text-white"
+              className="bg-rose-600 hover:bg-rose-700 text-white shadow-sm"
             >
               Eliminar
             </AlertDialogAction>
@@ -687,7 +672,7 @@ export default function SuperAdminUsersPage() {
 
       {/* Single Delete Confirmation Dialog */}
       <AlertDialog open={Boolean(singleDeleteUser)} onOpenChange={(open) => { if (!open) setSingleDeleteUser(null); }}>
-        <AlertDialogContent>
+        <AlertDialogContent className="border-border/50 glass-card">
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar usuario?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -697,11 +682,11 @@ export default function SuperAdminUsersPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={updating}>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel disabled={updating} className="border-border/50 bg-background/50 hover:bg-muted/50">Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmSingleDelete}
               disabled={updating}
-              className="bg-rose-600 hover:bg-rose-700 text-white"
+              className="bg-rose-600 hover:bg-rose-700 text-white shadow-sm"
             >
               Eliminar
             </AlertDialogAction>

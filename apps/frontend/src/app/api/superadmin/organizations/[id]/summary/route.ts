@@ -6,7 +6,7 @@ import { getSubscriptionSnapshot } from '@/app/api/subscription/_lib'
 function normalizeStatus(raw: string | null | undefined) {
   const value = String(raw || '').toLowerCase()
   if (value === 'active') return 'active'
-  if (value === 'trialing') return 'trialing'
+  if (value === 'trial' || value === 'trialing') return 'trialing'
   if (value === 'past_due') return 'past_due'
   if (value === 'suspended') return 'suspended'
   if (value === 'cancelled' || value === 'canceled') return 'canceled'

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-admin'
 import { assertSuperAdmin } from '@/app/api/_utils/auth'
+import { sanitizeSearch } from '@/app/api/_utils/search'
 import { buildUserResponse } from '@/app/api/users/_lib'
 
 export async function GET(request: NextRequest) {
@@ -104,7 +105,7 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
 
     if (search) {
-      query = query.or(`email.ilike.%${search}%,full_name.ilike.%${search}%`)
+      { const s = sanitizeSearch(search); query = query.or(`email.ilike.%${s}%,full_name.ilike.%${s}%`) }
     }
 
     const { data, error, count } = await query.range(start, end)

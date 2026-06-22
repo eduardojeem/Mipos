@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { assertSuperAdmin } from '@/app/api/_utils/auth';
 import { createAdminClient } from '@/lib/supabase-admin';
+import { invalidateFeatureFlagsCache } from '@/lib/system/feature-flags';
 
 const SETTING_META: Record<string, { category: string; description: string }> = {
   system_name: { category: 'general', description: 'Nombre visible del sistema' },
@@ -17,6 +18,7 @@ const SETTING_META: Record<string, { category: string; description: string }> = 
   backup_enabled: { category: 'data', description: 'Activa respaldos declarativos' },
   backup_frequency: { category: 'data', description: 'Frecuencia de respaldos' },
   data_retention_days: { category: 'data', description: 'Dias de retencion de datos' },
+  feature_flags: { category: 'features', description: 'Flags de features del SaaS' },
 };
 
 function parseSettingValue(value: unknown) {
@@ -110,6 +112,11 @@ export async function POST(request: NextRequest) {
         { error: 'Error al guardar configuraciones', details: error.message },
         { status: 500 },
       );
+    }
+
+    // Si se tocaron feature flags, invalidar la caché en memoria del helper.
+    if (rows.some((row) => row.key === 'feature_flags')) {
+      invalidateFeatureFlagsCache();
     }
 
     const updatedKeys = rows.map((row) => row.key);

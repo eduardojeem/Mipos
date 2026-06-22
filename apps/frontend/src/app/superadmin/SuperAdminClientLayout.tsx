@@ -41,6 +41,7 @@ import {
   Shield,
   Sparkles,
   Store,
+  Ticket,
   UserCheck,
   Users,
   Wrench,
@@ -166,6 +167,13 @@ const NAV_ITEMS: NavItem[] = [
     section: "billing",
   },
   {
+    title: "Promociones",
+    href: "/superadmin/promotion-codes",
+    icon: Ticket,
+    description: "Códigos de descuento SaaS",
+    section: "billing",
+  },
+  {
     title: "Facturas",
     href: "/superadmin/invoices",
     icon: FileText,
@@ -198,11 +206,10 @@ const NAV_ITEMS: NavItem[] = [
 
   // ── Sistema ─────────────────────────────────────────────────────────────────
   {
-    title: "Monitoreo",
-    href: "/superadmin/monitoring",
-    icon: Activity,
-    badge: "Live",
-    description: "Salud, rendimiento y conexiones",
+    title: "Emails",
+    href: "/superadmin/emails",
+    icon: Mail,
+    description: "Estado de Resend, plantillas y logs de envío",
     section: "system",
   },
   {
@@ -210,13 +217,6 @@ const NAV_ITEMS: NavItem[] = [
     href: "/superadmin/audit-logs",
     icon: Shield,
     description: "Registro de auditoría y trazabilidad",
-    section: "system",
-  },
-  {
-    title: "Plantillas de Email",
-    href: "/superadmin/emails",
-    icon: Mail,
-    description: "Correos transaccionales del sistema",
     section: "system",
   },
   {
@@ -331,20 +331,20 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
     const collapsed = mode === "desktop" && isCollapsed;
 
     return (
-      <div className="flex h-full flex-col bg-white dark:bg-slate-900">
+      <div className="flex h-full flex-col bg-background/60 backdrop-blur-2xl">
 
         {/* Logo / header */}
-        <div className="flex h-16 items-center justify-between border-b border-slate-200 px-3 dark:border-slate-800">
+        <div className="flex h-16 items-center justify-between border-b border-border/50 px-3">
           <div className={cn("flex min-w-0 items-center gap-2.5", collapsed && "mx-auto")}>
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-950 text-white shadow-sm dark:bg-slate-100 dark:text-slate-950">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary border border-primary/20 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
               <Crown className="h-4.5 w-4.5" />
             </div>
             {!collapsed && (
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold leading-tight text-slate-950 dark:text-slate-50">
+                <p className="truncate text-sm font-semibold leading-tight text-foreground">
                   MiPOS
                 </p>
-                <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">
+                <p className="truncate text-[11px] text-muted-foreground">
                   Super Admin
                 </p>
               </div>
@@ -378,7 +378,7 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
               return (
                 <div key={section} className="space-y-0.5">
                   {!collapsed && (
-                    <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                    <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
                       {SECTION_LABELS[section]}
                     </p>
                   )}
@@ -393,11 +393,11 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
                       <Button
                         variant="ghost"
                         className={cn(
-                          "group h-9 w-full gap-2.5 rounded-md px-2 transition-colors",
+                          "group h-9 w-full gap-2.5 rounded-md px-2 transition-all",
                           collapsed ? "justify-center" : "justify-start",
                           active
-                            ? "bg-slate-950 text-white hover:bg-slate-900 hover:text-white dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-slate-200"
-                            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                            ? "bg-primary/10 text-primary border border-primary/20 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]"
+                            : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
                         )}
                         onClick={() => {
                           if (item.children && !collapsed) {
@@ -419,8 +419,8 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
                                 className={cn(
                                   "h-4.5 shrink-0 rounded px-1.5 text-[10px] font-medium",
                                   active
-                                    ? "border-white/20 bg-white/10 text-white dark:border-slate-950/20 dark:bg-slate-950/10 dark:text-slate-950"
-                                    : "border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
+                                    ? "border-primary/20 bg-background/50 text-primary shadow-sm"
+                                    : "border-border/50 bg-background/50 text-muted-foreground"
                                 )}
                               >
                                 {item.badge}
@@ -429,7 +429,7 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
                             {item.children && (
                               <ChevronDown
                                 className={cn(
-                                  "h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform",
+                                  "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform",
                                   expanded && "rotate-180"
                                 )}
                               />
@@ -457,7 +457,7 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
 
                         {/* Submenú */}
                         {!collapsed && item.children && expanded && (
-                          <div className="ml-5 mt-0.5 space-y-0.5 border-l border-slate-200 pl-3 dark:border-slate-700">
+                          <div className="ml-5 mt-0.5 space-y-0.5 border-l border-border/50 pl-3">
                             {item.children.map((child) => {
                               const childActive = isItemActive(pathname, child);
                               return (
@@ -465,10 +465,10 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
                                   key={child.href}
                                   variant="ghost"
                                   className={cn(
-                                    "h-8 w-full justify-start gap-2 rounded-md px-2 text-[13px]",
+                                    "h-8 w-full justify-start gap-2 rounded-md px-2 text-[13px] transition-all",
                                     childActive
-                                      ? "bg-slate-100 font-medium text-slate-950 dark:bg-slate-800 dark:text-slate-50"
-                                      : "font-normal text-slate-500 hover:bg-slate-50 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-slate-200"
+                                      ? "bg-primary/5 font-medium text-primary border border-primary/10 shadow-sm"
+                                      : "font-normal text-muted-foreground hover:bg-muted/50 hover:text-foreground border border-transparent"
                                   )}
                                   onClick={() => navigate(child.href, mode === "mobile")}
                                 >
@@ -489,18 +489,18 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
         </ScrollArea>
 
         {/* Footer usuario */}
-        <div className="border-t border-slate-200 p-2 dark:border-slate-800">
+        <div className="border-t border-border/50 p-2">
           {!collapsed ? (
-            <div className="flex items-center gap-2 rounded-md bg-slate-50 px-2 py-2 dark:bg-slate-800/60">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white text-slate-500 shadow-sm dark:bg-slate-900 dark:text-slate-400">
+            <div className="flex items-center gap-2 rounded-xl bg-muted/40 px-2 py-2 border border-border/50 shadow-inner">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-background text-muted-foreground shadow-sm border border-border/50">
                 <UserCheck className="h-4 w-4" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium leading-tight text-slate-900 dark:text-slate-100">
+                <p className="truncate text-sm font-medium leading-tight text-foreground">
                   {user?.name || user?.email}
                 </p>
-                <p className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
-                  <Crown className="h-2.5 w-2.5" />
+                <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                  <Crown className="h-2.5 w-2.5 text-primary" />
                   Super Admin
                 </p>
               </div>
@@ -510,7 +510,7 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
                     variant="ghost"
                     size="icon"
                     onClick={handleLogout}
-                    className="h-8 w-8 shrink-0 text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/30 dark:hover:text-rose-400"
+                    className="h-8 w-8 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive rounded-lg transition-colors"
                   >
                     <LogOut className="h-4 w-4" />
                   </Button>
@@ -552,12 +552,18 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
   // ─── Layout ──────────────────────────────────────────────────────────────────
   return (
     <TooltipProvider delayDuration={150}>
-      <div className="flex h-screen overflow-hidden bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-50">
+      <div className="flex h-screen overflow-hidden bg-background text-foreground relative">
+        
+        {/* Premium Animated Background */}
+        <div className="pointer-events-none fixed inset-0 overflow-hidden">
+          <div className="absolute -top-[20%] -left-[10%] h-[50%] w-[50%] rounded-full bg-blue-500/10 blur-[120px]" />
+          <div className="absolute -bottom-[20%] -right-[10%] h-[50%] w-[50%] rounded-full bg-emerald-500/10 blur-[120px]" />
+        </div>
 
         {/* Sidebar desktop */}
         <aside
           className={cn(
-            "hidden shrink-0 border-r border-slate-200 transition-[width] duration-200 dark:border-slate-800 md:flex",
+            "hidden shrink-0 border-r border-border/50 transition-[width] duration-200 md:flex glass-card z-20",
             isCollapsed ? "w-[60px]" : "w-64"
           )}
         >
@@ -565,10 +571,10 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
         </aside>
 
         {/* Contenido principal */}
-        <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="flex flex-1 flex-col overflow-hidden z-10 relative">
 
           {/* Topbar */}
-          <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 dark:border-slate-800 dark:bg-slate-900">
+          <header className="flex h-14 shrink-0 items-center justify-between border-b border-border/50 bg-background/60 backdrop-blur-2xl px-4 shadow-sm relative z-30">
             <div className="flex min-w-0 items-center gap-3">
 
               {/* Botón expandir sidebar (solo desktop, cuando está colapsado) */}
@@ -605,7 +611,7 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
 
               {/* Breadcrumb activo */}
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-50">
+                <p className="truncate text-sm font-semibold text-foreground">
                   {activeItem?.title ?? "Super Admin"}
                 </p>
                 {"description" in (activeItem ?? {}) && (activeItem as NavItem)?.description && (
@@ -672,7 +678,7 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
               {activeItem && "badge" in activeItem && (activeItem as NavItem).badge && (
                 <Badge
                   variant="outline"
-                  className="hidden rounded border-slate-200 text-xs text-slate-500 sm:inline-flex dark:border-slate-700 dark:text-slate-400"
+                  className="hidden rounded-lg border-border/50 text-[10px] uppercase tracking-wider text-muted-foreground sm:inline-flex bg-background/50 shadow-sm"
                 >
                   {(activeItem as NavItem).badge}
                 </Badge>

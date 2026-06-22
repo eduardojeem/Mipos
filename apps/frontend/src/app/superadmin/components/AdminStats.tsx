@@ -94,10 +94,10 @@ export const AdminStats = memo(function AdminStats({ stats, trends }: AdminStats
           return (
             <Card
               key={index}
-              className={`relative overflow-hidden transition-all hover:shadow-lg hover:-translate-y-1 cursor-pointer border-l-4 ${stat.borderColor} bg-white dark:bg-slate-950/50 backdrop-blur-sm`}
+              className={`relative overflow-hidden glass-card hover-lift hover-glow cursor-pointer border-l-4 ${stat.borderColor} bg-background/60`}
             >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
                   {stat.title}
                 </CardTitle>
                 <div className={`p-2 rounded-lg ${stat.bgColor}`}>
@@ -107,8 +107,8 @@ export const AdminStats = memo(function AdminStats({ stats, trends }: AdminStats
               <CardContent>
                 <div className="flex items-end justify-between">
                   <div className="space-y-1">
-                    <div className="text-2xl font-bold text-slate-900 dark:text-slate-100">{stat.value}</div>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                    <div className="text-2xl font-bold text-foreground">{stat.value}</div>
+                    <p className="text-xs text-muted-foreground/80">
                       {stat.description}
                     </p>
                   </div>

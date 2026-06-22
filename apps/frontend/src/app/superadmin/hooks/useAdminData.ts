@@ -153,10 +153,9 @@ export function useAdminData(options: UseAdminDataOptions = {}) {
       const fetchStartTime = Date.now();
 
       const [statsRes, orgsRes] = await Promise.allSettled([
-        fetch('/api/superadmin/stats', { headers: { 'Content-Type': 'application/json' }, cache: 'no-store', signal }),
+        fetch('/api/superadmin/stats', { headers: { 'Content-Type': 'application/json' }, signal }),
         fetch('/api/superadmin/organizations?pageSize=100&sortBy=created_at&sortOrder=desc&page=1', {
           headers: { 'Content-Type': 'application/json' },
-          cache: 'no-store',
           signal,
         }),
       ]);

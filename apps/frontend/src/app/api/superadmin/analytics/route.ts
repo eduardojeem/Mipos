@@ -15,22 +15,24 @@ export async function GET(request: NextRequest) {
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
-    // 1. Growth Data - Organizaciones creadas por mes
+    // 1. Growth Data - Organizaciones creadas por mes (count only, no full rows)
     const { data: organizations, error: orgsError } = await supabase
       .from('organizations')
       .select('created_at')
       .gte('created_at', sixMonthsAgo.toISOString())
-      .order('created_at', { ascending: true });
+      .order('created_at', { ascending: true })
+      .limit(500);
 
     if (orgsError) throw orgsError;
 
     // Agrupar por mes
     const growthData = aggregateByMonth(organizations || [], 'created_at');
 
-    // 2. Plan Distribution - usando subscription_plan directamente de organizations
+    // 2. Plan Distribution - solo la columna necesaria con limit
     const { data: planDistribution, error: planError } = await supabase
       .from('organizations')
-      .select('subscription_plan');
+      .select('subscription_plan')
+      .limit(1000);
 
     if (planError) throw planError;
 
@@ -40,11 +42,12 @@ export async function GET(request: NextRequest) {
       return acc;
     }, {} as Record<string, number>);
 
-    // 3. User Activity - Usuarios creados por mes (sin is_active que no existe)
+    // 3. User Activity - count by month (limited)
     const { data: users, error: usersError } = await supabase
       .from('users')
       .select('created_at')
-      .gte('created_at', sixMonthsAgo.toISOString());
+      .gte('created_at', sixMonthsAgo.toISOString())
+      .limit(500);
 
     if (usersError) throw usersError;
 

@@ -18,7 +18,7 @@ function daysBetween(a: Date, b: Date) {
 function normalizeBillingStatus(status: string | null | undefined): 'active' | 'trialing' | 'past_due' | 'suspended' | 'canceled' | 'unknown' {
   const value = String(status || '').toLowerCase()
   if (value === 'active') return 'active'
-  if (value === 'trialing') return 'trialing'
+  if (value === 'trial' || value === 'trialing') return 'trialing'
   if (value === 'past_due') return 'past_due'
   if (value === 'suspended') return 'suspended'
   if (value === 'cancelled' || value === 'canceled') return 'canceled'
