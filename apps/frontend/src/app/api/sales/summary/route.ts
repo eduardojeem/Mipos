@@ -1,108 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getUserOrganizationId } from '@/app/api/_utils/organization';
 
-const COMPLETED_SALE_STATUS = 'COMPLETED' as const;
-
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const supabase = await createClient();
 
-    // Get current date ranges
-    const now = new Date();
-    const today = now.toISOString().split('T')[0];
-    const startOfWeek = new Date(now.getTime() - (now.getDay() * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0];
-    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0];
+    // Requiere sesión y resuelve la organización para scopear (antes dependía
+    // solo de RLS y sumaba todas las filas en JS).
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
+    const orgId = await getUserOrganizationId(user.id);
+    if (!orgId) {
+      return NextResponse.json({ error: 'Sin organización' }, { status: 403 });
+    }
 
-    // Optimized parallel queries
-    const [
-      todayResult,
-      weekResult,
-      monthResult,
-      lastMonthResult,
-      paymentMethodsResult
-    ] = await Promise.all([
-      // Today's sales
-      supabase
-        .from('sales')
-        .select('total_amount:total')
-        .gte('created_at', today)
-        .eq('status', COMPLETED_SALE_STATUS),
+    // Agregación en SQL (una sola llamada, tz-aware) vía RPC get_sales_summary.
+    const { data, error } = await supabase.rpc('get_sales_summary', { p_org_id: orgId });
+    if (error) throw error;
 
-      // This week's sales
-      supabase
-        .from('sales')
-        .select('total_amount:total')
-        .gte('created_at', startOfWeek)
-        .eq('status', COMPLETED_SALE_STATUS),
-
-      // This month's sales
-      supabase
-        .from('sales')
-        .select('total_amount:total')
-        .gte('created_at', startOfMonth)
-        .eq('status', COMPLETED_SALE_STATUS),
-
-      // Last month's sales for comparison
-      supabase
-        .from('sales')
-        .select('total_amount:total')
-        .gte('created_at', lastMonthStart)
-        .lte('created_at', lastMonthEnd)
-        .eq('status', COMPLETED_SALE_STATUS),
-
-      // Payment methods analysis
-      supabase
-        .from('sales')
-        .select('payment_method')
-        .gte('created_at', startOfMonth)
-        .eq('status', COMPLETED_SALE_STATUS)
-    ]);
-
-    // Calculate metrics
-    const todaySales = (todayResult.data || []).reduce((sum: number, sale: any) => sum + (sale.total_amount || 0), 0);
-    const todayCount = todayResult.data?.length || 0;
-
-    const weekSales = (weekResult.data || []).reduce((sum: number, sale: any) => sum + (sale.total_amount || 0), 0);
-    const weekCount = weekResult.data?.length || 0;
-
-    const monthSales = (monthResult.data || []).reduce((sum: number, sale: any) => sum + (sale.total_amount || 0), 0);
-    const monthCount = monthResult.data?.length || 0;
-
-    const lastMonthSales = (lastMonthResult.data || []).reduce((sum: number, sale: any) => sum + (sale.total_amount || 0), 0);
-    const lastMonthCount = lastMonthResult.data?.length || 0;
-
-    // Calculate average ticket
-    const avgTicket = monthCount > 0 ? monthSales / monthCount : 0;
-
-    // Find top payment method
-    const paymentMethods = paymentMethodsResult.data || [];
-    const methodCounts = paymentMethods.reduce((acc: Record<string, number>, sale: any) => {
-      const method = sale.payment_method || 'unknown';
-      acc[method] = (acc[method] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-
-    const topPaymentMethod = Object.entries(methodCounts)
-      .sort(([,a], [,b]) => (b as number) - (a as number))[0]?.[0] || 'N/A';
-
-    // Calculate growth percentage (month over month)
-    const growthPercentage = lastMonthSales > 0 
-      ? ((monthSales - lastMonthSales) / lastMonthSales * 100)
-      : monthSales > 0 ? 100 : 0;
+    const s = (data ?? {}) as Record<string, number | string>;
 
     const summary = {
-      todaySales,
-      todayCount,
-      weekSales,
-      weekCount,
-      monthSales,
-      monthCount,
-      avgTicket,
-      topPaymentMethod,
-      growthPercentage: Math.round(growthPercentage * 10) / 10,
-      lastUpdated: new Date().toISOString()
+      todaySales: Number(s.todaySales) || 0,
+      todayCount: Number(s.todayCount) || 0,
+      weekSales: Number(s.weekSales) || 0,
+      weekCount: Number(s.weekCount) || 0,
+      monthSales: Number(s.monthSales) || 0,
+      monthCount: Number(s.monthCount) || 0,
+      avgTicket: Number(s.avgTicket) || 0,
+      topPaymentMethod: (s.topPaymentMethod as string) || 'N/A',
+      growthPercentage: Number(s.growthPercentage) || 0,
+      lastUpdated: new Date().toISOString(),
     };
 
     return NextResponse.json(summary);

@@ -57,6 +57,27 @@ function getBackendHeaders(
   return headers;
 }
 
+type BranchValidationRow = {
+  organization_id?: string | null;
+  is_active?: boolean | null;
+};
+
+type BranchValidationError = {
+  message?: string;
+  code?: string;
+  details?: string;
+};
+
+type BranchValidationQuery = {
+  select: (columns: string) => BranchValidationQuery;
+  eq: (column: string, value: string) => BranchValidationQuery;
+  maybeSingle: () => Promise<{ data: BranchValidationRow | null; error: BranchValidationError | null }>;
+};
+
+type BranchValidationClient = {
+  from: (table: 'branches') => BranchValidationQuery;
+};
+
 async function persistSaleOperationalFields(
   supabase: any,
   organizationId: string,
@@ -90,6 +111,37 @@ async function persistSaleOperationalFields(
     if (error && !isMissingColumnError(error)) {
       console.warn('[sales] Optional sales update failed:', error.message);
     }
+  }
+}
+
+async function validateOperationalBranch(
+  supabase: BranchValidationClient | null,
+  organizationId: string,
+  context: ReturnType<typeof getRequestOperationalContext>,
+): Promise<void> {
+  if (!context.branchId || !supabase) return;
+
+  const { data, error } = await supabase
+    .from('branches')
+    .select('id, organization_id, is_active')
+    .eq('id', context.branchId)
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingColumnError(error)) return;
+    throw new Error(error.message || 'No se pudo validar la sucursal seleccionada');
+  }
+
+  if (!data) {
+    throw new Error('La sucursal seleccionada no existe');
+  }
+
+  if (data.organization_id && data.organization_id !== organizationId) {
+    throw new Error('La sucursal seleccionada no pertenece a la organizacion actual');
+  }
+
+  if (data.is_active === false) {
+    throw new Error('La sucursal seleccionada esta inactiva');
   }
 }
 
@@ -549,6 +601,22 @@ export async function POST(request: NextRequest) {
     const isDev = process.env.NODE_ENV !== 'production';
     const hasSupabaseEnv = !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     const canUseSupabase = !!user && !userError && hasSupabaseEnv && typeof (supabase as any).from === 'function';
+
+    if (canUseSupabase) {
+      try {
+        await validateOperationalBranch(supabase as BranchValidationClient, orgId, operationalContext);
+      } catch (branchError) {
+        return NextResponse.json(
+          {
+            error:
+              branchError instanceof Error
+                ? branchError.message
+                : 'No se pudo validar la sucursal seleccionada',
+          },
+          { status: 400 }
+        );
+      }
+    }
 
     // Optionally get access token for backend proxy
     const { data: { session } } = await (supabase as any).auth.getSession();
