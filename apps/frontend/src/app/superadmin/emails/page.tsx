@@ -1,13 +1,24 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { SuperAdminGuard } from '../components/SuperAdminGuard';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
+import { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import {
+  Check,
+  Copy,
+  Eye,
+  Loader2,
+  Mail,
+  RefreshCw,
+  Send,
+  AlertTriangle,
+  CheckCircle2,
+} from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { useToast } from '@/components/ui/use-toast'
 import {
   Dialog,
   DialogContent,
@@ -15,500 +26,389 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Mail,
-  Search,
-  Plus,
-  Edit,
-  Trash2,
-  Loader2,
-  Code,
-  Save,
-  X,
-  Eye,
-  RefreshCw,
-  AlertTriangle,
-} from 'lucide-react';
-import { useEmailTemplates, EmailTemplate } from '../hooks/useEmailTemplates';
-import { useDebounce } from 'use-debounce';
+} from '@/components/ui/dialog'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { cn } from '@/lib/utils'
 
-const CATEGORIES = [
-  { value: 'all', label: 'Todas las categorías' },
-  { value: 'auth', label: 'Autenticación' },
-  { value: 'billing', label: 'Facturación' },
-  { value: 'system', label: 'Sistema' },
-  { value: 'marketing', label: 'Marketing' },
-];
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
-export default function EmailTemplatesPage() {
-  const [search, setSearch] = useState('');
-  const [debouncedSearch] = useDebounce(search, 500);
-  const [category, setCategory] = useState('all');
-  const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null);
-  const [isEditorOpen, setIsEditorOpen] = useState(false);
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [isCreateMode, setIsCreateMode] = useState(false);
+type EmailLog = {
+  id: string
+  to: string
+  subject: string
+  template: string
+  status: 'sent' | 'failed'
+  sentAt: string
+  error?: string
+}
 
-  // Form state
-  const [formData, setFormData] = useState<{
-    name: string;
-    slug: string;
-    subject: string;
-    html_content: string;
-    text_content: string;
-    category: 'auth' | 'billing' | 'system' | 'marketing';
-    description: string;
-    is_active: boolean;
-  }>({
-    name: '',
-    slug: '',
-    subject: '',
-    html_content: '',
-    text_content: '',
-    category: 'auth',
-    description: '',
-    is_active: true,
-  });
+type EmailStats = {
+  totalSent: number
+  totalFailed: number
+  lastSentAt: string | null
+  configured: boolean
+}
 
-  const {
-    templates,
-    total,
-    loading,
-    error,
-    refresh,
-    createTemplate,
-    updateTemplate,
-    deleteTemplate,
-    isCreating,
-    isUpdating,
-    isDeleting,
-  } = useEmailTemplates({
-    category: category !== 'all' ? category : undefined,
-    search: debouncedSearch,
-  });
+type TestEmailPayload = {
+  to: string
+  template: 'invitation' | 'welcome'
+}
 
-  const handleEdit = (template: EmailTemplate) => {
-    setSelectedTemplate(template);
-    setFormData({
-      name: template.name,
-      slug: template.slug,
-      subject: template.subject,
-      html_content: template.html_content,
-      text_content: template.text_content || '',
-      category: template.category,
-      description: template.description || '',
-      is_active: template.is_active,
-    });
-    setIsCreateMode(false);
-    setIsEditorOpen(true);
-  };
+// ---------------------------------------------------------------------------
+// API helpers
+// ---------------------------------------------------------------------------
 
-  const handleCreate = () => {
-    setSelectedTemplate(null);
-    setFormData({
-      name: '',
-      slug: '',
-      subject: '',
-      html_content: '',
-      text_content: '',
-      category: 'auth',
-      description: '',
-      is_active: true,
-    });
-    setIsCreateMode(true);
-    setIsEditorOpen(true);
-  };
+async function fetchEmailStats(): Promise<EmailStats> {
+  const res = await fetch('/api/superadmin/emails/stats')
+  if (!res.ok) throw new Error('No se pudieron cargar las estadísticas')
+  return res.json()
+}
 
-  const handlePreview = (template: EmailTemplate) => {
-    setSelectedTemplate(template);
-    setIsPreviewOpen(true);
-  };
+async function fetchEmailLogs(): Promise<EmailLog[]> {
+  const res = await fetch('/api/superadmin/emails/logs')
+  if (!res.ok) throw new Error('No se pudieron cargar los logs')
+  const json = await res.json()
+  return json.logs || []
+}
 
-  const handleSave = async () => {
-    try {
-      if (isCreateMode) {
-        await createTemplate(formData);
-      } else if (selectedTemplate) {
-        await updateTemplate({
-          id: selectedTemplate.id,
-          updates: formData,
-        });
+async function sendTestEmail(payload: TestEmailPayload): Promise<{ success: boolean; message: string }> {
+  const res = await fetch('/api/superadmin/emails/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  return res.json()
+}
+
+// ---------------------------------------------------------------------------
+// Components
+// ---------------------------------------------------------------------------
+
+function StatusBadge({ status }: { status: string }) {
+  if (status === 'sent') {
+    return (
+      <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-400">
+        Enviado
+      </Badge>
+    )
+  }
+  return (
+    <Badge variant="outline" className="border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-400">
+      Fallido
+    </Badge>
+  )
+}
+
+function StatCard({ label, value, tone }: { label: string; value: React.ReactNode; tone?: 'ok' | 'bad' }) {
+  return (
+    <Card>
+      <CardContent className="p-5">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">{label}</p>
+        <div
+          className={cn(
+            'mt-1 text-2xl font-bold',
+            tone === 'ok' ? 'text-emerald-600 dark:text-emerald-400' : tone === 'bad' ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-white',
+          )}
+        >
+          {value}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function TemplateCard({
+  name,
+  description,
+  disabledTest,
+  onPreview,
+  onTest,
+}: {
+  name: string
+  description: string
+  disabledTest: boolean
+  onPreview: () => void
+  onTest: () => void
+}) {
+  return (
+    <div className="flex flex-col justify-between gap-3 rounded-lg border border-slate-200 p-4 dark:border-slate-800 sm:flex-row sm:items-center">
+      <div className="flex items-start gap-3">
+        <Mail className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
+        <div>
+          <p className="text-sm font-medium text-slate-900 dark:text-white">{name}</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">{description}</p>
+        </div>
+      </div>
+      <div className="flex shrink-0 gap-2">
+        <Button size="sm" variant="outline" className="gap-1.5" onClick={onPreview}>
+          <Eye className="h-3.5 w-3.5" /> Ver
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-1.5"
+          onClick={onTest}
+          disabled={disabledTest}
+          title={disabledTest ? 'Configurá Resend para enviar' : 'Enviar prueba'}
+        >
+          <Send className="h-3.5 w-3.5" /> Prueba
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+
+export default function SuperAdminEmailsPage() {
+  const { toast } = useToast()
+  const queryClient = useQueryClient()
+  const [testEmail, setTestEmail] = useState('')
+  const [testTemplate, setTestTemplate] = useState<'invitation' | 'welcome' | null>(null)
+  const [previewTemplate, setPreviewTemplate] = useState<'invitation' | 'welcome' | null>(null)
+  const [previewHtml, setPreviewHtml] = useState<string>('')
+  const [copied, setCopied] = useState(false)
+
+  const statsQuery = useQuery({
+    queryKey: ['email-stats'],
+    queryFn: fetchEmailStats,
+    staleTime: 30_000,
+  })
+
+  const logsQuery = useQuery({
+    queryKey: ['email-logs'],
+    queryFn: fetchEmailLogs,
+    staleTime: 30_000,
+  })
+
+  const testMutation = useMutation({
+    mutationFn: sendTestEmail,
+    onSuccess: (data) => {
+      if (data.success) {
+        toast({ title: 'Email de prueba enviado', description: data.message })
+        queryClient.invalidateQueries({ queryKey: ['email-logs'] })
+        queryClient.invalidateQueries({ queryKey: ['email-stats'] })
+      } else {
+        toast({ title: 'Error', description: data.message, variant: 'destructive' })
       }
-      setIsEditorOpen(false);
-    } catch (error) {
-      console.error('Error saving template:', error);
-    }
-  };
+      setTestTemplate(null)
+    },
+    onError: (err: Error) => {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' })
+    },
+  })
 
-  const handleDelete = async (template: EmailTemplate) => {
-    if (!confirm(`¿Estás seguro de eliminar la plantilla "${template.name}"?`)) {
-      return;
-    }
-    
+  const handleTest = () => {
+    if (!testEmail.trim() || !testTemplate) return
+    testMutation.mutate({ to: testEmail.trim(), template: testTemplate })
+  }
+
+  const handlePreview = async (template: 'invitation' | 'welcome') => {
     try {
-      await deleteTemplate(template.id);
-    } catch (error) {
-      console.error('Error deleting template:', error);
+      const res = await fetch(`/api/superadmin/emails/preview?template=${template}`)
+      const json = await res.json()
+      setPreviewHtml(json.html || '<p>Sin preview disponible</p>')
+      setPreviewTemplate(template)
+    } catch {
+      toast({ title: 'Error', description: 'No se pudo cargar el preview', variant: 'destructive' })
     }
-  };
-
-  const getCategoryBadge = (cat: string) => {
-    switch (cat) {
-      case 'auth':
-        return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-300">Autenticación</Badge>;
-      case 'billing':
-        return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30 dark:text-green-300">Facturación</Badge>;
-      case 'system':
-        return <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/30 dark:text-purple-300">Sistema</Badge>;
-      case 'marketing':
-        return <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/30 dark:text-orange-300">Marketing</Badge>;
-      default:
-        return <Badge variant="outline">{cat}</Badge>;
-    }
-  };
-
-  if (loading && templates.length === 0) {
-    return (
-      <SuperAdminGuard>
-        <div className="flex items-center justify-center min-h-[400px] flex-col gap-4">
-          <Loader2 className="h-10 w-10 animate-spin text-purple-600" />
-          <p className="text-slate-500 font-medium">Cargando plantillas de email...</p>
-        </div>
-      </SuperAdminGuard>
-    );
   }
 
-  if (error) {
-    return (
-      <SuperAdminGuard>
-        <div className="flex flex-col items-center justify-center min-h-[400px] gap-6 text-center max-w-md mx-auto">
-          <div className="w-20 h-20 bg-rose-50 dark:bg-rose-950/20 rounded-full flex items-center justify-center">
-            <AlertTriangle className="h-10 w-10 text-rose-500" />
-          </div>
-          <div>
-            <h2 className="text-3xl font-black text-slate-900 dark:text-white">Error al cargar</h2>
-            <p className="text-slate-500 mt-2">{error}</p>
-          </div>
-          <Button onClick={() => refresh()} className="gap-2">
-            <RefreshCw className="h-4 w-4" />
-            Reintentar
-          </Button>
-        </div>
-      </SuperAdminGuard>
-    );
-  }
+  const stats = statsQuery.data
+  const logs = logsQuery.data ?? []
+  const configured = stats?.configured ?? false
 
   return (
-    <SuperAdminGuard>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent flex items-center gap-3">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-pink-600 via-purple-600 to-indigo-600 flex items-center justify-center shadow-2xl shadow-pink-500/50">
-                <Mail className="h-7 w-7 text-white" />
-              </div>
-              Plantillas de Email
-            </h1>
-            <p className="text-slate-600 dark:text-slate-400 mt-3 text-lg font-medium">
-              Gestiona los correos transaccionales y notificaciones del sistema
-            </p>
-          </div>
-
-          <Button onClick={handleCreate} className="gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700">
-            <Plus className="h-4 w-4" />
-            Nueva Plantilla
-          </Button>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-900 dark:text-white">
+            <Mail className="h-6 w-6 text-slate-600" />
+            Emails del Sistema
+          </h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Supervisá y probá los correos automáticos (Resend)
+          </p>
         </div>
+      </div>
 
-        {/* Filters */}
-        <Card className="backdrop-blur-xl bg-white/95 dark:bg-slate-900/95 border-slate-200 dark:border-slate-800">
-          <CardContent className="pt-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input
-                  placeholder="Buscar plantillas..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-              <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar categoría" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORIES.map((cat) => (
-                    <SelectItem key={cat.value} value={cat.value}>
-                      {cat.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="mt-4 flex items-center justify-between">
-              <p className="text-sm text-slate-500">
-                Mostrando {templates.length} de {total} plantillas
-              </p>
-              <Button variant="outline" size="sm" onClick={() => refresh()} disabled={loading} className="gap-2">
-                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                Actualizar
-              </Button>
-            </div>
+      {/* Stats */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <StatCard
+          label="Estado API"
+          tone={configured ? 'ok' : 'bad'}
+          value={
+            <span className="flex items-center gap-2 text-lg">
+              {configured ? <CheckCircle2 className="h-5 w-5 text-emerald-500" /> : <AlertTriangle className="h-5 w-5 text-amber-500" />}
+              {configured ? 'Configurado' : 'Sin API Key'}
+            </span>
+          }
+        />
+        <StatCard label="Enviados" value={stats?.totalSent ?? '—'} />
+        <StatCard label="Fallidos" tone="bad" value={stats?.totalFailed ?? '—'} />
+      </div>
+
+      {!configured && (
+        <Alert className="border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/20">
+          <AlertTriangle className="h-4 w-4 text-amber-600" />
+          <AlertTitle className="text-sm font-semibold text-amber-800 dark:text-amber-300">Resend no configurado</AlertTitle>
+          <AlertDescription className="text-xs text-amber-700 dark:text-amber-300">
+            Agregá <code className="rounded bg-amber-100 px-1 dark:bg-amber-900/40">RESEND_API_KEY</code> y{' '}
+            <code className="rounded bg-amber-100 px-1 dark:bg-amber-900/40">RESEND_FROM_EMAIL</code> al entorno para activar el envío. (Podés previsualizar igual.)
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <div className="grid gap-6 lg:grid-cols-5">
+        {/* Templates */}
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Copy className="h-5 w-5 text-slate-600" /> Plantillas
+            </CardTitle>
+            <CardDescription>Previsualizá y probá las plantillas del sistema.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <TemplateCard
+              name="Invitación de equipo"
+              description="Se envía cuando un admin invita a alguien a la organización."
+              disabledTest={!configured}
+              onPreview={() => handlePreview('invitation')}
+              onTest={() => { setTestTemplate('invitation'); setTestEmail('') }}
+            />
+            <TemplateCard
+              name="Bienvenida"
+              description="Se envía al completar el registro de una nueva empresa."
+              disabledTest={!configured}
+              onPreview={() => handlePreview('welcome')}
+              onTest={() => { setTestTemplate('welcome'); setTestEmail('') }}
+            />
           </CardContent>
         </Card>
 
-        {/* Templates Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {templates.map((template) => (
-            <Card key={template.id} className="backdrop-blur-xl bg-white/95 dark:bg-slate-900/95 border-slate-200 dark:border-slate-800 hover:shadow-lg transition-all duration-300">
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <CardTitle className="text-lg line-clamp-1">{template.name}</CardTitle>
-                    <CardDescription className="mt-2 line-clamp-2">{template.subject}</CardDescription>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    {template.is_active ? (
-                      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 dark:bg-green-950/30">Activo</Badge>
-                    ) : (
-                      <Badge variant="outline" className="bg-slate-50 text-slate-700 border-slate-200">Inactivo</Badge>
-                    )}
-                  </div>
-                </div>
-                <div className="mt-3">
-                  {getCategoryBadge(template.category)}
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={() => handlePreview(template)} className="flex-1 gap-2">
-                    <Eye className="h-4 w-4" />
-                    Vista Previa
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => handleEdit(template)} className="gap-2">
-                    <Edit className="h-4 w-4" />
-                    Editar
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => handleDelete(template)} 
-                    disabled={isDeleting}
-                    className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/20"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        {templates.length === 0 && (
-          <Card className="backdrop-blur-xl bg-white/95 dark:bg-slate-900/95">
-            <CardContent className="py-12">
-              <div className="flex flex-col items-center gap-4 text-center">
-                <Mail className="h-16 w-16 text-slate-300 dark:text-slate-700" />
-                <div>
-                  <h3 className="text-xl font-semibold text-slate-900 dark:text-white">
-                    {search || category !== 'all' ? 'No se encontraron plantillas' : 'No hay plantillas'}
-                  </h3>
-                  <p className="text-slate-500 mt-2">
-                    {search || category !== 'all' 
-                      ? 'Intenta con otros términos de búsqueda' 
-                      : 'Crea tu primera plantilla de email'}
-                  </p>
-                </div>
-                {!search && category === 'all' && (
-                  <Button onClick={handleCreate} className="gap-2 mt-2">
-                    <Plus className="h-4 w-4" />
-                    Crear Plantilla
-                  </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Editor Dialog */}
-        <Dialog open={isEditorOpen} onOpenChange={setIsEditorOpen}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Code className="h-5 w-5 text-purple-600" />
-                {isCreateMode ? 'Crear Nueva Plantilla' : `Editar: ${selectedTemplate?.name}`}
-              </DialogTitle>
-              <DialogDescription>
-                Configura el contenido HTML y texto plano de la plantilla
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Nombre de la Plantilla *</Label>
-                  <Input
-                    id="name"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="Ej: Bienvenida a Nueva Organización"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="slug">Slug (Identificador) *</Label>
-                  <Input
-                    id="slug"
-                    value={formData.slug}
-                    onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
-                    placeholder="Ej: welcome-organization"
-                    disabled={!isCreateMode}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="subject">Asunto del Email *</Label>
-                <Input
-                  id="subject"
-                  value={formData.subject}
-                  onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-                  placeholder="Ej: Bienvenido a MiPOS"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="category">Categoría *</Label>
-                  <Select
-                    value={formData.category}
-                    onValueChange={(value: 'auth' | 'billing' | 'system' | 'marketing') => setFormData({ ...formData, category: value })}
-                  >
-                    <SelectTrigger id="category">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CATEGORIES.filter(c => c.value !== 'all').map((cat) => (
-                        <SelectItem key={cat.value} value={cat.value}>
-                          {cat.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="is_active">Estado</Label>
-                  <Select
-                    value={formData.is_active ? 'active' : 'inactive'}
-                    onValueChange={(value) => setFormData({ ...formData, is_active: value === 'active' })}
-                  >
-                    <SelectTrigger id="is_active">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="active">Activo</SelectItem>
-                      <SelectItem value="inactive">Inactivo</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="description">Descripción</Label>
-                <Input
-                  id="description"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Descripción breve de la plantilla"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="html_content">Contenido HTML *</Label>
-                <Textarea
-                  id="html_content"
-                  value={formData.html_content}
-                  onChange={(e) => setFormData({ ...formData, html_content: e.target.value })}
-                  placeholder="<html>...</html>"
-                  rows={10}
-                  className="font-mono text-sm"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="text_content">Contenido de Texto Plano</Label>
-                <Textarea
-                  id="text_content"
-                  value={formData.text_content}
-                  onChange={(e) => setFormData({ ...formData, text_content: e.target.value })}
-                  placeholder="Versión en texto plano del email..."
-                  rows={5}
-                />
-              </div>
+        {/* Logs */}
+        <Card className="flex flex-col lg:col-span-3">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <RefreshCw className="h-5 w-5 text-slate-600" /> Últimos envíos
+              </CardTitle>
+              <CardDescription>Historial reciente de emails procesados por Resend.</CardDescription>
             </div>
-
-            <DialogFooter className="mt-6">
-              <Button variant="outline" onClick={() => setIsEditorOpen(false)}>
-                <X className="h-4 w-4 mr-2" />
-                Cancelar
-              </Button>
-              <Button 
-                onClick={handleSave} 
-                disabled={isCreating || isUpdating || !formData.name || !formData.slug || !formData.subject || !formData.html_content}
-                className="gap-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700"
-              >
-                {(isCreating || isUpdating) ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Guardando...
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-4 w-4" />
-                    {isCreateMode ? 'Crear Plantilla' : 'Guardar Cambios'}
-                  </>
-                )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Preview Dialog */}
-        <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-          <DialogContent className="max-w-4xl max-h-[90vh]">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Eye className="h-5 w-5 text-purple-600" />
-                Vista Previa: {selectedTemplate?.name}
-              </DialogTitle>
-              <DialogDescription>
-                Asunto: {selectedTemplate?.subject}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden">
-              <iframe
-                srcDoc={selectedTemplate?.html_content}
-                className="w-full h-[500px] bg-white"
-                title="Email Preview"
-              />
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsPreviewOpen(false)}>
-                Cerrar
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              onClick={() => queryClient.invalidateQueries({ queryKey: ['email-logs'] })}
+              disabled={logsQuery.isFetching}
+            >
+              <RefreshCw className={cn('h-3.5 w-3.5', logsQuery.isFetching && 'animate-spin')} />
+              Actualizar
+            </Button>
+          </CardHeader>
+          <CardContent className="flex-1 p-0">
+            {logsQuery.isLoading ? (
+              <div className="flex flex-col items-center gap-3 py-16 text-center text-slate-500">
+                <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+                <p className="text-sm">Cargando envíos...</p>
+              </div>
+            ) : logs.length === 0 ? (
+              <div className="flex flex-col items-center gap-3 py-16 text-center">
+                <Mail className="h-12 w-12 text-slate-300 dark:text-slate-700" />
+                <p className="text-sm font-medium text-slate-900 dark:text-white">No hay envíos registrados</p>
+                <p className="text-xs text-slate-500">Los correos aparecerán acá una vez enviados</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                {logs.slice(0, 20).map((log) => (
+                  <div key={log.id} className="flex items-center justify-between gap-4 px-5 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-slate-900 dark:text-white">{log.to}</p>
+                      <p className="mt-0.5 truncate text-xs text-slate-500">{log.subject}</p>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-1.5 sm:flex-row sm:items-center">
+                      <span className="text-[11px] text-slate-400">
+                        {new Date(log.sentAt).toLocaleString('es-PY', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      <StatusBadge status={log.status} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
-    </SuperAdminGuard>
-  );
+
+      {/* Test Email Dialog */}
+      <Dialog open={!!testTemplate} onOpenChange={(o) => !o && setTestTemplate(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Send className="h-5 w-5 text-slate-600" /> Enviar email de prueba
+            </DialogTitle>
+            <DialogDescription>
+              Plantilla: <strong>{testTemplate === 'invitation' ? 'Invitación' : 'Bienvenida'}</strong>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="test-email">Email de destino</Label>
+            <Input
+              id="test-email"
+              type="email"
+              value={testEmail}
+              onChange={(e) => setTestEmail(e.target.value)}
+              placeholder="vos@ejemplo.com"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTestTemplate(null)}>Cancelar</Button>
+            <Button onClick={handleTest} disabled={!testEmail.trim() || testMutation.isPending} className="gap-2">
+              {testMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              Enviar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Preview Dialog */}
+      <Dialog open={!!previewTemplate} onOpenChange={(o) => !o && setPreviewTemplate(null)}>
+        <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden p-0 sm:max-w-2xl">
+          <DialogHeader className="p-6 pb-2">
+            <DialogTitle className="flex items-center gap-2">
+              <Eye className="h-5 w-5 text-slate-600" /> Preview: {previewTemplate === 'invitation' ? 'Invitación' : 'Bienvenida'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto border-y border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
+            {/* sandbox="" : el HTML se renderiza pero no ejecuta JS (anti-XSS) */}
+            <iframe
+              srcDoc={previewHtml}
+              className="h-[500px] w-full rounded-md border border-slate-200 bg-white dark:border-slate-800"
+              sandbox=""
+              title="Email preview"
+            />
+          </div>
+          <DialogFooter className="p-4">
+            <Button
+              variant="outline"
+              className="gap-1.5"
+              onClick={() => {
+                navigator.clipboard.writeText(previewHtml)
+                setCopied(true)
+                setTimeout(() => setCopied(false), 1500)
+              }}
+            >
+              {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+              {copied ? 'Copiado' : 'Copiar HTML'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
 }
