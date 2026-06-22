@@ -326,15 +326,12 @@ async function fetchCatalogBaseProducts(
   filters: CatalogFilterShape
 ): Promise<Product[]> {
   const client = await createAdminClient();
-
-  // Límite razonable para evitar cargar catálogos enormes en memoria.
-  // Para organizaciones con >500 productos públicos, la paginación server-side
-  // (order + limit) ya reduce el dataset. El filtrado de ofertas/precio se
-  // hace post-fetch pero acotado a este set.
-  const MAX_CATALOG_PRODUCTS = 500;
+  const CATALOG_BATCH_SIZE = 500;
 
   const runQuery = async (
     selectClause: string,
+    rangeFrom: number,
+    rangeTo: number,
     options?: { fallbackMode?: boolean; skipDeletedFilter?: boolean; skipPublicFilter?: boolean }
   ) => {
     let query = client
@@ -360,30 +357,67 @@ async function fetchCatalogBaseProducts(
     return query
       .order('updated_at', { ascending: false })
       .order('created_at', { ascending: false })
-      .limit(MAX_CATALOG_PRODUCTS);
+      .order('id', { ascending: false })
+      .range(rangeFrom, rangeTo);
   };
 
-  let result = await runQuery(CATALOG_PRODUCT_SELECT);
+  const loadAllBatches = async (
+    selectClause: string,
+    options?: { fallbackMode?: boolean; skipDeletedFilter?: boolean; skipPublicFilter?: boolean }
+  ) => {
+    const rows: Product[] = [];
+    let offset = 0;
+
+    while (true) {
+      const result = await runQuery(
+        selectClause,
+        offset,
+        offset + CATALOG_BATCH_SIZE - 1,
+        options
+      );
+
+      if (result.error) {
+        return {
+          data: [] as Product[],
+          error: result.error,
+        };
+      }
+
+      const batch = (result.data || []) as unknown as Product[];
+      rows.push(...batch);
+
+      if (batch.length < CATALOG_BATCH_SIZE) {
+        return {
+          data: rows,
+          error: null,
+        };
+      }
+
+      offset += CATALOG_BATCH_SIZE;
+    }
+  };
+
+  let result = await loadAllBatches(CATALOG_PRODUCT_SELECT);
 
   // Fallback 1: columnas faltantes en select (rating, offer_price, etc.)
-  // Mantener deleted_at y is_public si existen
+  // Mantener deleted_at y is_public si existen.
   if (result.error && isMissingColumnError(result.error)) {
-    result = await runQuery(CATALOG_PRODUCT_SELECT_FALLBACK, {
+    result = await loadAllBatches(CATALOG_PRODUCT_SELECT_FALLBACK, {
       fallbackMode: true,
     });
   }
 
-  // Fallback 2: deleted_at no existe
+  // Fallback 2: deleted_at no existe.
   if (result.error && isMissingColumnError(result.error)) {
-    result = await runQuery(CATALOG_PRODUCT_SELECT_FALLBACK, {
+    result = await loadAllBatches(CATALOG_PRODUCT_SELECT_FALLBACK, {
       fallbackMode: true,
       skipDeletedFilter: true,
     });
   }
 
-  // Fallback 3: is_public tampoco existe
+  // Fallback 3: is_public tampoco existe.
   if (result.error && isMissingColumnError(result.error)) {
-    result = await runQuery(CATALOG_PRODUCT_SELECT_FALLBACK, {
+    result = await loadAllBatches(CATALOG_PRODUCT_SELECT_FALLBACK, {
       fallbackMode: true,
       skipDeletedFilter: true,
       skipPublicFilter: true,
@@ -394,7 +428,7 @@ async function fetchCatalogBaseProducts(
     throw result.error;
   }
 
-  return (result.data || []) as unknown as Product[];
+  return result.data;
 }
 
 function filterCatalogProducts(products: Product[], input: PublicCatalogPageInput): Product[] {

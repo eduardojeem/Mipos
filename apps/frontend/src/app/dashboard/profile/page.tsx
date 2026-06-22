@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useProfile } from '@/hooks/use-profile';
+import { useMyStaffProfile } from '@/app/admin/agenda/hooks/useMyStaffProfile';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -10,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { User, RefreshCw, Shield, Lock, Save, X, Eye, Sparkles, Check, ArrowRight, Activity, Calendar, CreditCard, AlertTriangle, EyeOff, ShoppingBag, Package } from 'lucide-react';
+import { User, RefreshCw, Shield, Lock, Save, X, Eye, Sparkles, Check, ArrowRight, Activity, Calendar, CreditCard, AlertTriangle, EyeOff, ShoppingBag, Package, Briefcase, DollarSign, ListChecks } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/lib/toast';
 import { formatDate, formatCurrency } from '@/lib/utils';
@@ -81,6 +82,7 @@ const EMPTY_FORM = { name: '', phone: '', bio: '', location: '' };
 export default function ProfilePage() {
   const router = useRouter();
   const { profile, isLoading, error: profileError, updateProfile, updateAvatar, refreshProfile } = useProfile();
+  const { myStaff } = useMyStaffProfile();
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -188,18 +190,13 @@ export default function ProfilePage() {
 
     setIsVerifyingPassword(true);
     try {
-      const response = await fetch('/api/auth/verify-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: passwordConfirm })
-      });
-
-      if (response.ok) {
+      const response = await api.post('/auth/verify-password', { password: passwordConfirm });
+      if (response.data?.success) {
         setShowPasswordDialog(false);
         setIsEditing(true);
         toast.success('Contraseña verificada correctamente');
       } else {
-          toast.error('Contraseña incorrecta');
+        toast.error(response.data?.error || 'Contraseña incorrecta');
       }
     } catch {
       toast.error('Error al verificar la contraseña');
@@ -280,8 +277,9 @@ export default function ProfilePage() {
       <ProfileHeader profile={profile} isRefreshing={isRefreshing} isUploading={isUploading} isEditing={isEditing} onRefresh={handleRefresh} onToggleEdit={handleToggleEdit} onChangePassword={() => router.push('/dashboard/profile/change-password')} onAvatarUpload={handleAvatarUpload} />
       <Tabs defaultValue="overview" className="space-y-6">
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <TabsList className={`grid h-auto w-full p-1 sm:w-auto ${isAdmin ? 'grid-cols-4' : 'grid-cols-3'} rounded-lg bg-muted/50 animate-slide-in-left`}>
+          <TabsList className={`grid h-auto w-full p-1 sm:w-auto ${isAdmin || myStaff ? (isAdmin && myStaff ? 'grid-cols-5' : 'grid-cols-4') : 'grid-cols-3'} rounded-xl border border-border/50 bg-white/60 backdrop-blur-md dark:bg-slate-900/60 animate-slide-in-left`}>
             <TabsTrigger value="overview" className="flex items-center gap-2 px-4 py-2"><User className="h-4 w-4" /><span>Informacion personal</span></TabsTrigger>
+            {(myStaff || isAdmin) && <TabsTrigger value="performance" className="flex items-center gap-2 px-4 py-2"><Briefcase className="h-4 w-4" /><span>Mi Desempeño</span></TabsTrigger>}
             <TabsTrigger value="purchases" className="flex items-center gap-2 px-4 py-2"><ShoppingBag className="h-4 w-4" /><span>Mis compras</span></TabsTrigger>
             <TabsTrigger value="security" className="flex items-center gap-2 px-4 py-2"><Shield className="h-4 w-4" /><span>Seguridad</span></TabsTrigger>
             {isAdmin && <TabsTrigger value="plan" className="flex items-center gap-2 px-4 py-2"><Sparkles className="h-4 w-4" /><span>Plan</span></TabsTrigger>}
@@ -297,6 +295,23 @@ export default function ProfilePage() {
         <TabsContent value="security" className="space-y-6 tab-content-enter">
           <SecurityTab onChangePassword={() => router.push('/dashboard/profile/change-password')} onOpenTwoFactor={() => router.push('/dashboard/profile/two-factor')} onOpenSessions={() => router.push('/dashboard/profile/sessions')} />
         </TabsContent>
+        {(myStaff || isAdmin) && (
+          <TabsContent value="performance" className="space-y-6 tab-content-enter">
+            {myStaff ? (
+              <ProfessionalPerformanceTab staffProfileId={myStaff.id} />
+            ) : (
+              <Card className="overflow-hidden rounded-2xl border-border/50 bg-white/60 shadow-sm backdrop-blur-xl dark:bg-slate-900/60">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-amber-500" />Perfil de Profesional no encontrado</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-muted-foreground">Tu usuario administrador no tiene un perfil de profesional (barbero) asignado en esta sucursal.</p>
+                  <p className="mt-2 text-sm text-muted-foreground">Para que puedas ver tu desempeño y tener tu propia agenda, debes ir a la sección de <strong className="text-foreground">Equipo</strong> y crear un perfil de profesional vinculado a tu usuario.</p>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+        )}
         {isAdmin && <TabsContent value="plan" className="space-y-6 tab-content-enter"><PlanSection /></TabsContent>}
       </Tabs>
       <RecentActivitySection userId={profile.id} />
@@ -436,7 +451,7 @@ function OverviewTab({
 }) {
   return (
     <div className="grid gap-6 md:grid-cols-2">
-      <Card className="hover-lift smooth-transition">
+      <Card className="overflow-hidden rounded-2xl border-border/50 bg-white/60 shadow-sm backdrop-blur-xl transition-all hover:shadow-md dark:bg-slate-900/60">
         <CardHeader>
           <CardTitle>Informacion personal</CardTitle>
           <CardDescription>Gestiona tus datos personales y tu presentacion.</CardDescription>
@@ -477,7 +492,7 @@ function OverviewTab({
         </CardContent>
       </Card>
 
-      <Card className="hover-lift smooth-transition">
+      <Card className="overflow-hidden rounded-2xl border-border/50 bg-white/60 shadow-sm backdrop-blur-xl transition-all hover:shadow-md dark:bg-slate-900/60">
         <CardHeader>
           <CardTitle>Informacion de cuenta</CardTitle>
           <CardDescription>Contexto operativo de tu usuario dentro del sistema.</CardDescription>
@@ -537,7 +552,7 @@ function InfoRow({ label, value, strong = false }: { label: string; value: strin
 
 function SecurityTab({ onChangePassword, onOpenTwoFactor, onOpenSessions }: { onChangePassword: () => void; onOpenTwoFactor: () => void; onOpenSessions: () => void }) {
   return (
-    <Card className="hover-lift smooth-transition">
+    <Card className="overflow-hidden rounded-2xl border-border/50 bg-white/60 shadow-sm backdrop-blur-xl transition-all hover:shadow-md dark:bg-slate-900/60">
       <CardHeader>
         <CardTitle>Configuracion de seguridad</CardTitle>
         <CardDescription>Gestiona acceso, contraseña y protecciones de tu cuenta.</CardDescription>
@@ -572,9 +587,9 @@ function PurchasesTab() {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch('/api/profile/purchases?limit=30', { cache: 'no-store' });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || data?.success === false) {
+      const response = await api.get('/profile/purchases?limit=30');
+      const data = response.data;
+      if (data?.success === false) {
         throw new Error(data?.error || 'No se pudieron cargar tus compras');
       }
       setPurchases(Array.isArray(data?.purchases) ? data.purchases : []);
@@ -592,7 +607,7 @@ function PurchasesTab() {
 
   if (loading) {
     return (
-      <Card>
+      <Card className="overflow-hidden rounded-2xl border-border/50 bg-white/60 shadow-sm backdrop-blur-xl dark:bg-slate-900/60">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><ShoppingBag className="h-5 w-5" />Mis compras</CardTitle>
           <CardDescription>Pedidos hechos en tiendas del marketplace.</CardDescription>
@@ -604,7 +619,7 @@ function PurchasesTab() {
 
   if (error) {
     return (
-      <Card>
+      <Card className="overflow-hidden rounded-2xl border-border/50 bg-white/60 shadow-sm backdrop-blur-xl dark:bg-slate-900/60">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><ShoppingBag className="h-5 w-5" />Mis compras</CardTitle>
           <CardDescription>No pudimos cargar tu historial de compras.</CardDescription>
@@ -615,14 +630,14 @@ function PurchasesTab() {
   }
 
   return (
-    <Card className="hover-lift smooth-transition">
+    <Card className="overflow-hidden rounded-2xl border-border/50 bg-white/60 shadow-sm backdrop-blur-xl transition-all hover:shadow-md dark:bg-slate-900/60">
       <CardHeader>
         <CardTitle className="flex items-center gap-2"><ShoppingBag className="h-5 w-5 text-emerald-600" />Mis compras</CardTitle>
         <CardDescription>Pedidos donde figuras como comprador, sea como persona o como empresa.</CardDescription>
       </CardHeader>
       <CardContent>
         {purchases.length === 0 ? (
-          <div className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
+          <div className="rounded-2xl border border-dashed border-border/50 bg-white/40 p-8 text-center text-muted-foreground backdrop-blur-sm dark:bg-slate-900/40">
             <Package className="mx-auto mb-3 h-10 w-10 opacity-50" />
             <p>Aun no hay compras asociadas a tu usuario.</p>
           </div>
@@ -689,7 +704,7 @@ function RecentActivitySection({ userId }: { userId: string }) {
 
   if (loading) {
     return (
-      <Card className="mt-6">
+      <Card className="mt-6 overflow-hidden rounded-2xl border-border/50 bg-white/60 shadow-sm backdrop-blur-xl dark:bg-slate-900/60">
         <CardHeader><CardTitle className="flex items-center gap-2"><Activity className="h-5 w-5" />Actividad reciente</CardTitle></CardHeader>
         <CardContent><div className="space-y-4">{[1, 2, 3].map((index) => <div key={index} className="flex items-center justify-between rounded-lg border p-4 animate-pulse"><div className="h-4 w-1/3 rounded bg-gray-200" /><div className="h-4 w-1/4 rounded bg-gray-200" /></div>)}</div></CardContent>
       </Card>
@@ -698,7 +713,7 @@ function RecentActivitySection({ userId }: { userId: string }) {
 
   if (error) {
     return (
-      <Card className="mt-6">
+      <Card className="mt-6 overflow-hidden rounded-2xl border-border/50 bg-white/60 shadow-sm backdrop-blur-xl dark:bg-slate-900/60">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Activity className="h-5 w-5 text-blue-600" />Actividad reciente</CardTitle>
           <CardDescription>No pudimos cargar tu actividad comercial reciente.</CardDescription>
@@ -709,11 +724,11 @@ function RecentActivitySection({ userId }: { userId: string }) {
   }
 
   if (activities.length === 0) {
-    return <Card className="mt-6"><CardHeader><CardTitle className="flex items-center gap-2"><Activity className="h-5 w-5 text-blue-600" />Actividad reciente</CardTitle><CardDescription>Aun no hay movimientos recientes para este usuario.</CardDescription></CardHeader></Card>;
+    return <Card className="mt-6 overflow-hidden rounded-2xl border-border/50 bg-white/60 shadow-sm backdrop-blur-xl dark:bg-slate-900/60"><CardHeader><CardTitle className="flex items-center gap-2"><Activity className="h-5 w-5 text-blue-600" />Actividad reciente</CardTitle><CardDescription>Aun no hay movimientos recientes para este usuario.</CardDescription></CardHeader></Card>;
   }
 
   return (
-    <Card className="mt-6 hover-lift smooth-transition">
+    <Card className="mt-6 overflow-hidden rounded-2xl border-border/50 bg-white/60 shadow-sm backdrop-blur-xl transition-all hover:shadow-md dark:bg-slate-900/60">
       <CardHeader>
         <CardTitle className="flex items-center gap-2"><Activity className="h-5 w-5 text-blue-600" />Actividad reciente</CardTitle>
         <CardDescription>Tus ultimas ventas y movimientos registrados.</CardDescription>
@@ -751,7 +766,7 @@ function PlanSection() {
     try {
       setLoading(true);
       try {
-        const currentResponse = await api.get('/api/auth/organization/plan');
+        const currentResponse = await api.get('/auth/organization/plan');
         setCurrentPlan(currentResponse.data.data || null);
       } catch {
         setCurrentPlan(null);
@@ -773,7 +788,7 @@ function PlanSection() {
   const handleRequestPlanChange = async (planSlug: string) => {
     try {
       setRequesting(true);
-      await api.post('/api/auth/organization/request-plan-change', { planSlug });
+      await api.post('/auth/organization/request-plan-change', { planSlug });
       toast.success('Solicitud de cambio de plan enviada correctamente');
     } catch (error) {
       console.error('Error requesting plan change:', error);
@@ -793,11 +808,11 @@ function PlanSection() {
     return 'from-slate-500 to-slate-600';
   };
 
-  if (loading) return <Card><CardContent className="py-12"><div className="flex items-center justify-center"><RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" /></div></CardContent></Card>;
+  if (loading) return <Card className="overflow-hidden rounded-2xl border-border/50 bg-white/60 shadow-sm backdrop-blur-xl dark:bg-slate-900/60"><CardContent className="py-12"><div className="flex items-center justify-center"><RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" /></div></CardContent></Card>;
 
   return (
     <div className="space-y-6">
-      <Card className="hover-lift smooth-transition border-2">
+      <Card className="overflow-hidden rounded-2xl border-border/50 bg-white/60 shadow-sm backdrop-blur-xl transition-all hover:shadow-md dark:bg-slate-900/60">
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
@@ -831,7 +846,7 @@ function PlanSection() {
           )}
         </CardContent>
       </Card>
-      <Card className="hover-lift smooth-transition">
+      <Card className="overflow-hidden rounded-2xl border-border/50 bg-white/60 shadow-sm backdrop-blur-xl transition-all hover:shadow-md dark:bg-slate-900/60">
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><ArrowRight className="h-5 w-5 text-blue-600" />Planes disponibles</CardTitle>
           <CardDescription>Solicita un cambio cuando necesites mas capacidad.</CardDescription>
@@ -860,6 +875,156 @@ function PlanSection() {
             })}
           </div>
           {availablePlans.length === 0 && <div className="py-12 text-center text-muted-foreground"><Sparkles className="mx-auto mb-4 h-12 w-12 opacity-50" /><p>No hay planes disponibles en este momento.</p></div>}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function ProfessionalPerformanceTab({ staffProfileId }: { staffProfileId: string }) {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [appointments, setAppointments] = useState<any[]>([]);
+
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Rango: mes actual
+      const now = new Date();
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
+      const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+      const fromIso = firstDay.toISOString();
+      const toIso = lastDay.toISOString();
+
+      const response = await api.get(`/appointments?from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}&staff_profile_id=${staffProfileId}`);
+      if (response.data?.success) {
+        setAppointments(response.data.appointments || []);
+      } else {
+        throw new Error(response.data?.error || 'No se pudieron cargar los datos de desempeño');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Error al cargar los datos');
+    } finally {
+      setLoading(false);
+    }
+  }, [staffProfileId]);
+
+  useEffect(() => {
+    if (staffProfileId) {
+      void loadData();
+    }
+  }, [loadData, staffProfileId]);
+
+  const metrics = useMemo(() => {
+    let completedCount = 0;
+    let pendingCount = 0;
+    let earnings = 0;
+
+    appointments.forEach((a) => {
+      if (a.status === 'COMPLETED') {
+        completedCount++;
+        earnings += Number(a.price || 0);
+      } else if (a.status === 'BOOKED' || a.status === 'CONFIRMED') {
+        pendingCount++;
+      }
+    });
+
+    return { completedCount, pendingCount, earnings };
+  }, [appointments]);
+
+  if (loading) {
+    return (
+      <Card className="overflow-hidden rounded-2xl border-border/50 bg-white/60 shadow-sm backdrop-blur-xl dark:bg-slate-900/60">
+        <CardContent className="py-12 flex justify-center"><RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" /></CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card className="overflow-hidden rounded-2xl border-border/50 bg-white/60 shadow-sm backdrop-blur-xl dark:bg-slate-900/60">
+        <CardContent className="py-12 text-center text-red-500">
+          <AlertTriangle className="mx-auto mb-2 h-8 w-8" />
+          <p>{error}</p>
+          <Button variant="outline" className="mt-4" onClick={() => void loadData()}>Reintentar</Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="overflow-hidden rounded-2xl border-border/50 bg-white/60 shadow-sm backdrop-blur-xl dark:bg-slate-900/60">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Ganancias del Mes</CardTitle>
+            <DollarSign className="h-4 w-4 text-emerald-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-emerald-600">{formatCurrency(metrics.earnings)}</div>
+            <p className="text-xs text-muted-foreground mt-1">Bruto generado en servicios completados</p>
+          </CardContent>
+        </Card>
+
+        <Card className="overflow-hidden rounded-2xl border-border/50 bg-white/60 shadow-sm backdrop-blur-xl dark:bg-slate-900/60">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Servicios Realizados</CardTitle>
+            <Check className="h-4 w-4 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{metrics.completedCount}</div>
+            <p className="text-xs text-muted-foreground mt-1">Servicios finalizados este mes</p>
+          </CardContent>
+        </Card>
+
+        <Card className="overflow-hidden rounded-2xl border-border/50 bg-white/60 shadow-sm backdrop-blur-xl dark:bg-slate-900/60">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Reservas Pendientes</CardTitle>
+            <Calendar className="h-4 w-4 text-orange-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{metrics.pendingCount}</div>
+            <p className="text-xs text-muted-foreground mt-1">Turnos por atender</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="overflow-hidden rounded-2xl border-border/50 bg-white/60 shadow-sm backdrop-blur-xl dark:bg-slate-900/60">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><ListChecks className="h-5 w-5 text-blue-600" />Ultimos Servicios</CardTitle>
+          <CardDescription>Tus turnos más recientes de este mes.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {appointments.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-border/50 bg-white/40 p-8 text-center text-muted-foreground backdrop-blur-sm dark:bg-slate-900/40">
+              <Briefcase className="mx-auto mb-3 h-10 w-10 opacity-50" />
+              <p>Aun no tienes servicios registrados este mes.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {appointments.slice(-10).reverse().map((appt) => (
+                <div key={appt.id} className="flex items-center justify-between rounded-lg border p-4 transition-colors hover:bg-slate-50 dark:hover:bg-slate-900">
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold">{appt.service?.name || 'Servicio General'}</span>
+                      <Badge variant={appt.status === 'COMPLETED' ? 'default' : appt.status === 'CANCELLED' ? 'destructive' : 'secondary'} className="text-[10px]">
+                        {appt.status}
+                      </Badge>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      {formatDate(appt.start_at)} • Cliente: {appt.customer_label || 'Cliente Casual'}
+                    </div>
+                  </div>
+                  <div className="font-bold text-lg text-right">
+                    {formatCurrency(Number(appt.price || 0))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

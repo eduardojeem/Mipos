@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { sanitizeSearch } from '@/app/api/_utils/search'
 
 // Endpoint PÚBLICO (sin auth). NUNCA debe exponer datos comerciales sensibles
 // (cost_price, min_stock, márgenes, proveedores) ni mezclar organizaciones.
@@ -53,7 +54,7 @@ export async function GET(request: NextRequest) {
       q = q.eq('organization_id', orgId).eq('is_active', true)
       if (withPublic) q = q.eq('is_public', true)
       q = q.is('deleted_at', null)
-      if (search) q = q.or(`name.ilike.%${search}%,sku.ilike.%${search}%,description.ilike.%${search}%`)
+      if (search) { const s = sanitizeSearch(search); q = q.or(`name.ilike.%${s}%,sku.ilike.%${s}%,description.ilike.%${s}%`) }
       if (categoryId) q = q.eq('category_id', categoryId)
       return q
     }

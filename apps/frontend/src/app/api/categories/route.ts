@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { getValidatedOrganizationId } from '@/lib/organization'
+import { sanitizeSearch } from '@/app/api/_utils/search'
 
 type CategoryRow = {
   id: string
@@ -92,7 +93,7 @@ export async function GET(request: NextRequest) {
     if (status === 'active') query = query.eq('is_active', true)
     if (status === 'inactive') query = query.eq('is_active', false)
     if (search) {
-      const esc = search.replace(/%/g, '\\%').replace(/_/g, '\\_')
+      const esc = sanitizeSearch(search)
       query = query.or(`name.ilike.%${esc}%,description.ilike.%${esc}%`)
     }
 

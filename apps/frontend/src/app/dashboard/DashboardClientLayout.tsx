@@ -11,6 +11,7 @@ import { KeyboardShortcuts } from '@/components/keyboard/keyboard-shortcuts';
 import { ResponsiveLayout } from '@/components/ui/responsive-layout';
 import { DashboardErrorBoundary } from '@/components/error/DashboardErrorBoundary';
 import { usePlanPermissions } from '@/hooks/use-plan-permissions';
+import { useCurrentVertical } from '@/hooks/use-current-vertical';
 import { filterDashboardNavigation } from '@/components/dashboard/navigation-access';
 
 const ConnectionIndicator = dynamic<{ size?: 'sm' | 'md' | 'lg' }>(
@@ -26,6 +27,7 @@ export default function DashboardClientLayout({
   const { isAuthenticated, loading } = useIsAuthenticated();
   const resolvedRole = useResolvedRole();
   const { permissions, isPlanResolved } = usePlanPermissions();
+  const vertical = useCurrentVertical();
 
   // Refs persist across re-renders so we can avoid restarting the sync
   // coordinator every time `isAuthenticated` flips. The coordinator already
@@ -129,8 +131,9 @@ export default function DashboardClientLayout({
       userRole: resolvedRole || 'CASHIER',
       permissions,
       isPlanResolved,
+      vertical,
     });
-  }, [isPlanResolved, permissions, resolvedRole]);
+  }, [isPlanResolved, permissions, resolvedRole, vertical]);
 
   if (loading) {
     return (

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useMemo } from 'react'
-import { AlertTriangle, ArrowRight, BadgeCheck, CreditCard, Shield, ShoppingCart, Users } from 'lucide-react'
+import { AlertTriangle, ArrowRight, BadgeCheck, CreditCard, Shield, ShoppingCart, Users, Scissors, UserCog, Calendar } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -11,6 +11,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { CurrencyDisplay } from '@/components/ui/currency-display'
 import { useLowStockProducts } from '@/hooks/use-products'
 import { useAdminNavigation } from '@/hooks/use-admin-navigation'
+import { useCurrentVertical } from '@/hooks/use-current-vertical'
+import { useServices } from '@/app/admin/services/hooks/useServices'
+import { useStaff } from '@/app/admin/staff/hooks/useStaff'
 import { cn, formatDate } from '@/lib/utils'
 
 interface DashboardSummary {
@@ -63,6 +66,9 @@ export default function AdminDashboardPage() {
   const { data: recentSalesData, isLoading: recentSalesLoading } = useRecentSales()
   const { data: lowStockProducts, isLoading: lowStockLoading } = useLowStockProducts(5)
   const { sections, role, canAccessAdminPanel, canAccessReports } = useAdminNavigation()
+  const vertical = useCurrentVertical()
+  const { services, isLoading: servicesLoading } = useServices()
+  const { staff, isLoading: staffLoading } = useStaff()
 
   const recentSales = recentSalesData?.sales || []
   const quickSections = useMemo(() => sections.filter((section) => section.items.length > 0), [sections])
@@ -85,9 +91,14 @@ export default function AdminDashboardPage() {
               </Badge>
             </div>
             <div>
-              <h1 className="text-3xl font-semibold tracking-tight text-foreground">Administracion clara y operativa</h1>
+              <h1 className="text-3xl font-semibold tracking-tight text-foreground">
+                {vertical === 'BARBERSHOP' ? 'Administración de turnos y profesionales' : 'Administracion clara y operativa'}
+              </h1>
               <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-                La seccion admin queda organizada por empresa, operacion, analisis y seguridad, con acceso controlado por rol del usuario y por plan de la empresa.
+                {vertical === 'BARBERSHOP' 
+                  ? 'Organiza tu agenda, profesionales, servicios, dominio de la página de reservas y configuraciones operativas del salón.'
+                  : 'La seccion admin queda organizada por empresa, operacion, analisis y seguridad, con acceso controlado por rol del usuario y por plan de la empresa.'
+                }
               </p>
             </div>
           </div>
@@ -124,13 +135,17 @@ export default function AdminDashboardPage() {
 
         <Card className="rounded-3xl">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Pedidos del periodo</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              {vertical === 'BARBERSHOP' ? 'Turnos del periodo' : 'Pedidos del periodo'}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-semibold">
               {summaryLoading ? <Skeleton className="h-8 w-20" /> : summary?.totalOrders || 0}
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">Volumen comercial de los ultimos 30 dias.</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {vertical === 'BARBERSHOP' ? 'Citas registradas en los últimos 30 días.' : 'Volumen comercial de los ultimos 30 dias.'}
+            </p>
           </CardContent>
         </Card>
 
@@ -142,19 +157,28 @@ export default function AdminDashboardPage() {
             <div className="text-2xl font-semibold">
               {summaryLoading ? <Skeleton className="h-8 w-24" /> : <CurrencyDisplay value={summary?.avgTicket || 0} />}
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">Valor medio por transaccion.</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {vertical === 'BARBERSHOP' ? 'Valor medio por turno agendado.' : 'Valor medio por transaccion.'}
+            </p>
           </CardContent>
         </Card>
 
         <Card className="rounded-3xl">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Alertas de inventario</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              {vertical === 'BARBERSHOP' ? 'Profesionales' : 'Alertas de inventario'}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-semibold">
-              {lowStockLoading ? <Skeleton className="h-8 w-16" /> : lowStockProducts?.length || 0}
+              {vertical === 'BARBERSHOP' 
+                ? (staffLoading ? <Skeleton className="h-8 w-16" /> : staff.length)
+                : (lowStockLoading ? <Skeleton className="h-8 w-16" /> : lowStockProducts?.length || 0)
+              }
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">Productos que requieren accion inmediata.</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {vertical === 'BARBERSHOP' ? 'Barberos registrados en el staff.' : 'Productos que requieren accion inmediata.'}
+            </p>
           </CardContent>
         </Card>
       </section>
@@ -216,19 +240,36 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
 
-              <div className={cn('rounded-2xl border p-4', (lowStockProducts?.length || 0) > 0 ? 'border-destructive/30 bg-destructive/5' : 'border-border bg-muted/20')}>
-                <div className="flex items-start gap-3">
-                  <AlertTriangle className={cn('mt-0.5 h-5 w-5', (lowStockProducts?.length || 0) > 0 ? 'text-destructive' : 'text-muted-foreground')} />
-                  <div>
-                    <p className="text-sm font-medium text-foreground">Inventario sensible</p>
-                    <p className="text-xs text-muted-foreground">
-                      {(lowStockProducts?.length || 0) > 0
-                        ? `${lowStockProducts?.length || 0} productos requieren reposicion.`
-                        : 'No hay productos en nivel critico.'}
-                    </p>
+              {vertical === 'BARBERSHOP' ? (
+                <div className="rounded-2xl border border-border bg-muted/20 p-4">
+                  <div className="flex items-start gap-3">
+                    <Scissors className="mt-0.5 h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Servicios activos</p>
+                      <p className="text-xs text-muted-foreground">
+                        {servicesLoading 
+                          ? 'Cargando servicios…' 
+                          : `${services.length} servicios cargados en tu catálogo.`
+                        }
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className={cn('rounded-2xl border p-4', (lowStockProducts?.length || 0) > 0 ? 'border-destructive/30 bg-destructive/5' : 'border-border bg-muted/20')}>
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className={cn('mt-0.5 h-5 w-5', (lowStockProducts?.length || 0) > 0 ? 'text-destructive' : 'text-muted-foreground')} />
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Inventario sensible</p>
+                      <p className="text-xs text-muted-foreground">
+                        {(lowStockProducts?.length || 0) > 0
+                          ? `${lowStockProducts?.length || 0} productos requieren reposicion.`
+                          : 'No hay productos en nivel critico.'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -302,33 +343,71 @@ export default function AdminDashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="rounded-3xl">
-          <CardHeader>
-            <CardTitle>Stock critico</CardTitle>
-            <CardDescription>Productos con necesidad de reabastecimiento.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {lowStockLoading ? (
-              <Skeleton className="h-32 w-full rounded-2xl" />
-            ) : !lowStockProducts || lowStockProducts.length === 0 ? (
-              <p className="rounded-2xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
-                Inventario sin alertas criticas.
-              </p>
-            ) : (
-              lowStockProducts.map((product) => (
-                <div key={product.id} className="rounded-2xl border border-border px-4 py-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-foreground">{product.name}</p>
-                      <p className="text-xs text-muted-foreground">SKU: {product.sku}</p>
+        {vertical === 'BARBERSHOP' ? (
+          <Card className="rounded-3xl">
+            <CardHeader>
+              <CardTitle>Equipo de profesionales</CardTitle>
+              <CardDescription>Estilistas y barberos activos en la agenda.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {staffLoading ? (
+                <Skeleton className="h-32 w-full rounded-2xl" />
+              ) : !staff || staff.length === 0 ? (
+                <p className="rounded-2xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
+                  No hay profesionales registrados.
+                </p>
+              ) : (
+                staff.map((p) => {
+                  const displayName = p.display_name || p.user?.full_name || 'Profesional'
+                  return (
+                    <div key={p.id} className="rounded-2xl border border-border px-4 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-black text-white" style={{ backgroundColor: p.color || '#6366f1' }}>
+                            {displayName.charAt(0).toUpperCase()}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-foreground">{displayName}</p>
+                            <p className="truncate text-xs text-muted-foreground">{p.specialty || 'Estilista'}</p>
+                          </div>
+                        </div>
+                        <Badge variant="outline">Activo</Badge>
+                      </div>
                     </div>
-                    <Badge variant="destructive">{product.stock_quantity} un.</Badge>
+                  )
+                })
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="rounded-3xl">
+            <CardHeader>
+              <CardTitle>Stock critico</CardTitle>
+              <CardDescription>Productos con necesidad de reabastecimiento.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {lowStockLoading ? (
+                <Skeleton className="h-32 w-full rounded-2xl" />
+              ) : !lowStockProducts || lowStockProducts.length === 0 ? (
+                <p className="rounded-2xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
+                  Inventario sin alertas criticas.
+                </p>
+              ) : (
+                lowStockProducts.map((product) => (
+                  <div key={product.id} className="rounded-2xl border border-border px-4 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-foreground">{product.name}</p>
+                        <p className="text-xs text-muted-foreground">SKU: {product.sku}</p>
+                      </div>
+                      <Badge variant="destructive">{product.stock_quantity} un.</Badge>
+                    </div>
                   </div>
-                </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        )}
       </section>
     </div>
   )

@@ -2,13 +2,16 @@ import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { unstable_cache } from 'next/cache';
 import HomeClient from './HomeClient';
+import BarbershopHomeClient from './BarbershopHomeClient';
 import PublicMarketplaceHome from './components/PublicMarketplaceHome';
+import { BookingFloatingButton } from './components/BookingFloatingButton';
 import { StaticBusinessConfigProvider } from '@/contexts/BusinessConfigContext';
 import { resolveRequestTenantContext } from '@/lib/domain/request-tenant';
 import { getGlobalMarketplaceHomeData, getPublicBusinessConfig } from '@/lib/public-site/data';
 import { fetchTenantHomeSnapshot } from '@/lib/public-site/home-data';
 import { getMarketplaceContent } from '@/lib/web-content/server';
 import { createAdminClient } from '@/lib/supabase/server';
+import { normalizeVertical } from '@/config/verticals';
 
 export const dynamic = 'force-dynamic';
 
@@ -257,7 +260,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const config = await getPublicBusinessConfig(context.organization);
   const homeSnapshot = await fetchTenantHomeSnapshot(context.organization.id);
   const businessName = config.businessName || context.organization.name || 'Nuestra Tienda';
+  const vertical = normalizeVertical(context.organization.vertical);
   const schemas = await buildTenantSchemas(context.organization.id, businessName, config);
+  const TenantHome = vertical === 'BARBERSHOP' ? BarbershopHomeClient : HomeClient;
 
   return (
     <>
@@ -283,7 +288,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         organizationId={context.organization.id}
         organizationName={context.organization.name}
       >
-        <HomeClient initialData={homeSnapshot} />
+        <TenantHome initialData={homeSnapshot} organizationId={context.organization.id} vertical={vertical} />
+        {vertical === 'BARBERSHOP' ? <BookingFloatingButton organizationId={context.organization.id} /> : null}
       </StaticBusinessConfigProvider>
     </>
   );

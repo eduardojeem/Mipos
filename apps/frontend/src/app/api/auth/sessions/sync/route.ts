@@ -29,7 +29,11 @@ export async function POST(request: NextRequest) {
     })
 
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: 500 })
+      const status = result.code === 'SESSION_INVALIDATED' ? 409 : 500
+      return NextResponse.json(
+        { error: result.error, code: result.code },
+        { status }
+      )
     }
 
     return NextResponse.json({ ok: true, sessionKey: result.sessionKey })

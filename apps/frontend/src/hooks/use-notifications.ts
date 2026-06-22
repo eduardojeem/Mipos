@@ -30,8 +30,8 @@ interface UseNotificationsOptions {
 export function useNotifications(options: UseNotificationsOptions = {}) {
     // Extraer primitivos — evita que un objeto nuevo en cada render
     // cause loop infinito en useCallback/useEffect
-    const autoRefresh = options.autoRefresh ?? true;
-    const refreshInterval = options.refreshInterval ?? 30000;
+    const autoRefresh = options.autoRefresh ?? false; // Disabled: no backend implementation yet
+    const refreshInterval = options.refreshInterval ?? 60000;
     const maxNotifications = options.maxNotifications ?? 50;
 
     const [notifications, setNotifications] = useState<Notification[]>([]);

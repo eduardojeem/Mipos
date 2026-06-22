@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import type { BusinessVertical } from '@/config/verticals';
 
 // ── Global deduplication cache ──────────────────────────────────────
 // Prevents 10+ component instances from firing parallel API calls
@@ -68,6 +69,7 @@ export interface Organization {
   slug: string;
   subscription_plan: 'FREE' | 'STARTER' | 'PRO' | 'PROFESSIONAL' | 'PREMIUM' | 'ENTERPRISE' | 'BASIC';
   subscription_status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'TRIAL';
+  vertical?: BusinessVertical;
   created_at: string;
   subdomain?: string | null;
   custom_domain?: string | null;
@@ -131,7 +133,8 @@ function isSameOrganization(a: Organization | null, b: Organization | null): boo
     a.subscription_status === b.subscription_status &&
     (a.subdomain || null) === (b.subdomain || null) &&
     (a.custom_domain || null) === (b.custom_domain || null) &&
-    (a.domain_verified || false) === (b.domain_verified || false)
+    (a.domain_verified || false) === (b.domain_verified || false) &&
+    (a.vertical || null) === (b.vertical || null)
   );
 }
 
@@ -214,14 +217,24 @@ export function useUserOrganizations(
       setOrganizations(orgsData);
 
       const storedOrganization = readStoredOrganization();
-      if (storedOrganization && !orgsData.some((org) => org.id === storedOrganization.id)) {
-        setSelectedOrganization(null);
-        clearStoredOrganization();
+      if (storedOrganization) {
+        const fresh = orgsData.find((org) => org.id === storedOrganization.id);
+        if (!fresh) {
+          // La org guardada ya no está disponible para este usuario
+          setSelectedOrganization(null);
+          clearStoredOrganization();
+          return;
+        }
+        // Reconciliar: si el servidor trae datos distintos (ej: cambió el vertical
+        // o el plan), actualizar la org seleccionada y su copia en localStorage.
+        if (!isSameOrganization(fresh, storedOrganization)) {
+          selectOrganization(fresh);
+        }
         return;
       }
 
       // Auto-select first organization if none is currently selected
-      if (autoSelect && orgsData.length > 0 && !storedOrganization) {
+      if (autoSelect && orgsData.length > 0) {
         selectOrganization(orgsData[0]);
       }
     } catch (err) {

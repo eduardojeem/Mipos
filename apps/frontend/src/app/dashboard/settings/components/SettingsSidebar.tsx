@@ -6,6 +6,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { usePlanSyncContext } from '@/contexts/plan-sync-context';
+import { useCurrentVertical } from '@/hooks/use-current-vertical';
 import {
   Tooltip,
   TooltipContent,
@@ -33,6 +34,7 @@ export default function SettingsSidebar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { company, planDisplayName } = usePlanSyncContext();
+  const vertical = useCurrentVertical();
   const currentTab = normalizeSettingsTab(searchParams?.get('tab'));
 
   const [collapsed, setCollapsed] = useState(false);
@@ -59,9 +61,13 @@ export default function SettingsSidebar() {
 
   const isAdminSettings = pathname?.startsWith('/admin');
   const basePath = isAdminSettings ? '/admin/settings' : '/dashboard/settings';
-  const navigationItems = isAdminSettings
-    ? SETTINGS_NAVIGATION.filter((item) => item.id !== 'appearance')
-    : SETTINGS_NAVIGATION;
+  // Una barbería no maneja inventario/stock: ocultamos ese tab de configuración.
+  const isBarbershop = vertical === 'BARBERSHOP';
+  const navigationItems = SETTINGS_NAVIGATION.filter((item) => {
+    if (isAdminSettings && item.id === 'appearance') return false;
+    if (isBarbershop && item.id === 'inventory') return false;
+    return true;
+  });
 
   const isActive = (item: SettingsNavigationItem) => {
     const isSettingsPath = pathname === basePath || pathname === `${basePath}/general`;

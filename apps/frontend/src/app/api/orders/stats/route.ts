@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
 
     // Usamos una única RPC para contar por estado (GROUP BY en Postgres)
     // evitando descargar todas las filas al servidor de Next.js.
-    const [totalOrders, statusCountsResult, todayRevenueRows, averageRows] = await Promise.all([
+    const [totalOrders, statusCountsResult, todayRevenueRows, averageRows, webTodayOrders, manualTodayOrders, webPendingOrders] = await Promise.all([
       supabase
         .from('sales')
         .select('id', { count: 'exact', head: true })
@@ -50,6 +50,27 @@ export async function GET(request: NextRequest) {
         .eq('organization_id', organizationId)
         .is('deleted_at', null)
         .neq('status', 'CANCELLED'),
+      supabase
+        .from('sales')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', organizationId)
+        .is('deleted_at', null)
+        .eq('order_source', 'WEB')
+        .gte('created_at', todayStart),
+      supabase
+        .from('sales')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', organizationId)
+        .is('deleted_at', null)
+        .eq('order_source', 'MANUAL')
+        .gte('created_at', todayStart),
+      supabase
+        .from('sales')
+        .select('id', { count: 'exact', head: true })
+        .eq('organization_id', organizationId)
+        .is('deleted_at', null)
+        .eq('order_source', 'WEB')
+        .in('status', ['PENDING', 'CONFIRMED', 'PREPARING', 'READY']),
     ]);
 
     if (todayRevenueRows.error || averageRows.error) {
@@ -115,6 +136,9 @@ export async function GET(request: NextRequest) {
         todayRevenue,
         todayOrders,
         avgOrderValue,
+        webTodayOrders: webTodayOrders.count || 0,
+        manualTodayOrders: manualTodayOrders.count || 0,
+        webPendingOrders: webPendingOrders.count || 0,
       },
     });
   } catch (error) {

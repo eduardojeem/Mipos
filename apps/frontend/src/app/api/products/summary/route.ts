@@ -40,6 +40,25 @@ export async function GET(request: NextRequest) {
     const normalizedIsActive =
       isActiveParam === 'true' ? true : isActiveParam === 'false' ? false : null;
 
+    // Camino óptimo: agregación en SQL (no transfiere la tabla de productos).
+    const rpc = await supabase.rpc('get_products_summary', {
+      p_org_id: orgId,
+      p_is_active: normalizedIsActive,
+    });
+    if (!rpc.error && rpc.data) {
+      const d = rpc.data as Record<string, number | string>;
+      return NextResponse.json({
+        totalProducts: Number(d.totalProducts) || 0,
+        lowStockProducts: Number(d.lowStockProducts) || 0,
+        outOfStockProducts: Number(d.outOfStockProducts) || 0,
+        totalValue: Number(d.totalValue) || 0,
+        recentlyAdded: Number(d.recentlyAdded) || 0,
+        topCategory: (d.topCategory as string) || 'N/A',
+        lastUpdated: new Date().toISOString(),
+      });
+    }
+    // Fallback (RPC aún no aplicado): cálculo en JS heredado.
+
     // Siempre excluimos soft-deleted. Cuando isActive=false, solo contamos
     // productos con is_active=false (no mezclamos con deleted_at).
     const runQuery = async (applyDeletedFilter: boolean) => {

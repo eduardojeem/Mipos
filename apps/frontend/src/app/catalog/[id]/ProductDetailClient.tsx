@@ -12,25 +12,29 @@ import { useToast } from '@/components/ui/use-toast';
 import { useBusinessConfig } from '@/contexts/BusinessConfigContext';
 import { useCatalogCart } from '@/hooks/useCatalogCart';
 import { useTenantPublicRouting } from '@/hooks/useTenantPublicRouting';
+import { resolveBrandingColors } from '@/hooks/useBrandingColors';
 import { formatPrice } from '@/utils/formatters';
 import { NavBar } from '@/app/home/components/NavBar';
 import { Footer } from '@/app/home/components/Footer';
 import PageHero from '@/components/public-tenant/PageHero';
 import { getTenantPublicContent, getTenantPublicSections } from '@/lib/public-site/tenant-public-config';
+import type { BusinessVertical } from '@/config/verticals';
 import { getProductPricing } from '@/lib/public-site/product-pricing';
 import type { Product } from '@/types';
 
 interface ProductDetailClientProps {
   product: Product;
+  vertical?: BusinessVertical;
 }
 
-export default function ProductDetailClient({ product }: ProductDetailClientProps) {
+export default function ProductDetailClient({ product, vertical = 'RETAIL' }: ProductDetailClientProps) {
   const { toast } = useToast();
   const { config } = useBusinessConfig();
   const { addToCart } = useCatalogCart();
   const { tenantHref } = useTenantPublicRouting();
   const sections = getTenantPublicSections(config);
   const content = getTenantPublicContent(config);
+  const branding = resolveBrandingColors(config);
   const [quantity, setQuantity] = useState(1);
   const [isFavorite, setIsFavorite] = useState(false);
   const canUseCart = sections.showCart;
@@ -52,7 +56,13 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
-      <NavBar config={config} activeSection="catalogo" onNavigate={(section) => window.location.assign(tenantHref(`/home#${section}`))} skipTargetId="main-content" />
+      <NavBar
+        config={config}
+        activeSection={vertical === 'BARBERSHOP' ? 'productos' : 'catalogo'}
+        onNavigate={(section) => window.location.assign(tenantHref(`/home#${section}`))}
+        skipTargetId="main-content"
+        vertical={vertical}
+      />
 
       <main id="main-content" className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 scroll-mt-24">
         <PageHero
@@ -100,7 +110,12 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                     <p className="text-lg text-slate-500 line-through">{formatPrice(pricing.compareAtPrice, config)}</p>
                   ) : null}
                   {pricing.hasDiscount ? (
-                    <Badge className="border-0 bg-rose-600 text-white">-{pricing.discountPercent}%</Badge>
+                    <Badge
+                      className="border-0 text-white"
+                      style={{ backgroundColor: branding.primary }}
+                    >
+                      -{pricing.discountPercent}%
+                    </Badge>
                   ) : null}
                 </div>
 
@@ -125,7 +140,15 @@ export default function ProductDetailClient({ product }: ProductDetailClientProp
                       />
                     </div>
                     <div className="flex flex-wrap gap-3">
-                      <Button className="rounded-full bg-slate-950 text-white hover:bg-slate-800" disabled={product.stock_quantity <= 0} onClick={addToCartWithQuantity}>
+                      <Button
+                        className="rounded-full text-white hover:brightness-110"
+                        style={{
+                          backgroundImage: `linear-gradient(135deg, ${branding.gradientStart}, ${branding.gradientEnd})`,
+                          boxShadow: `0 14px 28px ${branding.hexToRgba(branding.primary, 0.22)}`,
+                        }}
+                        disabled={product.stock_quantity <= 0}
+                        onClick={addToCartWithQuantity}
+                      >
                         <ShoppingCart className="mr-2 h-4 w-4" />
                         Agregar al carrito
                       </Button>

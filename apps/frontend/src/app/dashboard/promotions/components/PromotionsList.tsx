@@ -25,8 +25,10 @@ export function PromotionsList({
 }: PromotionsListProps) {
   void loadingCounts;
 
-  const getProductCount = (promotion: Promotion) =>
-    productCounts[promotion.id] ?? promotion.applicableProducts?.length ?? 0;
+  const getAssociationCount = (promotion: Promotion) =>
+    promotion.targetType === 'SERVICE'
+      ? promotion.applicableServices?.length ?? 0
+      : productCounts[promotion.id] ?? promotion.applicableProducts?.length ?? 0;
 
   if (viewMode === 'grid') {
     return (
@@ -35,7 +37,7 @@ export function PromotionsList({
           <PromotionCard
             key={promotion.id}
             promotion={promotion}
-            productCount={getProductCount(promotion)}
+            associatedCount={getAssociationCount(promotion)}
             onRefresh={onRefresh}
             isSelected={selectedIds.has(promotion.id)}
             onToggleSelect={onToggleSelect}
@@ -51,7 +53,7 @@ export function PromotionsList({
         <PromotionListItem
           key={promotion.id}
           promotion={promotion}
-          productCount={getProductCount(promotion)}
+          associatedCount={getAssociationCount(promotion)}
           onRefresh={onRefresh}
         />
       ))}

@@ -46,6 +46,9 @@ type OrderFilterStatus = (typeof ORDER_FILTER_STATUSES)[number];
 const ORDER_FILTER_STATUS_SET = new Set<OrderFilterStatus>(
   ORDER_FILTER_STATUSES,
 );
+const ORDER_SOURCE_FILTERS = ["WEB", "MANUAL"] as const;
+type OrderSourceFilter = (typeof ORDER_SOURCE_FILTERS)[number];
+const ORDER_SOURCE_FILTER_SET = new Set<OrderSourceFilter>(ORDER_SOURCE_FILTERS);
 const ORDER_LIST_SELECT = `
   id,
   order_number,
@@ -341,6 +344,7 @@ export async function GET(request: NextRequest) {
       : "";
     const paymentMethod = (url.searchParams.get("paymentMethod") || "").trim().toUpperCase();
     const paymentStatus = (url.searchParams.get("paymentStatus") || "").trim().toUpperCase();
+    const orderSourceParam = (url.searchParams.get("orderSource") || "").trim().toUpperCase();
     const customerEmail = (url.searchParams.get("customerEmail") || "").trim();
     const search = sanitizeOrderSearchTerm(url.searchParams.get("search"));
     const dateRange = url.searchParams.get("dateRange");
@@ -352,6 +356,9 @@ export async function GET(request: NextRequest) {
     )
       ? sortByParam
       : "created_at";
+    const orderSource = ORDER_SOURCE_FILTER_SET.has(orderSourceParam as OrderSourceFilter)
+      ? (orderSourceParam as OrderSourceFilter)
+      : "";
     const startDate = getOrderStartDate(dateRange);
 
     const offset = (page - 1) * limit;
@@ -368,6 +375,10 @@ export async function GET(request: NextRequest) {
 
       if (status) {
         ordersQuery = ordersQuery.eq("status", status);
+      }
+
+      if (orderSource) {
+        ordersQuery = ordersQuery.eq("order_source", orderSource);
       }
 
       const allowedPaymentMethods = ["CASH", "CARD", "TRANSFER", "DIGITAL_WALLET"] as const;
@@ -998,8 +1009,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const createdOrderId = order.id;
+
     const orderItems = validatedItems.map((item) => ({
-      sale_id: order.id,
+      sale_id: createdOrderId,
       product_id: item.productId,
       product_name: item.productName,
       quantity: item.quantity,
@@ -1012,7 +1025,7 @@ export async function POST(request: NextRequest) {
       .insert(orderItems);
     if (itemsError) {
       console.error("Error creating order items:", itemsError);
-      await rollbackCreatedOrder(supabase, order.id);
+      await rollbackCreatedOrder(supabase, createdOrderId);
       return NextResponse.json(
         { error: "Error al crear items del pedido" },
         { status: 500 },

@@ -168,13 +168,13 @@ export function BulkActionsBar({
               {action === 'activate' && (
                 <>
                   Se activarán {count} promoción{count !== 1 ? 'es' : ''}. 
-                  Los clientes podrán verlas en el sitio público.
+                  Quedarán disponibles según su alcance y configuración actual.
                 </>
               )}
               {action === 'deactivate' && (
                 <>
                   Se desactivarán {count} promoción{count !== 1 ? 'es' : ''}. 
-                  Los clientes no podrán verlas en el sitio público.
+                  Dejarán de estar disponibles en los flujos donde hoy aplican.
                 </>
               )}
             </AlertDialogDescription>

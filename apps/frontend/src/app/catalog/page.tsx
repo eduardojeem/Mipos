@@ -4,6 +4,7 @@ import CatalogClientOptimized from './CatalogClientOptimized';
 import { normalizeCatalogQuery, type CatalogQueryRecord } from './catalog-query';
 import { maybeGetCurrentOrganization } from '@/lib/organization/get-current-organization';
 import { StaticBusinessConfigProvider } from '@/contexts/BusinessConfigContext';
+import { normalizeVertical } from '@/config/verticals';
 import { getPublicBusinessConfig } from '@/lib/public-site/data';
 import { fetchPublicCatalogSnapshot } from '@/lib/public-site/catalog-data';
 import SectionDisabledState from '@/components/public-tenant/SectionDisabledState';
@@ -53,6 +54,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
   }
 
   const config = await getPublicBusinessConfig(organization);
+  const vertical = normalizeVertical(organization.vertical);
   if (!config.publicSite?.sections?.showCatalog) {
     return (
       <StaticBusinessConfigProvider
@@ -87,6 +89,7 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
         initialTotalProducts={snapshot.totalProducts}
         initialMaxPrice={snapshot.maxPrice}
         initialQueryState={initialQueryState}
+        vertical={vertical}
       />
     </StaticBusinessConfigProvider>
   );

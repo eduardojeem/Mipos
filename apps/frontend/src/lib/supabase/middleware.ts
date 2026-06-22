@@ -180,6 +180,42 @@ async function getUserOrganizationPlan(supabase: any, userId: string, request: N
   }
 }
 
+/**
+ * Check if an organization has completed onboarding.
+ * Returns `true` if completed, `false` if not, `null` if unknown (query failed or no org).
+ * Uses a lightweight check against organizations.settings.onboardingCompleted.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function getOrganizationOnboardingStatus(supabase: any, organizationId: string): Promise<boolean | null> {
+  try {
+    const { data: org } = await supabase
+      .from('organizations')
+      .select('settings')
+      .eq('id', organizationId)
+      .maybeSingle();
+
+    if (!org || !org.settings || typeof org.settings !== 'object') {
+      return null;
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const settings = org.settings as Record<string, any>;
+    if (settings.onboardingCompleted === true) {
+      return true;
+    }
+
+    // Also check via the nested onboarding.completed flag set by syncOrganizationSettings
+    if (settings.onboarding && settings.onboarding.completed === true) {
+      return true;
+    }
+
+    return false;
+  } catch {
+    // On failure, don't block the user — assume completed
+    return null;
+  }
+}
+
 function buildSignInRedirectUrl(request: NextRequest): URL {
   const url = request.nextUrl.clone();
   const returnUrl = `${request.nextUrl.pathname}${request.nextUrl.search}`;
@@ -327,6 +363,20 @@ export async function updateSession(request: NextRequest) {
       url.pathname = '/home';
       return NextResponse.redirect(url);
     }
+
+    // --- Onboarding enforcement: redirect to /onboarding if org not configured ---
+    // Only check for non-API routes, skip if already loading dashboard for the first time
+    // to avoid blocking users who just registered.
+    const requestedOrgId = getRequestedOrganizationId(request);
+    if (requestedOrgId) {
+      const onboardingCompleted = await getOrganizationOnboardingStatus(supabase, requestedOrgId);
+      if (onboardingCompleted === false) {
+        const url = request.nextUrl.clone();
+        url.pathname = '/onboarding';
+        return NextResponse.redirect(url);
+      }
+    }
+
     return supabaseResponse;
   }
 

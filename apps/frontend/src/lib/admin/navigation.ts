@@ -1,21 +1,26 @@
 import {
+  Activity,
   Building2,
+  CalendarDays,
   CreditCard,
-  FileText,
+  KeyRound,
   LayoutDashboard,
   MapPin,
   Palette,
+  Scissors,
   Settings,
   Shield,
+  UserCog,
   Users,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { CompanyFeatureKey } from '@/lib/company-access'
+import type { BusinessVertical } from '@/config/verticals'
 
 export type AdminSectionKey =
   | 'overview'
+  | 'barbershop'
   | 'company'
-  | 'security'
   | 'platform'
 
 export type AdminNavItemConfig = {
@@ -30,16 +35,19 @@ export type AdminNavItemConfig = {
   requiredFeature?: CompanyFeatureKey
   superAdminOnly?: boolean
   exact?: boolean
+  /** Si está definido, el ítem solo se muestra para estos verticales. Sin definir = todos. */
+  verticals?: BusinessVertical[]
 }
 
 export const ADMIN_SECTION_LABELS: Record<AdminSectionKey, string> = {
   overview: 'Vision General',
+  barbershop: 'Operación',
   company: 'Empresa',
-  security: 'Auditoria y Seguridad',
   platform: 'Plataforma',
 }
 
 export const adminNavigationConfig: AdminNavItemConfig[] = [
+  // 1. OVERVIEW
   {
     title: 'Dashboard',
     href: '/admin',
@@ -50,15 +58,40 @@ export const adminNavigationConfig: AdminNavItemConfig[] = [
     requireAdminPanel: true,
     exact: true,
   },
+
+  // 2. BARBERSHOP (Operación diaria - Lo más usado)
   {
-    title: 'Empresa',
-    href: '/admin/business-config',
-    icon: Building2,
-    description: 'Contenido publico, dominio y presencia web',
-    section: 'company',
+    title: 'Agenda',
+    href: '/admin/agenda',
+    icon: CalendarDays,
+    description: 'Turnos del día por profesional: reservar, confirmar y cerrar',
+    section: 'barbershop',
     requiredRoles: ['ADMIN', 'SUPER_ADMIN', 'OWNER'],
     requireAdminPanel: true,
+    verticals: ['BARBERSHOP'],
   },
+  {
+    title: 'Profesionales',
+    href: '/admin/staff',
+    icon: UserCog,
+    description: 'Barberos: especialidad, comisión, color y horarios',
+    section: 'barbershop',
+    requiredRoles: ['ADMIN', 'SUPER_ADMIN', 'OWNER'],
+    requireAdminPanel: true,
+    verticals: ['BARBERSHOP'],
+  },
+  {
+    title: 'Servicios',
+    href: '/admin/services',
+    icon: Scissors,
+    description: 'Catálogo de servicios: cortes, barba, color (precio y duración)',
+    section: 'barbershop',
+    requiredRoles: ['ADMIN', 'SUPER_ADMIN', 'OWNER'],
+    requireAdminPanel: true,
+    verticals: ['BARBERSHOP'],
+  },
+
+  // 3. COMPANY (Gestión central)
   {
     title: 'Sucursales',
     href: '/admin/sucursal',
@@ -72,7 +105,16 @@ export const adminNavigationConfig: AdminNavItemConfig[] = [
     title: 'Usuarios y Roles',
     href: '/admin/users-roles',
     icon: Users,
-    description: 'Miembros, roles y permisos',
+    description: 'Miembros, roles y permisos de acceso',
+    section: 'company',
+    requiredRoles: ['ADMIN', 'SUPER_ADMIN', 'OWNER'],
+    requireAdminPanel: true,
+  },
+  {
+    title: 'Empresa',
+    href: '/admin/business-config',
+    icon: Building2,
+    description: 'Perfil público, dominio y presencia web',
     section: 'company',
     requiredRoles: ['ADMIN', 'SUPER_ADMIN', 'OWNER'],
     requireAdminPanel: true,
@@ -81,7 +123,7 @@ export const adminNavigationConfig: AdminNavItemConfig[] = [
     title: 'Configuracion',
     href: '/admin/settings',
     icon: Settings,
-    description: 'General, ventas, inventario y seguridad',
+    description: 'General, ventas, inventario y facturación',
     section: 'company',
     requiredRoles: ['ADMIN', 'SUPER_ADMIN', 'OWNER'],
     requireAdminPanel: true,
@@ -90,7 +132,7 @@ export const adminNavigationConfig: AdminNavItemConfig[] = [
     title: 'Apariencia',
     href: '/admin/appearance',
     icon: Palette,
-    description: 'Tema, densidad y estilo visual',
+    description: 'Tema, densidad y estilo visual del sistema',
     section: 'company',
     requiredRoles: ['ADMIN', 'SUPER_ADMIN', 'OWNER'],
     requireAdminPanel: true,
@@ -104,30 +146,13 @@ export const adminNavigationConfig: AdminNavItemConfig[] = [
     requiredRoles: ['ADMIN', 'SUPER_ADMIN', 'OWNER'],
     requireAdminPanel: true,
   },
-  {
-    title: 'Seguridad y Sesiones',
-    href: '/admin/sessions',
-    icon: Shield,
-    description: 'Sesiones activas, accesos y control de seguridad',
-    section: 'security',
-    requiredRoles: ['ADMIN', 'SUPER_ADMIN', 'OWNER'],
-    requireAdminPanel: true,
-  },
-  {
-    title: 'Auditoria',
-    href: '/admin/audit',
-    icon: FileText,
-    description: 'Eventos, trazabilidad y auditoria',
-    section: 'security',
-    requiredRoles: ['ADMIN', 'SUPER_ADMIN', 'OWNER'],
-    requireAdminPanel: true,
-  },
 
+  // 5. PLATFORM (Super Admin Only)
   {
     title: 'Planes SaaS',
     href: '/superadmin/plans',
     icon: CreditCard,
-    description: 'Catalogo de planes y oferta comercial',
+    description: 'Catálogo de planes y oferta comercial',
     section: 'platform',
     requiredRoles: ['SUPER_ADMIN'],
     superAdminOnly: true,
@@ -136,7 +161,7 @@ export const adminNavigationConfig: AdminNavItemConfig[] = [
     title: 'Panel SaaS',
     href: '/superadmin',
     icon: Shield,
-    description: 'Administracion global de la plataforma',
+    description: 'Administración global de la plataforma',
     section: 'platform',
     requiredRoles: ['SUPER_ADMIN'],
     superAdminOnly: true,

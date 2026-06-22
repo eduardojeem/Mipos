@@ -18,11 +18,10 @@ const SUMMARY_CACHE_TTL_MS = 30_000;
 
 // Hard ceiling for fallback queries that compute aggregates client-side.
 // Without this, queries like SELECT total FROM sales WHERE org=X could pull
-// 50k+ rows on every dashboard load when the RPC functions aren't available
-// — the single biggest source of Supabase egress / row-read cost. When a
-// query hits this cap we warn so it's visible that the local aggregate is
-// likely incomplete and the dashboard RPC should be deployed.
-const MAX_FALLBACK_ROWS = 10000;
+// thousands of rows on every dashboard load when the RPC functions aren't available.
+// Limit to 500 rows max — enough for accurate daily/weekly summaries while
+// keeping Supabase row-read costs under control.
+const MAX_FALLBACK_ROWS = 500;
 const loggedRowCaps = new Set<string>();
 function warnIfCapHit(label: string, rows: unknown) {
   if (!Array.isArray(rows) || rows.length < MAX_FALLBACK_ROWS) return;

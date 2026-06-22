@@ -1,6 +1,6 @@
 'use client';
 
-import { memo, useCallback, useState, type MouseEvent } from 'react';
+import { memo, useCallback, useState, type MouseEvent, type NamedExoticComponent } from 'react';
 import Image from 'next/image';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -16,6 +16,7 @@ import {
 import { formatPrice } from '@/utils/formatters';
 import { getProductPricing } from '@/lib/public-site/product-pricing';
 import { ProductImagePlaceholder } from '@/components/products/ProductImagePlaceholder';
+import { resolveBrandingColors } from '@/hooks/useBrandingColors';
 import type { BusinessConfig } from '@/types/business-config';
 import type { Product } from '@/types';
 
@@ -26,17 +27,19 @@ interface ProductCardOptimizedProps {
   onToggleFavorite: (productId: string) => void;
   onQuickView: (product: Product) => void;
   onAddToCart: (product: Product) => void;
+  allowAddToCart?: boolean;
   config: BusinessConfig;
   priority?: boolean;
 }
 
-const ProductCardOptimized = memo(function ProductCardOptimized({
+const ProductCardOptimized: NamedExoticComponent<ProductCardOptimizedProps> = memo(function ProductCardOptimized({
   product,
   viewMode,
   isFavorite,
   onToggleFavorite,
   onQuickView,
   onAddToCart,
+  allowAddToCart = true,
   config,
   priority = false,
 }: ProductCardOptimizedProps) {
@@ -44,6 +47,7 @@ const ProductCardOptimized = memo(function ProductCardOptimized({
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   const pricing = getProductPricing(product);
+  const branding = resolveBrandingColors(config);
 
   const isOutOfStock = Number(product.stock_quantity ?? 0) <= 0;
   const hasDiscount = pricing.hasDiscount;
@@ -188,18 +192,24 @@ const ProductCardOptimized = memo(function ProductCardOptimized({
                   <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleFavoriteClick}>
                     <Heart className={`h-4 w-4 ${isFavorite ? 'fill-red-500 text-red-500' : ''}`} />
                   </Button>
-                  <Button
-                    size="sm"
-                    disabled={isOutOfStock}
-                    onClick={handleAddToCart}
-                    className={`transition-all duration-200 hover:scale-105 hover:shadow-lg ${
-                      isAdding
-                        ? 'bg-green-600'
-                        : 'bg-red-600 text-white hover:bg-red-700'
-                    }`}
-                  >
-                    {isAdding ? <Check className="h-4 w-4" /> : <ShoppingCart className="h-4 w-4" />}
-                  </Button>
+                  {allowAddToCart ? (
+                    <Button
+                      size="sm"
+                      disabled={isOutOfStock}
+                      onClick={handleAddToCart}
+                      className="text-white transition-all duration-200 hover:scale-105 hover:brightness-110"
+                      style={
+                        isAdding
+                          ? { backgroundColor: '#16a34a' }
+                          : {
+                              backgroundColor: branding.primary,
+                              boxShadow: `0 10px 24px ${branding.hexToRgba(branding.primary, 0.24)}`,
+                            }
+                      }
+                    >
+                      {isAdding ? <Check className="h-4 w-4" /> : <ShoppingCart className="h-4 w-4" />}
+                    </Button>
+                  ) : null}
                 </div>
               </div>
 
@@ -317,30 +327,36 @@ const ProductCardOptimized = memo(function ProductCardOptimized({
             </Button>
           </div>
 
-          <div className="absolute bottom-0 left-0 right-0 z-20 translate-y-full p-4 transition-all duration-500 ease-out group-hover:translate-y-0">
-            <Button
-              size="sm"
-              className={`h-11 w-full rounded-xl font-bold tracking-tight shadow-2xl transition-all duration-300 ${
-                isAdding
-                  ? 'scale-105 border-0 bg-gradient-to-r from-green-500 to-emerald-600'
-                  : 'border-0 bg-gradient-to-r from-red-600 to-rose-600 text-white hover:scale-105 hover:from-red-700 hover:to-rose-700 hover:shadow-red-500/20'
-              }`}
-              disabled={isOutOfStock}
-              onClick={handleAddToCart}
-            >
-              {isAdding ? (
-                <>
-                  <Check className="mr-2 h-5 w-5 animate-bounce" />
-                  Listo
-                </>
-              ) : (
-                <>
-                  <ShoppingCart className="mr-2 h-5 w-5" />
-                  Comprar
-                </>
-              )}
-            </Button>
-          </div>
+          {allowAddToCart ? (
+            <div className="absolute bottom-0 left-0 right-0 z-20 translate-y-full p-4 transition-all duration-500 ease-out group-hover:translate-y-0">
+              <Button
+                size="sm"
+                className="h-11 w-full rounded-xl border-0 font-bold tracking-tight text-white shadow-2xl transition-all duration-300 hover:scale-105 hover:brightness-110"
+                disabled={isOutOfStock}
+                onClick={handleAddToCart}
+                style={
+                  isAdding
+                    ? { backgroundColor: '#16a34a' }
+                    : {
+                        backgroundImage: `linear-gradient(135deg, ${branding.gradientStart}, ${branding.gradientEnd})`,
+                        boxShadow: `0 20px 35px ${branding.hexToRgba(branding.primary, 0.24)}`,
+                      }
+                }
+              >
+                {isAdding ? (
+                  <>
+                    <Check className="mr-2 h-5 w-5 animate-bounce" />
+                    Listo
+                  </>
+                ) : (
+                  <>
+                    <ShoppingCart className="mr-2 h-5 w-5" />
+                    Comprar
+                  </>
+                )}
+              </Button>
+            </div>
+          ) : null}
         </div>
 
         <CardContent
@@ -402,8 +418,15 @@ const ProductCardOptimized = memo(function ProductCardOptimized({
               className={`font-extrabold tracking-tight ${
                 hasDiscount
                   ? 'text-slate-900 dark:text-slate-50'
-                  : 'bg-gradient-to-r from-primary via-purple-500 to-rose-500 bg-clip-text text-transparent'
+                  : 'bg-clip-text text-transparent'
               } ${viewMode === 'compact' ? 'text-lg' : 'text-2xl'}`}
+              style={
+                hasDiscount
+                  ? undefined
+                  : {
+                      backgroundImage: `linear-gradient(135deg, ${branding.primary}, ${branding.secondary})`,
+                    }
+              }
             >
               {priceLabel}
             </span>

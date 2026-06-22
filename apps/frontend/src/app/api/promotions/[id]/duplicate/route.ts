@@ -35,7 +35,7 @@ export async function POST(
 
     const { data: sourcePromotion, error: sourceError } = await supabase
       .from('promotions')
-      .select('id,name,description,discount_type,discount_value,start_date,end_date,is_active,min_purchase_amount,max_discount_amount,usage_limit,organization_id')
+      .select('id,name,description,target_type,discount_type,discount_value,start_date,end_date,is_active,min_purchase_amount,max_discount_amount,usage_limit,organization_id')
       .eq('id', sourcePromotionId)
       .eq('organization_id', orgId)
       .single()
@@ -49,6 +49,7 @@ export async function POST(
       .insert({
         name,
         description: sourcePromotion.description,
+        target_type: sourcePromotion.target_type || 'PRODUCT',
         discount_type: sourcePromotion.discount_type,
         discount_value: sourcePromotion.discount_value,
         start_date: sourcePromotion.start_date,
@@ -67,43 +68,78 @@ export async function POST(
     }
 
     let copiedProducts = 0
+    let copiedServices = 0
     if (copyProducts) {
-      const { data: links, error: linksError } = await supabase
-        .from('promotions_products')
-        .select('product_id')
-        .eq('promotion_id', sourcePromotionId)
-        .eq('organization_id', orgId)
+      if ((sourcePromotion.target_type || 'PRODUCT') === 'SERVICE') {
+        const { data: links, error: linksError } = await supabase
+          .from('promotions_services')
+          .select('service_id')
+          .eq('promotion_id', sourcePromotionId)
+          .eq('organization_id', orgId)
 
-      if (linksError) {
-        return NextResponse.json({ success: false, message: 'No se pudieron leer los productos asociados' }, { status: 500 })
-      }
-
-      const productIds = Array.from(
-        new Set((links || []).map((l: { product_id: string }) => String(l.product_id)))
-      )
-
-      if (productIds.length > 0) {
-        const rows = productIds.map((productId) => ({
-          promotion_id: createdPromotion.id,
-          product_id: productId,
-          organization_id: orgId,
-        }))
-
-        const { error: insertLinksError } = await supabase
-          .from('promotions_products')
-          .insert(rows)
-
-        if (insertLinksError) {
-          return NextResponse.json({ success: false, message: 'No se pudieron copiar los productos asociados' }, { status: 500 })
+        if (linksError) {
+          return NextResponse.json({ success: false, message: 'No se pudieron leer los servicios asociados' }, { status: 500 })
         }
 
-        copiedProducts = productIds.length
+        const serviceIds = Array.from(
+          new Set((links || []).map((l: { service_id: string }) => String(l.service_id)))
+        )
+
+        if (serviceIds.length > 0) {
+          const rows = serviceIds.map((serviceId) => ({
+            promotion_id: createdPromotion.id,
+            service_id: serviceId,
+            organization_id: orgId,
+          }))
+
+          const { error: insertLinksError } = await supabase
+            .from('promotions_services')
+            .insert(rows)
+
+          if (insertLinksError) {
+            return NextResponse.json({ success: false, message: 'No se pudieron copiar los servicios asociados' }, { status: 500 })
+          }
+
+          copiedServices = serviceIds.length
+        }
+      } else {
+        const { data: links, error: linksError } = await supabase
+          .from('promotions_products')
+          .select('product_id')
+          .eq('promotion_id', sourcePromotionId)
+          .eq('organization_id', orgId)
+
+        if (linksError) {
+          return NextResponse.json({ success: false, message: 'No se pudieron leer los productos asociados' }, { status: 500 })
+        }
+
+        const productIds = Array.from(
+          new Set((links || []).map((l: { product_id: string }) => String(l.product_id)))
+        )
+
+        if (productIds.length > 0) {
+          const rows = productIds.map((productId) => ({
+            promotion_id: createdPromotion.id,
+            product_id: productId,
+            organization_id: orgId,
+          }))
+
+          const { error: insertLinksError } = await supabase
+            .from('promotions_products')
+            .insert(rows)
+
+          if (insertLinksError) {
+            return NextResponse.json({ success: false, message: 'No se pudieron copiar los productos asociados' }, { status: 500 })
+          }
+
+          copiedProducts = productIds.length
+        }
       }
     }
 
     return NextResponse.json({
       success: true,
-      data: { id: createdPromotion.id, copiedProducts },
+      data: { id: createdPromotion.id, copiedProducts, copiedServices, targetType: sourcePromotion.target_type || 'PRODUCT' },
       message: 'Promoción duplicada exitosamente',
     })
   } catch (error: unknown) {

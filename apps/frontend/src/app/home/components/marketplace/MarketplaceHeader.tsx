@@ -45,7 +45,7 @@ function getUserInitials(name?: string | null, email?: string | null): string {
 const navItems = [
   { name: 'Inicio', href: '/home' },
   { name: 'Catalogo', href: '/home/catalogo' },
-  { name: 'Categorias', href: '/home/categorias' },
+  { name: 'Rubros', href: '/home/categorias' },
   { name: 'Empresas', href: '/home/empresas' },
 ];
 

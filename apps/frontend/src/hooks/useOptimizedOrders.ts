@@ -56,6 +56,7 @@ export interface OrderListParams {
   sortOrder?: 'asc' | 'desc';
   paymentMethod?: string;
   paymentStatus?: string;
+  orderSource?: 'ALL' | 'WEB' | 'MANUAL';
 }
 
 export interface OrderStats {
@@ -70,6 +71,9 @@ export interface OrderStats {
   todayRevenue: number;
   todayOrders: number;
   avgOrderValue: number;
+  webTodayOrders: number;
+  manualTodayOrders: number;
+  webPendingOrders: number;
 }
 
 export interface OrderPagination {
@@ -177,6 +181,7 @@ function normalizeOrderListParams(params: OrderListParams): Required<OrderListPa
     sortOrder: params.sortOrder || 'desc',
     paymentMethod: params.paymentMethod || 'ALL',
     paymentStatus: params.paymentStatus || 'ALL',
+    orderSource: params.orderSource || 'ALL',
   };
 }
 
@@ -274,6 +279,9 @@ export function useOptimizedOrders(params: OrderListParams = {}) {
       }
       if (memoizedParams.paymentStatus !== 'ALL') {
         searchParams.set('paymentStatus', memoizedParams.paymentStatus);
+      }
+      if (memoizedParams.orderSource !== 'ALL') {
+        searchParams.set('orderSource', memoizedParams.orderSource);
       }
 
       const data = await fetchOrderData<{

@@ -5,9 +5,22 @@ import { usePathname, useRouter } from 'next/navigation'
 import { adminNavigationConfig, ADMIN_SECTION_LABELS, type AdminNavItemConfig, type AdminSectionKey } from '@/lib/admin/navigation'
 import { usePlanPermissions } from '@/hooks/use-plan-permissions'
 import { useResolvedRole } from '@/hooks/use-auth'
+import { useCurrentVertical } from '@/hooks/use-current-vertical'
+import type { BusinessVertical } from '@/config/verticals'
 
-function canAccessAdminItem(item: AdminNavItemConfig, role: string, access: ReturnType<typeof usePlanPermissions>) {
+function canAccessAdminItem(
+  item: AdminNavItemConfig,
+  role: string,
+  access: ReturnType<typeof usePlanPermissions>,
+  vertical: BusinessVertical,
+) {
   const normalizedRole = role.toUpperCase()
+
+  // El vertical define la naturaleza de la org y aplica incluso a SUPER_ADMIN:
+  // una barbería ve "Servicios", una tienda no — independientemente del rol.
+  if (item.verticals && !item.verticals.includes(vertical)) {
+    return false
+  }
 
   if (item.superAdminOnly) {
     return normalizedRole === 'SUPER_ADMIN'
@@ -37,11 +50,12 @@ export function useAdminNavigation() {
   const router = useRouter()
   const resolvedRole = useResolvedRole()
   const planAccess = usePlanPermissions()
+  const vertical = useCurrentVertical()
   const role = resolvedRole || 'USER'
 
   const items = useMemo(
-    () => adminNavigationConfig.filter((item) => canAccessAdminItem(item, role, planAccess)),
-    [role, planAccess.canAccessAdminPanel, planAccess.canAccessAnalytics, planAccess.canUseCustomBranding]
+    () => adminNavigationConfig.filter((item) => canAccessAdminItem(item, role, planAccess, vertical)),
+    [role, vertical, planAccess.canAccessAdminPanel, planAccess.canAccessAnalytics, planAccess.canUseCustomBranding]
   )
 
   const sections = useMemo(() => {

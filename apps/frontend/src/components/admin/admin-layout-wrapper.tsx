@@ -11,11 +11,13 @@ function AdminLayoutContent({ children }: { children: ReactNode }) {
   const { isCollapsed } = useAdminSidebar()
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background text-foreground selection:bg-primary/20 selection:text-primary">
       <AdminRouteGuard />
 
+      {/* Premium Animated Background */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.08),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(16,185,129,0.07),transparent_26%)]" />
+        <div className="absolute -top-[20%] -left-[10%] h-[50%] w-[50%] rounded-full bg-blue-500/10 blur-[120px]" />
+        <div className="absolute -bottom-[20%] -right-[10%] h-[50%] w-[50%] rounded-full bg-emerald-500/10 blur-[120px]" />
       </div>
 
       <div className="relative flex min-h-screen">
@@ -25,24 +27,24 @@ function AdminLayoutContent({ children }: { children: ReactNode }) {
 
         <div
           className={cn(
-            'flex min-h-screen flex-1 flex-col transition-all duration-300 ease-in-out',
-            isCollapsed ? 'lg:pl-[72px]' : 'lg:pl-[288px]'
+            'flex min-h-screen min-w-0 flex-1 flex-col transition-all duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)] overflow-x-hidden',
+            isCollapsed ? 'lg:pl-[80px]' : 'lg:pl-[280px]'
           )}
         >
           <AdminHeader compact />
 
-          <main className="flex-1">
-            <div className="mx-auto w-full max-w-[1440px] px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
-              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">{children}</div>
+          <main className="flex-1 relative z-0">
+            <div className="mx-auto w-full max-w-[1440px] px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
+              <div className="animate-in fade-in zoom-in-95 duration-500 fill-mode-forwards">{children}</div>
             </div>
           </main>
 
-          <footer className="border-t border-border/80 bg-background/80 backdrop-blur">
-            <div className="mx-auto flex w-full max-w-7xl flex-col gap-2 px-4 py-4 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
-              <p>Panel administrativo orientado a empresa, operacion, analisis y seguridad.</p>
+          <footer className="mt-auto border-t border-border/40 bg-background/40 backdrop-blur-md">
+            <div className="mx-auto flex w-full max-w-7xl flex-col gap-2 px-4 py-5 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+              <p className="font-medium">Panel administrativo orientado a empresa, operación, análisis y seguridad.</p>
               <div className="flex items-center gap-4">
-                <span>Control por plan y rol</span>
-                <span>MiPOS Admin</span>
+                <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500"></span>Control por plan y rol</span>
+                <span className="font-semibold text-foreground/80">MiPOS Admin</span>
               </div>
             </div>
           </footer>

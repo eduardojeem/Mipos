@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import FilterDrawer, { type AdvancedFilters } from './FilterDrawer';
 import { type CatalogSortMode } from '../catalog-query';
+import { resolveBrandingColors } from '@/hooks/useBrandingColors';
 import type { Category } from '@/types';
 
 export type ViewMode = 'grid' | 'list' | 'compact';
@@ -84,6 +85,7 @@ export default function CatalogFiltersOptimized({
   }, [advancedFilters, maxPrice, selectedCategories, showOnlyInStock, showOnlyOnSale]);
 
   const hasActiveFilters = activeFiltersCount > 0;
+  const branding = resolveBrandingColors(config);
 
   const sortOptions: Array<{ value: SortMode; label: string }> = [
     { value: 'popular', label: 'Destacados' },
@@ -178,6 +180,11 @@ export default function CatalogFiltersOptimized({
         <Badge
           variant="outline"
           className="ml-3 bg-primary/5 border-primary/20 text-primary font-bold px-3 py-1 rounded-full backdrop-blur-sm"
+          style={{
+            backgroundColor: branding.hexToRgba(branding.primary, 0.08),
+            borderColor: branding.hexToRgba(branding.primary, 0.18),
+            color: branding.primary,
+          }}
           aria-live="polite"
           role="status"
         >
@@ -192,7 +199,16 @@ export default function CatalogFiltersOptimized({
           size="sm"
           variant={showOnlyOnSale ? 'default' : 'outline'}
           onClick={onToggleOnSale}
-          className={`rounded-full gap-1.5 ${showOnlyOnSale ? 'bg-red-600 hover:bg-red-700' : ''}`}
+          className="rounded-full gap-1.5"
+          style={
+            showOnlyOnSale
+              ? {
+                  backgroundColor: branding.primary,
+                  color: '#ffffff',
+                  borderColor: branding.primary,
+                }
+              : undefined
+          }
         >
           <Tag className="w-3.5 h-3.5" />
           Ofertas
@@ -207,6 +223,14 @@ export default function CatalogFiltersOptimized({
               ? 'bg-primary text-white shadow-lg shadow-primary/25 border-0'
               : 'bg-white dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300'
           }`}
+          style={
+            showOnlyInStock
+              ? {
+                  backgroundColor: branding.primary,
+                  boxShadow: `0 16px 30px ${branding.hexToRgba(branding.primary, 0.22)}`,
+                }
+              : undefined
+          }
         >
           <Package className="w-4 h-4" />
           En Stock

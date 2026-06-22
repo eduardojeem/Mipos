@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -7,6 +8,8 @@ import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import {
     Calendar,
+    CalendarDays,
+    Trophy,
     Mail,
     Phone,
     MapPin,
@@ -18,9 +21,12 @@ import {
     Building2,
     Gift,
     Clock,
+    Star,
     DollarSign,
     Package,
     Receipt,
+    Scissors,
+    ArrowUpRight,
     Loader2,
     Printer
 } from 'lucide-react';
@@ -41,7 +47,9 @@ interface CustomerDetailsModalProps {
 }
 
 type PurchaseHistoryItem = NonNullable<UICustomer['purchaseHistory']>[number];
+type AppointmentHistoryItem = NonNullable<UICustomer['appointmentHistory']>[number];
 export function CustomerDetailsModal({ customer: baseCustomer, open, onOpenChange }: CustomerDetailsModalProps) {
+    const router = useRouter();
     const customerDetail = useCustomerDetail(baseCustomer?.id ?? '', {
         enabled: open && Boolean(baseCustomer?.id)
     });
@@ -50,6 +58,9 @@ export function CustomerDetailsModal({ customer: baseCustomer, open, onOpenChang
     const formatCurrency = useCurrencyFormatter();
     const customer = customerDetail.data ?? baseCustomer;
     const purchaseHistory = customer?.purchaseHistory ?? [];
+    const appointmentHistory = customer?.appointmentHistory ?? [];
+    const loyalty = customer?.loyalty ?? null;
+    const activitySummary = customer?.activitySummary ?? null;
     const loadingHistory = customerDetail.isLoading;
 
     const handlePrintReceipt = (order: PurchaseHistoryItem) => {
@@ -125,18 +136,61 @@ export function CustomerDetailsModal({ customer: baseCustomer, open, onOpenChang
 
     const typeConfig = getCustomerTypeConfig(customer.customerType);
 
-    // Calcular promedios (simulados para el ejemplo, idealmente vendrían del backend)
-    const averageOrderValue = customer.totalOrders > 0
-        ? customer.totalSpent / customer.totalOrders
-        : 0;
-
-    // Progreso de fidelidad (basado en gastos, simulado)
-    const loyaltyProgress = Math.min((customer.totalSpent / 10000) * 100, 100);
-
     // Días desde última compra
     const daysSinceLastPurchase = customer.lastPurchase
         ? Math.floor((new Date().getTime() - new Date(customer.lastPurchase).getTime()) / (1000 * 60 * 60 * 24))
         : null;
+
+    const getAppointmentStatusConfig = (status: AppointmentHistoryItem['status']) => {
+        switch (status) {
+            case 'CONFIRMED':
+                return { label: 'Confirmado', variant: 'secondary' as const };
+            case 'COMPLETED':
+                return { label: 'Atendido', variant: 'default' as const };
+            case 'CANCELLED':
+                return { label: 'Cancelado', variant: 'destructive' as const };
+            case 'NO_SHOW':
+                return { label: 'No vino', variant: 'outline' as const };
+            default:
+                return { label: 'Reservado', variant: 'outline' as const };
+        }
+    };
+
+    const getLoyaltyTxLabel = (type?: string) => {
+        switch (type) {
+            case 'EARNED':
+                return 'Puntos ganados';
+            case 'REDEEMED':
+                return 'Puntos canjeados';
+            case 'BONUS':
+                return 'Bono';
+            case 'ADJUSTMENT':
+                return 'Ajuste';
+            case 'EXPIRED':
+                return 'Puntos expirados';
+            default:
+                return 'Sin movimientos';
+        }
+    };
+
+    const handleCreateAppointment = () => {
+        const params = new URLSearchParams();
+        params.set('openNewAppointment', '1');
+        params.set('customerId', customer.id);
+        params.set('customerName', customer.name);
+        if (customer.phone) params.set('customerPhone', customer.phone);
+        if (customer.email) params.set('customerEmail', customer.email);
+        onOpenChange(false);
+        router.push(`/dashboard/agenda?${params.toString()}`);
+    };
+
+    const handleOpenLoyaltyHistory = () => {
+        const params = new URLSearchParams();
+        params.set('customerId', customer.id);
+        params.set('customerName', customer.name);
+        onOpenChange(false);
+        router.push(`/dashboard/loyalty?${params.toString()}`);
+    };
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -174,103 +228,255 @@ export function CustomerDetailsModal({ customer: baseCustomer, open, onOpenChang
                                     {customer.is_active ? 'Activo' : 'Inactivo'}
                                 </Badge>
                             </div>
+                            <div className="mt-4 flex flex-wrap gap-2">
+                                <Button size="sm" onClick={handleCreateAppointment}>
+                                    <CalendarDays className="h-4 w-4 mr-2" />
+                                    Nuevo turno
+                                </Button>
+                                <Button size="sm" variant="outline" onClick={handleOpenLoyaltyHistory}>
+                                    <Gift className="h-4 w-4 mr-2" />
+                                    Ver puntos
+                                </Button>
+                                {activitySummary?.nextAppointment ? (
+                                    <Badge variant="secondary" className="h-9 px-3 text-xs">
+                                        <ArrowUpRight className="h-3.5 w-3.5 mr-1.5" />
+                                        Próximo turno: {new Date(activitySummary.nextAppointment.date).toLocaleDateString('es-ES', {
+                                            day: '2-digit',
+                                            month: 'short',
+                                        })}
+                                    </Badge>
+                                ) : null}
+                            </div>
                         </div>
                     </div>
                 </DialogHeader>
 
                 <div className="space-y-6">
-                    {/* Main Statistics Cards */}
                     <section>
                         <h3 className="text-sm font-semibold mb-4 flex items-center gap-2 text-muted-foreground uppercase tracking-wide">
                             <TrendingUp className="h-4 w-4" />
-                            Resumen de Actividad
+                            Resumen Combinado
                         </h3>
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                            {/* Total Spent */}
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                             <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 p-5 rounded-xl border border-green-200 dark:border-green-800 shadow-sm">
                                 <div className="flex items-center justify-between mb-2">
                                     <DollarSign className="h-8 w-8 text-green-600 dark:text-green-400" />
                                     <TrendingUp className="h-4 w-4 text-green-600 dark:text-green-400" />
                                 </div>
-                                <p className="text-sm text-muted-foreground mb-1">Total Gastado</p>
+                                <p className="text-sm text-muted-foreground mb-1">Valor Total del Cliente</p>
                                 <p className="text-2xl font-bold text-green-700 dark:text-green-400">
-                                    {formatCurrency(customer.totalSpent)}
+                                    {formatCurrency(activitySummary?.totalCustomerValue ?? customer.totalSpent)}
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    Compras + servicios cobrados
                                 </p>
                             </div>
 
-                            {/* Total Orders */}
                             <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950 dark:to-cyan-950 p-5 rounded-xl border border-blue-200 dark:border-blue-800 shadow-sm">
                                 <div className="flex items-center justify-between mb-2">
                                     <ShoppingCart className="h-8 w-8 text-blue-600 dark:text-blue-400" />
                                     <Package className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                                 </div>
-                                <p className="text-sm text-muted-foreground mb-1">Total Órdenes</p>
+                                <p className="text-sm text-muted-foreground mb-1">Compras Registradas</p>
                                 <p className="text-2xl font-bold text-blue-700 dark:text-blue-400">
                                     {customer.totalOrders}
                                 </p>
-                            </div>
-
-                            {/* Average Order Value */}
-                            <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950 dark:to-pink-950 p-5 rounded-xl border border-purple-200 dark:border-purple-800 shadow-sm">
-                                <div className="flex items-center justify-between mb-2">
-                                    <CreditCard className="h-8 w-8 text-purple-600 dark:text-purple-400" />
-                                    <TrendingUp className="h-4 w-4 text-purple-600 dark:text-purple-400" />
-                                </div>
-                                <p className="text-sm text-muted-foreground mb-1">Promedio por Orden</p>
-                                <p className="text-2xl font-bold text-purple-700 dark:text-purple-400">
-                                    {formatCurrency(averageOrderValue)}
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    Última compra {customer.lastPurchase
+                                        ? new Date(customer.lastPurchase).toLocaleDateString('es-ES', {
+                                            day: '2-digit',
+                                            month: 'short',
+                                            year: 'numeric',
+                                        })
+                                        : 'sin registrar'}
                                 </p>
                             </div>
 
-                            {/* Last Purchase */}
+                            <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950 dark:to-pink-950 p-5 rounded-xl border border-purple-200 dark:border-purple-800 shadow-sm">
+                                <div className="flex items-center justify-between mb-2">
+                                    <Scissors className="h-8 w-8 text-purple-600 dark:text-purple-400" />
+                                    <CalendarDays className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                                </div>
+                                <p className="text-sm text-muted-foreground mb-1">Turnos Atendidos</p>
+                                <p className="text-2xl font-bold text-purple-700 dark:text-purple-400">
+                                    {activitySummary?.completedAppointments ?? 0}
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    Facturación servicios: {formatCurrency(activitySummary?.totalServiceRevenue ?? 0)}
+                                </p>
+                            </div>
+
+                            <div className="bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-950 dark:to-yellow-950 p-5 rounded-xl border border-amber-200 dark:border-amber-800 shadow-sm">
+                                <div className="flex items-center justify-between mb-2">
+                                    <Gift className="h-8 w-8 text-amber-600 dark:text-amber-400" />
+                                    <Star className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                                </div>
+                                <p className="text-sm text-muted-foreground mb-1">Puntos Actuales</p>
+                                <p className="text-2xl font-bold text-amber-700 dark:text-amber-400">
+                                    {loyalty?.currentPoints ?? 0}
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    {loyalty?.programName || 'Sin programa activo'}
+                                </p>
+                            </div>
+
                             <div className="bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-950 dark:to-amber-950 p-5 rounded-xl border border-orange-200 dark:border-orange-800 shadow-sm">
                                 <div className="flex items-center justify-between mb-2">
-                                    <Clock className="h-8 w-8 text-orange-600 dark:text-orange-400" />
-                                    <Calendar className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                                    <CalendarDays className="h-8 w-8 text-orange-600 dark:text-orange-400" />
+                                    <Clock className="h-4 w-4 text-orange-600 dark:text-orange-400" />
                                 </div>
-                                <p className="text-sm text-muted-foreground mb-1">Última Compra</p>
-                                {customer.lastPurchase ? (
+                                <p className="text-sm text-muted-foreground mb-1">Próximo Turno</p>
+                                {activitySummary?.nextAppointment ? (
                                     <>
                                         <p className="text-lg font-semibold text-orange-700 dark:text-orange-400">
-                                            {new Date(customer.lastPurchase).toLocaleDateString('es-ES', {
+                                            {new Date(activitySummary.nextAppointment.date).toLocaleDateString('es-ES', {
                                                 day: 'numeric',
                                                 month: 'short',
-                                                year: 'numeric'
                                             })}
                                         </p>
-                                        {daysSinceLastPurchase !== null && (
-                                            <p className="text-xs text-muted-foreground mt-1">
-                                                Hace {daysSinceLastPurchase} días
-                                            </p>
-                                        )}
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                            {activitySummary.nextAppointment.serviceName}
+                                            {activitySummary.nextAppointment.staffName ? ` · ${activitySummary.nextAppointment.staffName}` : ''}
+                                        </p>
                                     </>
                                 ) : (
-                                    <p className="text-lg font-semibold text-muted-foreground">Sin compras</p>
+                                    <p className="text-lg font-semibold text-muted-foreground">Sin turno agendado</p>
+                                )}
+                            </div>
+
+                            <div className="bg-gradient-to-br from-rose-50 to-pink-50 dark:from-rose-950 dark:to-pink-950 p-5 rounded-xl border border-rose-200 dark:border-rose-800 shadow-sm">
+                                <div className="flex items-center justify-between mb-2">
+                                    <Clock className="h-8 w-8 text-rose-600 dark:text-rose-400" />
+                                    <Scissors className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                                </div>
+                                <p className="text-sm text-muted-foreground mb-1">Último Turno / No-Show</p>
+                                {activitySummary?.lastCompletedAppointment ? (
+                                    <>
+                                        <p className="text-lg font-semibold text-rose-700 dark:text-rose-400">
+                                            {new Date(activitySummary.lastCompletedAppointment.date).toLocaleDateString('es-ES', {
+                                                day: 'numeric',
+                                                month: 'short',
+                                            })}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                            {activitySummary.lastCompletedAppointment.serviceName} · No-show: {activitySummary.noShowCount}
+                                        </p>
+                                    </>
+                                ) : (
+                                    <p className="text-lg font-semibold text-muted-foreground">Sin turnos atendidos</p>
                                 )}
                             </div>
                         </div>
+
+                        <div className="mt-4 flex flex-wrap gap-2">
+                            <Badge variant="outline">Servicios cobrados: {formatCurrency(activitySummary?.totalServiceRevenue ?? 0)}</Badge>
+                            <Badge variant="outline">Cancelados: {activitySummary?.cancelledAppointments ?? 0}</Badge>
+                            <Badge variant="outline">No-show: {activitySummary?.noShowCount ?? 0}</Badge>
+                            {daysSinceLastPurchase !== null ? (
+                                <Badge variant="outline">Última compra hace {daysSinceLastPurchase} días</Badge>
+                            ) : null}
+                        </div>
                     </section>
 
-                    {/* Loyalty Progress */}
-                    {customer.totalOrders > 0 && (
-                        <section className="bg-muted/30 p-5 rounded-xl border">
-                            <div className="flex items-center justify-between mb-3">
-                                <div className="flex items-center gap-2">
-                                    <Gift className="h-5 w-5 text-primary" />
-                                    <h3 className="font-semibold">Nivel de Fidelidad</h3>
-                                </div>
-                                <Badge variant="outline" className="font-mono">
-                                    {Math.round(loyaltyProgress)}%
-                                </Badge>
+                    <section className="bg-muted/30 p-5 rounded-xl border">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                                <Gift className="h-5 w-5 text-primary" />
+                                <h3 className="font-semibold">Programa de Fidelidad</h3>
                             </div>
-                            <Progress value={loyaltyProgress} className="h-3 mb-2" />
-                            <p className="text-xs text-muted-foreground">
-                                {loyaltyProgress < 100
-                                    ? `Faltan ${formatCurrency(10000 - customer.totalSpent)} para alcanzar el siguiente nivel`
-                                    : '¡Cliente VIP! Has alcanzado el nivel máximo'}
-                            </p>
-                        </section>
-                    )}
+                            {loyalty?.currentTier?.name ? (
+                                <Badge variant="outline" className="font-medium">
+                                    <Trophy className="h-3.5 w-3.5 mr-1" />
+                                    {loyalty.currentTier.name}
+                                </Badge>
+                            ) : null}
+                        </div>
+
+                        {loyalty ? (
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+                                    <div className="rounded-lg border bg-background p-4">
+                                        <p className="text-xs text-muted-foreground mb-1">Programa</p>
+                                        <p className="font-semibold">{loyalty.programName}</p>
+                                    </div>
+                                    <div className="rounded-lg border bg-background p-4">
+                                        <p className="text-xs text-muted-foreground mb-1">Puntos actuales</p>
+                                        <p className="text-2xl font-bold text-amber-600 dark:text-amber-400">{loyalty.currentPoints}</p>
+                                    </div>
+                                    <div className="rounded-lg border bg-background p-4">
+                                        <p className="text-xs text-muted-foreground mb-1">Total ganados</p>
+                                        <p className="text-xl font-semibold text-emerald-600 dark:text-emerald-400">{loyalty.totalPointsEarned}</p>
+                                    </div>
+                                    <div className="rounded-lg border bg-background p-4">
+                                        <p className="text-xs text-muted-foreground mb-1">Total canjeados</p>
+                                        <p className="text-xl font-semibold text-purple-600 dark:text-purple-400">{loyalty.totalPointsRedeemed}</p>
+                                    </div>
+                                </div>
+
+                                <div className="rounded-lg border bg-background p-4">
+                                    <div className="flex items-center justify-between gap-3 mb-3">
+                                        <div>
+                                            <p className="text-sm font-medium">Progreso de nivel</p>
+                                            <p className="text-xs text-muted-foreground">
+                                                {loyalty.currentTier
+                                                    ? `Nivel actual: ${loyalty.currentTier.name}`
+                                                    : 'Cliente enrolado sin nivel asignado'}
+                                            </p>
+                                        </div>
+                                        <Badge variant="secondary">
+                                            {Math.round(loyalty.progressToNextTier ?? 0)}%
+                                        </Badge>
+                                    </div>
+                                    <Progress value={loyalty.progressToNextTier ?? 0} className="h-3 mb-2" />
+                                    <p className="text-xs text-muted-foreground">
+                                        {loyalty.nextTier
+                                            ? `Faltan ${loyalty.pointsToNextTier ?? 0} puntos para ${loyalty.nextTier.name}`
+                                            : 'Ya alcanzó el nivel más alto del programa'}
+                                    </p>
+                                </div>
+
+                                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                    <div className="rounded-lg border bg-background p-4">
+                                        <p className="text-xs text-muted-foreground mb-1">Última actividad loyalty</p>
+                                        <p className="font-medium">
+                                            {loyalty.lastActivityDate
+                                                ? new Date(loyalty.lastActivityDate).toLocaleString('es-ES', {
+                                                    day: '2-digit',
+                                                    month: 'short',
+                                                    year: 'numeric',
+                                                    hour: '2-digit',
+                                                    minute: '2-digit',
+                                                })
+                                                : 'Sin actividad registrada'}
+                                        </p>
+                                    </div>
+                                    <div className="rounded-lg border bg-background p-4">
+                                        <p className="text-xs text-muted-foreground mb-1">Último movimiento</p>
+                                        {loyalty.lastTransaction ? (
+                                            <>
+                                                <p className="font-medium">
+                                                    {getLoyaltyTxLabel(loyalty.lastTransaction.type)} · {loyalty.lastTransaction.points} pts
+                                                </p>
+                                                <p className="mt-1 text-xs text-muted-foreground">
+                                                    {loyalty.lastTransaction.description || 'Movimiento de puntos'}
+                                                </p>
+                                            </>
+                                        ) : (
+                                            <p className="font-medium text-muted-foreground">Sin transacciones</p>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="rounded-lg border border-dashed bg-background p-6 text-center">
+                                <Star className="h-10 w-10 mx-auto text-muted-foreground/50 mb-3" />
+                                <p className="font-medium">Sin programa de fidelidad activo para este cliente</p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    Cuando el cliente tenga compras o turnos cobrados vinculados a loyalty, sus puntos y nivel aparecerán aquí.
+                                </p>
+                            </div>
+                        )}
+                    </section>
 
                     {/* Purchase History */}
                     <section>
@@ -379,6 +585,99 @@ export function CustomerDetailsModal({ customer: baseCustomer, open, onOpenChang
                             <div className="text-center py-8 bg-muted/30 rounded-lg border border-dashed">
                                 <Receipt className="h-12 w-12 mx-auto text-muted-foreground mb-3 opacity-50" />
                                 <p className="text-sm text-muted-foreground">No hay historial de compras</p>
+                            </div>
+                        )}
+                    </section>
+
+                    <section>
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-sm font-semibold flex items-center gap-2 text-muted-foreground uppercase tracking-wide">
+                                <CalendarDays className="h-4 w-4" />
+                                Historial de Turnos
+                            </h3>
+                            {appointmentHistory.length > 0 && (
+                                <span className="text-xs text-muted-foreground">
+                                    Últimos {appointmentHistory.length} turnos
+                                </span>
+                            )}
+                        </div>
+
+                        {loadingHistory ? (
+                            <div className="flex items-center justify-center py-8">
+                                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                            </div>
+                        ) : appointmentHistory.length > 0 ? (
+                            <div className="space-y-3">
+                                {appointmentHistory.map((appointment) => {
+                                    const statusConfig = getAppointmentStatusConfig(appointment.status);
+
+                                    return (
+                                        <div
+                                            key={appointment.id}
+                                            className="p-4 bg-muted/50 rounded-lg border hover:border-primary/50 transition-colors"
+                                        >
+                                            <div className="flex items-start justify-between gap-3 mb-2">
+                                                <div className="min-w-0">
+                                                    <div className="flex items-center gap-2">
+                                                        <Scissors className="h-4 w-4 text-muted-foreground" />
+                                                        <span className="font-semibold text-sm truncate">
+                                                            {appointment.serviceName}
+                                                        </span>
+                                                    </div>
+                                                    <p className="mt-1 text-xs text-muted-foreground">
+                                                        {appointment.staffName || 'Profesional por definir'}
+                                                    </p>
+                                                </div>
+                                                <Badge variant={statusConfig.variant} className="text-xs shrink-0">
+                                                    {statusConfig.label}
+                                                </Badge>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+                                                <div>
+                                                    <p className="text-xs text-muted-foreground mb-1">Fecha</p>
+                                                    <p className="font-medium">
+                                                        {new Date(appointment.date).toLocaleDateString('es-ES', {
+                                                            day: '2-digit',
+                                                            month: 'short',
+                                                            year: 'numeric'
+                                                        })}
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs text-muted-foreground mb-1">Horario</p>
+                                                    <p className="font-medium">
+                                                        {new Date(appointment.startAt).toLocaleTimeString('es-ES', {
+                                                            hour: '2-digit',
+                                                            minute: '2-digit'
+                                                        })} - {new Date(appointment.endAt).toLocaleTimeString('es-ES', {
+                                                            hour: '2-digit',
+                                                            minute: '2-digit'
+                                                        })}
+                                                    </p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs text-muted-foreground mb-1">Precio</p>
+                                                    <p className="font-semibold text-emerald-600 dark:text-emerald-400">
+                                                        {formatCurrency(appointment.price)}
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            {appointment.notes && (
+                                                <div className="mt-3 pt-3 border-t">
+                                                    <p className="text-xs text-muted-foreground mb-1">Notas</p>
+                                                    <p className="text-sm">{appointment.notes}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="text-center py-8 bg-muted/30 rounded-lg border border-dashed">
+                                <CalendarDays className="h-12 w-12 mx-auto text-muted-foreground mb-3 opacity-50" />
+                                <p className="text-sm text-muted-foreground">No hay historial de turnos</p>
                             </div>
                         )}
                     </section>

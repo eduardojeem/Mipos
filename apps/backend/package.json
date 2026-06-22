@@ -49,6 +49,7 @@
     "redis": "^4.6.7",
     "sharp": "^0.34.4",
     "uuid": "^13.0.0",
+    "web-push": "^3.6.7",
     "xlsx": "^0.18.5",
     "zod": "^3.22.2"
   },
@@ -63,6 +64,7 @@
     "@types/nodemailer": "^6.4.20",
     "@types/pdfkit": "^0.12.9",
     "@types/supertest": "^6.0.3",
+    "@types/web-push": "^3.6.4",
     "@typescript-eslint/eslint-plugin": "^6.4.1",
     "@typescript-eslint/parser": "^6.4.1",
     "eslint": "^8.47.0",

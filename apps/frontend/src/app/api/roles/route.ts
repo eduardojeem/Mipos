@@ -1,8 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { ADMIN_API_ACCESS, requireAdminApiAccess } from '@/app/api/admin/_utils/access'
+import { assertGrantablePermissions } from '@/app/api/admin/_utils/grantable-permissions'
 
 const SYSTEM_ROLE_NAMES = ['ADMIN', 'SUPER_ADMIN', 'OWNER', 'SELLER', 'WAREHOUSE']
+
+type RoleScope = 'SYSTEM' | 'ORGANIZATION'
+
+function normalizeRoleCode(value: unknown) {
+  return String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '_')
+}
+
+function parseScopeFilter(rawValue: string | null): RoleScope | 'ALL' {
+  const normalized = String(rawValue || 'ALL').trim().toUpperCase()
+  if (normalized === 'SYSTEM') return 'SYSTEM'
+  if (normalized === 'ORGANIZATION') return 'ORGANIZATION'
+  return 'ALL'
+}
 
 function mapPermission(permission: any) {
   if (!permission) return null
@@ -22,7 +39,7 @@ function mapPermission(permission: any) {
 
 export async function GET(request: NextRequest) {
   const access = await requireAdminApiAccess(request, {
-    ...ADMIN_API_ACCESS.manageUsers,
+    ...ADMIN_API_ACCESS.manageRoles,
     requireOrganization: true,
   })
   if (!access.ok) {
@@ -36,6 +53,7 @@ export async function GET(request: NextRequest) {
 
   const supabase = await createAdminClient()
   const includeInactive = request.nextUrl.searchParams.get('includeInactive') === 'true'
+  const scopeFilter = parseScopeFilter(request.nextUrl.searchParams.get('scope'))
 
   let rolesQuery = supabase
     .from('roles')
@@ -46,6 +64,14 @@ export async function GET(request: NextRequest) {
     rolesQuery = rolesQuery.eq('is_active', true)
   }
 
+  if (scopeFilter === 'SYSTEM') {
+    rolesQuery = rolesQuery.is('organization_id', null)
+  }
+
+  if (scopeFilter === 'ORGANIZATION') {
+    rolesQuery = rolesQuery.eq('organization_id', organizationId)
+  }
+
   const { data: rolesData, error } = await rolesQuery
 
   if (error) {
@@ -53,7 +79,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ message: error.message }, { status: 500 })
   }
 
-  const roleIds = (rolesData || []).map((role: any) => role.id)
+  // Ocultar SUPER_ADMIN para usuarios que no sean super admin (es un rol de plataforma, no de org)
+  const isSuperAdmin = access.context.isSuperAdmin
+  const filteredRoles = (rolesData || []).filter((role: any) => {
+    if (isSuperAdmin) return true
+    return String(role.name).toUpperCase() !== 'SUPER_ADMIN'
+  })
+
+  const roleIds = filteredRoles.map((role: any) => role.id)
   const [{ data: allPermissions, error: permErr }, rolePermissionsResult, userRolesResult] = await Promise.all([
     supabase.from('permissions').select('*'),
     roleIds.length > 0
@@ -79,7 +112,7 @@ export async function GET(request: NextRequest) {
   })
 
   const permissionsMap = new Map(safePermissions.map((permission: any) => [permission.id, permission]))
-  const orgIds = [...new Set((rolesData || []).map((role: any) => role.organization_id).filter(Boolean))]
+  const orgIds = [...new Set(filteredRoles.map((role: any) => role.organization_id).filter(Boolean))]
   const organizationsMap = new Map<string, string>()
 
   if (orgIds.length > 0) {
@@ -93,13 +126,15 @@ export async function GET(request: NextRequest) {
     })
   }
 
-  const roles = (rolesData || []).map((role: any) => {
+  const roles = filteredRoles.map((role: any) => {
     const rolePerms = safeRolePerms.filter((rolePermission: any) => rolePermission.role_id === role.id)
     const mappedPermissions = rolePerms
       .map((rolePermission: any) => mapPermission(permissionsMap.get(rolePermission.permission_id)))
       .filter(Boolean)
 
     const roleName = String(role.name || '').toUpperCase()
+    const scope: RoleScope = role.organization_id ? 'ORGANIZATION' : 'SYSTEM'
+    const isSystemRole = SYSTEM_ROLE_NAMES.includes(roleName)
 
     return {
       id: role.id,
@@ -109,14 +144,24 @@ export async function GET(request: NextRequest) {
       permissions: mappedPermissions,
       userCount: userCountMap.get(role.id) || 0,
       isActive: role.is_active,
-      isSystem: SYSTEM_ROLE_NAMES.includes(roleName),
-      isSystemRole: SYSTEM_ROLE_NAMES.includes(roleName),
+      isSystem: isSystemRole,
+      isSystemRole: isSystemRole,
+      scope,
+      isEditable: scope === 'ORGANIZATION' && !isSystemRole,
+      isDeletable: scope === 'ORGANIZATION' && !isSystemRole && (userCountMap.get(role.id) || 0) === 0,
+      isAssignable: role.is_active === true,
       priority: 0,
       createdAt: role.created_at,
       updatedAt: role.updated_at,
       organizationId: role.organization_id || null,
       organizationName: role.organization_id ? organizationsMap.get(role.organization_id) || 'Desconocida' : null,
     }
+  }).sort((a: any, b: any) => {
+    if (a.scope !== b.scope) {
+      return a.scope === 'SYSTEM' ? -1 : 1
+    }
+
+    return String(a.displayName || a.name).localeCompare(String(b.displayName || b.name), 'es')
   })
 
   return NextResponse.json(roles)
@@ -124,7 +169,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const access = await requireAdminApiAccess(request, {
-    ...ADMIN_API_ACCESS.manageUsers,
+    ...ADMIN_API_ACCESS.manageRoles,
     requireOrganization: true,
   })
   if (!access.ok) {
@@ -138,13 +183,26 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { name, displayName, description, permissions, isActive } = body || {}
+    const { displayName, description, permissions, isActive } = body || {}
+    const name = normalizeRoleCode(body?.name || body?.displayName)
 
     if (!name || !displayName) {
       return NextResponse.json({ message: 'Datos invalidos' }, { status: 400 })
     }
 
+    if (!Array.isArray(permissions) || permissions.length === 0) {
+      return NextResponse.json({ message: 'Debes asignar al menos un permiso' }, { status: 400 })
+    }
+
+    if (SYSTEM_ROLE_NAMES.includes(name)) {
+      return NextResponse.json({ message: 'Ese codigo de rol esta reservado por el sistema' }, { status: 409 })
+    }
+
     const supabase = await createAdminClient()
+
+    // Anti-escalada: no se pueden otorgar permisos que el actor no posee.
+    const grantable = await assertGrantablePermissions(supabase, permissions, access.context)
+    if (!grantable.ok) return grantable.response
 
     const { data: existingByName } = await supabase
       .from('roles')
@@ -213,6 +271,10 @@ export async function POST(request: NextRequest) {
       isActive: fullRole.is_active,
       isSystem: SYSTEM_ROLE_NAMES.includes(roleName),
       isSystemRole: SYSTEM_ROLE_NAMES.includes(roleName),
+      scope: 'ORGANIZATION',
+      isEditable: true,
+      isDeletable: true,
+      isAssignable: fullRole.is_active === true,
       priority: 0,
       createdAt: fullRole.created_at,
       updatedAt: fullRole.updated_at,

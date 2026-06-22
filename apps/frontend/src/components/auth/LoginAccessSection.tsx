@@ -114,7 +114,7 @@ const LOGIN_ACCESS_ITEMS: Record<LoginAccessType, LoginAccessItem> = {
     eyebrow: 'Alta comercial',
     description: 'Crea tu empresa, elige un plan y conecta tu inventario al marketplace publico.',
     cta: 'Crear cuenta de negocio',
-    href: () => '/inicio/planes',
+    href: () => '/inicio/registro',
     icon: Briefcase,
     accentClass: 'bg-teal-500/12 text-teal-700 dark:text-teal-300',
   },

@@ -124,9 +124,21 @@ export async function DELETE(request: NextRequest, { params }: Params) {
 
   // Check for associated records — prefer soft delete if data exists
   const [{ count: salesCount }, { count: cashCount }, { count: movementsCount }] = await Promise.all([
-    adminClient.from('sales').select('id', { count: 'exact', head: true }).eq('branch_id', id),
-    adminClient.from('cash_sessions').select('id', { count: 'exact', head: true }).eq('branch_id', id),
-    adminClient.from('inventory_movements').select('id', { count: 'exact', head: true }).eq('branch_id', id),
+    adminClient
+      .from('sales')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', access.context.companyId)
+      .eq('branch_id', id),
+    adminClient
+      .from('cash_sessions')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', access.context.companyId)
+      .eq('branch_id', id),
+    adminClient
+      .from('inventory_movements')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', access.context.companyId)
+      .eq('branch_id', id),
   ]);
 
   const hasLinkedData = (salesCount ?? 0) > 0 || (cashCount ?? 0) > 0 || (movementsCount ?? 0) > 0;

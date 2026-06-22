@@ -71,7 +71,7 @@ export function ProfileHeader({
   }, []);
 
   return (
-    <Card className="hover-lift smooth-transition">
+    <Card className="overflow-hidden rounded-2xl border-border/50 bg-white/60 shadow-sm backdrop-blur-xl transition-all hover:shadow-md dark:bg-slate-900/60">
       <CardContent className="pt-6">
         <div className="flex flex-col md:flex-row items-start md:items-center gap-6">
           {/* Avatar */}

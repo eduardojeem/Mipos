@@ -14,8 +14,8 @@ import {
 } from './host-context';
 
 const PUBLIC_ORGANIZATION_STATUSES = ['ACTIVE', 'TRIAL'];
-const ORGANIZATION_SELECT = 'id,name,slug,subdomain,custom_domain,subscription_status,created_at,branding';
-const ORGANIZATION_SELECT_FALLBACK = 'id,name,slug,subscription_status,created_at,branding';
+const ORGANIZATION_SELECT = 'id,name,slug,subdomain,custom_domain,subscription_status,created_at,branding,vertical';
+const ORGANIZATION_SELECT_FALLBACK = 'id,name,slug,subscription_status,created_at,branding,vertical';
 
 export interface PublicOrganization {
   id: string;
@@ -27,6 +27,7 @@ export interface PublicOrganization {
   created_at?: string | null;
   branding?: Record<string, unknown> | null;
   marketplace_category_id?: string | null;
+  vertical?: string | null;
 }
 
 export type ResolvedTenantContext =
@@ -79,6 +80,48 @@ async function findOrganizationByField(
           return null;
         }
 
+        const fallback = await runQuery(ORGANIZATION_SELECT_FALLBACK);
+        if (fallback.error) {
+          if (isMissingColumnError(fallback.error)) {
+            return null;
+          }
+
+          throw fallback.error;
+        }
+
+        return (fallback.data as PublicOrganization | null) || null;
+      }
+
+      throw error;
+    }
+
+    return (data as PublicOrganization | null) || null;
+  } catch (error) {
+    if (isMissingColumnError(error)) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+async function findOrganizationById(
+  client: Awaited<ReturnType<typeof createAdminClient>>,
+  organizationId: string
+): Promise<PublicOrganization | null> {
+  const runQuery = async (selectClause: string) =>
+    client
+      .from('organizations')
+      .select(selectClause)
+      .eq('id', organizationId)
+      .in('subscription_status', PUBLIC_ORGANIZATION_STATUSES)
+      .maybeSingle();
+
+  try {
+    const { data, error } = await runQuery(ORGANIZATION_SELECT);
+
+    if (error) {
+      if (isMissingColumnError(error)) {
         const fallback = await runQuery(ORGANIZATION_SELECT_FALLBACK);
         if (fallback.error) {
           if (isMissingColumnError(fallback.error)) {
@@ -167,12 +210,15 @@ export async function resolveTenantContextFromHeaders(
     injectedTenantKey &&
     injectedOrganizationId
   ) {
+    const adminClient = await createAdminClient();
+    const organization = await findOrganizationById(adminClient, injectedOrganizationId);
+
     return {
       kind: 'tenant',
       hostname,
       source: injectedSource,
       tenantKey: injectedTenantKey,
-      organization: {
+      organization: organization || {
         id: injectedOrganizationId,
         name: readHeader(headerStore, 'x-organization-name') || 'Empresa',
         slug: readHeader(headerStore, 'x-organization-slug'),

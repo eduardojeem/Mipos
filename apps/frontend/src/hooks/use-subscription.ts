@@ -6,6 +6,9 @@ export interface PlanLimits {
     maxProducts?: number;
     maxTransactionsPerMonth?: number;
     maxLocations?: number;
+    maxServices?: number;
+    maxAppointmentsPerMonth?: number;
+    maxStaff?: number;
 }
 
 export interface Plan {
@@ -63,7 +66,6 @@ export function useSubscription(): UseSubscriptionReturn {
 
             const response = await fetch(`/api/subscription${organizationId ? `?organizationId=${organizationId}` : ''}`, {
                 headers: organizationId ? { 'x-organization-id': organizationId } : undefined,
-                cache: 'no-store',
             });
             const data = await response.json();
 

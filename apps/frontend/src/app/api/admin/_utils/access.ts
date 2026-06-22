@@ -12,7 +12,7 @@ type AllowedRole = NonNullable<CompanyAccessRequirement['allowedRoles']>[number]
 
 interface AdminApiAccessOptions {
   permission: CompanyPermissionKey
-  feature: CompanyFeatureKey
+  feature?: CompanyFeatureKey
   allowedRoles?: AllowedRole[]
   requireOrganization?: boolean
 }
@@ -68,6 +68,12 @@ export const ADMIN_API_ACCESS = {
   manageUsers: {
     permission: COMPANY_PERMISSIONS.MANAGE_USERS,
     feature: COMPANY_FEATURE_KEYS.TEAM_MANAGEMENT,
+  },
+  manageTeamAccess: {
+    permission: COMPANY_PERMISSIONS.MANAGE_USERS,
+  },
+  manageRoles: {
+    permission: COMPANY_PERMISSIONS.MANAGE_USERS,
   },
   adminPanel: {
     permission: COMPANY_PERMISSIONS.MANAGE_USERS,

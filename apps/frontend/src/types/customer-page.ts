@@ -31,6 +31,74 @@ export interface UICustomer extends Customer {
       price: number;
     }>;
   }>;
+  appointmentHistory?: Array<{
+    id: string;
+    date: string;
+    startAt: string;
+    endAt: string;
+    status: 'BOOKED' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
+    price: number;
+    serviceName: string;
+    staffName?: string | null;
+    notes?: string | null;
+  }>;
+  loyalty?: {
+    customerLoyaltyId: string;
+    programId: string;
+    programName: string;
+    currentPoints: number;
+    totalPointsEarned: number;
+    totalPointsRedeemed: number;
+    enrollmentDate?: string | null;
+    lastActivityDate?: string | null;
+    pointsPerPurchase?: number | null;
+    minimumPurchase?: number | null;
+    currentTier?: {
+      id: string;
+      name: string;
+      color?: string | null;
+      minPoints: number;
+      multiplier: number;
+    } | null;
+    nextTier?: {
+      id: string;
+      name: string;
+      color?: string | null;
+      minPoints: number;
+    } | null;
+    pointsToNextTier?: number | null;
+    progressToNextTier?: number | null;
+    lastTransaction?: {
+      id: string;
+      type: 'EARNED' | 'REDEEMED' | 'BONUS' | 'ADJUSTMENT' | 'EXPIRED';
+      points: number;
+      description?: string | null;
+      createdAt: string;
+      referenceType?: string | null;
+    } | null;
+  } | null;
+  activitySummary?: {
+    totalAppointments: number;
+    completedAppointments: number;
+    noShowCount: number;
+    cancelledAppointments: number;
+    totalServiceRevenue: number;
+    totalCustomerValue: number;
+    nextAppointment?: {
+      id: string;
+      date: string;
+      status: 'BOOKED' | 'CONFIRMED';
+      serviceName: string;
+      staffName?: string | null;
+    } | null;
+    lastCompletedAppointment?: {
+      id: string;
+      date: string;
+      serviceName: string;
+      staffName?: string | null;
+      price: number;
+    } | null;
+  } | null;
 }
 
 export interface CustomersPageState {

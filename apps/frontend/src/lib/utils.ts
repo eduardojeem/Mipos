@@ -37,12 +37,27 @@ export function formatCurrency(value: number, currency: string = 'USD', locale: 
     }
   }
   
-  const opts: Intl.NumberFormatOptions = { style: 'currency', currency: cur }
-  if (typeof dec === 'number') {
-    opts.minimumFractionDigits = dec
-    opts.maximumFractionDigits = dec
+  // Blindaje: una moneda vacía o inválida hace que Intl.NumberFormat lance
+  // RangeError ("Invalid currency code") y tumbe toda la pantalla. Cae aquí
+  // cuando se pasa '' para leer la config y la org todavía no tiene moneda
+  // configurada. Caemos a 'PYG' (mercado por defecto) y, si aún así falla,
+  // formateamos como número sin símbolo en vez de romper.
+  const safeCur = (typeof cur === 'string' && cur.trim()) ? cur.trim().toUpperCase() : 'PYG'
+  const safeDec = typeof dec === 'number' ? dec : (safeCur === 'PYG' ? 0 : 2)
+
+  try {
+    return new Intl.NumberFormat(loc, {
+      style: 'currency',
+      currency: safeCur,
+      minimumFractionDigits: safeDec,
+      maximumFractionDigits: safeDec,
+    }).format(numValue)
+  } catch {
+    return new Intl.NumberFormat(loc, {
+      minimumFractionDigits: safeDec,
+      maximumFractionDigits: safeDec,
+    }).format(numValue)
   }
-  return new Intl.NumberFormat(loc, opts).format(numValue)
 }
 
 /**

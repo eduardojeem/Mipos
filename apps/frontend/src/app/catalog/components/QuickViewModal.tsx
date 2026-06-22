@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { formatDate, formatPrice } from '@/utils/formatters';
 import { getProductPricing } from '@/lib/public-site/product-pricing';
+import { resolveBrandingColors } from '@/hooks/useBrandingColors';
 import type { Product } from '@/types';
 import type { BusinessConfig } from '@/types/business-config';
 
@@ -89,6 +90,7 @@ export default function QuickViewModal({
   }, []);
 
   const pricing = useMemo(() => (product ? getProductPricing(product) : null), [product]);
+  const branding = useMemo(() => resolveBrandingColors(config), [config]);
   const images = useMemo(() => (product ? getProductImageList(product) : []), [product]);
   const resolvedCategoryName =
     categoryName ||
@@ -318,7 +320,10 @@ export default function QuickViewModal({
 
                 <div>
                   <Link href={productHref} className="block">
-                    <h2 className="text-2xl font-bold tracking-tight text-foreground transition-colors hover:text-rose-600 md:text-3xl">
+                    <h2
+                      className="text-2xl font-bold tracking-tight text-foreground transition-colors md:text-3xl"
+                      style={{ color: branding.textColor }}
+                    >
                       {product.name}
                     </h2>
                   </Link>
@@ -460,13 +465,17 @@ export default function QuickViewModal({
               {allowAddToCart ? (
                 <Button
                   size="lg"
-                  className={`h-14 flex-1 rounded-2xl text-base font-semibold transition-all ${
-                    addedToCart
-                      ? 'bg-emerald-600 hover:bg-emerald-700'
-                      : 'bg-rose-600 text-white hover:bg-rose-700'
-                  }`}
+                  className="h-14 flex-1 rounded-2xl text-base font-semibold text-white transition-all hover:brightness-110"
                   onClick={handleAddToCart}
                   disabled={isOutOfStock}
+                  style={
+                    addedToCart
+                      ? { backgroundColor: '#059669' }
+                      : {
+                          backgroundImage: `linear-gradient(135deg, ${branding.gradientStart}, ${branding.gradientEnd})`,
+                          boxShadow: `0 16px 32px ${branding.hexToRgba(branding.primary, 0.22)}`,
+                        }
+                  }
                 >
                   {addedToCart ? (
                     <>

@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import {
-  COMPANY_FEATURE_KEYS,
-  requireCompanyAccess,
-} from '@/app/api/_utils/company-authorization';
+import { requireCompanyAccess } from '@/app/api/_utils/company-authorization';
 import { createAdminClient } from '@/lib/supabase/server';
 
 // Fallback limits per plan when saas_plans.max_locations is not configured
@@ -62,6 +59,10 @@ function asText(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function wantsActiveOnly(request: NextRequest): boolean {
+  return request.nextUrl.searchParams.get('activeOnly') === 'true';
+}
+
 function toSlug(value: string): string {
   return value
     .normalize('NFD')
@@ -109,17 +110,47 @@ export async function GET(request: NextRequest) {
   }
 
   const adminClient = await createAdminClient();
-  const { data, error, count } = await adminClient
+  const maxLocations = await getMaxLocationsForPlan(adminClient, access.context.plan);
+  const activeOnly = wantsActiveOnly(request);
+  let query = adminClient
     .from('branches')
     .select('id,name,slug,address,phone,is_active,created_at,updated_at', { count: 'exact' })
     .eq('organization_id', access.context.companyId)
     .order('created_at', { ascending: false });
 
+  if (activeOnly) {
+    query = query.eq('is_active', true);
+  }
+
+  const { data, error, count } = await query;
+
   if (error) {
     return NextResponse.json({ error: error.message || 'No se pudieron cargar sucursales' }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true, data: data || [], total: count || 0 });
+  const { count: totalCount, error: totalCountError } = await adminClient
+    .from('branches')
+    .select('id', { count: 'exact', head: true })
+    .eq('organization_id', access.context.companyId);
+
+  if (totalCountError) {
+    return NextResponse.json({ error: totalCountError.message || 'No se pudo validar el uso de sucursales' }, { status: 500 });
+  }
+
+  const currentLocations = totalCount || 0;
+
+  return NextResponse.json({
+    success: true,
+    data: data || [],
+    total: count || 0,
+    meta: {
+      plan: access.context.plan,
+      maxLocations,
+      currentLocations,
+      limitReached: currentLocations >= maxLocations,
+      activeOnly,
+    },
+  });
 }
 
 export async function POST(request: NextRequest) {

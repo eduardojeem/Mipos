@@ -24,6 +24,7 @@ import { formatPrice } from '@/utils/formatters';
 import { useBusinessConfig } from '@/contexts/BusinessConfigContext';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useCurrentOrganizationId } from '@/hooks/use-current-organization';
+import { useCurrentOrganizationName } from '@/hooks/use-current-organization';
 import type { Order } from '@/hooks/useOptimizedOrders';
 import {
   useOptimizedOrders,
@@ -51,6 +52,7 @@ import {
   CreditCard,
   Download,
   Eye,
+  Globe,
   Mail,
   MapPin,
   Package,
@@ -533,12 +535,14 @@ function OrderRow({ order, isSelected, isUpdating, onSelect, onOpenDetail, onSta
 
 export default function OrdersAdminPage() {
   const organizationId = useCurrentOrganizationId();
+  const organizationName = useCurrentOrganizationName();
   const { config } = useBusinessConfig();
   const { toast } = useToast();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('PENDING');
   const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'MANUAL_PENDING' | 'TRANSFER_PENDING' | 'CASH_PENDING'>('ALL');
+  const [sourceFilter, setSourceFilter] = useState<'ALL' | 'WEB' | 'MANUAL'>('ALL');
   const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | 'year' | 'all'>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
@@ -574,8 +578,9 @@ export default function OrdersAdminPage() {
             ? 'CASH'
             : 'ALL',
       paymentStatus: paymentFilter === 'ALL' ? 'ALL' : 'PENDING',
+      orderSource: sourceFilter,
     }),
-    [currentPage, statusFilter, debouncedSearchTerm, dateRange, sortBy, sortOrder, paymentFilter]
+    [currentPage, statusFilter, debouncedSearchTerm, dateRange, sortBy, sortOrder, paymentFilter, sourceFilter]
   );
 
   const { data: ordersData, isLoading: ordersLoading, refetch: refetchOrders } = useOptimizedOrders(queryParams);
@@ -618,6 +623,32 @@ export default function OrdersAdminPage() {
     Number(stats?.confirmed || 0) +
     Number(stats?.preparing || 0) +
     Number(stats?.ready || 0);
+  const sourceFilterMeta = useMemo(() => {
+    switch (sourceFilter) {
+      case 'WEB':
+        return {
+          title: 'Canal web',
+          description: 'Pedidos creados desde el catalogo publico y el carrito online.',
+          icon: Globe,
+          badgeClassName: 'border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-300',
+        };
+      case 'MANUAL':
+        return {
+          title: 'Canal manual',
+          description: 'Pedidos cargados desde dashboard, mostrador o gestion interna.',
+          icon: Building2,
+          badgeClassName: 'border-violet-300 bg-violet-50 text-violet-700 dark:border-violet-800 dark:bg-violet-950/30 dark:text-violet-300',
+        };
+      default:
+        return {
+          title: 'Todos los canales',
+          description: 'Vista unificada para pedidos web y pedidos creados manualmente.',
+          icon: ShoppingBag,
+          badgeClassName: 'border-zinc-300 bg-zinc-50 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-300',
+        };
+    }
+  }, [sourceFilter]);
+  const SourceFilterIcon = sourceFilterMeta.icon;
 
   const markUpdating = useCallback((ids: string[], enabled: boolean) => {
     setUpdatingIds((current) =>
@@ -628,7 +659,7 @@ export default function OrdersAdminPage() {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearchTerm, statusFilter, paymentFilter, dateRange, sortBy, sortOrder]);
+  }, [debouncedSearchTerm, statusFilter, paymentFilter, sourceFilter, dateRange, sortBy, sortOrder]);
 
   // Deselect orders that are no longer visible
   useEffect(() => {
@@ -832,6 +863,7 @@ export default function OrdersAdminPage() {
     setSearchTerm('');
     setStatusFilter('ALL');
     setPaymentFilter('ALL');
+    setSourceFilter('ALL');
     setDateRange('all');
     setSortBy('created_at');
     setSortOrder('desc');
@@ -849,6 +881,16 @@ export default function OrdersAdminPage() {
             <p className="mt-1 text-sm text-muted-foreground">
               Gestiona cumplimiento, cambios de estado y altas manuales desde una sola vista.
             </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Badge variant="outline" className="gap-1.5 border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300">
+                <Building2 className="h-3.5 w-3.5" />
+                {organizationName ? `Organizacion activa: ${organizationName}` : 'Organizacion activa'}
+              </Badge>
+              <Badge variant="outline" className={`gap-1.5 ${sourceFilterMeta.badgeClassName}`}>
+                <SourceFilterIcon className="h-3.5 w-3.5" />
+                {sourceFilterMeta.title}
+              </Badge>
+            </div>
           </div>
           <div className="flex flex-wrap gap-3">
             <Button variant="outline" onClick={() => void handleRefresh()} disabled={ordersLoading || statsLoading}>
@@ -906,7 +948,89 @@ export default function OrdersAdminPage() {
           </Card>
         </div>
 
+        <div className="grid gap-4 md:grid-cols-3">
+          <Card className="border-sky-200/80 shadow-sm dark:border-sky-900/40 dark:bg-zinc-900/60">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-2 text-sky-700 dark:text-sky-300">
+                <Globe className="h-4 w-4" />
+                <p className="text-sm font-medium">Web hoy</p>
+              </div>
+              <p className="mt-2 text-2xl font-semibold">
+                {statsLoading && !stats ? '...' : stats?.webTodayOrders || 0}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Pedidos creados desde el catalogo publico en esta organizacion.
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="border-violet-200/80 shadow-sm dark:border-violet-900/40 dark:bg-zinc-900/60">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-2 text-violet-700 dark:text-violet-300">
+                <Building2 className="h-4 w-4" />
+                <p className="text-sm font-medium">Manual hoy</p>
+              </div>
+              <p className="mt-2 text-2xl font-semibold">
+                {statsLoading && !stats ? '...' : stats?.manualTodayOrders || 0}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Pedidos cargados desde dashboard, mostrador o gestion interna.
+              </p>
+            </CardContent>
+          </Card>
+          <Card className="border-amber-200/80 shadow-sm dark:border-amber-900/40 dark:bg-zinc-900/60">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300">
+                <Package className="h-4 w-4" />
+                <p className="text-sm font-medium">Pendientes web</p>
+              </div>
+              <p className="mt-2 text-2xl font-semibold">
+                {statsLoading && !stats ? '...' : stats?.webPendingOrders || 0}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Cola operativa del canal online que aun requiere accion del equipo.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
         <StatusWorkflowBar value={statusFilter} stats={stats} onChange={setStatusFilter} />
+
+        <Card className="border-border/60 shadow-sm">
+          <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <SourceFilterIcon className="h-4 w-4 text-muted-foreground" />
+                <p className="text-sm font-semibold">{sourceFilterMeta.title}</p>
+              </div>
+              <p className="text-sm text-muted-foreground">{sourceFilterMeta.description}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant={sourceFilter === 'ALL' ? 'default' : 'outline'}
+                onClick={() => setSourceFilter('ALL')}
+                className={sourceFilter === 'ALL' ? 'bg-zinc-900 text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200' : ''}
+              >
+                Todos
+              </Button>
+              <Button
+                variant={sourceFilter === 'WEB' ? 'default' : 'outline'}
+                onClick={() => setSourceFilter('WEB')}
+                className={sourceFilter === 'WEB' ? 'bg-sky-600 text-white hover:bg-sky-700' : ''}
+              >
+                <Globe className="mr-2 h-4 w-4" />
+                Web
+              </Button>
+              <Button
+                variant={sourceFilter === 'MANUAL' ? 'default' : 'outline'}
+                onClick={() => setSourceFilter('MANUAL')}
+                className={sourceFilter === 'MANUAL' ? 'bg-violet-600 text-white hover:bg-violet-700' : ''}
+              >
+                <Building2 className="mr-2 h-4 w-4" />
+                Manual
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Filtros */}
         <Card className="border-border/60 shadow-sm">
@@ -958,6 +1082,17 @@ export default function OrdersAdminPage() {
                   <SelectItem value="TRANSFER_PENDING">Transferencias pendientes</SelectItem>
                 </SelectContent>
               </Select>
+              <Select value={sourceFilter} onValueChange={(value) => setSourceFilter(value as typeof sourceFilter)}>
+                <SelectTrigger>
+                  <Building2 className="mr-2 h-4 w-4" />
+                  <SelectValue placeholder="Origen" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Todos los origenes</SelectItem>
+                  <SelectItem value="WEB">Solo web</SelectItem>
+                  <SelectItem value="MANUAL">Solo manual</SelectItem>
+                </SelectContent>
+              </Select>
               <Select value={sortBy} onValueChange={(value) => setSortBy(value as typeof sortBy)}>
                 <SelectTrigger>
                   <SelectValue />
@@ -995,6 +1130,11 @@ export default function OrdersAdminPage() {
                       : paymentFilter === 'CASH_PENDING'
                         ? 'Efectivo pendiente'
                         : 'Pagos manuales pendientes'}
+                  </Badge>
+                ) : null}
+                {sourceFilter !== 'ALL' ? (
+                  <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                    {sourceFilter === 'WEB' ? 'Origen web' : 'Origen manual'}
                   </Badge>
                 ) : null}
                 {debouncedSearchTerm ? (
@@ -1072,8 +1212,14 @@ export default function OrdersAdminPage() {
             ) : !orders.length ? (
               <div className="px-6 py-16 text-center">
                 <Package className="mx-auto mb-4 h-12 w-12 text-muted-foreground/60" />
-                <h3 className="text-lg font-semibold">No se encontraron pedidos</h3>
-                <p className="mt-2 text-sm text-muted-foreground">Ajusta los filtros o crea una nueva orden manual.</p>
+                <h3 className="text-lg font-semibold">
+                  {sourceFilter === 'WEB' ? 'No se encontraron pedidos web' : 'No se encontraron pedidos'}
+                </h3>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {sourceFilter === 'WEB'
+                    ? 'Verifica si el pedido se creo en esta misma organizacion activa o cambia el canal a "Todos" para comparar.'
+                    : 'Ajusta los filtros o crea una nueva orden manual.'}
+                </p>
                 <div className="mt-5 flex justify-center gap-3">
                   <Button variant="outline" onClick={handleResetFilters}>
                     Limpiar filtros

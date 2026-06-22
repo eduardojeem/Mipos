@@ -5,6 +5,7 @@
 
 import { EventEmitter } from 'events';
 import React, { useState } from 'react';
+import api from '../api';
 
 // Types and Interfaces
 export type NotificationPriority = 'low' | 'normal' | 'high' | 'critical';
@@ -525,19 +526,13 @@ export class PushNotificationService extends EventEmitter {
   private async sendPushMessage(notification: NotificationPayload): Promise<void> {
     // This would typically send to your backend server
     // which then sends the push message to the browser
-    const response = await fetch('/api/notifications/send', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
+    try {
+      await api.post('/notifications/send', {
         subscription: this.subscription,
         notification
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to send push notification: ${response.statusText}`);
+      });
+    } catch (error) {
+      throw new Error(`Failed to send push notification: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -602,29 +597,25 @@ export class PushNotificationService extends EventEmitter {
 
   private async saveSubscription(subscription: PushSubscription): Promise<void> {
     // Save subscription to backend
-    await fetch('/api/notifications/subscribe', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
+    try {
+      await api.post('/notifications/subscribe', {
         subscription: subscription.toJSON()
-      })
-    });
+      });
+    } catch (error) {
+      console.error('Error saving push subscription:', error);
+    }
   }
 
   private async removeSubscription(): Promise<void> {
     // Remove subscription from backend
     if (this.subscription) {
-      await fetch('/api/notifications/unsubscribe', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
+      try {
+        await api.post('/notifications/unsubscribe', {
           endpoint: this.subscription.endpoint
-        })
-      });
+        });
+      } catch (error) {
+        console.error('Error removing push subscription:', error);
+      }
     }
   }
 

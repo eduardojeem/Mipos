@@ -15,10 +15,13 @@ import {
   User, 
   CheckCircle2,
   AlertCircle,
+  Briefcase,
   Building2,
   Sparkles,
   ArrowRight,
-  Shield
+  Shield,
+  Scissors,
+  Store,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,11 +30,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
 import { isValidTenantPathSegment } from '@/lib/domain/tenant-public-paths';
+import { DEFAULT_VERTICAL, VERTICAL_OPTIONS, type BusinessVertical } from '@/config/verticals';
 
 const signUpSchema = z.object({
   fullName: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
   email: z.string().email('Ingresa un email válido'),
   organizationName: z.string().optional(),
+  vertical: z.enum(['RETAIL', 'BARBERSHOP']).default(DEFAULT_VERTICAL),
   password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres')
     .regex(/[A-Z]/, 'Debe contener al menos una mayúscula')
     .regex(/[a-z]/, 'Debe contener al menos una minúscula')
@@ -43,6 +48,12 @@ const signUpSchema = z.object({
 });
 
 type SignUpFormData = z.infer<typeof signUpSchema>;
+
+function BusinessVerticalIcon({ vertical }: { vertical: BusinessVertical }) {
+  if (vertical === 'BARBERSHOP') return <Scissors className="h-5 w-5" />;
+  if (vertical === 'RETAIL') return <Store className="h-5 w-5" />;
+  return <Briefcase className="h-5 w-5" />;
+}
 
 function getTenantAuthPrefix(returnUrl: string): string {
   const [path] = returnUrl.split(/[?#]/, 1);
@@ -75,9 +86,13 @@ export default function SignUpPage() {
   } = useForm<SignUpFormData>({
     resolver: zodResolver(signUpSchema),
     mode: 'onChange',
+    defaultValues: {
+      vertical: DEFAULT_VERTICAL,
+    },
   });
 
   const password = watch('password', '');
+  const selectedVertical = watch('vertical', DEFAULT_VERTICAL);
 
   const getPasswordStrength = (pwd: string) => {
     if (!pwd) return { strength: 0, label: '', color: '' };
@@ -125,6 +140,7 @@ export default function SignUpPage() {
               password: data.password,
               name: data.fullName,
               organizationName,
+              vertical: data.vertical,
               planSlug: 'free',
             }),
       });
@@ -277,6 +293,55 @@ export default function SignUpPage() {
                       {errors.organizationName.message}
                     </p>
                   )}
+                  <fieldset className="space-y-3 pt-2">
+                    <legend className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
+                      <Briefcase className="h-4 w-4" />
+                      Tipo de negocio
+                    </legend>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {VERTICAL_OPTIONS.map((option) => {
+                        const isActive = selectedVertical === option.value;
+                        return (
+                          <label
+                            key={option.value}
+                            htmlFor={`vertical-${option.value}`}
+                            className={cn(
+                              'flex cursor-pointer items-start gap-3 rounded-lg border-2 p-3 text-left transition-all',
+                              isActive
+                                ? 'border-blue-500 bg-blue-50 ring-4 ring-blue-500/10 dark:bg-blue-950/20'
+                                : 'border-slate-200 bg-white hover:border-blue-200 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-600',
+                            )}
+                          >
+                            <input
+                              id={`vertical-${option.value}`}
+                              type="radio"
+                              value={option.value}
+                              className="sr-only"
+                              {...register('vertical')}
+                            />
+                            <span
+                              className={cn(
+                                'mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg',
+                                isActive
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300',
+                              )}
+                            >
+                              <BusinessVerticalIcon vertical={option.value} />
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                {option.label}
+                              </span>
+                              <span className="mt-1 block text-xs leading-5 text-slate-500 dark:text-slate-400">
+                                {option.description}
+                              </span>
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </fieldset>
                 </div>
                 ) : null}
 

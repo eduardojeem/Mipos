@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { getValidatedOrganizationId } from '@/lib/organization'
+import { COMPANY_PERMISSIONS, requireCompanyAccess } from '@/app/api/_utils/company-authorization'
 
 /**
  * GET /api/organizations/marketplace-category
@@ -65,6 +66,15 @@ export async function PUT(request: NextRequest) {
     const orgId = (await getValidatedOrganizationId(request)) || ''
     if (!orgId) {
       return NextResponse.json({ error: 'Organization ID requerido' }, { status: 400 })
+    }
+
+    // Solo OWNER/ADMIN (quienes tienen MANAGE_COMPANY) pueden cambiar el rubro público.
+    const access = await requireCompanyAccess(request, {
+      companyId: orgId,
+      permission: COMPANY_PERMISSIONS.MANAGE_COMPANY,
+    })
+    if (!access.ok) {
+      return NextResponse.json(access.body, { status: access.status })
     }
 
     const body = await request.json()

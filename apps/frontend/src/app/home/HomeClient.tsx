@@ -35,9 +35,12 @@ import HomeSalesShowcase from './components/HomeSalesShowcase';
 import { LoginAccessSection } from '@/components/auth/LoginAccessSection';
 import type { TenantHomeSnapshot } from './home-types';
 import type { Product } from '@/types';
+import type { BusinessVertical } from '@/config/verticals';
 
 interface HomeClientProps {
   initialData: TenantHomeSnapshot;
+  organizationId?: string;
+  vertical?: BusinessVertical;
 }
 
 // ── Countdown helper ──
@@ -157,7 +160,7 @@ export default function HomeClient({ initialData }: HomeClientProps) {
   };
 
   return (
-    <div className="min-h-screen bg-white dark:bg-slate-950" style={{ color: textColor }}>
+    <div className="min-h-screen bg-slate-50/50 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white via-slate-50 to-slate-100 dark:bg-slate-950 dark:from-slate-900 dark:via-slate-950 dark:to-slate-950" style={{ color: textColor }}>
       <NavBar config={config} activeSection={activeSection} onNavigate={scrollToSection} />
 
       {!persisted ? (
@@ -228,7 +231,7 @@ export default function HomeClient({ initialData }: HomeClientProps) {
 
             <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide sm:grid sm:grid-cols-2 sm:overflow-visible lg:grid-cols-3">
               {offers.map((offer) => (
-                <Card key={offer.id} className="min-w-[280px] shrink-0 overflow-hidden rounded-2xl border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:min-w-0">
+                <Card key={offer.id} className="group min-w-[280px] shrink-0 overflow-hidden rounded-2xl border-border/50 bg-white/60 shadow-sm backdrop-blur-xl transition-all hover:-translate-y-1 hover:shadow-xl dark:bg-slate-900/60 sm:min-w-0">
                   <div className="relative aspect-[16/10] overflow-hidden bg-slate-100 dark:bg-slate-800">
                     <Image
                       src={offer.image || '/api/placeholder/480/300'}
@@ -290,7 +293,7 @@ export default function HomeClient({ initialData }: HomeClientProps) {
                   <Link
                     key={cat.id}
                     href={tenantHref(`/catalog?category=${cat.id}`)}
-                    className="group flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-all hover:shadow-md dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+                    className="group flex items-center gap-2 rounded-full border border-border/50 bg-white/60 px-4 py-2.5 text-sm font-medium text-slate-700 backdrop-blur-md transition-all hover:-translate-y-0.5 hover:shadow-md dark:bg-slate-900/60 dark:text-slate-300 dark:hover:bg-slate-800/80"
                     style={{ borderColor: hexToRgba(color, 0.3) }}
                   >
                     <span
@@ -339,7 +342,7 @@ export default function HomeClient({ initialData }: HomeClientProps) {
                 return (
                   <Card
                     key={product.id}
-                    className="group overflow-hidden rounded-2xl border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-lg dark:border-slate-800 dark:bg-slate-900"
+                    className="group overflow-hidden rounded-2xl border-border/50 bg-white/60 shadow-sm backdrop-blur-xl transition-all hover:-translate-y-1 hover:shadow-xl dark:bg-slate-900/60"
                   >
                     <Link href={tenantHref(`/catalog/${product.id}`)} className="block">
                       <div className="relative aspect-square overflow-hidden bg-slate-100 dark:bg-slate-800">
@@ -400,7 +403,7 @@ export default function HomeClient({ initialData }: HomeClientProps) {
            ═══════════════════════════════════════════════════════════════════ */}
         {(sections.showContactInfo || sections.showLocation || sections.showBusinessHours) ? (
           <section id="contacto" className="scroll-mt-[calc(var(--public-nav-height,4rem)+1rem)]">
-            <Card className="overflow-hidden rounded-2xl border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <Card className="overflow-hidden rounded-2xl border-border/50 bg-white/60 shadow-sm backdrop-blur-xl transition-all hover:shadow-md dark:bg-slate-900/60">
               <div className="h-1 w-full" style={{ backgroundColor: primary }} />
               <CardContent className="p-6">
                 <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">

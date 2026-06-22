@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   ChevronRight,
   Command,
+  LayoutDashboard,
   LogOut,
   Search,
   Settings,
@@ -95,7 +96,7 @@ export function AdminHeader({ compact = false }: { compact?: boolean }) {
     <>
       <header
         className={cn(
-          'border-b border-border bg-background/80 backdrop-blur-xl',
+          'border-b border-border/50 bg-background/60 backdrop-blur-2xl shadow-sm',
           'sticky top-0 z-40',
           compact ? 'px-4 py-2.5 lg:px-6' : 'px-6 py-4'
         )}
@@ -135,12 +136,12 @@ export function AdminHeader({ compact = false }: { compact?: boolean }) {
           <div className="hidden max-w-md flex-1 md:flex">
             <Button
               variant="outline"
-              className="w-full justify-start gap-3 bg-muted/40 text-muted-foreground"
+              className="w-full justify-start gap-3 glass-card bg-muted/20 hover:bg-muted/40 text-muted-foreground border-border/50 shadow-sm transition-all duration-300"
               onClick={() => setSearchOpen(true)}
             >
               <Search className="h-4 w-4" />
               <span className="flex-1 text-left text-sm">Buscar en administracion</span>
-              <kbd className="inline-flex h-5 items-center gap-1 rounded border border-border bg-background px-1.5 text-[10px] font-medium">
+              <kbd className="inline-flex h-5 items-center gap-1 rounded bg-muted/50 px-1.5 text-[10px] font-medium border border-border/50">
                 <Command className="h-3 w-3" />
                 K
               </kbd>
@@ -148,22 +149,23 @@ export function AdminHeader({ compact = false }: { compact?: boolean }) {
           </div>
 
           <div className="flex items-center gap-2">
-            <Badge variant="outline" className="hidden gap-1 lg:inline-flex">
+            <Badge variant="outline" className="hidden gap-1 xl:inline-flex">
               <Shield className="h-3 w-3" />
               {role}
             </Badge>
 
-            <Badge variant={canAccessAdminPanel ? 'default' : 'secondary'} className="hidden lg:inline-flex">
+            <Badge variant={canAccessAdminPanel ? 'default' : 'secondary'} className="hidden xl:inline-flex">
               {canAccessAdminPanel ? 'Admin habilitado' : 'Admin restringido'}
             </Badge>
 
-            <Badge variant={canAccessReports ? 'outline' : 'secondary'} className="hidden xl:inline-flex">
+            <Badge variant={canAccessReports ? 'outline' : 'secondary'} className="hidden 2xl:inline-flex">
               {canAccessReports ? 'Reportes activos' : 'Sin reportes'}
             </Badge>
 
-            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl" asChild>
+            <Button variant="outline" size="sm" className="h-9 gap-2 rounded-xl border-primary/20 bg-primary/5 text-primary hover:bg-primary/10" asChild>
               <Link href="/dashboard">
-                <ArrowLeft className="h-4 w-4" />
+                <LayoutDashboard className="h-4 w-4" />
+                <span className="hidden sm:inline font-medium">Volver al Dashboard</span>
               </Link>
             </Button>
 
@@ -175,15 +177,15 @@ export function AdminHeader({ compact = false }: { compact?: boolean }) {
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-10 rounded-xl px-2">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+                <Button variant="ghost" className="h-10 rounded-xl px-2 hover:bg-muted/50 transition-colors">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20 shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]">
                     <User className="h-4 w-4" />
                   </div>
-                  <div className="hidden text-left lg:block">
-                    <p className="max-w-[180px] truncate text-sm font-medium text-foreground">
+                  <div className="hidden text-left xl:block">
+                    <p className="max-w-[150px] truncate text-sm font-semibold text-foreground">
                       {user?.email || 'Administrador'}
                     </p>
-                    <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">{role}</p>
+                    <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground">{role}</p>
                   </div>
                 </Button>
               </DropdownMenuTrigger>

@@ -55,7 +55,7 @@ async function requestPlans(): Promise<Plan[]> {
     }
 
     inFlightRequest = (async () => {
-        const response = await fetch('/api/plans', { cache: 'no-store' });
+        const response = await fetch('/api/plans');
         const data = await response.json();
 
         if (!response.ok) {

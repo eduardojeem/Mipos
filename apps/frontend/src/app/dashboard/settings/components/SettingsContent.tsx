@@ -78,25 +78,34 @@ export function SettingsContent({ activeTab }: SettingsContentProps) {
       <SettingsSidebar />
 
       <main className="min-w-0 flex-1 space-y-6">
-        {/* Contextual header — icon and name come from active tab */}
-        <section className="flex flex-col gap-4 rounded-xl border border-border/50 bg-card p-6 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 items-center gap-4">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <currentMeta.icon className="h-5 w-5" />
+        {/* Premium Contextual Header */}
+        <section className="relative overflow-hidden rounded-2xl border border-border/50 bg-card p-6 sm:p-8 shadow-sm">
+          {/* Subtle Background Gradients */}
+          <div className="absolute top-0 right-0 -mr-16 -mt-16 h-64 w-64 rounded-full bg-primary/5 blur-3xl" />
+          <div className="absolute bottom-0 left-0 -ml-16 -mb-16 h-48 w-48 rounded-full bg-primary/10 blur-3xl" />
+
+          <div className="relative flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-5">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 text-primary shadow-inner border border-primary/10">
+                <currentMeta.icon className="h-6 w-6" />
+              </div>
+              <div className="min-w-0">
+                <h1 className="text-3xl font-extrabold tracking-tight text-foreground">{currentMeta.name}</h1>
+                <p className="mt-1 text-sm text-muted-foreground">{currentMeta.description}</p>
+              </div>
             </div>
-            <div className="min-w-0">
-              <h1 className="text-2xl font-bold tracking-tight">{currentMeta.name}</h1>
-              <p className="mt-0.5 text-sm text-muted-foreground">{currentMeta.description}</p>
+            
+            <div className="flex flex-wrap items-center gap-2 shrink-0 bg-background/50 backdrop-blur-md px-4 py-2 rounded-xl border border-border/50">
+              <Badge variant="secondary" className="gap-1.5 font-semibold py-1">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                {planDisplayName || company?.plan_type || 'Plan'}
+              </Badge>
+              {company?.name && (
+                <Badge variant="outline" className="font-semibold py-1 border-primary/20 text-primary bg-primary/5">
+                  {company.name}
+                </Badge>
+              )}
             </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <Badge variant="secondary" className="gap-1.5">
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-              {planDisplayName || company?.plan_type || 'Plan'}
-            </Badge>
-            {company?.name && (
-              <Badge variant="outline">{company.name}</Badge>
-            )}
           </div>
         </section>
 

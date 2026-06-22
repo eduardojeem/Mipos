@@ -1,5 +1,6 @@
 import { logAudit } from '@/app/api/admin/_utils/audit'
 import { createAdminClient } from '@/lib/supabase/server'
+import { intersectSessionUserIds } from '@/lib/security/session-safety'
 import { createHash } from 'crypto'
 
 export type DeviceType = 'desktop' | 'mobile' | 'tablet' | 'unknown'
@@ -160,15 +161,6 @@ export function resolveSessionKey(accessToken?: string | null, refreshToken?: st
   return createHash('sha256').update(fallback).digest('hex')
 }
 
-function intersectIds(first: string[] | undefined, second: string[] | undefined): string[] | undefined {
-  if (!first && !second) return undefined
-  if (!first) return second ? [...second] : undefined
-  if (!second) return [...first]
-
-  const right = new Set(second)
-  return first.filter((value) => right.has(value))
-}
-
 function parseUserAgent(ua: string) {
   const source = ua || ''
   const lower = source.toLowerCase()
@@ -256,7 +248,10 @@ export async function syncCurrentSession(params: {
   expiresAt?: string | null
   ipAddress?: string | null
   userAgent?: string | null
-}): Promise<{ ok: true; sessionKey: string | null } | { ok: false; error: string }> {
+}): Promise<
+  { ok: true; sessionKey: string | null }
+  | { ok: false; error: string; code?: 'SESSION_INVALIDATED' }
+> {
   const sessionKey = resolveSessionKey(params.accessToken, params.refreshToken)
   if (!sessionKey) {
     return { ok: false, error: 'No se pudo resolver la clave de sesion actual.' }
@@ -266,17 +261,45 @@ export async function syncCurrentSession(params: {
   const now = new Date().toISOString()
   const expiresAt = params.expiresAt || new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString()
 
-  const { error } = await admin
+  const { data: existing, error: existingError } = await admin
     .from('user_sessions')
-    .upsert({
-      user_id: params.userId,
-      supabase_session_id: sessionKey,
-      ip_address: normalizeIpAddress(params.ipAddress) || null,
-      user_agent: String(params.userAgent || ''),
-      is_active: true,
-      last_activity: now,
-      expires_at: expiresAt,
-    }, { onConflict: 'supabase_session_id' })
+    .select('id, is_active')
+    .eq('supabase_session_id', sessionKey)
+    .maybeSingle()
+
+  if (existingError) {
+    return { ok: false, error: existingError.message }
+  }
+
+  if (existing && existing.is_active === false) {
+    return {
+      ok: false,
+      code: 'SESSION_INVALIDATED',
+      error: 'La sesion fue invalidada y no puede reactivarse.',
+    }
+  }
+
+  const sessionValues = {
+    user_id: params.userId,
+    supabase_session_id: sessionKey,
+    ip_address: normalizeIpAddress(params.ipAddress) || null,
+    user_agent: String(params.userAgent || ''),
+    last_activity: now,
+    expires_at: expiresAt,
+  }
+
+  const { error } = existing
+    ? await admin
+      .from('user_sessions')
+      .update(sessionValues)
+      .eq('id', existing.id)
+      .eq('is_active', true)
+    : await admin
+      .from('user_sessions')
+      .insert({
+        ...sessionValues,
+        is_active: true,
+      })
 
   if (error) {
     return { ok: false, error: error.message }
@@ -443,8 +466,12 @@ async function fetchSessionRows(
   admin: Awaited<ReturnType<typeof createAdminClient>>,
   filters: SessionListFilters
 ): Promise<SessionRow[]> {
+  if (filters.allowedUserIds?.length === 0) {
+    return []
+  }
+
   const roleUserIds = await resolveRoleUserIds(admin, filters)
-  const effectiveUserIds = intersectIds(filters.allowedUserIds, roleUserIds)
+  const effectiveUserIds = intersectSessionUserIds(filters.allowedUserIds, roleUserIds)
 
   if (effectiveUserIds && effectiveUserIds.length === 0) {
     return []
@@ -607,6 +634,10 @@ export async function terminateSession(
   id: string,
   allowedUserIds?: string[]
 ): Promise<SessionMutationResult> {
+  if (allowedUserIds?.length === 0) {
+    return { ok: false, status: 404, error: 'La sesion no pertenece al alcance permitido.' }
+  }
+
   const admin = await createAdminClient()
 
   let query = admin
@@ -615,7 +646,7 @@ export async function terminateSession(
     .eq('id', id)
     .eq('is_active', true)
 
-  if (allowedUserIds && allowedUserIds.length > 0) {
+  if (allowedUserIds) {
     query = query.in('user_id', allowedUserIds)
   }
 
@@ -637,6 +668,10 @@ export async function terminateSession(
 export async function cleanupExpired(
   allowedUserIds?: string[]
 ): Promise<{ ok: true; cleaned: number } | { ok: false; error: string }> {
+  if (allowedUserIds?.length === 0) {
+    return { ok: true, cleaned: 0 }
+  }
+
   const admin = await createAdminClient()
 
   let query = admin
@@ -645,7 +680,7 @@ export async function cleanupExpired(
     .lt('expires_at', new Date().toISOString())
     .eq('is_active', true)
 
-  if (allowedUserIds && allowedUserIds.length > 0) {
+  if (allowedUserIds) {
     query = query.in('user_id', allowedUserIds)
   }
 
@@ -684,6 +719,10 @@ export async function terminateUserSessions(
   userId: string,
   allowedUserIds?: string[]
 ): Promise<SessionMutationResult> {
+  if (allowedUserIds?.length === 0) {
+    return { ok: false, status: 404, error: 'El usuario no pertenece al alcance permitido.' }
+  }
+
   const admin = await createAdminClient()
 
   let query = admin
@@ -692,7 +731,7 @@ export async function terminateUserSessions(
     .eq('user_id', userId)
     .eq('is_active', true)
 
-  if (allowedUserIds && allowedUserIds.length > 0) {
+  if (allowedUserIds) {
     query = query.in('user_id', allowedUserIds)
   }
 

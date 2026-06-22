@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import NavBar from '@/components/public-tenant/NavBar';
+import { NavBar } from '@/app/home/components/NavBar';
 import CatalogFiltersOptimized, { type ViewMode } from './components/CatalogFiltersOptimized';
 import ProductGridOptimized from './components/ProductGridOptimized';
 import QuickViewModal from './components/QuickViewModal';
@@ -27,7 +27,8 @@ import { useAuth } from '@/hooks/use-auth';
 import { useTenantPublicRouting } from '@/hooks/useTenantPublicRouting';
 import { useCatalogAudit } from '@/hooks/useCatalogAudit';
 import { useBusinessConfig } from '@/contexts/BusinessConfigContext';
-import { getTenantPublicContent } from '@/lib/public-site/tenant-public-config';
+import { getTenantPublicContent, getTenantPublicSections } from '@/lib/public-site/tenant-public-config';
+import type { BusinessVertical } from '@/config/verticals';
 import {
   AlertCircle,
   Loader2,
@@ -89,6 +90,7 @@ interface CatalogClientOptimizedProps {
   initialTotalProducts: number;
   initialMaxPrice: number;
   initialQueryState: CatalogQueryState;
+  vertical?: BusinessVertical;
 }
 
 function buildInitialFilters(
@@ -117,14 +119,27 @@ export default function CatalogClientOptimized({
   initialTotalProducts,
   initialMaxPrice,
   initialQueryState,
+  vertical = 'RETAIL',
 }: CatalogClientOptimizedProps) {
   const router = useRouter();
   const { toast } = useToast();
   const { config } = useBusinessConfig();
   const content = getTenantPublicContent(config);
+  const sections = getTenantPublicSections(config);
   const { tenantHref, tenantApiPath } = useTenantPublicRouting();
   const categories = initialCategories;
   const brandPrimary = config.branding?.primaryColor || '#0f766e';
+  const canUseCart = sections.showCart;
+  const loginTypes = useMemo(
+    () => {
+      const nextTypes: Array<'customer' | 'guest-order'> = ['customer'];
+      if (sections.showCart || sections.showOrderTracking) {
+        nextTypes.push('guest-order');
+      }
+      return nextTypes;
+    },
+    [sections.showCart, sections.showOrderTracking]
+  );
   const initialAdvancedFilters = useMemo(
     () => buildInitialFilters(initialQueryState, initialMaxPrice),
     [initialMaxPrice, initialQueryState]
@@ -442,9 +457,12 @@ export default function CatalogClientOptimized({
   }, [logProductView]);
 
   const handleAddToCart = useCallback((product: Product, quantity = 1) => {
+    if (!canUseCart) {
+      return;
+    }
     addToCart(product, quantity);
     logAddToCart(product.id, quantity, product.name, Number(product.offer_price ?? product.sale_price));
-  }, [addToCart, logAddToCart]);
+  }, [addToCart, canUseCart, logAddToCart]);
 
   const handleToggleFavorite = useCallback((productId: string) => {
     toggleFavorite(productId);
@@ -520,10 +538,11 @@ export default function CatalogClientOptimized({
 
       <NavBar
         config={config}
-        activeSection="catalogo"
+        activeSection={vertical === 'BARBERSHOP' ? 'productos' : 'catalogo'}
         onNavigate={(section) => router.push(tenantHref(`/home#${section}`))}
         showCartButton={false}
         skipTargetId="main-content"
+        vertical={vertical}
       />
 
       <header className="sticky top-[var(--public-nav-height,4rem)] z-40 border-b border-slate-200/50 dark:border-white/5 bg-white/70 dark:bg-slate-900/60 backdrop-blur-xl transition-all duration-300">
@@ -546,21 +565,23 @@ export default function CatalogClientOptimized({
               </div>
             </div>
 
-            <Button
-              size="sm"
-              disabled={cartItemsCount === 0}
-              style={{ backgroundColor: brandPrimary }}
-              className="relative h-10 px-6 rounded-xl text-white shadow-lg shadow-black/10 transition-transform duration-200 hover:scale-105 active:scale-95 hover:brightness-110 gap-2 border-0 disabled:opacity-60 disabled:hover:scale-100"
-              onClick={handleCheckout}
-            >
-              <ShoppingCart className="w-4 h-4" />
-              <span className="hidden sm:inline font-semibold">Carrito</span>
-              {cartItemsCount > 0 && (
-                <Badge className="absolute -top-2 -right-2 h-5 min-w-[20px] px-1.5 flex items-center justify-center text-[10px] font-bold bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-2 border-white dark:border-slate-900 rounded-full animate-bounce">
-                  {cartItemsCount}
-                </Badge>
-              )}
-            </Button>
+            {canUseCart ? (
+              <Button
+                size="sm"
+                disabled={cartItemsCount === 0}
+                style={{ backgroundColor: brandPrimary }}
+                className="relative h-10 px-6 rounded-xl text-white shadow-lg shadow-black/10 transition-transform duration-200 hover:scale-105 active:scale-95 hover:brightness-110 gap-2 border-0 disabled:opacity-60 disabled:hover:scale-100"
+                onClick={handleCheckout}
+              >
+                <ShoppingCart className="w-4 h-4" />
+                <span className="hidden sm:inline font-semibold">Carrito</span>
+                {cartItemsCount > 0 && (
+                  <Badge className="absolute -top-2 -right-2 h-5 min-w-[20px] px-1.5 flex items-center justify-center text-[10px] font-bold bg-slate-900 dark:bg-white text-white dark:text-slate-900 border-2 border-white dark:border-slate-900 rounded-full animate-bounce">
+                    {cartItemsCount}
+                  </Badge>
+                )}
+              </Button>
+            ) : null}
           </div>
         </div>
       </header>
@@ -643,6 +664,7 @@ export default function CatalogClientOptimized({
             onQuickView={handleQuickView}
             onAddToCart={(product) => handleAddToCart(product, 1)}
             onClearFilters={handleClearFilters}
+            allowAddToCart={canUseCart}
             config={config}
           />
 
@@ -659,11 +681,15 @@ export default function CatalogClientOptimized({
             maxVisiblePages={7}
           />
 
-          {!user && (
+          {!user && loginTypes.length > 0 && (
             <LoginAccessSection
-              title="Opciones para comprar"
-              description="El catalogo permite pedido invitado para reducir friccion, y tambien acceso de cliente para historial, seguimiento y recompra."
-              types={['customer', 'guest-order']}
+              title={canUseCart ? 'Opciones para comprar' : 'Acceso de clientes'}
+              description={
+                canUseCart
+                  ? 'El catalogo permite pedido invitado para reducir friccion, y tambien acceso de cliente para historial, seguimiento y recompra.'
+                  : 'Los clientes pueden iniciar sesion para guardar sus datos y volver mas rapido cuando el negocio habilite compra o seguimiento.'
+              }
+              types={loginTypes}
               returnUrl={tenantHref('/catalog')}
               compact
               className="mt-10 bg-transparent"
@@ -680,6 +706,7 @@ export default function CatalogClientOptimized({
         onToggleFavorite={handleToggleFavorite}
         isFavorite={selectedProduct ? favorites.includes(selectedProduct.id) : false}
         config={config}
+        allowAddToCart={canUseCart}
         categoryName={
           selectedProduct?.category_id
             ? categories.find((item) => item.id === selectedProduct.category_id)?.name || null
@@ -688,7 +715,7 @@ export default function CatalogClientOptimized({
       />
 
       <Suspense fallback={null}>
-        {showCheckout && (
+        {canUseCart && showCheckout && (
           <CheckoutModal
             isOpen={showCheckout}
             onClose={() => setShowCheckout(false)}
@@ -708,7 +735,7 @@ export default function CatalogClientOptimized({
       </Suspense>
 
       <Suspense fallback={null}>
-        {showOrderConfirmation && orderConfirmationData && (
+        {canUseCart && showOrderConfirmation && orderConfirmationData && (
           <OrderConfirmationModal
             isOpen={showOrderConfirmation}
             onClose={() => {

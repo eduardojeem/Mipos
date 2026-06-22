@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { requirePOSPermissions } from '@/app/api/_utils/role-validation';
+import { sanitizeSearch } from '@/app/api/_utils/search';
 import { getUserOrganizationId, validateOrganizationAccess } from '@/app/api/_utils/organization';
 
 function normalizeString(value: unknown): string | null {
@@ -66,7 +67,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (search) {
-      query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`);
+      { const s = sanitizeSearch(search); query = query.or(`name.ilike.%${s}%,email.ilike.%${s}%,phone.ilike.%${s}%`); }
     }
 
     query = query.limit(limit);

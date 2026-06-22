@@ -6,6 +6,8 @@ type DashboardNavItem = {
   href: string;
   roles?: string[];
   category?: string;
+  /** Si está definido, el ítem solo se muestra para estos verticales. Sin definir = todos. */
+  verticals?: string[];
 };
 
 export function canRoleAccessDashboardItem(
@@ -37,8 +39,14 @@ export function canAccessDashboardItem(
     userRole?: string | null;
     permissions: PlanPermissions;
     isPlanResolved: boolean;
+    vertical?: string | null;
   }
 ) {
+  // Gating por vertical: ítems con `verticals` solo aparecen en esos rubros
+  // (ej: Proveedores/Pedidos Web/Devoluciones solo en RETAIL, no en barbería).
+  if (item.verticals && options.vertical && !item.verticals.includes(options.vertical)) {
+    return false;
+  }
   return (
     canRoleAccessDashboardItem(item, options.userRole) &&
     canPlanAccessDashboardHref(
@@ -57,6 +65,7 @@ export function filterDashboardNavigation<T extends DashboardNavItem>(
     userRole?: string | null;
     permissions: PlanPermissions;
     isPlanResolved: boolean;
+    vertical?: string | null;
   }
 ) {
   return items.filter((item) => canAccessDashboardItem(item, options));

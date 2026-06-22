@@ -3,6 +3,10 @@
 import { useEffect } from 'react';
 import { createClient } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
+import {
+  isCurrentSessionInvalidation,
+  resolveBrowserSessionKey,
+} from '@/lib/security/session-safety';
 
 /**
  * Listens to `user_sessions` changes for the current session and performs a safe logout
@@ -19,10 +23,14 @@ export function useSessionInvalidation() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         const { data: { user } } = await supabase.auth.getUser();
+        const sessionKey = await resolveBrowserSessionKey(
+          session?.access_token,
+          session?.refresh_token
+        );
 
         // If no session or Supabase not configured, do nothing
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if (!session || !(supabase as any).channel) return;
+        if (!session || !user?.id || !sessionKey || !(supabase as any).channel) return;
 
         // Subscribe to user_sessions updates for this user
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -39,10 +47,13 @@ export function useSessionInvalidation() {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             async (payload: any) => {
               const newRow = payload?.new || {};
-              if (newRow && newRow.is_active === false) {
+              if (isCurrentSessionInvalidation(newRow, {
+                userId: user.id,
+                sessionKey,
+              })) {
                 // Session invalidated: sign out and redirect to login
                 try {
-                  await supabase.auth.signOut();
+                  await supabase.auth.signOut({ scope: 'local' });
                 } catch {
                   // Ignore errors during sign out
                 }

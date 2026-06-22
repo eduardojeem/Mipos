@@ -12,6 +12,7 @@ export interface Promotion {
   id: string;
   name: string;
   description: string;
+  targetType?: 'PRODUCT' | 'SERVICE';
   discountType: 'PERCENTAGE' | 'FIXED_AMOUNT';
   discountValue: number;
   startDate: string;
@@ -22,6 +23,7 @@ export interface Promotion {
   minPurchaseAmount?: number;
   maxDiscountAmount?: number;
   applicableProducts?: any[];
+  applicableServices?: any[];
   createdAt?: string;
 }
 
@@ -111,8 +113,6 @@ export const validatePromotion = (promotion: Promotion | null): PromotionValidat
   if (promotion.usageLimit !== undefined) {
     if (typeof promotion.usageLimit !== 'number' || promotion.usageLimit < 0) {
       errors.push('Límite de uso inválido');
-    } else if (promotion.usageLimit === 0) {
-      warnings.push('El límite de uso es 0, la promoción no podrá ser utilizada');
     }
   }
   

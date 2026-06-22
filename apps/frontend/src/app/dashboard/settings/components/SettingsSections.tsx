@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -90,15 +90,15 @@ type AuditPreview = {
 
 function SectionCard({ title, description, icon: Icon, children, className, action }: SectionCardProps) {
   return (
-    <Card className={cn('rounded-lg border-border/70 bg-card shadow-sm', className)}>
-      <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex min-w-0 gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-950 text-white dark:bg-white dark:text-slate-950">
-            <Icon className="h-5 w-5" />
+    <Card className={cn('glass-card overflow-hidden hover-lift border-border/50 bg-card/60 backdrop-blur-xl', className)}>
+      <CardHeader className="gap-4 sm:flex-row sm:items-start sm:justify-between pb-4">
+        <div className="flex min-w-0 gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 text-primary shadow-sm ring-1 ring-primary/20">
+            <Icon className="h-6 w-6" />
           </div>
-          <div className="min-w-0">
-            <CardTitle className="text-lg">{title}</CardTitle>
-            <CardDescription className="mt-1">{description}</CardDescription>
+          <div className="min-w-0 py-0.5">
+            <CardTitle className="text-xl">{title}</CardTitle>
+            <CardDescription className="mt-1.5">{description}</CardDescription>
           </div>
         </div>
         {action}
@@ -110,19 +110,19 @@ function SectionCard({ title, description, icon: Icon, children, className, acti
 
 function SettingLine({ title, description, icon: Icon, children }: SettingLineProps) {
   return (
-    <div className="flex flex-col gap-4 rounded-lg border border-border/70 bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex min-w-0 gap-3">
+    <div className="group flex flex-col gap-4 rounded-xl border border-border/50 bg-background/50 p-5 transition-all hover:border-primary/30 hover:bg-card hover:shadow-sm sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 gap-4">
         {Icon && (
-          <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-background text-muted-foreground">
+          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
             <Icon className="h-4 w-4" />
           </div>
         )}
         <div className="min-w-0">
-          <p className="text-sm font-medium">{title}</p>
+          <p className="text-sm font-semibold">{title}</p>
           <p className="mt-1 text-sm text-muted-foreground">{description}</p>
         </div>
       </div>
-      <div className="shrink-0 sm:min-w-[180px]">{children}</div>
+      <div className="shrink-0 sm:min-w-[180px] flex sm:justify-end">{children}</div>
     </div>
   );
 }
@@ -166,12 +166,18 @@ function SaveRow({
   if (!hasChanges) return null;
 
   return (
-    <div className="flex justify-end">
+    <div className="sticky bottom-6 z-10 flex justify-end mt-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <PermissionGuard permission="settings.edit">
-        <Button onClick={onSave} disabled={isSaving} className="min-w-[180px]">
-          {isSaving ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-          {label}
-        </Button>
+        <div className="rounded-2xl bg-card/80 backdrop-blur-xl p-2 shadow-2xl ring-1 ring-border/50 border border-border/50">
+          <Button onClick={onSave} disabled={isSaving} className="min-w-[200px] h-12 shadow-lg hover:shadow-primary/20 transition-all font-bold text-base">
+            {isSaving ? (
+              <RefreshCw className="mr-2 h-5 w-5 animate-spin" />
+            ) : (
+              <Save className="mr-2 h-5 w-5" />
+            )}
+            {label}
+          </Button>
+        </div>
       </PermissionGuard>
     </div>
   );

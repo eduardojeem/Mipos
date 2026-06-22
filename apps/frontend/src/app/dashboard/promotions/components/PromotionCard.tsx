@@ -10,7 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Edit, Trash2, MoreVertical, Calendar, Percent, Eye, Power, Package, ExternalLink, Copy, Loader2 } from 'lucide-react';
+import { Edit, Trash2, MoreVertical, Calendar, Percent, Eye, Power, Package, ExternalLink, Copy, Loader2, Scissors } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { useToast } from '@/components/ui/use-toast';
@@ -25,7 +25,7 @@ import api from '@/lib/api';
 
 interface PromotionCardProps {
   promotion: Promotion;
-  productCount?: number; // ✅ Ahora viene como prop
+  associatedCount?: number;
   onRefresh: () => void;
   isSelected?: boolean;
   onToggleSelect?: (id: string) => void;
@@ -35,7 +35,7 @@ const logger = createLogger('PromotionCard');
 
 export const PromotionCard = memo(function PromotionCard({
   promotion,
-  productCount = 0, // ✅ Default value
+  associatedCount = 0,
   onRefresh,
   isSelected = false,
   onToggleSelect
@@ -65,6 +65,7 @@ export const PromotionCard = memo(function PromotionCard({
   };
 
   const status = getStatus();
+  const isServicePromotion = promotion.targetType === 'SERVICE';
 
   const statusConfig = {
     active: {
@@ -176,9 +177,15 @@ export const PromotionCard = memo(function PromotionCard({
             <h3 className="text-xl font-bold text-slate-900 dark:text-white truncate mb-2">
               {promotion.name}
             </h3>
-            <Badge className={statusConfig[status].className}>
-              {statusConfig[status].label}
-            </Badge>
+            <div className="flex flex-wrap gap-2">
+              <Badge className={statusConfig[status].className}>
+                {statusConfig[status].label}
+              </Badge>
+              <Badge variant="outline" className="gap-1">
+                {isServicePromotion ? <Scissors className="h-3 w-3" /> : <Package className="h-3 w-3" />}
+                {isServicePromotion ? 'Servicio' : 'Producto'}
+              </Badge>
+            </div>
           </div>
 
           <DropdownMenu>
@@ -252,12 +259,20 @@ export const PromotionCard = memo(function PromotionCard({
 
           <div className="flex items-center gap-2 text-sm">
             <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-950/30">
-              <Calendar className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              {isServicePromotion ? (
+                <Scissors className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              ) : (
+                <Calendar className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              )}
             </div>
             <div>
-              <p className="text-xs text-slate-500 dark:text-slate-500">Vigencia</p>
+              <p className="text-xs text-slate-500 dark:text-slate-500">
+                {isServicePromotion ? 'Servicios' : 'Vigencia'}
+              </p>
               <p className="font-medium text-slate-900 dark:text-white text-xs">
-                {formatDate(promotion.startDate)} - {formatDate(promotion.endDate)}
+                {isServicePromotion
+                  ? `${promotion.applicableServices?.length || 0} asociado${(promotion.applicableServices?.length || 0) !== 1 ? 's' : ''}`
+                  : `${formatDate(promotion.startDate)} - ${formatDate(promotion.endDate)}`}
               </p>
             </div>
           </div>
@@ -267,12 +282,18 @@ export const PromotionCard = memo(function PromotionCard({
         <div className="pt-3 border-t border-slate-200 dark:border-slate-800">
           <div className="flex items-center gap-2 text-sm">
             <div className="p-2 rounded-lg bg-indigo-100 dark:bg-indigo-950/30">
-              <Package className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+              {isServicePromotion ? (
+                <Scissors className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+              ) : (
+                <Package className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+              )}
             </div>
             <div>
-              <p className="text-xs text-slate-500 dark:text-slate-500">Productos</p>
+              <p className="text-xs text-slate-500 dark:text-slate-500">
+                {isServicePromotion ? 'Servicios' : 'Productos'}
+              </p>
               <p className="font-bold text-slate-900 dark:text-white">
-                {productCount} asociado{productCount !== 1 ? 's' : ''}
+                {associatedCount} asociado{associatedCount !== 1 ? 's' : ''}
               </p>
             </div>
           </div>
@@ -308,14 +329,16 @@ export const PromotionCard = memo(function PromotionCard({
             <Eye className="h-4 w-4" />
             Ver Detalles
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => window.open(`/offers?promotion=${promotion.id}`, '_blank')}
-            className="gap-2"
-          >
-            <ExternalLink className="h-4 w-4" />
-          </Button>
+          {!isServicePromotion && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.open(`/offers?promotion=${promotion.id}`, '_blank')}
+              className="gap-2"
+            >
+              <ExternalLink className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </CardContent>
 
@@ -356,7 +379,7 @@ export const PromotionCard = memo(function PromotionCard({
         onCancel={() => setIsDeleteDialogOpen(false)}
         loading={loadingStates.deleting}
         details={[
-          `${productCount} producto${productCount !== 1 ? 's' : ''} asociado${productCount !== 1 ? 's' : ''}`,
+          `${associatedCount} ${isServicePromotion ? 'servicio' : 'producto'}${associatedCount !== 1 ? 's' : ''} asociado${associatedCount !== 1 ? 's' : ''}`,
           `${promotion.usageCount || 0} uso${(promotion.usageCount || 0) !== 1 ? 's' : ''} registrado${(promotion.usageCount || 0) !== 1 ? 's' : ''}`
         ]}
       />
@@ -370,7 +393,7 @@ export const PromotionCard = memo(function PromotionCard({
     prevProps.promotion.isActive === nextProps.promotion.isActive &&
     prevProps.promotion.name === nextProps.promotion.name &&
     prevProps.promotion.usageCount === nextProps.promotion.usageCount &&
-    prevProps.productCount === nextProps.productCount &&
+    prevProps.associatedCount === nextProps.associatedCount &&
     prevProps.isSelected === nextProps.isSelected
   );
 });

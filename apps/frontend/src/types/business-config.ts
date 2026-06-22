@@ -1,3 +1,5 @@
+import type { BusinessVertical } from '@/config/verticals';
+
 export interface BusinessConfig {
   // Información básica del negocio
   businessName: string;
@@ -220,6 +222,86 @@ export interface BusinessConfigUpdate extends Partial<BusinessConfig> {
   updatedAt: string;
 }
 
+export function buildDefaultPublicSite(vertical: BusinessVertical = 'RETAIL'): NonNullable<BusinessConfig['publicSite']> {
+  if (vertical === 'BARBERSHOP') {
+    return {
+      sections: {
+        showOffers: true,
+        showCatalog: true,
+        showCategories: true,
+        showFeaturedProducts: true,
+        showContactInfo: true,
+        showLocation: true,
+        showCart: false,
+        showOrderTracking: true,
+        showBusinessHours: true,
+        showSocialLinks: true,
+        showHeroStats: true,
+      },
+      content: {
+        announcementText: "",
+        heroBadge: "Reserva online",
+        heroSecondaryText: "Agenda servicios, conoce al staff y descubre productos recomendados sin mezclar la experiencia principal de turnos.",
+        heroPrimaryCtaLabel: "Reservar turno",
+        heroSecondaryCtaLabel: "Ver productos",
+        heroImageUrl: "",
+        featuredCategoriesTitle: "Categorias recomendadas",
+        featuredCategoriesDescription: "Productos sugeridos para cuidado y mantenimiento antes o despues del servicio.",
+        featuredProductsTitle: "Productos recomendados",
+        featuredProductsDescription: "Seleccion de productos visibles como venta complementaria dentro de la experiencia publica.",
+        offersTitle: "Promociones de productos",
+        offersDescription: "Descuentos visibles para productos de mostrador y cuidado personal.",
+        catalogTitle: "Productos recomendados",
+        catalogDescription: "Explora productos de cuidado, styling y mantenimiento asociados a la experiencia de la barberia.",
+        orderTrackingTitle: "Seguimiento de compras",
+        orderTrackingDescription: "Consulta el estado de tus compras de productos cuando la barberia habilita venta directa online.",
+        contactTitle: "Contacto y reservas",
+        contactDescription: "Canales visibles para consultas, ubicacion, horarios y coordinacion de turnos.",
+        footerHeadline: "Reserva, consulta horarios y descubre productos recomendados desde una experiencia publica enfocada en servicios.",
+        supportMessage: "Si necesitas ayuda con una reserva o quieres consultar productos recomendados, escribenos por nuestros canales oficiales.",
+      },
+    };
+  }
+
+  return {
+    sections: {
+      showOffers: true,
+      showCatalog: true,
+      showCategories: true,
+      showFeaturedProducts: true,
+      showContactInfo: true,
+      showLocation: true,
+      showCart: true,
+      showOrderTracking: true,
+      showBusinessHours: true,
+      showSocialLinks: true,
+      showHeroStats: true,
+    },
+    content: {
+      announcementText: "",
+      heroBadge: "Tienda oficial",
+      heroSecondaryText: "Compra online, revisa promociones y sigue tus pedidos desde una experiencia publica unificada.",
+      heroPrimaryCtaLabel: "Ver catalogo",
+      heroSecondaryCtaLabel: "Ver ofertas",
+      heroImageUrl: "",
+      featuredCategoriesTitle: "Categorias destacadas",
+      featuredCategoriesDescription: "Explora las familias con mayor rotacion dentro del catalogo publico.",
+      featuredProductsTitle: "Productos destacados",
+      featuredProductsDescription: "Seleccion de productos activos con mejor traccion comercial.",
+      offersTitle: "Ofertas activas",
+      offersDescription: "Promociones visibles para clientes finales, con precios actualizados y ahorro claro.",
+      catalogTitle: "Catalogo completo",
+      catalogDescription: "Busca por categoria, filtra por disponibilidad y descubre productos del tenant actual.",
+      orderTrackingTitle: "Sigue tu pedido",
+      orderTrackingDescription: "Consulta el estado de tu compra con una vista clara y actualizada.",
+      contactTitle: "Contacto y soporte",
+      contactDescription: "Canales visibles para consultas, ubicacion y horarios del negocio.",
+      footerHeadline: "Compra con informacion clara, branding consistente y secciones publicas controladas desde el panel.",
+      supportMessage: "Si necesitas ayuda con tu pedido o una compra especifica, escribenos por nuestros canales oficiales.",
+    },
+  };
+}
+
 export const defaultBusinessConfig: BusinessConfig = {
   businessName: "Mi Negocio Paraguay",
   tagline: "Calidad y servicio de excelencia",
@@ -368,43 +450,7 @@ export const defaultBusinessConfig: BusinessConfig = {
     ratio: 16 / 9,
   },
 
-  publicSite: {
-    sections: {
-      showOffers: true,
-      showCatalog: true,
-      showCategories: true,
-      showFeaturedProducts: true,
-      showContactInfo: true,
-      showLocation: true,
-      showCart: true,
-      showOrderTracking: true,
-      showBusinessHours: true,
-      showSocialLinks: true,
-      showHeroStats: true,
-    },
-    content: {
-      announcementText: "",
-      heroBadge: "Tienda oficial",
-      heroSecondaryText: "Compra online, revisa promociones y sigue tus pedidos desde una experiencia publica unificada.",
-      heroPrimaryCtaLabel: "Ver catalogo",
-      heroSecondaryCtaLabel: "Ver ofertas",
-      heroImageUrl: "",
-      featuredCategoriesTitle: "Categorias destacadas",
-      featuredCategoriesDescription: "Explora las familias con mayor rotacion dentro del catalogo publico.",
-      featuredProductsTitle: "Productos destacados",
-      featuredProductsDescription: "Seleccion de productos activos con mejor traccion comercial.",
-      offersTitle: "Ofertas activas",
-      offersDescription: "Promociones visibles para clientes finales, con precios actualizados y ahorro claro.",
-      catalogTitle: "Catalogo completo",
-      catalogDescription: "Busca por categoria, filtra por disponibilidad y descubre productos del tenant actual.",
-      orderTrackingTitle: "Sigue tu pedido",
-      orderTrackingDescription: "Consulta el estado de tu compra con una vista clara y actualizada.",
-      contactTitle: "Contacto y soporte",
-      contactDescription: "Canales visibles para consultas, ubicacion y horarios del negocio.",
-      footerHeadline: "Compra con informacion clara, branding consistente y secciones publicas controladas desde el panel.",
-      supportMessage: "Si necesitas ayuda con tu pedido o una compra especifica, escribenos por nuestros canales oficiales.",
-    },
-  },
+  publicSite: buildDefaultPublicSite('RETAIL'),
 
   notifications: {
     emailNotifications: true,

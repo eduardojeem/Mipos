@@ -8,6 +8,7 @@ type OrganizationRow = {
   slug: string | null;
   subscription_plan: string | null;
   subscription_status: string | null;
+  vertical?: string | null;
   created_at?: string | null;
   settings?: Record<string, unknown> | null;
   branding?: {
@@ -71,7 +72,7 @@ export async function GET(request: NextRequest) {
       const { data: organizations, error: orgsError } = await admin
         .from("organizations")
         .select(
-          "id, name, slug, subscription_plan, subscription_status, created_at, settings, branding",
+          "id, name, slug, subscription_plan, subscription_status, vertical, created_at, settings, branding",
         )
         .neq("subscription_status", "SUSPENDED")
         .order("name", { ascending: true });
@@ -127,7 +128,7 @@ export async function GET(request: NextRequest) {
     const { data: organizations, error: orgsError } = await admin
       .from("organizations")
       .select(
-        "id, name, slug, subscription_plan, subscription_status, created_at, settings, branding",
+        "id, name, slug, subscription_plan, subscription_status, vertical, created_at, settings, branding",
       )
       .in("id", organizationIds)
       .order("name", { ascending: true });

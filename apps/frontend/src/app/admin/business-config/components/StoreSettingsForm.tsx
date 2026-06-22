@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import type { BusinessConfig } from '@/types/business-config'
 import { useConfigValidation } from '../hooks/useConfigValidation'
+import { useCurrentVertical } from '@/hooks/use-current-vertical'
 
 interface StoreSettingsFormProps {
   config: BusinessConfig
@@ -17,6 +18,8 @@ interface StoreSettingsFormProps {
 
 export function StoreSettingsForm({ config, onUpdate }: StoreSettingsFormProps) {
   const { getFieldError } = useConfigValidation()
+  // Una barbería no hace envíos: ocultamos toda la sección de envío/zonas.
+  const isBarbershop = useCurrentVertical() === 'BARBERSHOP'
 
   const handleStoreSettingsChange = (
     field: keyof BusinessConfig['storeSettings'],
@@ -230,6 +233,7 @@ export function StoreSettingsForm({ config, onUpdate }: StoreSettingsFormProps) 
         </CardContent>
       </Card>
 
+      {!isBarbershop && (
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -389,6 +393,7 @@ export function StoreSettingsForm({ config, onUpdate }: StoreSettingsFormProps) 
           </div>
         </CardContent>
       </Card>
+      )}
 
       <Card>
         <CardHeader>

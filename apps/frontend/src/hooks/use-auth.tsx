@@ -55,15 +55,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (typeof window === 'undefined') return;
 
     try {
-      await fetch('/api/auth/sessions/sync', {
+      const response = await fetch('/api/auth/sessions/sync', {
         method,
         credentials: 'include',
         cache: 'no-store',
       });
+
+      if (method === 'POST' && response.status === 409) {
+        const payload = await response.json().catch(() => ({}));
+        if (payload?.code === 'SESSION_INVALIDATED') {
+          await supabase.auth.signOut({ scope: 'local' });
+          setUser(null);
+          router.replace('/auth/signin');
+        }
+      }
     } catch {
       // No bloquear el flujo de auth por errores de sincronizacion
     }
-  }, []);
+  }, [router, supabase.auth]);
 
   useEffect(() => {
     userRef.current = user;

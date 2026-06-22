@@ -81,16 +81,26 @@ async function syncOrganizationSettings(
   const marketplaceCategorySlug = cleanPublicString(companyData.marketplace_category_slug);
   const marketplaceCategoryName = cleanPublicString(companyData.marketplace_category_name);
 
-  const { error: businessConfigError } = await client
-    .from('business_config')
-    .upsert(
-      {
-        organization_id: organizationId,
-        business_name: companyData.name,
-        updated_at: now,
-      },
-      { onConflict: 'organization_id' }
-    );
+  const { error: businessConfigError } = await (async () => {
+    // Partial unique index on organization_id WHERE NOT NULL doesn't satisfy
+    // PostgREST ON CONFLICT. Use select + insert/update instead.
+    const { data: existing } = await client
+      .from('business_config')
+      .select('id')
+      .eq('organization_id', organizationId)
+      .maybeSingle();
+
+    if (existing) {
+      return client
+        .from('business_config')
+        .update({ business_name: companyData.name, updated_at: now })
+        .eq('organization_id', organizationId);
+    } else {
+      return client
+        .from('business_config')
+        .insert({ organization_id: organizationId, business_name: companyData.name, updated_at: now });
+    }
+  })();
 
   if (businessConfigError) {
     throw new Error(`No se pudo sincronizar business_config: ${businessConfigError.message}`);
@@ -630,6 +640,13 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    if (typeof name === 'string' && name.trim().length < 3) {
+      return NextResponse.json(
+        { success: false, error: 'El nombre debe tener al menos 3 caracteres' },
+        { status: 400 }
+      );
+    }
+
     if (supabaseAdmin && !marketplaceCategory) {
       return NextResponse.json(
         { success: false, error: 'Selecciona un rubro activo del marketplace' },
@@ -646,18 +663,29 @@ export async function PUT(request: NextRequest) {
 
     const clientForWrite = supabaseAdmin || supabase;
     const requestedOrganizationId = getRequestedOrganizationId(request);
-    let companyId: string | null = null;
-    let organizationIdForSettings: string | null = null;
+    let organizationId: string | null = null;
 
+    // Priority 1: Explicit organization header (multi-tenant context)
     if (requestedOrganizationId && supabaseAdmin) {
       const membershipOk = await validateOrganizationMembership(supabaseAdmin, user.id, requestedOrganizationId);
       if (membershipOk) {
-        companyId = requestedOrganizationId;
-        organizationIdForSettings = requestedOrganizationId;
+        organizationId = requestedOrganizationId;
       }
     }
 
-    if (!companyId) {
+    // Priority 2: Get organization from user membership
+    if (!organizationId) {
+      const { data: membership } = await clientForWrite
+        .from('organization_members')
+        .select('organization_id')
+        .eq('user_id', user.id)
+        .limit(1)
+        .maybeSingle();
+      organizationId = membership?.organization_id || null;
+    }
+
+    // Priority 3: Legacy companies table fallback
+    if (!organizationId) {
       const { data: userCompany } = await supabase
         .from('user_company_associations')
         .select('company_id')
@@ -665,17 +693,19 @@ export async function PUT(request: NextRequest) {
         .eq('is_active', true)
         .maybeSingle();
 
-      companyId = userCompany?.company_id || null;
+      if (userCompany?.company_id) {
+        organizationId = userCompany.company_id;
+      }
     }
 
-    if (!companyId) {
+    if (!organizationId) {
       if (!hasServiceRole) {
         return NextResponse.json(
-          { success: false, error: 'No se encontrÃ³ empresa asociada y falta Service Role para crearla' },
+          { success: false, error: 'No se encontró empresa asociada' },
           { status: 403 }
         );
       }
-      // Create new company for user
+      // Create new company for user (legacy path)
       const { data: newCompany, error: createError } = await clientForWrite
         .from('companies')
         .insert({
@@ -736,49 +766,34 @@ export async function PUT(request: NextRequest) {
       });
     }
 
-    // Update existing company
+    // --- Update via organizations table (primary path) ---
     const clientForUpdate = supabaseAdmin || supabase;
-    const { data: updatedCompany, error: updateError } = await clientForUpdate
-      .from('companies')
-      .update({
-        name,
-        rfc,
-        industry,
-        size,
-        primary_color: primary_color || '#2563EB',
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', companyId)
-      .select()
-      .single();
+    const { data: existingOrganization } = await clientForUpdate
+      .from('organizations')
+      .select('id,name,subscription_plan,subscription_status,settings,branding,marketplace_category_id')
+      .eq('id', organizationId)
+      .maybeSingle();
 
-    if (updateError || !updatedCompany) {
-      const { data: existingOrganization } = await clientForUpdate
+    if (existingOrganization) {
+      const currentSettings = isRecord(existingOrganization.settings)
+        ? existingOrganization.settings
+        : {};
+      const currentBranding = isRecord(existingOrganization.branding)
+        ? existingOrganization.branding
+        : {};
+
+      const { data: updatedOrganization, error: organizationUpdateError } = await clientForUpdate
         .from('organizations')
-        .select('id,name,subscription_plan,subscription_status,settings,branding,marketplace_category_id')
-        .eq('id', companyId)
-        .maybeSingle();
-
-      if (existingOrganization) {
-        const currentSettings = isRecord(existingOrganization.settings)
-          ? existingOrganization.settings
-          : {};
-        const currentBranding = isRecord(existingOrganization.branding)
-          ? existingOrganization.branding
-          : {};
-
-        const { data: updatedOrganization, error: organizationUpdateError } = await clientForUpdate
-          .from('organizations')
-          .update({
-            name,
-            marketplace_category_id,
+        .update({
+          name,
+          marketplace_category_id,
           settings: {
             ...currentSettings,
             rfc,
             industry,
-        marketplace_category_id,
-        marketplace_category_slug,
-        marketplace_category_name,
+            marketplace_category_id,
+            marketplace_category_slug,
+            marketplace_category_name,
             size,
             phone,
             email,
@@ -791,49 +806,72 @@ export async function PUT(request: NextRequest) {
             ...currentBranding,
             primaryColor: primary_color || '#2563EB',
           },
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', companyId)
-          .select('id,name,subscription_plan,subscription_status,settings,branding,marketplace_category_id')
-          .single();
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', organizationId)
+        .select('id,name,subscription_plan,subscription_status,settings,branding,marketplace_category_id')
+        .single();
 
-        if (!organizationUpdateError && updatedOrganization) {
-          const updatedBranding = isRecord(updatedOrganization.branding)
-            ? updatedOrganization.branding
-            : {};
+      if (!organizationUpdateError && updatedOrganization) {
+        const updatedBranding = isRecord(updatedOrganization.branding)
+          ? updatedOrganization.branding
+          : {};
 
-          await syncOrganizationSettings(clientForUpdate, user.id, {
-            name: updatedOrganization.name,
-            primary_color: stringFromRecord(updatedBranding, 'primaryColor', primary_color || '#2563EB'),
-            rfc,
-            industry,
-        marketplace_category_id,
-        marketplace_category_slug,
-        marketplace_category_name,
-            size,
+        await syncOrganizationSettings(clientForUpdate, user.id, {
+          name: updatedOrganization.name,
+          primary_color: stringFromRecord(updatedBranding, 'primaryColor', primary_color || '#2563EB'),
+          rfc,
+          industry,
+          marketplace_category_id,
+          marketplace_category_slug,
+          marketplace_category_name,
+          size,
+          tagline,
+          phone,
+          email,
+          website,
+          city,
+          department,
+        }, organizationId);
+        await markOrganizationOnboardingComplete(clientForUpdate, user.id, organizationId);
+
+        return NextResponse.json({
+          success: true,
+          data: organizationToCompanyProfile(updatedOrganization, {
             tagline,
-            phone,
-            email,
-            website,
-            city,
-            department,
-          }, companyId);
-          await markOrganizationOnboardingComplete(clientForUpdate, user.id, companyId);
-
-          return NextResponse.json({
-            success: true,
-            data: organizationToCompanyProfile(updatedOrganization, {
-              tagline,
-              contact: { phone, email, website },
-              address: { city, department },
-              legalInfo: { ruc: rfc, economicActivity: industry },
-              branding: { primaryColor: primary_color || '#2563EB' },
-            }),
-            message: 'Empresa actualizada exitosamente',
-          });
-        }
+            contact: { phone, email, website },
+            address: { city, department },
+            legalInfo: { ruc: rfc, economicActivity: industry },
+            branding: { primaryColor: primary_color || '#2563EB' },
+          }),
+          message: 'Empresa actualizada exitosamente',
+        });
       }
 
+      // Organization update failed — return error
+      const msg = organizationUpdateError?.message || 'Error al actualizar empresa';
+      return NextResponse.json(
+        { success: false, error: msg },
+        { status: 500 }
+      );
+    }
+
+    // --- Fallback: try legacy companies table ---
+    const { data: updatedCompany, error: updateError } = await clientForUpdate
+      .from('companies')
+      .update({
+        name,
+        rfc,
+        industry,
+        size,
+        primary_color: primary_color || '#2563EB',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', organizationId)
+      .select()
+      .single();
+
+    if (updateError || !updatedCompany) {
       const msg = updateError?.message || 'Error al actualizar empresa';
       return NextResponse.json(
         { success: false, error: msg },
@@ -846,9 +884,9 @@ export async function PUT(request: NextRequest) {
       primary_color: updatedCompany.primary_color,
       rfc,
       industry,
-        marketplace_category_id,
-        marketplace_category_slug,
-        marketplace_category_name,
+      marketplace_category_id,
+      marketplace_category_slug,
+      marketplace_category_name,
       size,
       tagline,
       phone,
@@ -856,8 +894,8 @@ export async function PUT(request: NextRequest) {
       website,
       city,
       department,
-    }, organizationIdForSettings);
-    await markOrganizationOnboardingComplete(clientForUpdate, user.id, organizationIdForSettings);
+    }, organizationId);
+    await markOrganizationOnboardingComplete(clientForUpdate, user.id, organizationId);
 
     return NextResponse.json({
       success: true,

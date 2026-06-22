@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowRight, Building2, LayoutList, MapPin, Search, SlidersHorizontal, X } from 'lucide-react';
+import { ArrowRight, Building2, ChevronDown, LayoutList, MapPin, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { GlobalOrganizationsSortMode } from '@/lib/public-site/global-organizations-data';
 
@@ -91,7 +91,7 @@ export function OrganizationsFilterBar({
       : null;
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white/70 shadow-sm backdrop-blur-sm dark:border-slate-800 dark:bg-slate-950/70">
       {/* Header del filtro */}
       <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-3 dark:border-slate-800">
         <SlidersHorizontal className="h-4 w-4 text-slate-400" />
@@ -119,7 +119,7 @@ export function OrganizationsFilterBar({
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             placeholder="Buscá por nombre, rubro o ciudad..."
-            className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 pl-11 pr-12 text-sm text-slate-900 outline-none transition-all focus:border-sky-400 focus:bg-white focus:ring-4 focus:ring-sky-500/8 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-sky-500 dark:focus:bg-slate-800"
+            className="h-12 w-full rounded-xl border border-slate-200 bg-slate-50 pl-11 pr-12 text-sm text-slate-900 outline-none transition-all focus:border-sky-400 focus:bg-white focus:ring-4 focus:ring-sky-500/8 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-sky-500 dark:focus:bg-slate-950"
           />
           {inputValue ? (
             <button
@@ -141,7 +141,7 @@ export function OrganizationsFilterBar({
             <select
               value={department}
               onChange={(e) => router.push(buildHref({ department: e.target.value, city: '' }))}
-              className="h-11 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm text-slate-900 outline-none transition-all focus:border-sky-400 focus:ring-4 focus:ring-sky-500/5 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+              className="h-11 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-10 pr-10 text-sm text-slate-900 outline-none transition-all focus:border-sky-400 focus:ring-4 focus:ring-sky-500/5 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
               aria-label="Filtrar por departamento"
             >
               <option value="">Todos los departamentos</option>
@@ -151,6 +151,7 @@ export function OrganizationsFilterBar({
                 </option>
               ))}
             </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
           </div>
 
           {/* Ciudad */}
@@ -159,7 +160,7 @@ export function OrganizationsFilterBar({
             <select
               value={city}
               onChange={(e) => router.push(buildHref({ city: e.target.value }))}
-              className="h-11 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-10 pr-4 text-sm text-slate-900 outline-none transition-all focus:border-sky-400 focus:ring-4 focus:ring-sky-500/5 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+              className="h-11 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-10 pr-10 text-sm text-slate-900 outline-none transition-all focus:border-sky-400 focus:ring-4 focus:ring-sky-500/5 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
               aria-label="Filtrar por ciudad"
             >
               <option value="">Todas las ciudades</option>
@@ -169,6 +170,7 @@ export function OrganizationsFilterBar({
                 </option>
               ))}
             </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
           </div>
 
           {/* Botón buscar */}

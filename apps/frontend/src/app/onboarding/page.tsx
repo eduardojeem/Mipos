@@ -325,7 +325,7 @@ function resolveMarketplaceCategoryValue(profile: CompanyProfile | null, categor
 
 async function fetchMarketplaceCategories(): Promise<MarketplaceCategoryOption[]> {
   const response = await fetch('/api/marketplace/categories', { cache: 'no-store' });
-  if (!response.ok) throw new Error('No se pudieron cargar los rubros del marketplace');
+  if (!response.ok) throw new Error('No se pudieron cargar las categorías de negocio');
   const data = await response.json();
   const categories = Array.isArray(data?.categories) ? data.categories : [];
   return categories
@@ -364,7 +364,7 @@ function validateStep(stepId: StepId, form: FormState): Record<string, string> {
   if (stepId === 'business') {
     if (!form.name.trim()) errors.name = 'El nombre del negocio es obligatorio.';
     else if (form.name.trim().length < 3) errors.name = 'Mínimo 3 caracteres.';
-    if (!form.industry.trim()) errors.industry = 'Seleccioná el rubro principal.';
+    if (!form.industry.trim()) errors.industry = 'Seleccioná la categoría de tu negocio.';
     if (form.rfc.trim() && form.rfc.trim().length < 5) {
       errors.rfc = 'El RUC debe tener al menos 5 caracteres.';
     }
@@ -584,9 +584,9 @@ export default function OnboardingPage() {
         const categoryData = categories.status === 'fulfilled' ? categories.value : [];
         setMarketplaceCategories(categoryData);
         if (categories.status !== 'fulfilled') {
-          setCategoriesError('No se pudieron cargar los rubros del marketplace.');
+          setCategoriesError('No se pudieron cargar las categorías de negocio.');
         } else if (categoryData.length === 0) {
-          setCategoriesError('No hay rubros activos del marketplace.');
+          setCategoriesError('No hay categorías activas disponibles.');
         }
         const baseForm = buildForm(profileData, resolvedOrgName, categoryData);
         const draft = readOnboardingDraft(user?.id, resolvedOrgId);
@@ -676,7 +676,7 @@ export default function OnboardingPage() {
       const categoryData = await fetchMarketplaceCategories();
       setMarketplaceCategories(categoryData);
       if (categoryData.length === 0) {
-        setCategoriesError('No hay rubros activos del marketplace.');
+        setCategoriesError('No hay categorías activas disponibles.');
         return;
       }
       setForm((current) => {
@@ -690,7 +690,7 @@ export default function OnboardingPage() {
         return next;
       });
     } catch {
-      setCategoriesError('No se pudieron cargar los rubros del marketplace.');
+      setCategoriesError('No se pudieron cargar las categorías de negocio.');
     } finally {
       setCategoriesLoading(false);
     }
@@ -715,7 +715,7 @@ export default function OnboardingPage() {
   const getFieldLabel = (field: string): string => {
     const labels: Record<string, string> = {
       name: 'Nombre del negocio',
-      industry: 'Rubro principal',
+      industry: 'Categoría del negocio',
       rfc: 'RUC',
       phone: 'Teléfono',
       email: 'Email',
@@ -731,8 +731,8 @@ export default function OnboardingPage() {
   const handleNext = () => {
     if (currentStep.id === 'business' && marketplaceCategories.length === 0) {
       toast({
-        title: 'Faltan rubros del marketplace',
-        description: 'Reintentá cargar los rubros para continuar.',
+        title: 'Faltan categorías',
+        description: 'Reintentá cargar las categorías para continuar.',
         variant: 'destructive',
       });
       return;
@@ -847,14 +847,7 @@ export default function OnboardingPage() {
     router.refresh();
   };
 
-  // ---- Render guards ----
-  if (!hydrated || (authLoading && !resolvedOrgId)) return <LoadingState />;
-  if (!authLoading && !user) return <PublicFallback />;
-  if (!loadingData && user && !resolvedOrgId) return <NoOrgFallback />;
-
-  const StepIcon = currentStep.icon;
-  const progressPct = Math.round(((stepIndex + 1) / STEPS.length) * 100);
-  const canContinueLater = !saving;
+  // ---- Derived state (must stay above render guards to respect Rules of Hooks) ----
   const currentStepErrorFields = useMemo(() => {
     const keys =
       currentStep.id === 'business'
@@ -864,6 +857,15 @@ export default function OnboardingPage() {
           : (['primary_color'] as const);
     return keys.filter((key) => Boolean(fieldErrors[key]));
   }, [currentStep.id, fieldErrors]);
+
+  // ---- Render guards ----
+  if (!hydrated || (authLoading && !resolvedOrgId)) return <LoadingState />;
+  if (!authLoading && !user) return <PublicFallback />;
+  if (!loadingData && user && !resolvedOrgId) return <NoOrgFallback />;
+
+  const StepIcon = currentStep.icon;
+  const progressPct = Math.round(((stepIndex + 1) / STEPS.length) * 100);
+  const canContinueLater = !saving;
   const continueLater = () => {
     if (!canContinueLater) return;
     if (!isDirty) {
@@ -1112,7 +1114,7 @@ function BusinessStep({
       <div className="grid gap-5 md:grid-cols-2">
         <div className="space-y-2">
           <Label className="text-slate-200">
-            Rubro principal <span className="text-red-400">*</span>
+            Categoría de tu negocio <span className="text-red-400">*</span>
           </Label>
           <Select
             value={form.industry}
@@ -1120,7 +1122,7 @@ function BusinessStep({
             disabled={marketplaceCategories.length === 0}
           >
             <SelectTrigger className={cn('border-white/10 bg-white/5 text-white', errors.industry && 'border-red-400')}>
-              <SelectValue placeholder={marketplaceCategories.length ? 'Selecciona un rubro' : 'Cargando rubros'} />
+              <SelectValue placeholder={marketplaceCategories.length ? '¿A qué se dedica tu negocio?' : 'Cargando categorías...'} />
             </SelectTrigger>
             <SelectContent>
               {marketplaceCategories.map((category) => (
@@ -1129,7 +1131,7 @@ function BusinessStep({
             </SelectContent>
           </Select>
           <p className="text-[11px] text-slate-500">
-            Este rubro sale de los rubros activos del marketplace y define donde aparecera tu empresa publicamente.
+            Elegí la categoría que mejor describe tu actividad. Así tus clientes podrán encontrarte en el catálogo público.
           </p>
           {selectedCategory?.description ? (
             <p className="text-[11px] text-emerald-300">{selectedCategory.description}</p>
@@ -1137,7 +1139,7 @@ function BusinessStep({
           {marketplaceCategories.length === 0 ? (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
               <p className="text-xs text-amber-200">
-                {categoriesError || 'Cargando rubros del marketplace...'}
+                {categoriesError || 'Cargando categorías...'}
               </p>
               <div className="mt-2">
                 <Button
@@ -1148,7 +1150,7 @@ function BusinessStep({
                   disabled={categoriesLoading}
                 >
                   {categoriesLoading ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
-                  Reintentar cargar rubros
+                  Reintentar
                 </Button>
               </div>
             </div>

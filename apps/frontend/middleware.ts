@@ -20,6 +20,7 @@ type MiddlewareOrganization = {
   slug: string | null;
   subdomain?: string | null;
   custom_domain?: string | null;
+  vertical?: string | null;
 };
 
 type TenantContext =
@@ -39,9 +40,9 @@ type TenantContext =
     };
 
 const PUBLIC_ORGANIZATION_STATUSES = ['ACTIVE', 'TRIAL'];
-const ORGANIZATION_SELECT = 'id,name,slug,subdomain,custom_domain';
-const ORGANIZATION_SELECT_FALLBACK = 'id,name,slug';
-const PUBLIC_PATHS = ['/home', '/inicio', '/onboarding', '/offers', '/catalog', '/orders/track', '/account', '/'];
+const ORGANIZATION_SELECT = 'id,name,slug,subdomain,custom_domain,vertical';
+const ORGANIZATION_SELECT_FALLBACK = 'id,name,slug,vertical';
+const PUBLIC_PATHS = ['/home', '/inicio', '/onboarding', '/offers', '/catalog', '/orders/track', '/account', '/reservar', '/profesionales', '/invite', '/'];
 const PUBLIC_API_PATHS = [
   '/api/offers',
   '/api/catalog',
@@ -71,6 +72,7 @@ function clearOrganizationCookies(response: NextResponse) {
   response.cookies.delete('x-organization-slug');
   response.cookies.delete('x-organization-subdomain');
   response.cookies.delete('x-organization-custom-domain');
+  response.cookies.delete('x-organization-vertical');
 }
 
 function setOrganizationCookies(
@@ -89,6 +91,7 @@ function setOrganizationCookies(
   response.cookies.set('x-organization-slug', organization.slug || '', cookieOptions);
   response.cookies.set('x-organization-subdomain', organization.subdomain || '', cookieOptions);
   response.cookies.set('x-organization-custom-domain', organization.custom_domain || '', cookieOptions);
+  response.cookies.set('x-organization-vertical', organization.vertical || '', cookieOptions);
 }
 
 function applyRequestContextHeaders(
@@ -110,6 +113,7 @@ function applyRequestContextHeaders(
   requestHeaders.delete('x-organization-slug');
   requestHeaders.delete('x-organization-subdomain');
   requestHeaders.delete('x-organization-custom-domain');
+  requestHeaders.delete('x-organization-vertical');
   requestHeaders.delete(TENANT_SOURCE_HEADER);
   requestHeaders.delete(TENANT_KEY_HEADER);
 
@@ -136,6 +140,7 @@ function applyRequestContextHeaders(
       'x-organization-custom-domain',
       tenantContext.organization.custom_domain || ''
     );
+    requestHeaders.set('x-organization-vertical', tenantContext.organization.vertical || '');
   }
 }
 

@@ -2,8 +2,10 @@ import express from 'express';
 import { z } from 'zod';
 import { validate } from '../middleware/validation';
 import { notificationService } from '../services/notification';
+import { pushNotificationService } from '../services/push-notification';
 import { logger } from '../middleware/logger';
 import { asyncHandler } from '../middleware/errorHandler';
+import { prisma } from '../lib/prisma';
 
 const router = express.Router();
 
@@ -24,6 +26,18 @@ const systemNotificationSchema = z.object({
   message: z.string().min(1).max(1000),
   type: z.enum(['info', 'warning', 'error']).default('info'),
   recipients: z.array(z.string().email()).min(1)
+});
+
+const pushSubscriptionSchema = z.object({
+  subscription: z.object({
+    endpoint: z.string().url(),
+    keys: z.object({
+      p256dh: z.string(),
+      auth: z.string()
+    })
+  }),
+  userAgent: z.string().optional(),
+  deviceId: z.string().optional()
 });
 
 /**
@@ -287,6 +301,75 @@ router.post('/credit-reminder',
 );
 
 /**
+ * Get user notifications
+ * GET /api/notifications
+ */
+router.get('/',
+  asyncHandler(async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const { limit = '50', offset = '0', unreadOnly = 'false' } = req.query;
+
+    const where: any = { userId };
+    if (unreadOnly === 'true') {
+      where.isRead = false;
+    }
+
+    const [notifications, total] = await Promise.all([
+      prisma.notification.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: parseInt(limit as string),
+        skip: parseInt(offset as string)
+      }),
+      prisma.notification.count({ where })
+    ]);
+
+    res.json({
+      success: true,
+      data: notifications,
+      meta: {
+        total,
+        limit: parseInt(limit as string),
+        offset: parseInt(offset as string),
+        unreadCount: await prisma.notification.count({ where: { userId, isRead: false } })
+      }
+    });
+  })
+);
+
+/**
+ * Mark notification as read
+ * PUT /api/notifications/:id/read
+ */
+router.put('/:id/read',
+  asyncHandler(async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+
+    const notification = await prisma.notification.findUnique({
+      where: { id: req.params.id }
+    });
+
+    if (!notification || notification.userId !== userId) {
+      return res.status(404).json({ success: false, message: 'Notification not found' });
+    }
+
+    const updated = await prisma.notification.update({
+      where: { id: req.params.id },
+      data: { isRead: true, readAt: new Date() }
+    });
+
+    res.json({ success: true, data: updated });
+  })
+);
+
+/**
  * Get notification configuration status
  * GET /api/notifications/config-status
  */
@@ -304,8 +387,46 @@ router.get('/config-status',
       sms: {
         configured: false, // TODO: Implement SMS service
         provider: 'not configured'
+      },
+      push: {
+        configured: !!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY)
       }
     });
+  })
+);
+
+/**
+ * Subscribe to Push Notifications
+ * POST /api/notifications/subscribe
+ */
+router.post('/subscribe',
+  validate({ body: pushSubscriptionSchema }),
+  asyncHandler(async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Unauthorized' });
+    }
+    
+    const organizationId = req.user?.organizationId || null;
+    const { subscription, userAgent, deviceId } = req.body;
+
+    await pushNotificationService.subscribe(userId, organizationId, subscription, userAgent, deviceId);
+    
+    res.json({ success: true, message: 'Subscribed to push notifications' });
+  })
+);
+
+/**
+ * Unsubscribe from Push Notifications
+ * POST /api/notifications/unsubscribe
+ */
+router.post('/unsubscribe',
+  validate({ 
+    body: z.object({ endpoint: z.string().url() }) 
+  }),
+  asyncHandler(async (req, res) => {
+    await pushNotificationService.unsubscribe(req.body.endpoint);
+    res.json({ success: true, message: 'Unsubscribed from push notifications' });
   })
 );
 

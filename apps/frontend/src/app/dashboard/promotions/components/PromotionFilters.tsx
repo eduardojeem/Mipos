@@ -19,6 +19,9 @@ import {
 interface PromotionFiltersProps {
   statusFilter: 'all' | 'active' | 'scheduled' | 'expired' | 'inactive';
   setStatusFilter: (value: 'all' | 'active' | 'scheduled' | 'expired' | 'inactive') => void;
+  targetFilter?: 'all' | 'PRODUCT' | 'SERVICE';
+  setTargetFilter?: (value: 'all' | 'PRODUCT' | 'SERVICE') => void;
+  showTargetFilter?: boolean;
   sortBy: 'name' | 'date' | 'discount';
   setSortBy: (value: 'name' | 'date' | 'discount') => void;
   viewMode: 'grid' | 'list';
@@ -28,6 +31,9 @@ interface PromotionFiltersProps {
 export function PromotionFilters({
   statusFilter,
   setStatusFilter,
+  targetFilter = 'all',
+  setTargetFilter,
+  showTargetFilter = false,
   sortBy,
   setSortBy,
   viewMode,
@@ -49,6 +55,20 @@ export function PromotionFilters({
           <SelectItem value="inactive">Inactivas</SelectItem>
         </SelectContent>
       </Select>
+
+      {showTargetFilter && setTargetFilter && (
+        <Select value={targetFilter} onValueChange={setTargetFilter}>
+          <SelectTrigger className="w-[170px] h-10" aria-label="Filtrar por alcance">
+            <Filter className="h-4 w-4 mr-2" />
+            <SelectValue placeholder="Alcance" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todo el alcance</SelectItem>
+            <SelectItem value="PRODUCT">Productos</SelectItem>
+            <SelectItem value="SERVICE">Servicios</SelectItem>
+          </SelectContent>
+        </Select>
+      )}
 
       {/* Sort Dropdown */}
       <DropdownMenu>

@@ -4,6 +4,7 @@ import OffersClient from './OffersClient';
 import { normalizeOfferQuery, type OfferQueryRecord } from './offers-query';
 import { maybeGetCurrentOrganization } from '@/lib/organization/get-current-organization';
 import { StaticBusinessConfigProvider } from '@/contexts/BusinessConfigContext';
+import { normalizeVertical } from '@/config/verticals';
 import { getPublicBusinessConfig } from '@/lib/public-site/data';
 import SectionDisabledState from '@/components/public-tenant/SectionDisabledState';
 import {
@@ -56,6 +57,7 @@ export default async function OffersPage({ searchParams }: OffersPageProps) {
   }
 
   const config = await getPublicBusinessConfig(organization);
+  const vertical = normalizeVertical(organization.vertical);
   if (!config.publicSite?.sections?.showOffers) {
     return (
       <StaticBusinessConfigProvider
@@ -90,6 +92,7 @@ export default async function OffersPage({ searchParams }: OffersPageProps) {
         initialCarouselItems={carouselSnapshot.items}
         initialPagination={snapshot.pagination}
         initialQueryState={initialQueryState}
+        vertical={vertical}
       />
     </StaticBusinessConfigProvider>
   );

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { createServerClient } from '@/lib/supabase';
+import { sanitizeSearch } from '@/app/api/_utils/search';
 import { createAdminClient } from '@/lib/supabase/server';
 import { getUserOrganizationId, validateOrganizationAccess } from '@/app/api/_utils/organization';
 import { validateRole } from '@/app/api/_utils/role-validation';
@@ -144,7 +145,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (search) {
-      const s = search.replace(/%/g, '\\%').replace(/_/g, '\\_');
+      const s = sanitizeSearch(search);
       query = query.or(`invoice_number.ilike.%${s}%,customer_name.ilike.%${s}%`);
     }
 

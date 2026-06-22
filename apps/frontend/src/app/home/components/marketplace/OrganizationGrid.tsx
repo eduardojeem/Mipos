@@ -54,7 +54,7 @@ export function OrganizationGrid({ organizations, className }: OrganizationGridP
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: Math.min(index, 12) * 0.04, duration: 0.25 }}
-            className="group flex flex-col overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-slate-200/70 dark:border-slate-800/80 dark:bg-slate-900 dark:hover:shadow-slate-900/60"
+            className="group flex flex-col overflow-hidden rounded-xl border border-slate-200/80 bg-white/90 shadow-sm backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-slate-200/50 dark:border-slate-800/80 dark:bg-slate-950/60 dark:hover:shadow-black/40"
           >
             {/* ── Banner ── */}
             <div className="relative h-16 overflow-hidden">
@@ -126,12 +126,12 @@ export function OrganizationGrid({ organizations, className }: OrganizationGridP
 
               {/* Stats */}
               <div className="mt-2.5 flex items-center gap-1.5">
-                <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700 dark:bg-sky-950/60 dark:text-sky-300">
-                  <PackageSearch className="h-2.5 w-2.5" />
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+                  <PackageSearch className="h-2.5 w-2.5 text-amber-600 dark:text-amber-400" />
                   {org.productCount || 0}
                 </span>
-                <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-semibold text-violet-700 dark:bg-violet-950/60 dark:text-violet-300">
-                  <Layers3 className="h-2.5 w-2.5" />
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+                  <Layers3 className="h-2.5 w-2.5 text-emerald-600 dark:text-emerald-400" />
                   {org.categoryCount || 0}
                 </span>
               </div>
@@ -140,7 +140,7 @@ export function OrganizationGrid({ organizations, className }: OrganizationGridP
               <Link href={org.href} className="mt-3">
                 <Button
                   size="sm"
-                  className="h-8 w-full rounded-lg bg-slate-950 text-xs text-white transition-all duration-200 hover:bg-sky-700 hover:shadow-sm hover:shadow-sky-500/20 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white"
+                  className="h-8 w-full rounded-lg bg-slate-950 text-xs text-white transition-all duration-300 hover:bg-sky-700 hover:shadow-lg hover:shadow-sky-500/25 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white dark:hover:shadow-white/10"
                 >
                   Ver empresa
                   <ArrowRight className="ml-1.5 h-3 w-3" />

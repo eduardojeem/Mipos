@@ -491,7 +491,7 @@ export const useRealTimeSales = (
     setNewSalesCount(0);
   }, []);
 
-  // Configurar el intervalo de actualización
+  // Configurar el intervalo de actualización (solo como fallback cuando realtime NO está conectado)
   useEffect(() => {
     if (!enabled) {
       if (intervalRef.current) {
@@ -504,11 +504,12 @@ export const useRealTimeSales = (
     // Cargar datos iniciales
     updateSales();
 
-    // Configurar intervalo con jitter para evitar thundering herd
-    const jitter = Math.random() * 5000; // 0-5 segundos de jitter
-    const adjustedInterval = interval + jitter;
-    
-    intervalRef.current = setInterval(updateSales, adjustedInterval);
+    // Solo usar polling si realtime no está conectado
+    if (!isConnected) {
+      const jitter = Math.random() * 5000;
+      const adjustedInterval = interval + jitter;
+      intervalRef.current = setInterval(updateSales, adjustedInterval);
+    }
 
     return () => {
       if (intervalRef.current) {
@@ -516,7 +517,7 @@ export const useRealTimeSales = (
         intervalRef.current = null;
       }
     };
-  }, [enabled, interval, updateSales]);
+  }, [enabled, interval, isConnected, updateSales]);
 
   // Limpiar al desmontar
   useEffect(() => {

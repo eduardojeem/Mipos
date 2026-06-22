@@ -70,7 +70,7 @@ export function useBranchContext() {
     if (!organizationId) return;
     setIsLoading(true);
     const headers: HeadersInit = { 'x-organization-id': organizationId };
-    fetch('/api/branches', { cache: 'no-store', headers })
+    fetch('/api/branches?activeOnly=true', { cache: 'no-store', headers })
       .then((r) => r.json())
       .then((payload) => {
         const list: BranchOption[] = Array.isArray(payload?.data) ? payload.data : [];

@@ -1,6 +1,7 @@
 'use client';
 
 import { memo, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { CheckCircle, DollarSign, Download, Plus, Sparkles, Trash2, TrendingUp, Users, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,6 +13,7 @@ import { useCurrencyFormatter } from '@/contexts/BusinessConfigContext';
 import {
     type CustomerSummary,
     useBulkCustomerOperation,
+    useCustomerDetail,
     useCustomerList,
     useCustomerSummary,
     useDeleteCustomer
@@ -77,8 +79,12 @@ export default function CustomersPage() {
 
 const CustomersPageContent = memo(function CustomersPageContent() {
     const { toast } = useToast();
+    const router = useRouter();
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
     const organizationId = useCurrentOrganizationId();
     const formatCurrency = useCurrencyFormatter();
+    const customerIdFromUrl = searchParams.get('customerId');
 
     const filters = useCustomerFilters();
     const debouncedSearch = useDebounce(filters.searchTerm, 300);
@@ -126,6 +132,9 @@ const CustomersPageContent = memo(function CustomersPageContent() {
         error: listError,
         refetch: refetchList
     } = useCustomerList(customerFilters);
+    const customerDetailFromUrl = useCustomerDetail(customerIdFromUrl ?? '', {
+        enabled: Boolean(customerIdFromUrl)
+    });
 
     const deleteCustomer = useDeleteCustomer();
     const bulkOperation = useBulkCustomerOperation();
@@ -143,6 +152,19 @@ const CustomersPageContent = memo(function CustomersPageContent() {
     useEffect(() => {
         setSelectedIds((previous) => previous.filter((id) => customers.some((customer) => customer.id === id)));
     }, [customers]);
+
+    const replaceCustomerParam = useCallback((customerId?: string | null) => {
+        const nextParams = new URLSearchParams(searchParams.toString());
+
+        if (customerId) {
+            nextParams.set('customerId', customerId);
+        } else {
+            nextParams.delete('customerId');
+        }
+
+        const nextQuery = nextParams.toString();
+        router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname);
+    }, [pathname, router, searchParams]);
 
     const handleOpenForm = useCallback((customer?: UICustomer) => {
         setFormModal({ open: true, customer });
@@ -176,12 +198,14 @@ const CustomersPageContent = memo(function CustomersPageContent() {
     }, [customers, deleteCustomer, toast]);
 
     const handleViewDetails = useCallback((customer: UICustomer) => {
+        replaceCustomerParam(customer.id);
         setDetailsModal({ open: true, customer });
-    }, []);
+    }, [replaceCustomerParam]);
 
     const handleCloseDetails = useCallback(() => {
+        replaceCustomerParam(null);
         setDetailsModal({ open: false, customer: null });
-    }, []);
+    }, [replaceCustomerParam]);
 
     const handleBulkActivate = useCallback(() => {
         if (selectedIds.length === 0) {
@@ -281,6 +305,36 @@ const CustomersPageContent = memo(function CustomersPageContent() {
     const handleRetry = useCallback(async () => {
         await Promise.all([refetchSummary(), refetchList()]);
     }, [refetchList, refetchSummary]);
+
+    useEffect(() => {
+        if (!customerIdFromUrl || !customerDetailFromUrl.data) {
+            return;
+        }
+
+        setDetailsModal((current) => {
+            if (current.open && current.customer?.id === customerDetailFromUrl.data.id) {
+                return current;
+            }
+
+            return {
+                open: true,
+                customer: customerDetailFromUrl.data
+            };
+        });
+    }, [customerDetailFromUrl.data, customerIdFromUrl]);
+
+    useEffect(() => {
+        if (!customerIdFromUrl || !customerDetailFromUrl.error) {
+            return;
+        }
+
+        toast({
+            title: 'No se pudo abrir la ficha',
+            description: customerDetailFromUrl.error.message,
+            variant: 'destructive'
+        });
+        replaceCustomerParam(null);
+    }, [customerDetailFromUrl.error, customerIdFromUrl, replaceCustomerParam, toast]);
 
     return (
         <div className="space-y-6 pb-10">

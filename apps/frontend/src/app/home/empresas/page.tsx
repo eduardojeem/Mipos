@@ -82,16 +82,16 @@ export default async function OrganizationsPage({
       <div className="mx-auto max-w-7xl px-4 pb-24 sm:px-6 lg:px-8">
 
         {/* ── Hero section ── */}
-        <header className="relative mt-8 overflow-hidden rounded-2xl bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 px-6 py-10 sm:px-10 sm:py-14">
+        <header className="relative mt-8 overflow-hidden rounded-2xl bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 px-6 py-10 sm:px-10 sm:py-14">
           {/* Decorative blobs */}
-          <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-emerald-500/20 blur-3xl" />
+          <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-blue-500/20 blur-3xl" />
           <div className="pointer-events-none absolute -left-12 bottom-0 h-48 w-48 rounded-full bg-sky-500/15 blur-3xl" />
-          <div className="pointer-events-none absolute right-1/3 top-1/2 h-32 w-32 rounded-full bg-violet-500/10 blur-2xl" />
+          <div className="pointer-events-none absolute right-1/3 top-1/2 h-32 w-32 rounded-full bg-indigo-500/10 blur-2xl" />
 
           <div className="relative">
             {/* Badge */}
             <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/8 px-3 py-1.5 text-xs font-semibold tracking-wide text-white/70">
-              <Building2 className="h-3 w-3 text-emerald-400" />
+              <Building2 className="h-3 w-3 text-sky-400" />
               Directorio Comercial
             </span>
 
@@ -118,8 +118,8 @@ export default async function OrganizationsPage({
               </div>
 
               <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur-sm">
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/20">
-                  <Package className="h-4 w-4 text-emerald-400" />
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500/20">
+                  <Package className="h-4 w-4 text-amber-400" />
                 </span>
                 <div>
                   <p className="text-xl font-bold leading-none text-white">
@@ -130,8 +130,8 @@ export default async function OrganizationsPage({
               </div>
 
               <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur-sm">
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-500/20">
-                  <Tag className="h-4 w-4 text-violet-400" />
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/20">
+                  <Tag className="h-4 w-4 text-emerald-400" />
                 </span>
                 <div>
                   <p className="text-xl font-bold leading-none text-white">

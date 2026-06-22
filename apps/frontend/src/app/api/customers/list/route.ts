@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { validateRole } from '@/app/api/_utils/role-validation';
+import { sanitizeSearch } from '@/app/api/_utils/search';
 import {
   resolveCustomerOrganizationId,
   transformCustomerRecord,
@@ -77,7 +78,7 @@ export async function GET(request: NextRequest) {
 
     // Apply search across multiple fields
     if (search) {
-      query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,customer_code.ilike.%${search}%,phone.ilike.%${search}%,ruc.ilike.%${search}%`);
+      { const s = sanitizeSearch(search); query = query.or(`name.ilike.%${s}%,email.ilike.%${s}%,customer_code.ilike.%${s}%,phone.ilike.%${s}%,ruc.ilike.%${s}%`); }
     }
 
     // Filter by RUC presence

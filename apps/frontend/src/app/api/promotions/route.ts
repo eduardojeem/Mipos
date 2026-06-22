@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase-admin'
+import { sanitizeSearch } from '@/app/api/_utils/search'
 import { isSupabaseActive } from '@/lib/env'
 import { getValidatedOrganizationId } from '@/lib/organization'
 import {
@@ -23,6 +24,7 @@ type RawPromotionRow = {
   id: string
   name: string
   description: string | null
+  target_type?: 'PRODUCT' | 'SERVICE' | null
   discount_type: 'PERCENTAGE' | 'FIXED_AMOUNT'
   discount_value: number
   start_date: string
@@ -39,6 +41,15 @@ type RawPromotionRow = {
       categories?: {
         name?: string | null
       } | null
+    } | null
+  }>
+  promotions_services?: Array<{
+    service_id: string
+    services?: {
+      name?: string | null
+      category?: string | null
+      price?: number | null
+      duration_min?: number | null
     } | null
   }>
 }
@@ -110,13 +121,16 @@ export async function GET(request: NextRequest) {
       .from('promotions')
       .select(
         `id,name,description,discount_type,discount_value,start_date,end_date,is_active,min_purchase_amount,max_discount_amount,usage_limit,usage_count,
-         promotions_products(product_id,products(id,name))`,
+         target_type,
+         promotions_products(product_id,products(id,name)),
+         promotions_services(service_id,services(id,name,category,price,duration_min))`,
         { count: 'exact' }
       )
       .eq('organization_id', orgId)
 
     if (search) {
-      query.or(`name.ilike.%${search}%,description.ilike.%${search}%`)
+      const s = sanitizeSearch(search)
+      query.or(`name.ilike.%${s}%,description.ilike.%${s}%`)
     }
 
     const nowIso = new Date().toISOString()
@@ -176,12 +190,23 @@ export async function GET(request: NextRequest) {
         }))
         .filter((product) => product.id)
 
+      const applicableServices = (row.promotions_services || [])
+        .map((link) => ({
+          id: link.service_id,
+          name: link.services?.name || '',
+          category: link.services?.category || '',
+          price: Number(link.services?.price || 0),
+          duration_min: Number(link.services?.duration_min || 0),
+        }))
+        .filter((service) => service.id)
+
       const aggregated = redemptionsByPromo[row.id] || { count: 0, discount: 0 }
 
       return {
         id: row.id,
         name: row.name,
         description: row.description || '',
+        targetType: row.target_type || 'PRODUCT',
         discountType: row.discount_type,
         discountValue: Number(row.discount_value || 0),
         startDate: row.start_date,
@@ -192,6 +217,7 @@ export async function GET(request: NextRequest) {
         usageLimit: Number(row.usage_limit || 0),
         usageCount: Math.max(Number(row.usage_count || 0), aggregated.count),
         applicableProducts,
+        applicableServices,
       }
     })
 
@@ -267,6 +293,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, data: created })
     }
 
+    const targetType = body.targetType === 'SERVICE' ? 'SERVICE' : 'PRODUCT'
     const productIds: string[] = Array.isArray(body.applicableProductIds)
       ? Array.from(
         new Set(
@@ -276,8 +303,17 @@ export async function POST(request: NextRequest) {
         )
       )
       : []
+    const serviceIds: string[] = Array.isArray(body.applicableServiceIds)
+      ? Array.from(
+        new Set(
+          body.applicableServiceIds
+            .map((serviceId: unknown) => String(serviceId).trim())
+            .filter((serviceId: string): serviceId is string => serviceId.length > 0)
+        )
+      )
+      : []
 
-    if (productIds.length > 0) {
+    if (targetType === 'PRODUCT' && productIds.length > 0) {
       const { data: validProducts, error: productsError } = await supabase
         .from('products')
         .select('id')
@@ -303,11 +339,38 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (targetType === 'SERVICE' && serviceIds.length > 0) {
+      const { data: validServices, error: servicesError } = await supabase
+        .from('services')
+        .select('id')
+        .eq('organization_id', orgId)
+        .eq('is_active', true)
+        .in('id', serviceIds)
+
+      if (servicesError) {
+        throw new Error('No se pudo validar los servicios de la promocion')
+      }
+
+      const validServiceIds = new Set(
+        ((validServices || []) as Array<{ id: string }>).map((service) => String(service.id))
+      )
+
+      if (validServiceIds.size !== serviceIds.length) {
+        const invalidServiceIds = serviceIds.filter((id) => !validServiceIds.has(id))
+        return NextResponse.json({
+          success: false,
+          message: 'Algunos servicios no existen, no estan activos o no pertenecen a la organizacion',
+          invalidServiceIds,
+        }, { status: 400 })
+      }
+    }
+
     const { data: promotion, error: promoError } = await supabaseAdmin
       .from('promotions')
       .insert({
         name: body.name,
         description: body.description,
+        target_type: targetType,
         discount_type: body.discountType,
         discount_value: body.discountValue,
         start_date: body.startDate,
@@ -325,7 +388,7 @@ export async function POST(request: NextRequest) {
 
     promotionIdToRollback = String(promotion.id)
 
-    if (productIds.length > 0) {
+    if (targetType === 'PRODUCT' && productIds.length > 0) {
       const links = productIds.map((productId) => ({
         promotion_id: promotion.id,
         product_id: productId,
@@ -348,6 +411,33 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
           success: false,
           message: 'No se pudo crear la promocion porque fallo la asociacion de productos',
+        }, { status: 500 })
+      }
+    }
+
+    if (targetType === 'SERVICE' && serviceIds.length > 0) {
+      const links = serviceIds.map((serviceId) => ({
+        promotion_id: promotion.id,
+        service_id: serviceId,
+        organization_id: orgId,
+      }))
+
+      const { error: linksError } = await supabase
+        .from('promotions_services')
+        .insert(links)
+
+      if (linksError) {
+        console.error('[API/Promotions] Error inserting service links:', linksError)
+        await supabase
+          .from('promotions')
+          .delete()
+          .eq('id', promotion.id)
+          .eq('organization_id', orgId)
+
+        promotionIdToRollback = null
+        return NextResponse.json({
+          success: false,
+          message: 'No se pudo crear la promocion porque fallo la asociacion de servicios',
         }, { status: 500 })
       }
     }

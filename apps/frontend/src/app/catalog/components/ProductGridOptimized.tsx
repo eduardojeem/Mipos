@@ -2,7 +2,6 @@
 
 import { useRef, useEffect, useMemo, useCallback, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent } from '@/components/ui/card';
 import { 
   Search, 
@@ -25,6 +24,7 @@ interface ProductGridOptimizedProps {
   onAddToCart: (product: Product) => void;
   onLoadMore?: () => void;
   onClearFilters?: () => void;
+  allowAddToCart?: boolean;
   config: any;
 }
 
@@ -40,6 +40,7 @@ export default function ProductGridOptimized({
   onAddToCart,
   onLoadMore,
   onClearFilters,
+  allowAddToCart = true,
   config,
 }: ProductGridOptimizedProps) {
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -173,6 +174,7 @@ export default function ProductGridOptimized({
                   onToggleFavorite={onToggleFavorite}
                   onQuickView={onQuickView}
                   onAddToCart={onAddToCart}
+                  allowAddToCart={allowAddToCart}
                   config={config}
                   priority={index < 4}
                 />

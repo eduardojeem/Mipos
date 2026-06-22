@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { requirePOSPermissions } from '@/app/api/_utils/role-validation';
+import { sanitizeSearch } from '@/app/api/_utils/search';
 import { getUserOrganizationId, validateOrganizationAccess } from '@/app/api/_utils/organization';
 
 function normalizeString(value: unknown): string | null {
@@ -88,7 +89,7 @@ export async function GET(request: NextRequest) {
       // Nunca vender productos en la papelera (deleted_at != null).
       if (withDeletedFilter) q = q.is('deleted_at', null);
       if (activeOnly) q = q.eq('is_active', true);
-      if (search) q = q.or(`name.ilike.%${search}%,sku.ilike.%${search}%,barcode.ilike.%${search}%`);
+      if (search) { const s = sanitizeSearch(search); q = q.or(`name.ilike.%${s}%,sku.ilike.%${s}%,barcode.ilike.%${s}%`); }
       if (categoryId && categoryId !== 'all') q = q.eq('category_id', categoryId);
       return q.limit(limit);
     };

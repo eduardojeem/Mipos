@@ -130,6 +130,8 @@ export default function UserManagement() {
   const [editingUser, setEditingUser] = useState<CompanyUser | null>(null)
   const [rowActionId, setRowActionId] = useState<string | null>(null)
   const [deleteUserId, setDeleteUserId] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
+  const pageSize = 50
 
   const companyAccess = useCompanyAccess({
     permission: 'manage_users',
@@ -155,9 +157,6 @@ export default function UserManagement() {
     isRealtimeConnected,
     error,
     refresh,
-    createUser,
-    updateUser,
-    deleteUser,
     creating,
     updating,
     deleting,
@@ -167,7 +166,8 @@ export default function UserManagement() {
     role: roleFilter,
     status: statusFilter,
     enabled: canManageUsers || isSuperAdmin,
-    pageSize: 200,
+    page,
+    pageSize,
   })
 
   const availableRoles = useMemo(() => {
@@ -206,9 +206,10 @@ export default function UserManagement() {
   const isMutating = creating || updating || deleting
   const filteredCountLabel = hasFiltersApplied ? `${totalCount} resultados` : `${totalTeamCount} miembros`
 
+  // El alta de personas ahora es por invitación (flujo SaaS). En vez de abrir el
+  // form de "crear con contraseña", llevamos a la pestaña Equipo.
   const openCreateDialog = () => {
-    setEditingUser(null)
-    setDialogOpen(true)
+    router.push('/admin/users-roles?tab=access')
   }
 
   const openEditDialog = (targetUser: CompanyUser) => {
@@ -246,38 +247,50 @@ export default function UserManagement() {
         return
       }
 
-      if (!editingUser && formData.password.trim().length < 8) {
-        toast({
-          title: 'Contrasena invalida',
-          description: 'La contrasena inicial debe tener al menos 8 caracteres.',
-          variant: 'destructive',
-        })
-        return
-      }
-
       if (editingUser) {
-        await updateUser({
-          userId: editingUser.id,
-          data: {
-            name: formData.name.trim(),
-            email: formData.email.trim(),
-            role: formData.role,
-            status: formData.status,
-            password: formData.password.trim() || undefined,
-            organizationId: selectedOrganizationId,
-          },
-        })
+        // Usar el endpoint unificado /api/team/members/[userId] (PATCH)
+        const patchBody: Record<string, unknown> = {}
+        if (formData.status !== normalizeStatus(editingUser.status)) {
+          patchBody.status = formData.status
+        }
+        // El cambio de rol se resuelve buscando el role_id del nombre
+        if (formData.role !== normalizeRole(editingUser.role)) {
+          // Buscar el role_id correspondiente al nombre del rol seleccionado
+          const rolesRes = await fetch('/api/roles', {
+            headers: { 'x-organization-id': selectedOrganizationId },
+            cache: 'no-store',
+          })
+          const rolesData = await rolesRes.json().catch(() => [])
+          const rolesList = Array.isArray(rolesData) ? rolesData : []
+          const matchedRole = rolesList.find((r: any) =>
+            String(r.name).toUpperCase() === formData.role
+          )
+          if (matchedRole) {
+            patchBody.role_id = matchedRole.id
+          }
+        }
+
+        if (Object.keys(patchBody).length > 0) {
+          const res = await fetch(`/api/team/members/${editingUser.id}`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-organization-id': selectedOrganizationId,
+            },
+            body: JSON.stringify(patchBody),
+          })
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}))
+            throw new Error(err.message || err.error || 'Error al actualizar')
+          }
+        }
+
+        await refresh()
         toast({ title: 'Usuario actualizado', description: 'Los cambios ya quedaron sincronizados.' })
       } else {
-        await createUser({
-          name: formData.name.trim(),
-          email: formData.email.trim(),
-          password: formData.password.trim(),
-          role: formData.role,
-          status: formData.status,
-          organizationId: selectedOrganizationId,
-        })
-        toast({ title: 'Usuario creado', description: 'El miembro fue agregado a la organizacion.' })
+        // Crear: redirigir al flujo de invitaciones (SaaS flow)
+        router.push('/admin/users-roles?tab=access')
+        return
       }
 
       closeDialog()
@@ -293,16 +306,19 @@ export default function UserManagement() {
   const updateStatus = async (targetUser: CompanyUser, nextStatus: UserStatus) => {
     setRowActionId(targetUser.id)
     try {
-      await updateUser({
-        userId: targetUser.id,
-        data: {
-          name: targetUser.name,
-          email: targetUser.email,
-          role: targetUser.role,
-          status: nextStatus,
-          organizationId: selectedOrganizationId,
+      const res = await fetch(`/api/team/members/${targetUser.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-organization-id': selectedOrganizationId!,
         },
+        body: JSON.stringify({ status: nextStatus }),
       })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.message || err.error || 'Error al actualizar estado')
+      }
+      await refresh()
       toast({ title: 'Estado actualizado', description: `El usuario ahora esta ${nextStatus.toLowerCase()}.` })
     } catch (statusError: unknown) {
       toast({
@@ -318,7 +334,15 @@ export default function UserManagement() {
   const removeUser = async (targetUser: CompanyUser) => {
     setRowActionId(targetUser.id)
     try {
-      await deleteUser(targetUser.id)
+      const res = await fetch(`/api/team/members/${targetUser.id}`, {
+        method: 'DELETE',
+        headers: { 'x-organization-id': selectedOrganizationId! },
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.message || err.error || 'Error al quitar miembro')
+      }
+      await refresh()
       toast({ title: 'Membresia removida', description: 'El acceso fue quitado solo de esta organizacion.' })
     } catch (deleteError: unknown) {
       toast({
@@ -463,9 +487,9 @@ export default function UserManagement() {
               </Badge>
             </div>
             <div>
-              <h1 className="text-3xl font-semibold tracking-tight">Equipo y roles</h1>
+              <h1 className="text-3xl font-semibold tracking-tight">Miembros y acceso operativo</h1>
               <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-                Gestiona miembros, permisos operativos y estados de acceso con datos reales de Supabase por organizacion.
+                Controla el estado del equipo actual, la ocupación del plan y los cambios de rol sin mezclar el alta de personas con la edición diaria.
               </p>
             </div>
           </div>
@@ -475,9 +499,9 @@ export default function UserManagement() {
               <RefreshCw className={cn('mr-2 h-4 w-4', isFetching && 'animate-spin')} />
               Actualizar
             </Button>
-            <Button onClick={openCreateDialog} disabled={!selectedOrganizationId || isMutating || isSeatLimitReached}>
+            <Button onClick={openCreateDialog} disabled={!selectedOrganizationId}>
               <Plus className="mr-2 h-4 w-4" />
-              Nuevo usuario
+              Ir a invitaciones
             </Button>
           </div>
         </div>
@@ -489,6 +513,14 @@ export default function UserManagement() {
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
+
+        <Alert>
+          <UserCog className="h-4 w-4" />
+          <AlertTitle>Flujo SaaS recomendado</AlertTitle>
+          <AlertDescription>
+            Las altas nuevas se gestionan desde <strong>Acceso e invitaciones</strong>. Este bloque queda enfocado en editar miembros existentes, revisar estados y resolver operación diaria.
+          </AlertDescription>
+        </Alert>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <TeamStatCard title="Miembros" value={totalTeamCount} helper={`${filteredCountLabel} en esta vista`} />
@@ -541,10 +573,10 @@ export default function UserManagement() {
             <div className="grid gap-3 md:grid-cols-3 xl:min-w-[760px]">
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nombre o email" className="pl-9" />
+                <Input value={search} onChange={(event) => { setSearch(event.target.value); setPage(1) }} placeholder="Buscar por nombre o email" className="pl-9" />
               </div>
 
-              <Select value={roleFilter} onValueChange={setRoleFilter}>
+              <Select value={roleFilter} onValueChange={(v) => { setRoleFilter(v); setPage(1) }}>
                 <SelectTrigger>
                   <SelectValue placeholder="Rol" />
                 </SelectTrigger>
@@ -556,7 +588,7 @@ export default function UserManagement() {
                 </SelectContent>
               </Select>
 
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1) }}>
                 <SelectTrigger>
                   <SelectValue placeholder="Estado" />
                 </SelectTrigger>
@@ -614,8 +646,14 @@ export default function UserManagement() {
             <div className="rounded-2xl border border-dashed border-border px-6 py-16 text-center">
               <p className="text-sm font-medium text-foreground">No hay miembros para mostrar</p>
               <p className="mt-2 text-sm text-muted-foreground">
-                Ajusta filtros o agrega el primer usuario operativo de esta organizacion.
+                Ajusta filtros o invita al primer miembro desde la pestaña de acceso e invitaciones.
               </p>
+              <div className="mt-5">
+                <Button variant="outline" onClick={openCreateDialog}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Abrir invitaciones
+                </Button>
+              </div>
             </div>
           ) : (
             <>
@@ -660,14 +698,30 @@ export default function UserManagement() {
                 ))}
               </div>
 
-              {totalCount > users.length && (
-                <Alert>
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertTitle>Vista truncada por límite operativo</AlertTitle>
-                  <AlertDescription>
-                    Se cargaron {users.length} miembros de {totalCount}. Refina filtros si necesitas una vista más acotada.
-                  </AlertDescription>
-                </Alert>
+              {totalCount > pageSize && (
+                <div className="flex items-center justify-between border-t pt-4">
+                  <p className="text-sm text-muted-foreground">
+                    Mostrando {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, totalCount)} de {totalCount}
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={page <= 1 || isFetching}
+                      onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    >
+                      Anterior
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={page * pageSize >= totalCount || isFetching}
+                      onClick={() => setPage((p) => p + 1)}
+                    >
+                      Siguiente
+                    </Button>
+                  </div>
+                </div>
               )}
             </>
           )}

@@ -24,12 +24,15 @@ import {
   Sparkles,
   ShoppingBag,
   Building2,
-  RotateCcw
+  RotateCcw,
+  CalendarDays
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth, useResolvedRole, useIsAuthenticated } from '@/hooks/use-auth';
 import { usePlanPermissions } from '@/hooks/use-plan-permissions';
+import { useCurrentVertical } from '@/hooks/use-current-vertical';
+import type { BusinessVertical } from '@/config/verticals';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -52,6 +55,8 @@ export type NavItem = {
   bgColor?: string;
   borderColor?: string;
   badge?: string;
+  /** Si está definido, el ítem solo se muestra para estos verticales. Sin definir = todos. */
+  verticals?: BusinessVertical[];
   subItems?: Array<{
     name: string;
     href: string;
@@ -71,6 +76,18 @@ export const navigation: NavItem[] = [
     color: 'text-blue-600 dark:text-blue-400',
     bgColor: 'bg-blue-50 dark:bg-blue-900/20',
     borderColor: 'border-blue-200 dark:border-blue-800'
+  },
+  {
+    name: 'Agenda',
+    href: '/dashboard/agenda',
+    icon: CalendarDays,
+    roles: ['ADMIN', 'CASHIER', 'SUPER_ADMIN', 'OWNER'],
+    category: 'barbershop',
+    description: 'Turnos del día: reservar, confirmar y cobrar',
+    verticals: ['BARBERSHOP'],
+    color: 'text-fuchsia-600 dark:text-fuchsia-400',
+    bgColor: 'bg-fuchsia-50 dark:bg-fuchsia-900/20',
+    borderColor: 'border-fuchsia-200 dark:border-fuchsia-800'
   },
   {
     name: 'Punto de Venta',
@@ -145,6 +162,7 @@ export const navigation: NavItem[] = [
     icon: RotateCcw,
     roles: ['ADMIN', 'CASHIER', 'SUPER_ADMIN', 'OWNER'],
     category: 'management',
+    verticals: ['RETAIL'],
     description: 'Gestiona devoluciones y reembolsos',
     color: 'text-amber-600 dark:text-amber-400',
     bgColor: 'bg-amber-50 dark:bg-amber-900/20',
@@ -189,6 +207,7 @@ export const navigation: NavItem[] = [
     icon: Truck,
     roles: ['ADMIN', 'SUPER_ADMIN', 'OWNER'],
     category: 'inventory',
+    verticals: ['RETAIL'],
     description: 'Gestión de proveedores',
     color: 'text-violet-600 dark:text-violet-400',
     bgColor: 'bg-violet-50 dark:bg-violet-900/20',
@@ -230,11 +249,17 @@ export const navigation: NavItem[] = [
 ];
 
 const categories = {
-  main: { 
-    name: 'Principal', 
-    color: 'text-blue-600 dark:text-blue-400', 
+  main: {
+    name: 'Principal',
+    color: 'text-blue-600 dark:text-blue-400',
     bgColor: 'bg-blue-50 dark:bg-blue-900/30',
     gradient: 'from-blue-500 to-cyan-500'
+  },
+  barbershop: {
+    name: 'Barbería',
+    color: 'text-fuchsia-600 dark:text-fuchsia-400',
+    bgColor: 'bg-fuchsia-50 dark:bg-fuchsia-900/30',
+    gradient: 'from-fuchsia-500 to-pink-500'
   },
   sales: { 
     name: 'Ventas', 
@@ -289,6 +314,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const { user, signOut } = useAuth();
   const resolvedRole = useResolvedRole();
+  const vertical = useCurrentVertical();
   const { loading } = useIsAuthenticated();
   const { permissions, isPlanResolved } = usePlanPermissions();
   const { config } = useBusinessConfig();
@@ -299,8 +325,8 @@ export function Sidebar() {
     const userRole = resolvedRole || 'CASHIER';
     
     return navigation.filter(item => {
-      if (!canAccessDashboardItem(item, { userRole, permissions, isPlanResolved })) return false;
-      
+      if (!canAccessDashboardItem(item, { userRole, permissions, isPlanResolved, vertical })) return false;
+
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
         const matchesName = item.name.toLowerCase().includes(query);
@@ -314,8 +340,18 @@ export function Sidebar() {
       }
       
       return true;
+    }).map((item) => {
+      if (vertical === 'BARBERSHOP' && item.href === '/dashboard/orders') {
+        return {
+          ...item,
+          name: 'Compras Online',
+          description: 'Gestion de compras web de productos',
+        };
+      }
+
+      return item;
     });
-  }, [resolvedRole, permissions, isPlanResolved, searchQuery]);
+  }, [resolvedRole, permissions, isPlanResolved, searchQuery, vertical]);
 
   const groupedNavigation = useMemo(() => filteredNavigation.reduce((acc, item) => {
     const category = item.category || 'other';

@@ -1,5 +1,12 @@
 import { createAdminClient } from '@/lib/supabase/server'
-import { getCanonicalPlanAliases, getCanonicalPlanDisplayName, normalizePlanCode, normalizePlanSlug } from '@/lib/plan-catalog'
+import {
+  CANONICAL_PLAN_LIMITS,
+  getCanonicalPlanAliases,
+  getCanonicalPlanDisplayName,
+  normalizePlanCode,
+  normalizePlanSlug,
+  sanitizePlanFeatures,
+} from '@/lib/plan-catalog'
 import { logAudit } from '@/app/api/admin/_utils/audit'
 
 type BillingCycle = 'monthly' | 'yearly'
@@ -69,6 +76,9 @@ export type SubscriptionResponse = {
       maxProducts: number
       maxTransactionsPerMonth: number
       maxLocations: number
+      maxServices: number
+      maxAppointmentsPerMonth: number
+      maxStaff: number
     }
     description?: string | null
     currency: string
@@ -115,6 +125,9 @@ type ResolvedCorePlanLimits = {
   maxProducts: number
   maxTransactionsPerMonth: number
   maxLocations: number
+  maxServices: number
+  maxAppointmentsPerMonth: number
+  maxStaff: number
 }
 
 function toFiniteLimitValue(value: unknown): number | null {
@@ -141,6 +154,12 @@ function getPlanLimitCandidate(plan: PlanRecord, key: keyof ResolvedCorePlanLimi
       return toFiniteLimitValue(plan.max_transactions_per_month)
     case 'maxLocations':
       return toFiniteLimitValue(plan.max_locations)
+    case 'maxServices':
+      return toFiniteLimitValue(plan.limits?.maxServices ?? plan.limits?.max_services)
+    case 'maxAppointmentsPerMonth':
+      return toFiniteLimitValue(plan.limits?.maxAppointmentsPerMonth ?? plan.limits?.max_appointments_per_month)
+    case 'maxStaff':
+      return toFiniteLimitValue(plan.limits?.maxStaff ?? plan.limits?.max_staff)
     default:
       return null
   }
@@ -153,29 +172,45 @@ function normalizeUnlimitedLimit(value: number | null | undefined, fallback: num
   return value
 }
 
+function normalizeCappedLimit(value: number | null | undefined, fallback: number) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
+  if (value < 0) return 999999
+  return value
+}
+
 export function resolveSubscriptionPlanLimits(plan: PlanRecord): ResolvedCorePlanLimits {
-  const features = new Set((plan.features || []).map((feature) => String(feature).trim()))
+  const features = new Set(sanitizePlanFeatures(plan.features || [], plan.slug))
+  const fallbackLimits = CANONICAL_PLAN_LIMITS[normalizePlanSlug(plan.slug)]
 
   const maxUsers = features.has('unlimited_users')
     ? 999999
-    : normalizeUnlimitedLimit(getPlanLimitCandidate(plan, 'maxUsers'), 1)
+    : normalizeUnlimitedLimit(getPlanLimitCandidate(plan, 'maxUsers'), fallbackLimits.maxUsers)
 
   const maxProducts = features.has('unlimited_products')
     ? 999999
-    : normalizeUnlimitedLimit(getPlanLimitCandidate(plan, 'maxProducts'), 20)
+    : normalizeUnlimitedLimit(getPlanLimitCandidate(plan, 'maxProducts'), fallbackLimits.maxProducts)
 
   const maxTransactionsPerMonth = normalizeUnlimitedLimit(
     getPlanLimitCandidate(plan, 'maxTransactionsPerMonth'),
-    50
+    fallbackLimits.maxTransactionsPerMonth
   )
 
-  const maxLocations = normalizeUnlimitedLimit(getPlanLimitCandidate(plan, 'maxLocations'), 1)
+  const maxLocations = normalizeUnlimitedLimit(getPlanLimitCandidate(plan, 'maxLocations'), fallbackLimits.maxLocations)
+  const maxServices = normalizeCappedLimit(getPlanLimitCandidate(plan, 'maxServices'), fallbackLimits.maxServices)
+  const maxAppointmentsPerMonth = normalizeCappedLimit(
+    getPlanLimitCandidate(plan, 'maxAppointmentsPerMonth'),
+    fallbackLimits.maxAppointmentsPerMonth
+  )
+  const maxStaff = normalizeCappedLimit(getPlanLimitCandidate(plan, 'maxStaff'), fallbackLimits.maxStaff)
 
   return {
     maxUsers,
     maxProducts,
     maxTransactionsPerMonth,
     maxLocations,
+    maxServices,
+    maxAppointmentsPerMonth,
+    maxStaff,
   }
 }
 
@@ -621,7 +656,7 @@ export function buildSubscriptionResponse(params: {
       slug: normalizePlanSlug(plan.slug),
       priceMonthly: Number(plan.price_monthly || 0),
       priceYearly: Number(plan.price_yearly || 0),
-      features: Array.isArray(plan.features) ? plan.features.map(String) : [],
+      features: sanitizePlanFeatures(plan.features || [], plan.slug),
       limits: resolvedLimits,
       description: plan.description || null,
       currency: plan.currency || 'PYG',

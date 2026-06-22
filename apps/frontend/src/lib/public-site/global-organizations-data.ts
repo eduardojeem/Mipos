@@ -16,7 +16,7 @@ import type { FeaturedOrganizationCard } from '@/lib/public-site/data';
 const PUBLIC_ORGANIZATION_STATUSES = ['ACTIVE', 'TRIAL'];
 const ORGANIZATION_BATCH_SIZE = 250;
 const PRODUCT_BATCH_SIZE = 500;
-const ORGANIZATION_BASE_COLUMNS = ['id', 'name', 'slug', 'created_at'];
+const ORGANIZATION_BASE_COLUMNS = ['id', 'name', 'slug', 'created_at', 'marketplace_category_id'];
 const ORGANIZATION_OPTIONAL_COLUMNS = ['branding'];
 const PRODUCT_BASE_COLUMNS = ['id', 'organization_id', 'category_id', 'is_active'];
 const PRODUCT_OPTIONAL_COLUMNS: string[] = [];
@@ -573,7 +573,12 @@ export async function fetchGlobalOrganizationsSnapshot(
   const sortedOrganizations = sortOrganizations(filteredOrganizations, input.sortBy);
   const featuredOrganizations = sortOrganizations(filteredOrganizations, 'featured').slice(0, 5);
   const totalProducts = allOrganizations.reduce((sum, organization) => sum + Number(organization.productCount || 0), 0);
-  const totalCategories = allOrganizations.reduce((sum, organization) => sum + Number(organization.categoryCount || 0), 0);
+  const uniqueMarketplaceCategories = new Set(
+    allOrganizations
+      .map((org) => (org as unknown as { marketplace_category_id?: string | null }).marketplace_category_id)
+      .filter((id): id is string => typeof id === 'string' && id.length > 0)
+  );
+  const totalCategories = uniqueMarketplaceCategories.size;
 
   return {
     organizations: sortedOrganizations,

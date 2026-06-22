@@ -1,5 +1,12 @@
 import type { Plan, PlanLimits } from '@/hooks/use-subscription'
-import { getCanonicalFeatureLabel, normalizePlanSlug } from '@/lib/plan-catalog'
+import {
+  CANONICAL_PLAN_LIMITS,
+  getCanonicalFeatureLabel,
+  getPublicPlanFeatures,
+  isPublicPlanFeature,
+  normalizePlanFeatureKey,
+  normalizePlanSlug,
+} from '@/lib/plan-catalog'
 
 type LimitKey = keyof PlanLimits
 
@@ -10,6 +17,9 @@ type PlanLimitSource = {
   max_products?: number | null
   max_transactions_per_month?: number | null
   max_locations?: number | null
+  max_services?: number | null
+  max_appointments_per_month?: number | null
+  max_staff?: number | null
   features?: string[] | null
 }
 
@@ -23,34 +33,12 @@ const LIMIT_LABELS: Record<LimitKey, string> = {
   maxProducts: 'Productos',
   maxTransactionsPerMonth: 'Transacciones / mes',
   maxLocations: 'Sucursales',
+  maxServices: 'Servicios',
+  maxAppointmentsPerMonth: 'Turnos / mes',
+  maxStaff: 'Profesionales',
 }
 
-const DEFAULT_LIMITS_BY_PLAN: Record<string, Required<PlanLimits>> = {
-  free: {
-    maxUsers: 1,
-    maxProducts: 100,
-    maxTransactionsPerMonth: 200,
-    maxLocations: 1,
-  },
-  starter: {
-    maxUsers: 5,
-    maxProducts: 3000,
-    maxTransactionsPerMonth: 5000,
-    maxLocations: 3,
-  },
-  professional: {
-    maxUsers: 50,
-    maxProducts: 50000,
-    maxTransactionsPerMonth: 50000,
-    maxLocations: 10,
-  },
-  enterprise: {
-    maxUsers: 999,
-    maxProducts: 999999,
-    maxTransactionsPerMonth: 999999,
-    maxLocations: 999,
-  },
-}
+const DEFAULT_LIMITS_BY_PLAN: Record<string, Required<PlanLimits>> = CANONICAL_PLAN_LIMITS
 
 // Tier order for feature inheritance: higher tier inherits lower tier features
 const PLAN_TIER: Record<string, number> = {
@@ -62,6 +50,13 @@ const PLAN_TIER: Record<string, number> = {
 
 const FEATURE_PRIORITY = [
   'basic_sales',
+  'public_catalog',
+  'online_orders',
+  'marketplace_public',
+  'services_catalog',
+  'appointments',
+  'staff_management',
+  'public_booking',
   'basic_inventory',
   'purchase_module',
   'advanced_inventory',
@@ -70,21 +65,22 @@ const FEATURE_PRIORITY = [
   'basic_reports',
   'advanced_reports',
   'multi_branch',
-  'audit_logs',
   'export_reports',
-  'api_access',
   'loyalty_program',
   'custom_branding',
-  'unlimited_users',
-  'unlimited_products',
 ] as const
 
 // Feature groups for the comparison table
 const FEATURE_GROUPS: Array<{ key: string; label: string; features: string[] }> = [
   {
     key: 'ventas',
-    label: 'Ventas y caja',
-    features: ['basic_sales'],
+    label: 'Ventas, ecommerce y marketplace',
+    features: ['basic_sales', 'public_catalog', 'online_orders', 'marketplace_public'],
+  },
+  {
+    key: 'servicios',
+    label: 'Agenda y servicios',
+    features: ['services_catalog', 'appointments', 'staff_management', 'public_booking'],
   },
   {
     key: 'inventario',
@@ -94,7 +90,7 @@ const FEATURE_GROUPS: Array<{ key: string; label: string; features: string[] }> 
   {
     key: 'equipo',
     label: 'Equipo y administracion',
-    features: ['team_management', 'admin_panel', 'audit_logs'],
+    features: ['team_management', 'admin_panel'],
   },
   {
     key: 'reportes',
@@ -104,12 +100,12 @@ const FEATURE_GROUPS: Array<{ key: string; label: string; features: string[] }> 
   {
     key: 'escala',
     label: 'Escala operativa',
-    features: ['multi_branch', 'unlimited_users', 'unlimited_products'],
+    features: ['multi_branch'],
   },
   {
     key: 'extras',
     label: 'Integracion y extras',
-    features: ['api_access', 'loyalty_program', 'custom_branding'],
+    features: ['loyalty_program', 'custom_branding'],
   },
 ]
 
@@ -172,6 +168,12 @@ function getSourceLimit(source: PlanLimitSource, key: LimitKey): number | null {
       return toFiniteNumber(source.max_transactions_per_month)
     case 'maxLocations':
       return toFiniteNumber(source.max_locations)
+    case 'maxServices':
+      return toFiniteNumber(source.max_services)
+    case 'maxAppointmentsPerMonth':
+      return toFiniteNumber(source.max_appointments_per_month)
+    case 'maxStaff':
+      return toFiniteNumber(source.max_staff)
     default:
       return null
   }
@@ -182,7 +184,7 @@ export function isUnlimitedLimit(value?: number | null) {
 }
 
 export function resolvePlanLimits(source: PlanLimitSource): Required<PlanLimits> {
-  const features = new Set((source.features || []).map((feature) => String(feature).trim()))
+  const features = new Set(getPublicPlanFeatures(source.features || [], source.slug))
 
   const maxUsers = features.has('unlimited_users')
     ? -1
@@ -198,11 +200,23 @@ export function resolvePlanLimits(source: PlanLimitSource): Required<PlanLimits>
   const maxLocations =
     getSourceLimit(source, 'maxLocations') ?? getLimitFallback(source, 'maxLocations')
 
+  const maxServices =
+    getSourceLimit(source, 'maxServices') ?? getLimitFallback(source, 'maxServices')
+
+  const maxAppointmentsPerMonth =
+    getSourceLimit(source, 'maxAppointmentsPerMonth') ?? getLimitFallback(source, 'maxAppointmentsPerMonth')
+
+  const maxStaff =
+    getSourceLimit(source, 'maxStaff') ?? getLimitFallback(source, 'maxStaff')
+
   return {
     maxUsers,
     maxProducts,
     maxTransactionsPerMonth,
     maxLocations,
+    maxServices,
+    maxAppointmentsPerMonth,
+    maxStaff,
   }
 }
 
@@ -234,8 +248,8 @@ export function isSelfServicePaidPlan(plan: Plan | null | undefined) {
 
 export function getPlanFeatureLabels(features: string[]) {
   return features
-    .map((feature) => String(feature).trim())
-    .filter(Boolean)
+    .map((feature) => normalizePlanFeatureKey(feature))
+    .filter((feature): feature is NonNullable<typeof feature> => Boolean(feature && isPublicPlanFeature(feature)))
     .sort((a, b) => {
       const aIndex = FEATURE_PRIORITY.indexOf(a as (typeof FEATURE_PRIORITY)[number])
       const bIndex = FEATURE_PRIORITY.indexOf(b as (typeof FEATURE_PRIORITY)[number])
@@ -268,6 +282,7 @@ export function formatLimitValue(key: LimitKey, value?: number | null) {
   if (isUnlimitedLimit(value)) {
     switch (key) {
       case 'maxTransactionsPerMonth':
+      case 'maxAppointmentsPerMonth':
         return 'Ilimitadas'
       case 'maxLocations':
         return 'Ilimitadas'
@@ -281,6 +296,7 @@ export function formatLimitValue(key: LimitKey, value?: number | null) {
 
   switch (key) {
     case 'maxTransactionsPerMonth':
+    case 'maxAppointmentsPerMonth':
       return `${number} / mes`
     case 'maxLocations':
       return safeValue === 1 ? '1 sucursal' : `${number} sucursales`
@@ -288,6 +304,10 @@ export function formatLimitValue(key: LimitKey, value?: number | null) {
       return safeValue === 1 ? '1 usuario' : `${number} usuarios`
     case 'maxProducts':
       return `${number} productos`
+    case 'maxServices':
+      return `${number} servicios`
+    case 'maxStaff':
+      return safeValue === 1 ? '1 profesional' : `${number} profesionales`
     default:
       return number
   }
@@ -346,8 +366,8 @@ function getEffectivePlanFeatures(plan: Plan, allPlans: Plan[]): Set<string> {
     const tier = PLAN_TIER[normalizePlanSlug(p.slug)] ?? 0
     if (tier <= planTier) {
       for (const f of p.features || []) {
-        const trimmed = String(f).trim()
-        if (trimmed) effective.add(trimmed)
+        const feature = normalizePlanFeatureKey(f)
+        if (feature && isPublicPlanFeature(feature)) effective.add(feature)
       }
     }
   }

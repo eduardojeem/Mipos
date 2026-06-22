@@ -62,10 +62,14 @@ export interface RoleStats {
 class RoleService {
   private baseUrl = '/api/roles'
   private permissionsUrl = '/api/permissions'
-  private getHeaders(contentTypeJson: boolean = false): Record<string, string> {
+  private getHeaders(contentTypeJson: boolean = false, organizationId?: string | null): Record<string, string> {
     const headers: Record<string, string> = {}
     if (contentTypeJson) {
       headers['Content-Type'] = 'application/json'
+    }
+    const org = (organizationId || '').trim()
+    if (org) {
+      headers['x-organization-id'] = org
     }
     const mode = getEnvMode()
     if (mode === 'mock') {
@@ -78,18 +82,19 @@ class RoleService {
   // ========== GESTIÓN DE ROLES ==========
 
   // Obtener todos los roles
-  async getRoles(includeInactive: boolean = false): Promise<Role[]> {
+  async getRoles(includeInactive: boolean = false, organizationId?: string | null): Promise<Role[]> {
     try {
       const params = new URLSearchParams({
         includeInactive: includeInactive.toString()
       })
 
-      const response = await fetch(`${this.baseUrl}?${params}`, { headers: this.getHeaders() })
+      const response = await fetch(`${this.baseUrl}?${params}`, { headers: this.getHeaders(false, organizationId) })
       if (!response.ok) {
         let errorMessage = `Error ${response.status}: ${response.statusText}`;
         try {
             const errorData = await response.json();
             if (errorData.message) errorMessage += ` - ${errorData.message}`;
+            else if (errorData.error) errorMessage += ` - ${errorData.error}`;
         } catch (e) {
             // ignore json parse error
         }
@@ -105,9 +110,9 @@ class RoleService {
   }
 
   // Obtener rol por ID
-  async getRoleById(id: string): Promise<Role> {
+  async getRoleById(id: string, organizationId?: string | null): Promise<Role> {
     try {
-      const response = await fetch(`${this.baseUrl}/${id}`)
+      const response = await fetch(`${this.baseUrl}/${id}`, { headers: this.getHeaders(false, organizationId) })
       if (!response.ok) {
         if (response.status === 404) {
           throw new Error('Rol no encontrado')
@@ -123,7 +128,7 @@ class RoleService {
   }
 
   // Crear nuevo rol
-  async createRole(roleData: RoleFormData): Promise<Role> {
+  async createRole(roleData: RoleFormData, organizationId?: string | null): Promise<Role> {
     try {
       // Validar nombre único
       const isNameUnique = await validateUniqueRoleName(roleData.name)
@@ -139,7 +144,7 @@ class RoleService {
 
       const response = await fetch(this.baseUrl, {
         method: 'POST',
-        headers: this.getHeaders(true),
+        headers: this.getHeaders(true, organizationId),
         body: JSON.stringify(roleData)
       })
 
@@ -156,7 +161,7 @@ class RoleService {
   }
 
   // Actualizar rol
-  async updateRole(id: string, roleData: Partial<RoleUpdateData>): Promise<Role> {
+  async updateRole(id: string, roleData: Partial<RoleUpdateData>, organizationId?: string | null): Promise<Role> {
     try {
       // Validar permisos si se están actualizando
       if (roleData.permissions) {
@@ -168,7 +173,7 @@ class RoleService {
 
       const response = await fetch(`${this.baseUrl}/${id}`, {
         method: 'PUT',
-        headers: this.getHeaders(true),
+        headers: this.getHeaders(true, organizationId),
         body: JSON.stringify(roleData)
       })
 
@@ -185,9 +190,9 @@ class RoleService {
   }
 
   // Eliminar rol
-  async deleteRole(id: string): Promise<void> {
+  async deleteRole(id: string, organizationId?: string | null): Promise<void> {
     try {
-      const role = await this.getRoleById(id)
+      const role = await this.getRoleById(id, organizationId)
       
       // No permitir eliminar roles del sistema
       if (role.isSystem) {
@@ -200,7 +205,8 @@ class RoleService {
       }
 
       const response = await fetch(`${this.baseUrl}/${id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: this.getHeaders(false, organizationId)
       })
 
       if (!response.ok) {
@@ -214,11 +220,11 @@ class RoleService {
   }
 
   // Cambiar estado de rol
-  async toggleRoleStatus(id: string, isActive: boolean): Promise<Role> {
+  async toggleRoleStatus(id: string, isActive: boolean, organizationId?: string | null): Promise<Role> {
     try {
       const response = await fetch(`${this.baseUrl}/${id}/status`, {
         method: 'PATCH',
-        headers: this.getHeaders(true),
+        headers: this.getHeaders(true, organizationId),
         body: JSON.stringify({ isActive })
       })
 
@@ -235,11 +241,11 @@ class RoleService {
   }
 
   // Clonar rol
-  async cloneRole(id: string, newName: string, newDisplayName: string): Promise<Role> {
+  async cloneRole(id: string, newName: string, newDisplayName: string, organizationId?: string | null): Promise<Role> {
     try {
       const response = await fetch(`${this.baseUrl}/${id}/clone`, {
         method: 'POST',
-        headers: this.getHeaders(true),
+        headers: this.getHeaders(true, organizationId),
         body: JSON.stringify({ 
           name: newName, 
           displayName: newDisplayName 
@@ -303,13 +309,11 @@ class RoleService {
   }
 
   // Asignar permisos a rol
-  async assignPermissionsToRole(roleId: string, permissionIds: string[]): Promise<Role> {
+  async assignPermissionsToRole(roleId: string, permissionIds: string[], organizationId?: string | null): Promise<Role> {
     try {
       const response = await fetch(`${this.baseUrl}/${roleId}/permissions`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: this.getHeaders(true, organizationId),
         body: JSON.stringify({ permissionIds })
       })
 
@@ -326,13 +330,11 @@ class RoleService {
   }
 
   // Remover permisos de rol
-  async removePermissionsFromRole(roleId: string, permissionIds: string[]): Promise<Role> {
+  async removePermissionsFromRole(roleId: string, permissionIds: string[], organizationId?: string | null): Promise<Role> {
     try {
       const response = await fetch(`${this.baseUrl}/${roleId}/permissions`, {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: this.getHeaders(true, organizationId),
         body: JSON.stringify({ permissionIds })
       })
 
@@ -351,9 +353,9 @@ class RoleService {
   // ========== JERARQUÍA DE ROLES ==========
 
   // Obtener jerarquía de roles
-  async getRoleHierarchy(): Promise<RoleHierarchy[]> {
+  async getRoleHierarchy(organizationId?: string | null): Promise<RoleHierarchy[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/hierarchy`)
+      const response = await fetch(`${this.baseUrl}/hierarchy`, { headers: this.getHeaders(false, organizationId) })
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`)
       }
@@ -366,13 +368,11 @@ class RoleService {
   }
 
   // Establecer rol padre
-  async setParentRole(roleId: string, parentRoleId: string | null): Promise<Role> {
+  async setParentRole(roleId: string, parentRoleId: string | null, organizationId?: string | null): Promise<Role> {
     try {
       const response = await fetch(`${this.baseUrl}/${roleId}/parent`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: this.getHeaders(true, organizationId),
         body: JSON.stringify({ parentRoleId })
       })
 
@@ -391,9 +391,9 @@ class RoleService {
   // ========== ESTADÍSTICAS Y REPORTES ==========
 
   // Obtener estadísticas de roles
-  async getRoleStats(): Promise<RoleStats> {
+  async getRoleStats(organizationId?: string | null): Promise<RoleStats> {
     try {
-      const response = await fetch(`${this.baseUrl}/stats`)
+      const response = await fetch(`${this.baseUrl}/stats`, { headers: this.getHeaders(false, organizationId) })
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`)
       }
@@ -406,7 +406,7 @@ class RoleService {
   }
 
   // Obtener usuarios por rol
-  async getUsersByRole(roleId: string): Promise<Array<{
+  async getUsersByRole(roleId: string, organizationId?: string | null): Promise<Array<{
     id: string
     firstName: string
     lastName: string
@@ -417,7 +417,7 @@ class RoleService {
     createdAt?: string
   }>> {
     try {
-      const response = await fetch(`${this.baseUrl}/${roleId}/users`)
+      const response = await fetch(`${this.baseUrl}/${roleId}/users`, { headers: this.getHeaders(false, organizationId) })
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`)
       }
@@ -430,13 +430,11 @@ class RoleService {
   }
 
   // Validar permisos de rol
-  async validateRolePermissions(roleId: string, permissions: string[]): Promise<Record<string, boolean>> {
+  async validateRolePermissions(roleId: string, permissions: string[], organizationId?: string | null): Promise<Record<string, boolean>> {
     try {
       const response = await fetch(`${this.baseUrl}/${roleId}/validate-permissions`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: this.getHeaders(true, organizationId),
         body: JSON.stringify({ permissions })
       })
 
@@ -452,9 +450,9 @@ class RoleService {
   }
 
   // Exportar configuración de roles
-  async exportRoles(format: 'json' | 'csv' = 'json'): Promise<Blob> {
+  async exportRoles(format: 'json' | 'csv' = 'json', organizationId?: string | null): Promise<Blob> {
     try {
-      const response = await fetch(`${this.baseUrl}/export?format=${format}`)
+      const response = await fetch(`${this.baseUrl}/export?format=${format}`, { headers: this.getHeaders(false, organizationId) })
       if (!response.ok) {
         throw new Error(`Error ${response.status}: ${response.statusText}`)
       }

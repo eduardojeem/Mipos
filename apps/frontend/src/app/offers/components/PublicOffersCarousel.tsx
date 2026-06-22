@@ -1,6 +1,8 @@
 /**
  * Displays featured offers from the admin-configured carousel
  * and falls back to active promotions when the manual carousel is empty.
+ *
+ * REDESIGNED: split desktop layout, animated progress bar, smooth transitions.
  */
 
 'use client';
@@ -18,7 +20,6 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/components/ui/use-toast';
 import { useCatalogCart } from '@/hooks/useCatalogCart';
 import { useTenantPublicRouting } from '@/hooks/useTenantPublicRouting';
@@ -39,19 +40,20 @@ interface PublicOffersCarouselProps {
   showCart?: boolean;
 }
 
+const AUTO_PLAY_INTERVAL = 5500;
+
 function getTimeRemaining(endDate?: string) {
   if (!endDate) return null;
   const end = new Date(endDate);
   const now = new Date();
   const diff = end.getTime() - now.getTime();
-
   if (diff <= 0) return 'Finalizada';
-
   const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  if (days > 0) return `${days} dias`;
-
+  if (days > 0) return `${days}d restantes`;
   const hours = Math.floor(diff / (1000 * 60 * 60));
-  return `${hours} horas`;
+  if (hours > 0) return `${hours}h restantes`;
+  const minutes = Math.floor(diff / (1000 * 60));
+  return `${minutes}min restantes`;
 }
 
 export default function PublicOffersCarousel({
@@ -64,87 +66,80 @@ export default function PublicOffersCarousel({
   const [loading, setLoading] = useState(initialItems.length === 0);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
+  const [progress, setProgress] = useState(0);
   const formatCurrency = useCurrencyFormatter();
   const { toast } = useToast();
   const { addToCart: addToCartHook } = useCatalogCart();
   const { tenantApiPath } = useTenantPublicRouting();
   const autoPlayRef = useRef<NodeJS.Timeout | null>(null);
+  const progressRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const fetchCarousel = async () => {
       try {
-        const response = await fetch(tenantApiPath('/api/promotions/carousel/public'), {
-          cache: 'no-store',
-        });
-
+        const response = await fetch(tenantApiPath('/api/promotions/carousel/public'), { cache: 'no-store' });
         if (!response.ok) {
-          console.warn('[PublicCarousel] API returned error:', response.status);
-          if (initialItems.length === 0) {
-            setItems([]);
-          }
+          if (initialItems.length === 0) setItems([]);
           return;
         }
-
         const result = (await response.json().catch(() => null)) as CarouselApiPayload | null;
         const nextItems = Array.isArray(result?.data) ? result.data : null;
         if (result?.success && nextItems) {
           setItems(nextItems);
-          setCurrentIndex((previous) => {
-            if (nextItems.length === 0) return 0;
-            return Math.min(previous, nextItems.length - 1);
-          });
+          setCurrentIndex((prev) => (nextItems.length === 0 ? 0 : Math.min(prev, nextItems.length - 1)));
           return;
         }
-
-        if (initialItems.length === 0) {
-          setItems([]);
-        }
-      } catch (error) {
-        console.warn('[PublicCarousel] Error loading carousel:', error);
-        if (initialItems.length === 0) {
-          setItems([]);
-        }
+        if (initialItems.length === 0) setItems([]);
+      } catch {
+        if (initialItems.length === 0) setItems([]);
       } finally {
         setLoading(false);
       }
     };
-
     void fetchCarousel();
   }, [initialItems, tenantApiPath]);
 
+  // Progress bar animation
   useEffect(() => {
     if (!isAutoPlaying || items.length <= 1) return;
+    setProgress(0);
+    const step = 100 / (AUTO_PLAY_INTERVAL / 50);
+    progressRef.current = setInterval(() => {
+      setProgress((p) => Math.min(p + step, 100));
+    }, 50);
+    return () => { if (progressRef.current) clearInterval(progressRef.current); };
+  }, [isAutoPlaying, items.length, currentIndex]);
 
+  // Auto-play
+  useEffect(() => {
+    if (!isAutoPlaying || items.length <= 1) return;
     autoPlayRef.current = setInterval(() => {
-      setCurrentIndex((previous) => (previous + 1) % items.length);
-    }, 5000);
-
-    return () => {
-      if (autoPlayRef.current) {
-        clearInterval(autoPlayRef.current);
-      }
-    };
+      setProgress(0);
+      setCurrentIndex((prev) => (prev + 1) % items.length);
+    }, AUTO_PLAY_INTERVAL);
+    return () => { if (autoPlayRef.current) clearInterval(autoPlayRef.current); };
   }, [isAutoPlaying, items.length]);
 
-  const handlePrevious = () => {
+  const navigate = (direction: 'prev' | 'next') => {
     setIsAutoPlaying(false);
-    setCurrentIndex((previous) => (previous - 1 + items.length) % items.length);
-  };
-
-  const handleNext = () => {
-    setIsAutoPlaying(false);
-    setCurrentIndex((previous) => (previous + 1) % items.length);
+    setProgress(0);
+    if (progressRef.current) clearInterval(progressRef.current);
+    setCurrentIndex((prev) =>
+      direction === 'prev'
+        ? (prev - 1 + items.length) % items.length
+        : (prev + 1) % items.length
+    );
   };
 
   const handleDotClick = (index: number) => {
     setIsAutoPlaying(false);
+    setProgress(0);
     setCurrentIndex(index);
   };
 
   const handleAddToCart = (item: OfferItem) => {
     const basePrice = Number.isFinite(item.basePrice) && item.basePrice > 0 ? item.basePrice : item.offerPrice;
     const hasOfferPrice = Number.isFinite(item.offerPrice) && item.offerPrice > 0 && item.offerPrice < basePrice;
-
     const productForCart: CarouselCartProduct = {
       id: String(item.product.id || ''),
       name: String(item.product.name || 'Producto'),
@@ -163,13 +158,9 @@ export default function PublicOffersCarousel({
       created_at: new Date(0).toISOString(),
       updated_at: new Date(0).toISOString(),
     };
-
     try {
-      if (onAddToCart) {
-        onAddToCart(productForCart);
-      } else {
-        addToCartHook(productForCart, 1);
-      }
+      if (onAddToCart) onAddToCart(productForCart);
+      else addToCartHook(productForCart, 1);
     } catch {
       toast({ title: 'Error', description: 'No se pudo agregar al carrito', variant: 'destructive' });
     }
@@ -178,17 +169,11 @@ export default function PublicOffersCarousel({
   if (loading) {
     return (
       <section className="mb-12">
-        <div className="mb-6 flex items-center gap-2">
+        <div className="mb-5 flex items-center gap-2.5">
           <Flame className="h-6 w-6 animate-pulse text-rose-500" />
-          <h2 className="text-3xl font-bold text-slate-900 dark:text-white">
-            Promociones activas
-          </h2>
+          <h2 className="text-2xl font-black text-slate-900 dark:text-white">Promociones activas</h2>
         </div>
-        <Card className="overflow-hidden border-0 shadow-2xl">
-          <CardContent className="p-0">
-            <div className="relative h-[400px] bg-gradient-to-r from-slate-100 via-slate-200 to-slate-100 dark:from-slate-800 dark:via-slate-700 dark:to-slate-800 animate-pulse md:h-[500px]" />
-          </CardContent>
-        </Card>
+        <div className="relative h-[400px] rounded-3xl overflow-hidden bg-gradient-to-r from-slate-100 via-slate-200 to-slate-100 dark:from-slate-800 dark:via-slate-700 dark:to-slate-800 animate-pulse md:h-[480px]" />
       </section>
     );
   }
@@ -196,193 +181,224 @@ export default function PublicOffersCarousel({
   if (items.length === 0) {
     return (
       <section className="mb-12">
-        <div className="mb-6 flex items-center gap-2">
+        <div className="mb-5 flex items-center gap-2.5">
           <Flame className="h-6 w-6 text-slate-400" />
-          <h2 className="text-3xl font-bold text-slate-900 dark:text-white">
-            Promociones activas
-          </h2>
+          <h2 className="text-2xl font-black text-slate-900 dark:text-white">Promociones activas</h2>
         </div>
-        <Card className="overflow-hidden border border-dashed border-slate-300 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <CardContent className="p-12 text-center">
-            <div className="mx-auto max-w-md space-y-4">
-              <Sparkles className="mx-auto h-14 w-14 text-slate-300 dark:text-slate-600" />
-              <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
-                Sin promociones destacadas
-              </h3>
-              <p className="text-slate-600 dark:text-slate-400">
-                Cuando haya promociones activas configuradas, apareceran aqui con su mejor oferta visible.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="rounded-3xl border border-dashed border-slate-300 bg-white dark:border-slate-800 dark:bg-slate-900 p-16 text-center">
+          <Sparkles className="mx-auto h-14 w-14 text-slate-300 dark:text-slate-600" />
+          <h3 className="mt-4 text-xl font-bold text-slate-900 dark:text-white">Sin promociones destacadas</h3>
+          <p className="mt-2 text-slate-500 dark:text-slate-400">
+            Cuando haya promociones activas configuradas, apareceran aqui.
+          </p>
+        </div>
       </section>
     );
   }
 
   const currentItem = items[currentIndex];
-  const imageUrl =
-    currentItem.product.images?.[0]?.url ||
-    currentItem.product.image ||
-    '/api/placeholder/800/600';
+  const imageUrl = currentItem.product.images?.[0]?.url || currentItem.product.image || '/api/placeholder/800/600';
+  const timeRemaining = getTimeRemaining(currentItem.promotion.endDate);
 
   return (
     <section className="mb-12">
-      <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      {/* Section header */}
+      <div className="mb-5 flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
           <Flame className="h-6 w-6 text-rose-500" />
-          <h2 className="text-3xl font-bold text-slate-900 dark:text-white">
-            Promociones activas
-          </h2>
-          <Badge className="border-none bg-rose-500 text-white">
-            <Sparkles className="mr-1 h-3 w-3" />
-            Destacadas
+          <h2 className="text-2xl font-black text-slate-900 dark:text-white">Promociones activas</h2>
+          <Badge className="border-none bg-rose-500 text-white text-xs px-2.5 py-1">
+            <Sparkles className="mr-1 h-3 w-3" />Destacadas
           </Badge>
         </div>
-        <div className="text-sm text-slate-500 dark:text-slate-400">
-          {currentIndex + 1} / {items.length}
-        </div>
+        <span className="text-sm font-medium text-slate-400 tabular-nums">
+          {currentIndex + 1}&nbsp;/&nbsp;{items.length}
+        </span>
       </div>
 
-      <Card className="overflow-hidden border border-rose-200 shadow-xl dark:border-rose-900/40">
-        <CardContent className="p-0">
-          <div className="relative h-[420px] md:h-[520px]">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={`${currentItem.product.id}-${currentItem.promotion.id}`}
-                initial={{ opacity: 0, x: 80 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -80 }}
-                transition={{ duration: 0.28, ease: 'easeInOut' }}
-                className="absolute inset-0"
-              >
-                <div className="absolute inset-0">
-                  <Image
-                    src={imageUrl}
-                    alt={currentItem.product.name}
-                    fill
-                    className="object-cover"
-                    sizes="100vw"
-                    priority={currentIndex === 0}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/65 to-slate-950/20" />
+      {/* Progress bar */}
+      {items.length > 1 && isAutoPlaying && (
+        <div className="mb-3 h-0.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+          <div
+            className="h-full bg-rose-500 rounded-full transition-none"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      )}
+
+      {/* Main carousel */}
+      <div className="relative overflow-hidden rounded-3xl border border-rose-100 dark:border-rose-900/30 shadow-2xl shadow-rose-500/5">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={`${currentItem.product.id}-${currentItem.promotion.id}`}
+            initial={{ opacity: 0, x: 60 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -60 }}
+            transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+            className="grid md:grid-cols-[1fr_380px] min-h-[400px] md:min-h-[460px]"
+          >
+            {/* Image panel */}
+            <div className="relative overflow-hidden bg-slate-900 min-h-[300px]">
+              <Image
+                src={imageUrl}
+                alt={currentItem.product.name}
+                fill
+                className="object-cover opacity-90"
+                sizes="(max-width: 768px) 100vw, 60vw"
+                priority={currentIndex === 0}
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-slate-950/60 via-transparent to-transparent md:bg-gradient-to-b" />
+
+              {/* Mobile overlay content */}
+              <div className="absolute bottom-0 left-0 right-0 p-6 md:hidden">
+                <div className="flex gap-2 mb-3">
+                  <Badge className="border-none bg-rose-600 px-3 py-1.5 text-base font-black text-white">
+                    -{Math.round(currentItem.discountPercent)}% OFF
+                  </Badge>
+                  {timeRemaining && (
+                    <Badge variant="secondary" className="bg-white/90 backdrop-blur-sm text-slate-800">
+                      <Clock className="mr-1.5 h-3.5 w-3.5" />{timeRemaining}
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs font-bold uppercase tracking-[0.2em] text-white/60 mb-1">{currentItem.promotion.name}</p>
+                <h3 className="text-2xl font-black text-white">{currentItem.product.name}</h3>
+                <div className="mt-3 flex items-end gap-3">
+                  <span className="text-3xl font-black text-white">{formatCurrency(currentItem.offerPrice)}</span>
+                  {currentItem.basePrice > currentItem.offerPrice && (
+                    <span className="text-lg text-white/50 line-through pb-0.5">{formatCurrency(currentItem.basePrice)}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Info panel - desktop */}
+            <div className="hidden md:flex flex-col justify-between bg-white dark:bg-slate-900 p-8">
+              <div className="space-y-5">
+                <div className="flex flex-wrap gap-2">
+                  <Badge className="border-none bg-rose-600 px-3 py-1.5 text-base font-black text-white shadow-lg shadow-rose-600/20">
+                    -{Math.round(currentItem.discountPercent)}% OFF
+                  </Badge>
+                  {timeRemaining && (
+                    <Badge variant="outline" className="px-3 py-1.5 text-sm font-semibold">
+                      <Clock className="mr-1.5 h-4 w-4 text-rose-500" />{timeRemaining}
+                    </Badge>
+                  )}
                 </div>
 
-                <div className="relative z-10 flex h-full items-center">
-                  <div className="container mx-auto px-6 md:px-12">
-                    <div className="max-w-2xl space-y-6">
-                      <div className="flex flex-wrap gap-3">
-                        <Badge className="border-none bg-rose-500 px-4 py-2 text-lg text-white">
-                          -{Math.round(currentItem.discountPercent)}% OFF
-                        </Badge>
-                        {currentItem.promotion.endDate ? (
-                          <Badge
-                            variant="secondary"
-                            className="bg-white/90 px-4 py-2 text-base text-slate-800 backdrop-blur-sm dark:bg-slate-900/90 dark:text-white"
-                          >
-                            <Clock className="mr-2 h-4 w-4" />
-                            {getTimeRemaining(currentItem.promotion.endDate)}
-                          </Badge>
-                        ) : null}
-                      </div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground mb-2">
+                    {currentItem.promotion.name}
+                  </p>
+                  <h3 className="text-2xl font-black text-foreground leading-tight">{currentItem.product.name}</h3>
+                  {currentItem.promotion.description && (
+                    <p className="mt-3 text-sm text-muted-foreground leading-relaxed line-clamp-3">
+                      {currentItem.promotion.description}
+                    </p>
+                  )}
+                </div>
 
-                      <div className="space-y-3">
-                        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-white/70">
-                          {currentItem.promotion.name}
+                <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-5">
+                  <div className="flex items-end gap-3">
+                    <span className="text-4xl font-black text-foreground tracking-tight">
+                      {formatCurrency(currentItem.offerPrice)}
+                    </span>
+                    {currentItem.basePrice > currentItem.offerPrice && (
+                      <div className="pb-1 space-y-0.5">
+                        <p className="text-base text-muted-foreground line-through">
+                          {formatCurrency(currentItem.basePrice)}
                         </p>
-                        <h3 className="text-3xl font-black text-white md:text-5xl">
-                          {currentItem.product.name}
-                        </h3>
-                        {currentItem.promotion.description ? (
-                          <p className="max-w-xl text-base text-white/80 md:text-lg">
-                            {currentItem.promotion.description}
-                          </p>
-                        ) : null}
+                        <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                          Ahorro: {formatCurrency(currentItem.savings)}
+                        </p>
                       </div>
-
-                      <div className="flex flex-wrap items-end gap-4">
-                        <span className="text-4xl font-black text-white md:text-6xl">
-                          {formatCurrency(currentItem.offerPrice)}
-                        </span>
-                        {currentItem.basePrice > currentItem.offerPrice ? (
-                          <div className="space-y-1 pb-1">
-                            <p className="text-lg text-white/60 line-through md:text-2xl">
-                              {formatCurrency(currentItem.basePrice)}
-                            </p>
-                            <p className="text-sm font-medium text-emerald-300">
-                              Ahorras {formatCurrency(currentItem.savings)}
-                            </p>
-                          </div>
-                        ) : null}
-                      </div>
-
-                      <div className="flex flex-wrap gap-4">
-                        {showCart ? (
-                          <Button
-                            size="lg"
-                            className="rounded-xl bg-rose-600 px-8 py-6 text-lg font-bold text-white shadow-lg transition hover:scale-[1.02] hover:bg-rose-700"
-                            onClick={() => handleAddToCart(currentItem)}
-                          >
-                            <ShoppingCart className="mr-2 h-5 w-5" />
-                            Agregar al carrito
-                          </Button>
-                        ) : null}
-                        {onViewDetails ? (
-                          <Button
-                            size="lg"
-                            variant="outline"
-                            className="rounded-xl border-white/50 bg-white/10 px-8 py-6 text-lg text-white backdrop-blur-sm hover:bg-white/20"
-                            onClick={() => onViewDetails(currentItem)}
-                          >
-                            Ver detalle
-                          </Button>
-                        ) : null}
-                      </div>
-                    </div>
+                    )}
                   </div>
                 </div>
-              </motion.div>
-            </AnimatePresence>
-
-            {items.length > 1 ? (
-              <>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute left-4 top-1/2 z-20 h-12 w-12 -translate-y-1/2 rounded-full bg-white/20 text-white backdrop-blur-sm transition hover:scale-110 hover:bg-white/30"
-                  onClick={handlePrevious}
-                  aria-label="Anterior"
-                >
-                  <ChevronLeft className="h-6 w-6" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-4 top-1/2 z-20 h-12 w-12 -translate-y-1/2 rounded-full bg-white/20 text-white backdrop-blur-sm transition hover:scale-110 hover:bg-white/30"
-                  onClick={handleNext}
-                  aria-label="Siguiente"
-                >
-                  <ChevronRight className="h-6 w-6" />
-                </Button>
-              </>
-            ) : null}
-
-            {items.length > 1 ? (
-              <div className="absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 gap-2">
-                {items.map((_, index) => (
-                  <button
-                    key={index}
-                    onClick={() => handleDotClick(index)}
-                    className={`h-2 rounded-full transition-all duration-300 ${
-                      index === currentIndex ? 'w-8 bg-white' : 'w-2 bg-white/50 hover:bg-white/75'
-                    }`}
-                    aria-label={`Ir a oferta ${index + 1}`}
-                  />
-                ))}
               </div>
-            ) : null}
+
+              <div className="flex flex-col gap-3 mt-6">
+                {showCart && (
+                  <Button
+                    size="lg"
+                    className="w-full rounded-xl bg-rose-600 text-white font-bold hover:bg-rose-700 transition-all hover:scale-[1.02] active:scale-95 shadow-lg shadow-rose-600/25"
+                    onClick={() => handleAddToCart(currentItem)}
+                  >
+                    <ShoppingCart className="mr-2 h-5 w-5" />Agregar al carrito
+                  </Button>
+                )}
+                {onViewDetails && (
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="w-full rounded-xl font-semibold"
+                    onClick={() => onViewDetails(currentItem)}
+                  >
+                    Ver detalle
+                  </Button>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        </AnimatePresence>
+
+        {/* Nav arrows */}
+        {items.length > 1 && (
+          <>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute left-4 top-1/2 z-20 h-11 w-11 -translate-y-1/2 rounded-full bg-white/20 dark:bg-black/30 text-white backdrop-blur-md hover:bg-white/30 hover:scale-110 transition-all"
+              onClick={() => navigate('prev')}
+              aria-label="Anterior"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute right-4 top-1/2 z-20 h-11 w-11 -translate-y-1/2 rounded-full bg-white/20 dark:bg-black/30 text-white backdrop-blur-md hover:bg-white/30 hover:scale-110 transition-all md:right-[396px]"
+              onClick={() => navigate('next')}
+              aria-label="Siguiente"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </Button>
+          </>
+        )}
+      </div>
+
+      {/* Dot indicators + mobile CTA */}
+      {items.length > 1 && (
+        <div className="mt-5 flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
+          <div className="flex gap-2">
+            {items.map((_, index) => (
+              <button
+                key={index}
+                onClick={() => handleDotClick(index)}
+                className={`h-2 rounded-full transition-all duration-300 ${
+                  index === currentIndex ? 'w-8 bg-rose-500' : 'w-2 bg-slate-300 dark:bg-slate-700 hover:bg-slate-400'
+                }`}
+                aria-label={`Ir a oferta ${index + 1}`}
+              />
+            ))}
           </div>
-        </CardContent>
-      </Card>
+          <div className="md:hidden flex gap-3 w-full sm:w-auto">
+            {showCart && (
+              <Button
+                className="flex-1 sm:flex-none rounded-xl bg-rose-600 text-white font-bold hover:bg-rose-700"
+                onClick={() => handleAddToCart(currentItem)}
+              >
+                <ShoppingCart className="mr-2 h-4 w-4" />Agregar
+              </Button>
+            )}
+            {onViewDetails && (
+              <Button variant="outline" className="flex-1 sm:flex-none rounded-xl" onClick={() => onViewDetails(currentItem)}>
+                Ver detalle
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
     </section>
   );
 }

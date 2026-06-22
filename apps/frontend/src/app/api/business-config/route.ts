@@ -177,6 +177,13 @@ export async function PUT(request: NextRequest) {
     }
     const b = (v: any, d: boolean) => (typeof v === 'boolean' ? v : d)
     const arrStr = (v: any, d: string[]) => (Array.isArray(v) ? v.filter((x: any) => typeof x === 'string') : d)
+    // Bloquea esquemas peligrosos (javascript:, data:, vbscript:) que permitirían
+    // XSS si el valor se renderiza como href en el sitio público. Conserva URLs
+    // http(s) y handles/paths normales, así no rompe datos existentes.
+    const safeUrl = (v: any) => {
+      const str = typeof v === 'string' ? v.trim() : ''
+      return /^\s*(javascript|data|vbscript):/i.test(str) ? '' : str
+    }
     const baselineSystemSettings = prevConfig?.systemSettings || defaultBusinessConfig.systemSettings!
     const systemSettings: NonNullable<BusinessConfig['systemSettings']> =
       access.context.isSuperAdmin && raw?.systemSettings ? {
@@ -222,7 +229,7 @@ export async function PUT(request: NextRequest) {
         phone: cleanPublicString(raw?.contact?.phone),
         email: cleanPublicString(raw?.contact?.email),
         whatsapp: cleanPublicString(raw?.contact?.whatsapp),
-        website: cleanPublicString(raw?.contact?.website),
+        website: safeUrl(cleanPublicString(raw?.contact?.website)),
         landline: cleanPublicString(raw?.contact?.landline),
       },
       address: {
@@ -240,11 +247,11 @@ export async function PUT(request: NextRequest) {
         mapEmbedUrl: s(raw?.address?.mapEmbedUrl),
       },
       socialMedia: {
-        facebook: s(raw?.socialMedia?.facebook),
-        instagram: s(raw?.socialMedia?.instagram),
-        twitter: s(raw?.socialMedia?.twitter),
-        tiktok: s(raw?.socialMedia?.tiktok),
-        linkedin: s(raw?.socialMedia?.linkedin),
+        facebook: safeUrl(raw?.socialMedia?.facebook),
+        instagram: safeUrl(raw?.socialMedia?.instagram),
+        twitter: safeUrl(raw?.socialMedia?.twitter),
+        tiktok: safeUrl(raw?.socialMedia?.tiktok),
+        linkedin: safeUrl(raw?.socialMedia?.linkedin),
       },
       businessHours: arrStr(raw?.businessHours, defaultBusinessConfig.businessHours),
       branding: {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { getValidatedOrganizationId } from '@/lib/organization';
+import { sanitizeSearch } from '@/app/api/_utils/search';
 
 const RICH_PRODUCT_SELECT = `
   id,
@@ -117,8 +118,9 @@ function applyProductFilters(
   }
 
   if (search) {
+    const s = sanitizeSearch(search);
     scopedQuery = (scopedQuery as unknown as { or: (filters: string) => unknown })
-      .or(`name.ilike.%${search}%,sku.ilike.%${search}%,description.ilike.%${search}%`);
+      .or(`name.ilike.%${s}%,sku.ilike.%${s}%,description.ilike.%${s}%`);
   }
 
   if (categoryId) {

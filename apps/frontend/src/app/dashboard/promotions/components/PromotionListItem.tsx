@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Edit, Trash2, Power, Calendar, Percent } from 'lucide-react';
+import { Edit, Trash2, Power, Calendar, Percent, Package, Scissors } from 'lucide-react';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { useToast } from '@/components/ui/use-toast';
 import api from '@/lib/api';
@@ -14,11 +14,11 @@ import { ConfirmDeleteDialog } from './ConfirmDeleteDialog';
 
 interface PromotionListItemProps {
   promotion: Promotion;
-  productCount?: number; // ✅ Nueva prop
+  associatedCount?: number;
   onRefresh: () => void;
 }
 
-export function PromotionListItem({ promotion, productCount = 0, onRefresh }: PromotionListItemProps) {
+export function PromotionListItem({ promotion, associatedCount = 0, onRefresh }: PromotionListItemProps) {
   const { toast } = useToast();
   const [isToggling, setIsToggling] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -37,6 +37,7 @@ export function PromotionListItem({ promotion, productCount = 0, onRefresh }: Pr
   };
 
   const status = getStatus();
+  const isServicePromotion = promotion.targetType === 'SERVICE';
 
   const statusConfig = {
     active: {
@@ -118,6 +119,10 @@ export function PromotionListItem({ promotion, productCount = 0, onRefresh }: Pr
               <Badge className={statusConfig[status].className}>
                 {statusConfig[status].label}
               </Badge>
+              <Badge variant="outline" className="gap-1">
+                {isServicePromotion ? <Scissors className="h-3 w-3" /> : <Package className="h-3 w-3" />}
+                {isServicePromotion ? 'Servicio' : 'Producto'}
+              </Badge>
             </div>
 
             <div className="flex flex-wrap items-center gap-4 text-sm">
@@ -133,7 +138,15 @@ export function PromotionListItem({ promotion, productCount = 0, onRefresh }: Pr
               <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
                 <Calendar className="h-4 w-4" />
                 <span>
-                  {formatDate(promotion.startDate)} - {formatDate(promotion.endDate)}
+                  {`${formatDate(promotion.startDate)} - ${formatDate(promotion.endDate)}`}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                {isServicePromotion ? <Scissors className="h-4 w-4" /> : <Package className="h-4 w-4" />}
+                <span>
+                  {associatedCount} {isServicePromotion ? 'servicio' : 'producto'}
+                  {associatedCount !== 1 ? 's' : ''} asociado{associatedCount !== 1 ? 's' : ''}
                 </span>
               </div>
 

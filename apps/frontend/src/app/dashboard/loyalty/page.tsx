@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -78,9 +79,14 @@ function StatPill({
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function LoyaltyDashboard() {
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const customerIdFromUrl = searchParams.get('customerId') || '';
+  const customerNameFromUrl = searchParams.get('customerName') || '';
 
   // ── Tab ──
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState(customerIdFromUrl ? 'history' : 'overview');
 
   // ── Data ──
   const { data: programs = [], isPending: programsLoading } = useLoyaltyPrograms();
@@ -128,15 +134,30 @@ export default function LoyaltyDashboard() {
     try {
       const params: Record<string, string> = { programId: effectiveProgramId };
       if (txType !== 'all') params.type = txType;
+      if (customerIdFromUrl) params.customerId = customerIdFromUrl;
       const res = await api.get('/loyalty/points-transactions', { params });
       setTransactions(res.data?.data?.items ?? []);
     } catch (err: unknown) {
       const e = err as { response?: { data?: { error?: string } }; message?: string };
       setTxError(e?.response?.data?.error || e?.message || 'Error al cargar historial');
     } finally { setTxLoading(false); }
-  }, [effectiveProgramId, txType]);
+  }, [customerIdFromUrl, effectiveProgramId, txType]);
 
   useEffect(() => { loadTransactions(); }, [loadTransactions]);
+
+  useEffect(() => {
+    if (customerIdFromUrl) {
+      setActiveTab('history');
+    }
+  }, [customerIdFromUrl]);
+
+  const clearCustomerFilter = useCallback(() => {
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete('customerId');
+    nextParams.delete('customerName');
+    const nextQuery = nextParams.toString();
+    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname);
+  }, [pathname, router, searchParams]);
 
   // ── Export columns ──
   const [analyticsCols, setAnalyticsCols] = usePersistentColumns('loyalty_export_cols_analytics',
@@ -207,6 +228,11 @@ export default function LoyaltyDashboard() {
           {/* Stats inline */}
           {!programsLoading && (
             <>
+              {customerIdFromUrl && (
+                <Badge variant="outline" className="gap-1.5">
+                  Filtrado por cliente: {customerNameFromUrl || customerIdFromUrl}
+                </Badge>
+              )}
               <StatPill icon={Users} label="Miembros" value={totalCustomers.toLocaleString('es')} accent="purple" />
               {totalPointsIssued > 0 && (
                 <StatPill icon={Star} label="Puntos emitidos" value={totalPointsIssued.toLocaleString('es')} accent="amber" />
@@ -242,6 +268,12 @@ export default function LoyaltyDashboard() {
           <Button variant="ghost" size="icon" onClick={refreshAll} className="h-9 w-9 text-muted-foreground" title="Actualizar">
             <RefreshCw className="h-4 w-4" />
           </Button>
+
+          {customerIdFromUrl && (
+            <Button variant="outline" size="sm" className="h-9" onClick={clearCustomerFilter}>
+              Ver todos
+            </Button>
+          )}
 
           {/* Canjear */}
           <Button variant="outline" size="sm" className="h-9 gap-1.5"

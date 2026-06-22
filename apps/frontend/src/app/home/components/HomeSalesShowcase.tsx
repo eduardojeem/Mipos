@@ -154,7 +154,7 @@ export default function HomeSalesShowcase({
         <div className="max-w-2xl space-y-6">
           {/* Badge */}
           <Badge
-            className="rounded-full border-0 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.2em] backdrop-blur-sm"
+            className="rounded-full border-0 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.2em] backdrop-blur-md"
             style={{ backgroundColor: hexToRgba(primary, 0.25), color: '#fff' }}
           >
             {content.heroBadge || 'Tienda oficial'}
@@ -195,7 +195,7 @@ export default function HomeSalesShowcase({
                 asChild
                 variant="outline"
                 size="lg"
-                className="rounded-full border-white/30 bg-white/10 px-8 text-base font-semibold text-white backdrop-blur-sm transition-transform hover:scale-105 hover:bg-white/20"
+                className="rounded-full border-white/30 bg-white/10 px-8 text-base font-semibold text-white backdrop-blur-md transition-transform hover:scale-105 hover:bg-white/20"
               >
                 <Link href={tenantHref(secondaryAction.href)}>
                   {secondaryAction.label}
@@ -218,7 +218,7 @@ export default function HomeSalesShowcase({
               .map((stat) => (
                 <div
                   key={stat.label}
-                  className="flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 backdrop-blur-sm"
+                  className="flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 backdrop-blur-md"
                 >
                   <span className="text-lg font-bold text-white">{stat.value}</span>
                   <span className="text-xs font-medium text-white/70">{stat.label}</span>
@@ -234,14 +234,14 @@ export default function HomeSalesShowcase({
           <button
             onClick={goPrev}
             aria-label="Anterior"
-            className="absolute left-4 top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white backdrop-blur-sm transition-all hover:bg-white/20 sm:left-6 sm:h-12 sm:w-12"
+            className="absolute left-4 top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white backdrop-blur-md transition-all hover:bg-white/20 sm:left-6 sm:h-12 sm:w-12"
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
           <button
             onClick={goNext}
             aria-label="Siguiente"
-            className="absolute right-4 top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white backdrop-blur-sm transition-all hover:bg-white/20 sm:right-6 sm:h-12 sm:w-12"
+            className="absolute right-4 top-1/2 z-20 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-white/10 text-white backdrop-blur-md transition-all hover:bg-white/20 sm:right-6 sm:h-12 sm:w-12"
           >
             <ChevronRight className="h-5 w-5" />
           </button>

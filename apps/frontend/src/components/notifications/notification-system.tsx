@@ -30,6 +30,7 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
+import api from '@/lib/api';
 
 export interface Notification {
   id: string;
@@ -59,71 +60,7 @@ interface NotificationSystemProps {
   position?: 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left';
 }
 
-// Mock notifications for demonstration
-const mockNotifications: Notification[] = [
-  {
-    id: '1',
-    title: 'Stock Bajo',
-    message: 'El producto "Labial Rojo Mate" tiene solo 5 unidades restantes',
-    type: 'warning',
-    category: 'inventory',
-    timestamp: new Date(Date.now() - 5 * 60 * 1000),
-    read: false,
-    priority: 'high',
-    actions: [
-      {
-        id: 'reorder',
-        label: 'Reabastecer',
-        action: () => console.log('Reordering product'),
-        variant: 'default'
-      },
-      {
-        id: 'dismiss',
-        label: 'Descartar',
-        action: () => console.log('Dismissing notification'),
-        variant: 'outline'
-      }
-    ]
-  },
-  {
-    id: '2',
-    title: 'Nueva Venta',
-    message: 'Venta completada por $125.50 - Cliente: María García',
-    type: 'success',
-    category: 'sales',
-    timestamp: new Date(Date.now() - 10 * 60 * 1000),
-    read: false,
-    priority: 'medium'
-  },
-  {
-    id: '3',
-    title: 'Actualización del Sistema',
-    message: 'Nueva versión disponible con mejoras de rendimiento',
-    type: 'info',
-    category: 'system',
-    timestamp: new Date(Date.now() - 30 * 60 * 1000),
-    read: true,
-    priority: 'low'
-  },
-  {
-    id: '4',
-    title: 'Error de Conexión',
-    message: 'Problema temporal con la conexión a la base de datos',
-    type: 'error',
-    category: 'system',
-    timestamp: new Date(Date.now() - 2 * 60 * 1000),
-    read: false,
-    priority: 'urgent',
-    actions: [
-      {
-        id: 'retry',
-        label: 'Reintentar',
-        action: () => console.log('Retrying connection'),
-        variant: 'default'
-      }
-    ]
-  }
-];
+// Mock notifications removed in favor of real data
 
 const NotificationIcon = ({ type }: { type: Notification['type'] }) => {
   const iconMap = {
@@ -305,11 +242,37 @@ export const NotificationSystem: React.FC<NotificationSystemProps> = ({
   enableSound = true,
   position = 'top-right'
 }) => {
-  const [notifications, setNotifications] = useState<Notification[]>(mockNotifications);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [filter, setFilter] = useState<'all' | 'unread' | 'priority'>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [soundEnabled, setSoundEnabled] = useState(enableSound);
+
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const response = await api.get('/notifications?limit=50');
+      const data = response.data?.data || [];
+      const mapped = data.map((n: any) => ({
+        id: n.id,
+        title: n.title,
+        message: n.message,
+        type: n.type as 'info' | 'success' | 'warning' | 'error',
+        category: n.data?.category || 'general',
+        timestamp: new Date(n.createdAt),
+        read: n.isRead,
+        priority: n.priority as 'low' | 'medium' | 'high' | 'urgent',
+        data: n.data
+      }));
+      setNotifications(mapped);
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchNotifications();
+    // In a real app, you would also set up a Supabase Realtime subscription here
+  }, [fetchNotifications]);
 
   // Notification management functions
   const addNotification = useCallback((notification: Omit<Notification, 'id' | 'timestamp'>) => {
@@ -328,15 +291,21 @@ export const NotificationSystem: React.FC<NotificationSystemProps> = ({
     }
   }, [maxNotifications, soundEnabled]);
 
-  const markAsRead = useCallback((id: string) => {
-    setNotifications(prev => 
-      prev.map(notif => 
-        notif.id === id ? { ...notif, read: true } : notif
-      )
-    );
+  const markAsRead = useCallback(async (id: string) => {
+    try {
+      await api.put(`/notifications/${id}/read`);
+      setNotifications(prev => 
+        prev.map(notif => 
+          notif.id === id ? { ...notif, read: true } : notif
+        )
+      );
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
   }, []);
 
-  const dismissNotification = useCallback((id: string) => {
+  const dismissNotification = useCallback(async (id: string) => {
+    // We could delete it, but let's just remove from view for now
     setNotifications(prev => prev.filter(notif => notif.id !== id));
   }, []);
 

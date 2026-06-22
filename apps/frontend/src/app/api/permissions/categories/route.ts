@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
-import { assertAdmin } from '@/app/api/_utils/auth'
+import { ADMIN_API_ACCESS, requireAdminApiAccess } from '@/app/api/admin/_utils/access'
 
 function toDisplay(name: string) {
   const n = name?.toLowerCase() || ''
@@ -14,10 +14,11 @@ function toDisplay(name: string) {
 }
 
 export async function GET(request: NextRequest) {
-  const auth = await assertAdmin(request)
-  if (!('ok' in auth) || auth.ok === false) {
-    return NextResponse.json(auth.body, { status: auth.status })
-  }
+  const access = await requireAdminApiAccess(request, {
+    ...ADMIN_API_ACCESS.manageRoles,
+    requireOrganization: true,
+  })
+  if (!access.ok) return access.response
 
   const supabase = await createAdminClient()
   const { data, error } = await supabase.from('permissions').select('*')

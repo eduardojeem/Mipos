@@ -37,6 +37,15 @@ function normalizeSearchTerm(rawValue: string | null) {
   return String(rawValue || '').trim().replace(/,/g, ' ')
 }
 
+function isExplicitDirectCreateEnabled(request: NextRequest, body: unknown) {
+  const headerFlag = request.headers.get('x-direct-user-create')
+  const bodyFlag = typeof body === 'object' && body !== null
+    ? (body as { allowDirectCreate?: boolean }).allowDirectCreate
+    : false
+
+  return headerFlag === 'true' || bodyFlag === true
+}
+
 async function requireUsersAccess(request: NextRequest) {
   return resolveCompanyAccess({
     companyId: getRequestedOrganizationId(request),
@@ -216,6 +225,26 @@ export async function POST(request: NextRequest) {
 
     if (!companyId) {
       return NextResponse.json({ error: 'Organizacion no resuelta' }, { status: 400 })
+    }
+
+    if (!access.context.isSuperAdmin) {
+      return NextResponse.json(
+        {
+          error: 'El alta directa de usuarios fue deshabilitada para organizaciones. Usa invitaciones del equipo para incorporar personas.',
+          code: 'DIRECT_USER_CREATE_DISABLED',
+        },
+        { status: 409 }
+      )
+    }
+
+    if (!isExplicitDirectCreateEnabled(request, body)) {
+      return NextResponse.json(
+        {
+          error: 'El alta directa solo puede ser ejecutada por super admin con confirmacion explicita.',
+          code: 'DIRECT_USER_CREATE_REQUIRES_CONFIRMATION',
+        },
+        { status: 400 }
+      )
     }
 
     if (!name || !email || !password) {

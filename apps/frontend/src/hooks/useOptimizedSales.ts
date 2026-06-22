@@ -53,6 +53,6 @@ export function useRecentSales(limit = 10) {
     },
     enabled: !!orgId,
     staleTime: CACHE_CONFIG.RECENT_STALE_TIME,
-    refetchInterval: CACHE_CONFIG.RECENT_REFETCH_INTERVAL
+    refetchInterval: false, // Realtime handles updates via query invalidation
   });
 }

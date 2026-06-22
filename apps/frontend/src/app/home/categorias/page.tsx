@@ -11,7 +11,7 @@ import {
   type GlobalCategoryExplorerItem,
 } from '@/lib/public-site/global-categories-data';
 import { MarketplaceLayout } from '../components/marketplace/MarketplaceLayout';
-import { CategoryGrid } from '../components/marketplace/CategoryGrid';
+import { AllCategoriesGrid } from './AllCategoriesGrid';
 import { CategoryFilterBar } from './CategoryFilterBar';
 import { FeaturedCategoriesRow } from './FeaturedCategoriesRow';
 
@@ -96,10 +96,10 @@ export default async function CategoriesPage({
                   Directorio de rubros
                 </p>
                 <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white sm:text-4xl">
-                  Explora por categoría
+                  Explora por rubro
                 </h1>
                 <p className="mt-2 max-w-xl text-base text-slate-500 dark:text-slate-400">
-                  Encuentra empresas locales organizadas por rubro. Cada categoría agrupa negocios
+                  Encuentra empresas locales organizadas por rubro. Cada rubro agrupa negocios
                   verificados con sus productos y servicios.
                 </p>
               </div>
@@ -155,7 +155,7 @@ export default async function CategoriesPage({
                 ? `${snapshot.visibleCategories} de ${snapshot.totalCategories} rubros`
                 : `Todos los rubros (${snapshot.totalCategories})`}
             </div>
-            <CategoryGrid categories={snapshot.categories} />
+            <AllCategoriesGrid categories={snapshot.categories} />
           </section>
         ) : (
           <div className="mt-10 rounded-xl border border-dashed border-slate-300 bg-white/60 px-6 py-16 text-center dark:border-slate-700 dark:bg-slate-950/50">

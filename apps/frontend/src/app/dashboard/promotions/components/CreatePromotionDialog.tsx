@@ -24,6 +24,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
 import { ProductSelectionDialog } from './ProductSelectionDialog';
+import { ServiceSelectionDialog } from './ServiceSelectionDialog';
 import {
   Package,
   Plus,
@@ -34,9 +35,11 @@ import {
   Settings2,
   Percent,
   DollarSign,
+  Scissors,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { useState } from 'react';
+import { useCurrentVertical } from '@/hooks/use-current-vertical';
 
 interface CreatePromotionDialogProps {
   open: boolean;
@@ -47,6 +50,7 @@ interface CreatePromotionDialogProps {
 interface FormData {
   name: string;
   description: string;
+  targetType: 'PRODUCT' | 'SERVICE';
   discountType: 'PERCENTAGE' | 'FIXED_AMOUNT';
   discountValue: number;
   startDate: string;
@@ -62,8 +66,12 @@ export function CreatePromotionDialog({
   onSuccess,
 }: CreatePromotionDialogProps) {
   const { toast } = useToast();
+  const vertical = useCurrentVertical();
   const [isProductSelectOpen, setIsProductSelectOpen] = useState(false);
+  const [isServiceSelectOpen, setIsServiceSelectOpen] = useState(false);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
+  const isBarbershop = vertical === 'BARBERSHOP';
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -78,6 +86,7 @@ export function CreatePromotionDialog({
     defaultValues: {
       name: '',
       description: '',
+      targetType: 'PRODUCT',
       discountType: 'PERCENTAGE',
       discountValue: 0,
       startDate: today,
@@ -88,6 +97,7 @@ export function CreatePromotionDialog({
     },
   });
 
+  const targetType = watch('targetType');
   const discountType = watch('discountType');
   const discountValue = watch('discountValue');
 
@@ -97,6 +107,7 @@ export function CreatePromotionDialog({
       reset({
         name: '',
         description: '',
+        targetType: 'PRODUCT',
         discountType: 'PERCENTAGE',
         discountValue: 0,
         startDate: today,
@@ -106,6 +117,7 @@ export function CreatePromotionDialog({
         usageLimit: 0,
       });
       setSelectedProductIds([]);
+      setSelectedServiceIds([]);
     }
   }, [open, reset, today]);
 
@@ -139,11 +151,13 @@ export function CreatePromotionDialog({
     try {
       const response = await api.post('/promotions', {
         ...data,
+        targetType: isBarbershop ? data.targetType : 'PRODUCT',
         discountValue: Number(data.discountValue),
         minPurchaseAmount: Number(data.minPurchaseAmount) || 0,
         maxDiscountAmount: Number(data.maxDiscountAmount) || 0,
         usageLimit: Number(data.usageLimit) || 0,
-        applicableProductIds: selectedProductIds,
+        applicableProductIds: (isBarbershop ? data.targetType : 'PRODUCT') === 'PRODUCT' ? selectedProductIds : [],
+        applicableServiceIds: (isBarbershop ? data.targetType : 'PRODUCT') === 'SERVICE' ? selectedServiceIds : [],
       });
 
       if (response.data.success) {
@@ -167,16 +181,22 @@ export function CreatePromotionDialog({
     setSelectedProductIds((prev) => prev.filter((p) => p !== id));
   };
 
+  const removeService = (id: string) => {
+    setSelectedServiceIds((prev) => prev.filter((serviceId) => serviceId !== id));
+  };
+
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-violet-600 to-indigo-600 dark:from-violet-400 dark:to-indigo-400 bg-clip-text text-transparent">
-              Crear Nueva Promoción
+              {isBarbershop ? 'Crear campaña o promo de productos' : 'Crear Nueva Promoción'}
             </DialogTitle>
             <DialogDescription>
-              Completa la información para crear una nueva promoción
+              {isBarbershop
+                ? 'Usá este flujo para descuentos de productos y ofertas web de tu barbería.'
+                : 'Completa la información para crear una nueva promoción'}
             </DialogDescription>
           </DialogHeader>
 
@@ -218,46 +238,78 @@ export function CreatePromotionDialog({
                   {...register('description')}
                 />
               </div>
+
+              {isBarbershop && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="targetType" className="text-sm font-semibold">
+                    Alcance de la promoción
+                  </Label>
+                  <Select
+                    value={targetType}
+                    onValueChange={(value: 'PRODUCT' | 'SERVICE') =>
+                      setValue('targetType', value, { shouldValidate: true })
+                    }
+                  >
+                    <SelectTrigger className="h-11">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="PRODUCT">Productos / tienda online</SelectItem>
+                      <SelectItem value="SERVICE">Servicios de barbería</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
 
             {/* ── SECCIÓN 2: Productos ── */}
             <div className="space-y-3 pt-1 border-t border-dashed border-slate-200 dark:border-slate-800">
               <div className="flex items-center justify-between pt-3">
                 <Label className="text-sm font-semibold flex items-center gap-2">
-                  <Package className="w-4 h-4 text-violet-500" />
-                  Productos Aplicables
+                  {targetType === 'SERVICE' ? (
+                    <Scissors className="w-4 h-4 text-violet-500" />
+                  ) : (
+                    <Package className="w-4 h-4 text-violet-500" />
+                  )}
+                  {targetType === 'SERVICE'
+                    ? 'Servicios promocionados'
+                    : isBarbershop ? 'Productos promocionados' : 'Productos Aplicables'}
                 </Label>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
                   className="h-8 gap-2 border-violet-200 hover:border-violet-400 hover:bg-violet-50 dark:border-violet-900 dark:hover:bg-violet-900/20"
-                  onClick={() => setIsProductSelectOpen(true)}
+                  onClick={() => targetType === 'SERVICE' ? setIsServiceSelectOpen(true) : setIsProductSelectOpen(true)}
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  {selectedProductIds.length > 0 ? 'Modificar selección' : 'Seleccionar productos'}
+                  {targetType === 'SERVICE'
+                    ? selectedServiceIds.length > 0 ? 'Modificar selección' : 'Seleccionar servicios'
+                    : selectedProductIds.length > 0 ? 'Modificar selección' : 'Seleccionar productos'}
                 </Button>
               </div>
 
               <div className="min-h-[56px] p-3 rounded-xl border-2 border-dashed border-violet-100 dark:border-violet-900/50 bg-violet-50/30 dark:bg-violet-900/10 transition-colors">
-                {selectedProductIds.length > 0 ? (
+                {(targetType === 'SERVICE' ? selectedServiceIds.length : selectedProductIds.length) > 0 ? (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-medium text-violet-700 dark:text-violet-300">
-                        {selectedProductIds.length} producto{selectedProductIds.length !== 1 ? 's' : ''} seleccionado{selectedProductIds.length !== 1 ? 's' : ''}
+                        {targetType === 'SERVICE'
+                          ? `${selectedServiceIds.length} servicio${selectedServiceIds.length !== 1 ? 's' : ''} seleccionado${selectedServiceIds.length !== 1 ? 's' : ''}`
+                          : `${selectedProductIds.length} producto${selectedProductIds.length !== 1 ? 's' : ''} seleccionado${selectedProductIds.length !== 1 ? 's' : ''}`}
                       </span>
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
                         className="h-6 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 px-2"
-                        onClick={() => setSelectedProductIds([])}
+                        onClick={() => targetType === 'SERVICE' ? setSelectedServiceIds([]) : setSelectedProductIds([])}
                       >
                         Limpiar todo
                       </Button>
                     </div>
                     <div className="flex flex-wrap gap-1.5">
-                      {selectedProductIds.slice(0, 12).map((id) => (
+                      {(targetType === 'SERVICE' ? selectedServiceIds : selectedProductIds).slice(0, 12).map((id) => (
                         <Badge
                           key={id}
                           variant="secondary"
@@ -266,26 +318,37 @@ export function CreatePromotionDialog({
                           <span className="font-mono">···{id.slice(-6)}</span>
                           <button
                             type="button"
-                            onClick={() => removeProduct(id)}
+                            onClick={() => targetType === 'SERVICE' ? removeService(id) : removeProduct(id)}
                             className="ml-0.5 rounded-full hover:bg-violet-200 dark:hover:bg-violet-800 p-0.5"
                           >
                             <X className="h-2.5 w-2.5" />
                           </button>
                         </Badge>
                       ))}
-                      {selectedProductIds.length > 12 && (
+                      {(targetType === 'SERVICE' ? selectedServiceIds.length : selectedProductIds.length) > 12 && (
                         <Badge variant="outline" className="text-xs text-muted-foreground">
-                          +{selectedProductIds.length - 12} más
+                          +{(targetType === 'SERVICE' ? selectedServiceIds.length : selectedProductIds.length) - 12} más
                         </Badge>
                       )}
                     </div>
                   </div>
                 ) : (
                   <p className="text-sm text-center text-muted-foreground py-2">
-                    Sin productos seleccionados. La promoción se aplicará a todos los productos.
+                    {targetType === 'SERVICE'
+                      ? 'Sin servicios seleccionados. La promoción se aplicará a todos los servicios activos.'
+                      : isBarbershop
+                      ? 'Sin productos seleccionados. La promoción se aplicará a toda la tienda online de productos.'
+                      : 'Sin productos seleccionados. La promoción se aplicará a todos los productos.'}
                   </p>
                 )}
               </div>
+              {isBarbershop && (
+                <p className="text-xs text-muted-foreground">
+                  {targetType === 'SERVICE'
+                    ? 'Esta promo se asociará a servicios del negocio. La difusión pública de reservas se puede sumar después.'
+                    : 'Esta promo afectará productos y ofertas web de la barbería.'}
+                </p>
+              )}
             </div>
 
             {/* ── SECCIÓN 3: Descuento ── */}
@@ -493,6 +556,15 @@ export function CreatePromotionDialog({
         excludeProductIds={[]}
         discountType={discountType}
         discountValue={Number(discountValue) || 0}
+      />
+      <ServiceSelectionDialog
+        open={isServiceSelectOpen}
+        onOpenChange={setIsServiceSelectOpen}
+        onConfirm={(ids) => {
+          setSelectedServiceIds(ids);
+          setIsServiceSelectOpen(false);
+        }}
+        excludeServiceIds={[]}
       />
     </>
   );

@@ -52,7 +52,7 @@ export function SecuritySettingsTab() {
   return (
     <div className="space-y-8">
       {/* Security Health Dashboard */}
-      <Card className="border-none shadow-xl shadow-emerald-500/5 bg-gradient-to-br from-emerald-500/5 to-transparent backdrop-blur-sm overflow-hidden">
+      <Card className="glass-card hover-lift shadow-xl shadow-emerald-500/5 bg-gradient-to-br from-emerald-500/5 to-transparent backdrop-blur-xl overflow-hidden border-emerald-500/20">
         <CardHeader className="pb-4">
           <CardTitle className="flex items-center gap-3 text-xl font-bold">
             <div className="p-2 rounded-lg bg-emerald-600 text-white shadow-lg shadow-emerald-600/20">
@@ -102,7 +102,7 @@ export function SecuritySettingsTab() {
 
       <div className="grid gap-8 md:grid-cols-2">
         {/* Password Policies */}
-        <Card className="border-none shadow-xl shadow-blue-500/5 bg-white/50 dark:bg-card/50 backdrop-blur-sm overflow-hidden group">
+        <Card className="glass-card hover-lift shadow-xl bg-card/60 backdrop-blur-xl overflow-hidden group">
           <div className="absolute top-0 left-0 w-1 h-full bg-blue-600"></div>
           <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-3 text-xl font-bold">
@@ -179,7 +179,7 @@ export function SecuritySettingsTab() {
         </Card>
 
         {/* Access Control */}
-        <Card className="border-none shadow-xl shadow-purple-500/5 bg-white/50 dark:bg-card/50 backdrop-blur-sm overflow-hidden group">
+        <Card className="glass-card hover-lift shadow-xl bg-card/60 backdrop-blur-xl overflow-hidden group">
           <div className="absolute top-0 left-0 w-1 h-full bg-purple-600"></div>
           <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-3 text-xl font-bold">
@@ -256,7 +256,7 @@ export function SecuritySettingsTab() {
         </Card>
 
         {/* Two-Factor Authentication */}
-        <Card className="border-none shadow-xl shadow-indigo-500/5 bg-white/50 dark:bg-card/50 backdrop-blur-sm overflow-hidden group">
+        <Card className="glass-card hover-lift shadow-xl bg-card/60 backdrop-blur-xl overflow-hidden group">
           <div className="absolute top-0 left-0 w-1 h-full bg-indigo-600"></div>
           <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-3 text-xl font-bold">
@@ -326,7 +326,7 @@ export function SecuritySettingsTab() {
         </Card>
 
         {/* Login Notifications */}
-        <Card className="border-none shadow-xl shadow-amber-500/5 bg-white/50 dark:bg-card/50 backdrop-blur-sm overflow-hidden group">
+        <Card className="glass-card hover-lift shadow-xl bg-card/60 backdrop-blur-xl overflow-hidden group">
           <div className="absolute top-0 left-0 w-1 h-full bg-amber-600"></div>
           <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-3 text-xl font-bold">

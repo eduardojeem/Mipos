@@ -23,9 +23,11 @@ import {
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
-import { Loader2, Package, Plus, X } from 'lucide-react'
+import { Loader2, Package, Plus, Scissors, X } from 'lucide-react'
 import api from '@/lib/api'
 import { ProductSelectionDialog } from './ProductSelectionDialog'
+import { ServiceSelectionDialog } from './ServiceSelectionDialog'
+import { useCurrentVertical } from '@/hooks/use-current-vertical'
 
 import type { Promotion } from '@/lib/validation/promotion-validation'
 
@@ -39,6 +41,7 @@ interface EditPromotionDialogProps {
 interface FormData {
   name: string
   description: string
+  targetType: 'PRODUCT' | 'SERVICE'
   discountType: 'PERCENTAGE' | 'FIXED_AMOUNT'
   discountValue: number
   startDate: string
@@ -54,10 +57,14 @@ export function EditPromotionDialog({
   onOpenChange,
   onSuccess,
 }: EditPromotionDialogProps) {
+  const vertical = useCurrentVertical()
   const [loading, setLoading] = useState(false)
   const [isProductSelectOpen, setIsProductSelectOpen] = useState(false)
+  const [isServiceSelectOpen, setIsServiceSelectOpen] = useState(false)
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([])
+  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([])
   const { toast } = useToast()
+  const isBarbershop = vertical === 'BARBERSHOP'
   
   const {
     register,
@@ -70,6 +77,7 @@ export function EditPromotionDialog({
 
   const discountType = watch('discountType')
   const discountValue = watch('discountValue')
+  const targetType = watch('targetType')
 
   const knownProducts = useMemo(() => {
     const applicable = promotion?.applicableProducts || []
@@ -85,6 +93,20 @@ export function EditPromotionDialog({
     return new Map(entries.map((product) => [product.id, product.name]))
   }, [promotion?.applicableProducts])
 
+  const knownServices = useMemo(() => {
+    const applicable = promotion?.applicableServices || []
+    const entries = Array.isArray(applicable)
+      ? applicable
+          .map((service) => ({
+            id: typeof service?.id === 'string' ? service.id : String(service?.id || ''),
+            name: typeof service?.name === 'string' ? service.name : '',
+          }))
+          .filter((service) => service.id)
+      : []
+
+    return new Map(entries.map((service) => [service.id, service.name]))
+  }, [promotion?.applicableServices])
+
   useEffect(() => {
     if (promotion && open) {
       // Convertir fechas al formato correcto para input[type="date"]
@@ -94,6 +116,7 @@ export function EditPromotionDialog({
       reset({
         name: promotion.name,
         description: promotion.description,
+        targetType: promotion.targetType || 'PRODUCT',
         discountType: promotion.discountType,
         discountValue: promotion.discountValue,
         startDate,
@@ -110,6 +133,13 @@ export function EditPromotionDialog({
               .filter((id): id is string => id.length > 0)
           : []
       )
+      setSelectedServiceIds(
+        Array.isArray(promotion.applicableServices)
+          ? promotion.applicableServices
+              .map((service) => String(service?.id || '').trim())
+              .filter((id): id is string => id.length > 0)
+          : []
+      )
     }
   }, [promotion, open, reset])
 
@@ -120,6 +150,15 @@ export function EditPromotionDialog({
 
   const removeProduct = (productId: string) => {
     setSelectedProductIds((prev) => prev.filter((id) => id !== productId))
+  }
+
+  const handleAddServices = (serviceIds: string[]) => {
+    setSelectedServiceIds((prev) => Array.from(new Set([...prev, ...serviceIds])))
+    setIsServiceSelectOpen(false)
+  }
+
+  const removeService = (serviceId: string) => {
+    setSelectedServiceIds((prev) => prev.filter((id) => id !== serviceId))
   }
 
   const onSubmit = async (data: FormData) => {
@@ -156,6 +195,7 @@ export function EditPromotionDialog({
       const payload = {
         name: data.name.trim(),
         description: data.description ?? '',
+        targetType: isBarbershop ? data.targetType : 'PRODUCT',
         discountType: data.discountType,
         discountValue: Number(data.discountValue),
         startDate: data.startDate,
@@ -164,7 +204,8 @@ export function EditPromotionDialog({
         maxDiscountAmount: Number(data.maxDiscountAmount) || 0,
         usageLimit: Number(data.usageLimit) || 0,
         isActive: promotion.isActive, // preserve current active state
-        applicableProductIds: selectedProductIds,
+        applicableProductIds: (isBarbershop ? data.targetType : 'PRODUCT') === 'PRODUCT' ? selectedProductIds : [],
+        applicableServiceIds: (isBarbershop ? data.targetType : 'PRODUCT') === 'SERVICE' ? selectedServiceIds : [],
       }
       
       const response = await api.patch(`/promotions/${promotion.id}`, payload)
@@ -199,9 +240,11 @@ export function EditPromotionDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Editar Promoción</DialogTitle>
+          <DialogTitle>{isBarbershop ? 'Editar campaña o promo de productos' : 'Editar Promoción'}</DialogTitle>
           <DialogDescription>
-            Modifica los detalles de la promoción
+            {isBarbershop
+              ? 'Ajusta descuentos y productos visibles en ofertas web de tu barbería.'
+              : 'Modifica los detalles de la promoción'}
           </DialogDescription>
         </DialogHeader>
 
@@ -230,15 +273,42 @@ export function EditPromotionDialog({
             />
           </div>
 
+          {isBarbershop && (
+            <div className="space-y-2">
+              <Label htmlFor="targetType">Alcance de la promoción</Label>
+              <Select
+                value={targetType}
+                onValueChange={(value: 'PRODUCT' | 'SERVICE') => setValue('targetType', value)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="PRODUCT">Productos / tienda online</SelectItem>
+                  <SelectItem value="SERVICE">Servicios de barbería</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="space-y-3 pt-4 border-t">
             <div className="flex items-center justify-between">
               <div className="space-y-1">
                 <Label className="text-sm font-semibold flex items-center gap-2">
-                  <Package className="h-4 w-4 text-violet-500" />
-                  Productos Asociados
+                  {targetType === 'SERVICE'
+                    ? <Scissors className="h-4 w-4 text-violet-500" />
+                    : <Package className="h-4 w-4 text-violet-500" />
+                  }
+                  {targetType === 'SERVICE'
+                    ? 'Servicios promocionados'
+                    : isBarbershop ? 'Productos promocionados' : 'Productos Asociados'}
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  Agrega o quita productos. Los cambios se guardan al pulsar Guardar Cambios.
+                  {targetType === 'SERVICE'
+                    ? 'Agrega o quita servicios. Los cambios se guardan al pulsar Guardar Cambios.'
+                    : isBarbershop
+                    ? 'Agrega o quita productos de la tienda online. Los cambios se guardan al pulsar Guardar Cambios.'
+                    : 'Agrega o quita productos. Los cambios se guardan al pulsar Guardar Cambios.'}
                 </p>
               </div>
               <Button
@@ -246,25 +316,27 @@ export function EditPromotionDialog({
                 variant="outline"
                 size="sm"
                 className="h-8 gap-2"
-                onClick={() => setIsProductSelectOpen(true)}
+                onClick={() => targetType === 'SERVICE' ? setIsServiceSelectOpen(true) : setIsProductSelectOpen(true)}
               >
                 <Plus className="h-3.5 w-3.5" />
-                Agregar productos
+                {targetType === 'SERVICE' ? 'Agregar servicios' : 'Agregar productos'}
               </Button>
             </div>
 
             <div className="rounded-xl border border-dashed border-violet-200 bg-violet-50/30 p-3 dark:border-violet-900/50 dark:bg-violet-900/10">
-              {selectedProductIds.length > 0 ? (
+              {(targetType === 'SERVICE' ? selectedServiceIds.length : selectedProductIds.length) > 0 ? (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-violet-700 dark:text-violet-300">
-                      {selectedProductIds.length} producto{selectedProductIds.length !== 1 ? 's' : ''} asociado{selectedProductIds.length !== 1 ? 's' : ''}
+                      {targetType === 'SERVICE'
+                        ? `${selectedServiceIds.length} servicio${selectedServiceIds.length !== 1 ? 's' : ''} asociado${selectedServiceIds.length !== 1 ? 's' : ''}`
+                        : `${selectedProductIds.length} producto${selectedProductIds.length !== 1 ? 's' : ''} asociado${selectedProductIds.length !== 1 ? 's' : ''}`}
                     </span>
                   </div>
                   <div className="max-h-28 overflow-y-auto">
                     <div className="flex flex-wrap gap-1.5">
-                      {selectedProductIds.map((id) => {
-                        const name = knownProducts.get(id)
+                      {(targetType === 'SERVICE' ? selectedServiceIds : selectedProductIds).map((id) => {
+                        const name = targetType === 'SERVICE' ? knownServices.get(id) : knownProducts.get(id)
                         return (
                           <Badge
                             key={id}
@@ -276,9 +348,9 @@ export function EditPromotionDialog({
                             </span>
                             <button
                               type="button"
-                              onClick={() => removeProduct(id)}
+                              onClick={() => targetType === 'SERVICE' ? removeService(id) : removeProduct(id)}
                               className="rounded-full p-0.5 hover:bg-violet-200 dark:hover:bg-violet-800"
-                              aria-label="Quitar producto"
+                              aria-label={targetType === 'SERVICE' ? 'Quitar servicio' : 'Quitar producto'}
                             >
                               <X className="h-2.5 w-2.5" />
                             </button>
@@ -290,10 +362,21 @@ export function EditPromotionDialog({
                 </div>
               ) : (
                 <p className="text-sm text-center text-muted-foreground py-2">
-                  Sin productos seleccionados. La promoción se aplicará a todos los productos.
+                  {targetType === 'SERVICE'
+                    ? 'Sin servicios seleccionados. La promoción se aplicará a todos los servicios activos.'
+                    : isBarbershop
+                    ? 'Sin productos seleccionados. La promoción se aplicará a toda la tienda online de productos.'
+                    : 'Sin productos seleccionados. La promoción se aplicará a todos los productos.'}
                 </p>
               )}
             </div>
+            {isBarbershop && (
+              <p className="text-xs text-muted-foreground">
+                {targetType === 'SERVICE'
+                  ? 'Esta promo se guardará sobre servicios del negocio.'
+                  : 'Esta promo seguirá afectando ofertas y productos web.'}
+              </p>
+            )}
           </div>
 
           {/* Tipo y Valor de Descuento */}
@@ -432,6 +515,12 @@ export function EditPromotionDialog({
         excludeProductIds={selectedProductIds}
         discountType={discountType || promotion.discountType}
         discountValue={Number(discountValue) || promotion.discountValue}
+      />
+      <ServiceSelectionDialog
+        open={isServiceSelectOpen}
+        onOpenChange={setIsServiceSelectOpen}
+        onConfirm={handleAddServices}
+        excludeServiceIds={selectedServiceIds}
       />
     </>
   )

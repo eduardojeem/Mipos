@@ -13,6 +13,7 @@ model Organization {
   name      String
   slug      String   @unique
   status    String   @default("ACTIVE") // ACTIVE, INACTIVE, SUSPENDED
+  vertical  String   @default("RETAIL") // RETAIL (tienda) | BARBERSHOP (agenda/servicios) — gobierna qué módulos ve la org
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
   users     User[]
@@ -22,6 +23,9 @@ model Organization {
   suppliers Supplier[]
   purchases Purchase[]
   inventoryMovements InventoryMovement[]
+  services  Service[]
+  staffProfiles StaffProfile[]
+  appointments Appointment[]
   subscription Subscription?
   invoices  Invoice[]
   payments  Payment[]
@@ -29,6 +33,86 @@ model Organization {
   apiKeys   OrganizationApiKey[]
 
   @@map("organizations")
+}
+
+// Catálogo de servicios (vertical BARBERSHOP): producto sin stock, con duración
+// y precio. Se agenda como turno y se cobra como venta.
+model Service {
+  id             String   @id @db.Uuid @default(dbgenerated("gen_random_uuid()"))
+  organizationId String   @db.Uuid @map("organization_id")
+  name           String
+  description    String?
+  durationMin    Int      @default(30) @map("duration_min")
+  price          Decimal  @default(0) @db.Decimal(14, 2)
+  category       String?
+  color          String?
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, isActive])
+  @@map("services")
+}
+
+// Ficha de profesional agendable (vertical BARBERSHOP). Cuelga de un User
+// existente de la org; el "es barbero" vive acá, no en el enum de roles.
+model StaffProfile {
+  id             String   @id @db.Uuid @default(dbgenerated("gen_random_uuid()"))
+  organizationId String   @db.Uuid @map("organization_id")
+  userId         String   @db.Uuid @map("user_id")
+  displayName    String?  @map("display_name")
+  specialty      String?
+  commissionPct  Decimal  @default(0) @map("commission_pct") @db.Decimal(5, 2)
+  color          String?
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workingHours   StaffWorkingHours[]
+
+  @@unique([organizationId, userId])
+  @@index([organizationId, isActive])
+  @@map("staff_profiles")
+}
+
+// Horario de atención de un profesional, por día de semana (0=domingo … 6=sábado).
+model StaffWorkingHours {
+  id             String   @id @db.Uuid @default(dbgenerated("gen_random_uuid()"))
+  organizationId String   @db.Uuid @map("organization_id")
+  staffProfileId String   @db.Uuid @map("staff_profile_id")
+  dayOfWeek      Int      @map("day_of_week") @db.SmallInt
+  startTime      DateTime @map("start_time") @db.Time
+  endTime        DateTime @map("end_time") @db.Time
+  staffProfile   StaffProfile @relation(fields: [staffProfileId], references: [id], onDelete: Cascade)
+
+  @@index([staffProfileId])
+  @@map("staff_working_hours")
+}
+
+// Turno de la agenda (vertical BARBERSHOP). Al cobrarse genera un Sale (sale_id).
+model Appointment {
+  id             String   @id @db.Uuid @default(dbgenerated("gen_random_uuid()"))
+  organizationId String   @db.Uuid @map("organization_id")
+  staffProfileId String   @db.Uuid @map("staff_profile_id")
+  serviceId      String   @db.Uuid @map("service_id")
+  customerId     String?  @map("customer_id")
+  customerName   String?  @map("customer_name")
+  customerPhone  String?  @map("customer_phone")
+  startAt        DateTime @map("start_at") @db.Timestamptz
+  endAt          DateTime @map("end_at") @db.Timestamptz
+  status         String   @default("BOOKED") // BOOKED, CONFIRMED, COMPLETED, CANCELLED, NO_SHOW
+  price          Decimal  @default(0) @db.Decimal(14, 2)
+  notes          String?
+  saleId         String?  @map("sale_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, startAt])
+  @@index([staffProfileId, startAt])
+  @@map("appointments")
 }
 
 model User {
@@ -62,6 +146,7 @@ model User {
   cashMovementsCreated  CashMovement[]
   reportedDiscrepancies CashDiscrepancy[]
   pointsTransactions    PointsTransaction[]
+  staffProfiles         StaffProfile[]
   organization          Organization?       @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
@@ -323,6 +408,7 @@ model Sale {
   organizationId String           @map("organization_id")
   userId         String           @map("user_id")
   customerId     String?          @map("customer_id")
+  branchId       String?          @map("branch_id")
   buyerType      String           @default("guest") @map("buyer_type")
   buyerUserId    String?          @db.Uuid @map("buyer_user_id")
   buyerOrganizationId String?     @db.Uuid @map("buyer_organization_id")
@@ -346,6 +432,7 @@ model Sale {
 
   @@index([organizationId, date])
   @@index([organizationId, userId])
+  @@index([branchId])
   @@index([buyerUserId])
   @@index([buyerOrganizationId])
   @@map("sales")

@@ -45,7 +45,7 @@ function FooterComponent({ config, onNavigate }: FooterProps) {
     .join(', ');
 
   return (
-    <footer className="mt-16 border-t border-slate-200/70 bg-slate-950 text-slate-100">
+    <footer className="mt-16 border-t border-border/50 bg-slate-950 text-slate-100">
       <div
         className="border-b border-white/10"
         style={{

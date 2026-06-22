@@ -42,6 +42,80 @@ type PurchaseHistorySale = {
   }>;
 };
 
+type AppointmentHistoryRow = {
+  id: string;
+  start_at: string;
+  end_at: string;
+  status?: string | null;
+  price?: number | null;
+  notes?: string | null;
+  service?: {
+    name?: string | null;
+  } | null;
+  staff?: {
+    display_name?: string | null;
+  } | null;
+};
+
+type LoyaltySummaryData = {
+  customerLoyaltyId: string;
+  programId: string;
+  programName: string;
+  currentPoints: number;
+  totalPointsEarned: number;
+  totalPointsRedeemed: number;
+  enrollmentDate?: string | null;
+  lastActivityDate?: string | null;
+  pointsPerPurchase?: number | null;
+  minimumPurchase?: number | null;
+  currentTier?: {
+    id: string;
+    name: string;
+    color?: string | null;
+    minPoints: number;
+    multiplier: number;
+  } | null;
+  nextTier?: {
+    id: string;
+    name: string;
+    color?: string | null;
+    minPoints: number;
+  } | null;
+  pointsToNextTier?: number | null;
+  progressToNextTier?: number | null;
+  lastTransaction?: {
+    id: string;
+    type: 'EARNED' | 'REDEEMED' | 'BONUS' | 'ADJUSTMENT' | 'EXPIRED';
+    points: number;
+    description?: string | null;
+    createdAt: string;
+    referenceType?: string | null;
+  } | null;
+};
+
+type CustomerActivitySummaryData = {
+  totalAppointments: number;
+  completedAppointments: number;
+  noShowCount: number;
+  cancelledAppointments: number;
+  totalServiceRevenue: number;
+  totalCustomerValue: number;
+  nextAppointment?: {
+    id: string;
+    date: string;
+    status: 'BOOKED' | 'CONFIRMED';
+    serviceName: string;
+    staffName?: string | null;
+  } | null;
+  lastCompletedAppointment?: {
+    id: string;
+    date: string;
+    serviceName: string;
+    staffName?: string | null;
+    price: number;
+  } | null;
+};
+
 export function getRequestedOrganizationId(request: NextRequest): string | null {
   const requested = request.headers.get('x-organization-id')?.trim();
   return requested || null;
@@ -157,9 +231,28 @@ function transformPurchaseHistory(purchaseHistory: PurchaseHistorySale[]) {
   }));
 }
 
+function transformAppointmentHistory(appointmentHistory: AppointmentHistoryRow[]) {
+  return appointmentHistory.map((appointment) => ({
+    id: appointment.id,
+    date: appointment.start_at,
+    startAt: appointment.start_at,
+    endAt: appointment.end_at,
+    status: (appointment.status || 'BOOKED') as 'BOOKED' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW',
+    price: Number(appointment.price) || 0,
+    serviceName: appointment.service?.name || 'Servicio',
+    staffName: appointment.staff?.display_name || null,
+    notes: appointment.notes || null,
+  }));
+}
+
 export function transformCustomerRecord(
   customer: any,
-  options: { purchaseHistory?: PurchaseHistorySale[] } = {}
+  options: {
+    purchaseHistory?: PurchaseHistorySale[];
+    appointmentHistory?: AppointmentHistoryRow[];
+    loyalty?: LoyaltySummaryData | null;
+    activitySummary?: CustomerActivitySummaryData | null;
+  } = {}
 ) {
   const totalSpent = Number(customer.total_purchases) || 0;
   const totalOrders = Number(customer.total_orders) || 0;
@@ -190,6 +283,9 @@ export function transformCustomerRecord(
     riskScore: calculateCustomerRiskScore(customer.last_purchase, totalOrders),
     lifetimeValue: calculateCustomerLifetimeValue(totalSpent, totalOrders, customer.created_at),
     ...(options.purchaseHistory ? { purchaseHistory: transformPurchaseHistory(options.purchaseHistory) } : {}),
+    ...(options.appointmentHistory ? { appointmentHistory: transformAppointmentHistory(options.appointmentHistory) } : {}),
+    ...(options.loyalty !== undefined ? { loyalty: options.loyalty } : {}),
+    ...(options.activitySummary !== undefined ? { activitySummary: options.activitySummary } : {}),
   };
 }
 

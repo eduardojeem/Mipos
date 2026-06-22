@@ -2344,6 +2344,7 @@ export class SupabaseRealtimeService {
 
     // Promociones + promotions_products (mismo handler)
     if (handlers.onPromotionChange) {
+      const promoConfig = this.buildRealtimeConfig('promotions');
       const promoHandler = (payload: RealtimePostgresChangesPayload<RowData>) => {
         handlers.onPromotionChange!({
           eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
@@ -2352,12 +2353,13 @@ export class SupabaseRealtimeService {
         });
       };
       channel = channel
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'promotions' }, promoHandler)
+        .on('postgres_changes', promoConfig, promoHandler)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'promotions_products' }, promoHandler);
     }
 
     // Cupones + coupon_usages (mismo handler)
     if (handlers.onCouponChange) {
+      const couponConfig = this.buildRealtimeConfig('coupons');
       const couponHandler = (payload: RealtimePostgresChangesPayload<RowData>) => {
         handlers.onCouponChange!({
           eventType: payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE',
@@ -2366,7 +2368,7 @@ export class SupabaseRealtimeService {
         });
       };
       channel = channel
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'coupons' }, couponHandler)
+        .on('postgres_changes', couponConfig, couponHandler)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'coupon_usages' }, couponHandler);
     }
 

@@ -1,14 +1,17 @@
 'use client';
 
+import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Download, FileJson, FileSpreadsheet, History, Plus,
-  RefreshCw, Search, Tag, Zap, TrendingDown, Clock, XCircle, Package,
+  RefreshCw, Search, Tag, Clock, XCircle, Package, Scissors, Info, Store, Layers3, Sparkles, FilterX,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { UnifiedPermissionGuard } from '@/components/auth/UnifiedPermissionGuard';
 import { useStore } from '@/store';
 import { PromotionFilters } from './components/PromotionFilters';
@@ -31,11 +34,13 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { createLogger } from '@/lib/logger';
+import { useCurrentVertical } from '@/hooks/use-current-vertical';
 
 interface Promotion {
   id: string;
   name: string;
   description: string;
+  targetType?: 'PRODUCT' | 'SERVICE';
   discountType: 'PERCENTAGE' | 'FIXED_AMOUNT';
   discountValue: number;
   startDate: string;
@@ -44,6 +49,7 @@ interface Promotion {
   usageCount?: number;
   usageLimit?: number;
   applicableProducts?: unknown[];
+  applicableServices?: unknown[];
 }
 
 const logger = createLogger('PromotionsPage');
@@ -55,35 +61,64 @@ function deriveProductCounts(promotions: Promotion[]): Record<string, number> {
   }, {});
 }
 
-// ── Stat pill (inline) ────────────────────────────────────────────────────────
-function StatPill({
-  icon: Icon, label, value, accent = 'default',
+function OverviewCard({
+  icon: Icon,
+  label,
+  value,
+  helper,
+  accent = 'default',
 }: {
   icon: React.ElementType;
   label: string;
   value: string | number;
+  helper: string;
   accent?: 'default' | 'emerald' | 'amber' | 'rose' | 'blue';
 }) {
-  const cls = {
-    default:  'bg-muted/60 text-foreground',
-    emerald:  'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400',
-    amber:    'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400',
-    rose:     'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400',
-    blue:     'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400',
+  const palette = {
+    default: {
+      wrap: 'bg-muted/50 text-foreground',
+      icon: 'bg-background text-foreground',
+    },
+    emerald: {
+      wrap: 'bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100',
+      icon: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+    },
+    amber: {
+      wrap: 'bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100',
+      icon: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+    },
+    rose: {
+      wrap: 'bg-rose-50 text-rose-900 dark:bg-rose-950/40 dark:text-rose-100',
+      icon: 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300',
+    },
+    blue: {
+      wrap: 'bg-blue-50 text-blue-900 dark:bg-blue-950/40 dark:text-blue-100',
+      icon: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+    },
   }[accent];
+
   return (
-    <div className={cn('flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium', cls)}>
-      <Icon className="h-3.5 w-3.5 shrink-0" />
-      <span className="hidden sm:inline text-[11px] opacity-70">{label}</span>
-      <span className="font-semibold">{value}</span>
-    </div>
+    <Card className={cn('border-border/60 shadow-sm', palette.wrap)}>
+      <CardContent className="flex items-start justify-between gap-3 p-4">
+        <div className="space-y-1">
+          <p className="text-sm font-medium opacity-80">{label}</p>
+          <p className="text-2xl font-bold tracking-tight">{value}</p>
+          <p className="text-xs opacity-70">{helper}</p>
+        </div>
+        <div className={cn('flex h-10 w-10 items-center justify-center rounded-xl', palette.icon)}>
+          <Icon className="h-5 w-5" />
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
 export default function PromotionsPage() {
+  const vertical = useCurrentVertical();
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'scheduled' | 'expired' | 'inactive'>('all');
+  const [targetFilter, setTargetFilter] = useState<'all' | 'PRODUCT' | 'SERVICE'>('all');
   const [sortBy, setSortBy] = useState<'name' | 'date' | 'discount'>('date');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -152,11 +187,20 @@ export default function PromotionsPage() {
     return 'active';
   }, []);
 
+  const getAssociationCount = useCallback((promotion: Promotion) => {
+    if (promotion.targetType === 'SERVICE') {
+      return promotion.applicableServices?.length ?? 0;
+    }
+
+    return productCounts[promotion.id] ?? promotion.applicableProducts?.length ?? 0;
+  }, [productCounts]);
+
   const filteredPromotions = useMemo(() => {
     const filtered = storeItems.filter((p: Promotion) => {
       const q = searchTerm.toLowerCase();
       if (q && !p.name.toLowerCase().includes(q) && !(p.description || '').toLowerCase().includes(q)) return false;
       if (statusFilter !== 'all' && getStatus(p) !== statusFilter) return false;
+      if (targetFilter !== 'all' && (p.targetType || 'PRODUCT') !== targetFilter) return false;
       return true;
     });
     return filtered.sort((a: Promotion, b: Promotion) => {
@@ -164,18 +208,30 @@ export default function PromotionsPage() {
       if (sortBy === 'date') return new Date(b.startDate).getTime() - new Date(a.startDate).getTime();
       return b.discountValue - a.discountValue;
     });
-  }, [storeItems, searchTerm, statusFilter, sortBy, getStatus]);
+  }, [storeItems, searchTerm, statusFilter, targetFilter, sortBy, getStatus]);
 
-  // Stats
   const stats = useMemo(() => {
     const all = storeItems as Promotion[];
+    const productPromotions = all.filter((p) => (p.targetType || 'PRODUCT') === 'PRODUCT');
+    const servicePromotions = all.filter((p) => p.targetType === 'SERVICE');
+
     return {
       total: all.length,
       active: all.filter((p) => getStatus(p) === 'active').length,
       scheduled: all.filter((p) => getStatus(p) === 'scheduled').length,
       expired: all.filter((p) => getStatus(p) === 'expired').length,
+      productPromotions: productPromotions.length,
+      servicePromotions: servicePromotions.length,
+      linkedProducts: productPromotions.reduce((sum, promotion) => sum + getAssociationCount(promotion), 0),
+      linkedServices: servicePromotions.reduce((sum, promotion) => sum + getAssociationCount(promotion), 0),
     };
-  }, [storeItems, getStatus]);
+  }, [storeItems, getStatus, getAssociationCount]);
+
+  const activeFiltersCount = [
+    searchTerm.trim().length > 0,
+    statusFilter !== 'all',
+    targetFilter !== 'all',
+  ].filter(Boolean).length;
 
   const totalPages = Math.ceil(filteredPromotions.length / itemsPerPage);
   const paginatedPromotions = filteredPromotions.slice(
@@ -183,7 +239,7 @@ export default function PromotionsPage() {
     currentPage * itemsPerPage,
   );
 
-  useEffect(() => { setCurrentPage(1); }, [searchTerm, statusFilter, sortBy]);
+  useEffect(() => { setCurrentPage(1); }, [searchTerm, statusFilter, targetFilter, sortBy]);
 
   const exportToExcel = () => {
     const data = filteredPromotions.map((p: Promotion) => ({
@@ -225,6 +281,37 @@ export default function PromotionsPage() {
     fetchProductCounts();
   };
 
+  const clearFilters = () => {
+    setSearchTerm('');
+    setStatusFilter('all');
+    setTargetFilter('all');
+  };
+
+  const isBarbershop = vertical === 'BARBERSHOP';
+  const pageCopy = isBarbershop
+    ? {
+        title: 'Promociones y campañas',
+        subtitle: 'Administrá promociones de productos y servicios para tu barbería desde un solo panel.',
+        createLabel: 'Nueva promoción',
+        searchPlaceholder: 'Buscar campañas o promociones...',
+        carouselTitle: 'Carrusel de compras online',
+        infoTitle: 'Promociones para barbería',
+        infoDescription: 'Desde este panel podés gestionar promos de productos y servicios. Las ofertas web siguen funcionando para productos, mientras que las promos de servicios quedan disponibles para uso interno y operación del negocio.',
+        workspaceTitle: 'Panel operativo',
+        workspaceDescription: 'Controlá campañas activas, material público y promociones internas sin mezclar reservas con ofertas web.',
+      }
+    : {
+        title: 'Promociones',
+        subtitle: 'Gestioná descuentos y ofertas para tu tienda online y catálogo de productos.',
+        createLabel: 'Nueva Promoción',
+        searchPlaceholder: 'Buscar por nombre o descripción...',
+        carouselTitle: 'Carrusel de Ofertas',
+        infoTitle: '',
+        infoDescription: '',
+        workspaceTitle: 'Panel comercial',
+        workspaceDescription: 'Gestioná campañas visibles para el catálogo, seguimiento operativo y acciones masivas desde una sola vista.',
+      };
+
   return (
     <UnifiedPermissionGuard
       resource="promotions"
@@ -232,29 +319,30 @@ export default function PromotionsPage() {
       fallback={<div className="p-6"><h1 className="text-xl font-semibold">Acceso denegado</h1></div>}
     >
       <div className="flex flex-col gap-5 p-4 sm:p-6">
-        {/* ═══ HEADER ══════════════════════════════════════════════════════════ */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          {/* Izquierda: título + stats inline */}
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 ring-1 ring-indigo-500/20">
-              <Tag className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 ring-1 ring-indigo-500/20">
+              {isBarbershop ? (
+                <Scissors className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+              ) : (
+                <Tag className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+              )}
             </div>
-            <h1 className="text-xl font-bold tracking-tight">Promociones</h1>
-
-            {/* Stat pills */}
-            {!storeLoading && stats.total > 0 && (
-              <>
-                <StatPill icon={Zap} label="Total" value={stats.total} />
-                {stats.active > 0 && <StatPill icon={TrendingDown} label="Activas" value={stats.active} accent="emerald" />}
-                {stats.scheduled > 0 && <StatPill icon={Clock} label="Programadas" value={stats.scheduled} accent="blue" />}
-                {stats.expired > 0 && <StatPill icon={XCircle} label="Expiradas" value={stats.expired} accent="rose" />}
-              </>
-            )}
+            <div className="min-w-0 space-y-1">
+              <h1 className="text-xl font-bold tracking-tight">{pageCopy.title}</h1>
+              <p className="text-sm text-muted-foreground">{pageCopy.subtitle}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary" className="gap-1">
+                  <Layers3 className="h-3.5 w-3.5" />
+                  {pageCopy.workspaceTitle}
+                </Badge>
+                <Badge variant="outline">{filteredPromotions.length} resultado{filteredPromotions.length !== 1 ? 's' : ''}</Badge>
+                {selectedIds.size > 0 && <Badge variant="outline">{selectedIds.size} seleccionada{selectedIds.size !== 1 ? 's' : ''}</Badge>}
+              </div>
+            </div>
           </div>
 
-          {/* Derecha: acciones */}
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            {/* Historial / Carrusel (acceso rápido) */}
             <Button
               variant="ghost" size="icon"
               onClick={() => setShowAuditLog((v) => !v)}
@@ -297,60 +385,108 @@ export default function PromotionsPage() {
               className="h-9 gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white"
             >
               <Plus className="h-4 w-4" />
-              Nueva Promoción
+              {pageCopy.createLabel}
             </Button>
           </div>
         </div>
 
-        {/* ═══ CARRUSEL (colapsable) ════════════════════════════════════════════ */}
-        <div className="overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm">
-          <button
-            onClick={() => setShowCarousel((v) => !v)}
-            className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium text-foreground hover:bg-muted/30 transition-colors"
-          >
-            <span className="flex items-center gap-2">
-              <Package className="h-4 w-4 text-indigo-500" />
-              Carrusel de Ofertas
-            </span>
-            <Badge variant="outline" className="text-[11px]">
-              {showCarousel ? 'Ocultar' : 'Mostrar'}
-            </Badge>
-          </button>
-          {showCarousel && (
-            <div className="border-t border-border/40 p-4">
-              <CarouselEditor
-                key={`carousel-v${carouselVersion}`}
-                promotions={storeItems}
-                isLoading={storeLoading}
-              />
-            </div>
-          )}
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,0.9fr)]">
+          <Card className="border-border/60 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">{pageCopy.workspaceTitle}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">{pageCopy.workspaceDescription}</p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <OverviewCard
+                  icon={Tag}
+                  label="Promociones"
+                  value={stats.total}
+                  helper="Total cargadas en esta organización"
+                />
+                <OverviewCard
+                  icon={Sparkles}
+                  label="Activas"
+                  value={stats.active}
+                  helper={`${stats.scheduled} programadas y ${stats.expired} expiradas`}
+                  accent="emerald"
+                />
+                <OverviewCard
+                  icon={Store}
+                  label="Productos"
+                  value={stats.productPromotions}
+                  helper={`${stats.linkedProducts} productos asociados`}
+                  accent="blue"
+                />
+                <OverviewCard
+                  icon={Scissors}
+                  label="Servicios"
+                  value={stats.servicePromotions}
+                  helper={`${stats.linkedServices} servicios asociados`}
+                  accent={isBarbershop ? 'amber' : 'default'}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/60 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Estado operativo</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <div className="flex items-center justify-between rounded-xl border border-border/60 bg-muted/30 px-3 py-2">
+                <span className="text-muted-foreground">Vista actual</span>
+                <Badge variant="secondary">{viewMode === 'grid' ? 'Tarjetas' : 'Lista'}</Badge>
+              </div>
+              <div className="flex items-center justify-between rounded-xl border border-border/60 bg-muted/30 px-3 py-2">
+                <span className="text-muted-foreground">Filtros activos</span>
+                <Badge variant={activeFiltersCount > 0 ? 'default' : 'secondary'}>{activeFiltersCount}</Badge>
+              </div>
+              <div className="flex items-center justify-between rounded-xl border border-border/60 bg-muted/30 px-3 py-2">
+                <span className="text-muted-foreground">Página</span>
+                <Badge variant="outline">{totalPages > 0 ? `${currentPage} de ${totalPages}` : 'Sin paginar'}</Badge>
+              </div>
+              <div className="flex items-center justify-between rounded-xl border border-border/60 bg-muted/30 px-3 py-2">
+                <span className="text-muted-foreground">Acciones masivas</span>
+                <Badge variant="outline">{selectedIds.size > 0 ? 'Disponibles' : 'Sin selección'}</Badge>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
-        {/* ═══ HISTORIAL (colapsable) ══════════════════════════════════════════ */}
-        {showAuditLog && (
-          <div className="overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm">
-            <div className="border-b border-border/40 px-4 py-3">
-              <h3 className="text-sm font-medium">Historial de Cambios</h3>
-            </div>
-            <div className="p-4">
-              <CarouselAuditLog
-                onRevert={() => {
-                  fetchStorePromotions();
-                  setCarouselVersion((v) => v + 1);
-                }}
-              />
-            </div>
-          </div>
+        {isBarbershop && (
+          <Alert className="border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+            <Info className="h-4 w-4" />
+            <AlertTitle>{pageCopy.infoTitle}</AlertTitle>
+            <AlertDescription>{pageCopy.infoDescription}</AlertDescription>
+          </Alert>
         )}
 
-        {/* ═══ BÚSQUEDA Y FILTROS ══════════════════════════════════════════════ */}
         <div className="sticky top-4 z-30 overflow-hidden rounded-2xl border border-border/50 bg-background/90 p-3 shadow-sm backdrop-blur-md">
-          <div className="flex flex-col gap-3 lg:flex-row">
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-medium">Buscador y filtros</p>
+                <p className="text-xs text-muted-foreground">
+                  Encontrá campañas por nombre, estado o alcance y mantené visible solo lo que necesitás operar.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary">{filteredPromotions.length} visible{filteredPromotions.length !== 1 ? 's' : ''}</Badge>
+                {activeFiltersCount > 0 && (
+                  <Button variant="ghost" size="sm" className="h-8 gap-1.5" onClick={clearFilters}>
+                    <FilterX className="h-3.5 w-3.5" />
+                    Limpiar filtros
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 lg:flex-row">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Buscar por nombre o descripción..."
+                placeholder={pageCopy.searchPlaceholder}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="h-9 rounded-xl pl-9 text-sm"
@@ -360,57 +496,113 @@ export default function PromotionsPage() {
             <PromotionFilters
               statusFilter={statusFilter}
               setStatusFilter={setStatusFilter}
+              targetFilter={targetFilter}
+              setTargetFilter={setTargetFilter}
+              showTargetFilter={isBarbershop}
               sortBy={sortBy}
               setSortBy={setSortBy}
               viewMode={viewMode}
               setViewMode={setViewMode}
             />
+            </div>
           </div>
         </div>
 
-        {/* ═══ LISTA / ESTADOS ═════════════════════════════════════════════════ */}
-        <div className="min-h-[400px]">
-          {storeError ? (
-            <ErrorState
-              error={storeError}
-              onRetry={refreshAll}
-              additionalInfo="Verifica tu conexión o contacta a soporte."
-            />
-          ) : storeLoading && storeItems.length === 0 ? (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="h-48 animate-pulse rounded-2xl border border-border/50 bg-muted/40" />
-              ))}
-            </div>
-          ) : filteredPromotions.length === 0 ? (
-            <EmptyState
-              type={storeItems.length === 0 ? 'no-promotions' : 'no-results'}
-              onCreateClick={storeItems.length === 0 ? () => setIsCreateDialogOpen(true) : undefined}
-              onClearFilters={() => { setSearchTerm(''); setStatusFilter('all'); }}
-            />
-          ) : (
-            <div className="space-y-5">
-              <PromotionsList
-                promotions={paginatedPromotions}
-                viewMode={viewMode}
-                onRefresh={refreshAll}
-                selectedIds={selectedIds}
-                onToggleSelect={handleToggleSelect}
-                productCounts={productCounts}
-                loadingCounts={loadingCounts}
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="min-h-[400px]">
+            {storeError ? (
+              <ErrorState
+                error={storeError}
+                onRetry={refreshAll}
+                additionalInfo="Verifica tu conexión o contacta a soporte."
               />
-              {totalPages > 1 && (
-                <Pagination
-                  currentPage={currentPage}
-                  totalPages={totalPages}
-                  totalItems={filteredPromotions.length}
-                  itemsPerPage={itemsPerPage}
-                  onPageChange={setCurrentPage}
-                  onItemsPerPageChange={(n) => { setItemsPerPage(n); setCurrentPage(1); }}
+            ) : storeLoading && storeItems.length === 0 ? (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {[...Array(6)].map((_, i) => (
+                  <div key={i} className="h-48 animate-pulse rounded-2xl border border-border/50 bg-muted/40" />
+                ))}
+              </div>
+            ) : filteredPromotions.length === 0 ? (
+              <EmptyState
+                type={storeItems.length === 0 ? 'no-promotions' : 'no-results'}
+                onCreateClick={storeItems.length === 0 ? () => setIsCreateDialogOpen(true) : undefined}
+                onClearFilters={clearFilters}
+              />
+            ) : (
+              <div className="space-y-5">
+                <PromotionsList
+                  promotions={paginatedPromotions}
+                  viewMode={viewMode}
+                  onRefresh={refreshAll}
+                  selectedIds={selectedIds}
+                  onToggleSelect={handleToggleSelect}
+                  productCounts={productCounts}
+                  loadingCounts={loadingCounts}
                 />
+                {totalPages > 1 && (
+                  <Pagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    totalItems={filteredPromotions.length}
+                    itemsPerPage={itemsPerPage}
+                    onPageChange={setCurrentPage}
+                    onItemsPerPageChange={(n) => { setItemsPerPage(n); setCurrentPage(1); }}
+                  />
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-4">
+            <Card className="overflow-hidden border-border/60 shadow-sm">
+              <button
+                onClick={() => setShowCarousel((v) => !v)}
+                className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted/30"
+              >
+                <span className="flex items-center gap-2">
+                  <Package className="h-4 w-4 text-indigo-500" />
+                  {pageCopy.carouselTitle}
+                </span>
+                <Badge variant="outline" className="text-[11px]">
+                  {showCarousel ? 'Ocultar' : 'Mostrar'}
+                </Badge>
+              </button>
+              {showCarousel && (
+                <div className="border-t border-border/40 p-4">
+                  <CarouselEditor
+                    key={`carousel-v${carouselVersion}`}
+                    promotions={storeItems}
+                    isLoading={storeLoading}
+                  />
+                </div>
               )}
-            </div>
-          )}
+            </Card>
+
+            <Card className="overflow-hidden border-border/60 shadow-sm">
+              <button
+                onClick={() => setShowAuditLog((v) => !v)}
+                className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted/30"
+              >
+                <span className="flex items-center gap-2">
+                  <History className="h-4 w-4 text-indigo-500" />
+                  Historial de cambios
+                </span>
+                <Badge variant="outline" className="text-[11px]">
+                  {showAuditLog ? 'Ocultar' : 'Mostrar'}
+                </Badge>
+              </button>
+              {showAuditLog && (
+                <div className="border-t border-border/40 p-4">
+                  <CarouselAuditLog
+                    onRevert={() => {
+                      fetchStorePromotions();
+                      setCarouselVersion((v) => v + 1);
+                    }}
+                  />
+                </div>
+              )}
+            </Card>
+          </div>
         </div>
       </div>
 

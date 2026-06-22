@@ -19,10 +19,10 @@ export function AdminSidebar() {
   return (
     <TooltipProvider delayDuration={0}>
       <div className={cn(
-        'flex h-full flex-col border-r border-border bg-background/95 shadow-sm backdrop-blur',
-        isCollapsed ? 'w-[72px]' : 'w-[288px]'
+        'flex h-full flex-col border-r border-border/50 bg-background/60 shadow-lg shadow-black/5 backdrop-blur-2xl transition-all duration-500 ease-[cubic-bezier(0.2,0.8,0.2,1)]',
+        isCollapsed ? 'w-[80px]' : 'w-[280px]'
       )}>
-        <div className="flex h-16 items-center justify-between border-b border-border px-3">
+        <div className="flex h-16 items-center justify-between border-b border-border/50 px-4">
           {!isCollapsed && (
             <div className="min-w-0">
               <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">MiPOS</p>
@@ -66,8 +66,10 @@ export function AdminSidebar() {
                             <Link
                               href={item.href}
                               className={cn(
-                                'mx-auto flex h-10 w-10 items-center justify-center rounded-lg transition-colors',
-                                isActive ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                                'mx-auto flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-300',
+                                isActive 
+                                  ? 'bg-primary/10 text-primary shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] border border-primary/20' 
+                                  : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground border border-transparent'
                               )}
                             >
                               <item.icon className="h-5 w-5" />
@@ -86,19 +88,24 @@ export function AdminSidebar() {
                         key={item.href}
                         href={item.href}
                         className={cn(
-                          'flex items-start gap-3 rounded-lg px-3 py-2.5 transition-colors',
-                          isActive ? 'bg-primary text-primary-foreground shadow-sm' : 'text-foreground hover:bg-muted'
+                          'relative flex items-start gap-3 rounded-xl px-3 py-2.5 transition-all duration-300',
+                          isActive 
+                            ? 'bg-primary/10 text-primary shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)] border border-primary/20' 
+                            : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground border border-transparent'
                         )}
                       >
-                        <item.icon className={cn('mt-0.5 h-4 w-4 flex-shrink-0', isActive ? 'text-primary-foreground' : 'text-muted-foreground')} />
+                        {isActive && (
+                          <div className="absolute left-0 top-1/2 h-8 w-1 -translate-y-1/2 rounded-r-full bg-primary" />
+                        )}
+                        <item.icon className={cn('mt-0.5 h-4 w-4 flex-shrink-0', isActive ? 'text-primary' : 'text-muted-foreground')} />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
-                            <span className="truncate text-sm font-medium">{item.title}</span>
+                            <span className="truncate text-sm font-semibold">{item.title}</span>
                             {item.superAdminOnly && (
-                              <Badge variant={isActive ? 'secondary' : 'outline'} className="text-[10px]">SaaS</Badge>
+                              <Badge variant={isActive ? 'default' : 'outline'} className="text-[10px]">SaaS</Badge>
                             )}
                           </div>
-                          <p className={cn('mt-1 text-xs', isActive ? 'text-primary-foreground/80' : 'text-muted-foreground')}>
+                          <p className={cn('mt-1 text-xs', isActive ? 'text-primary/80' : 'text-muted-foreground')}>
                             {item.description}
                           </p>
                         </div>

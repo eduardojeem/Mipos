@@ -1,9 +1,11 @@
 export type DiscountType = 'PERCENTAGE' | 'FIXED_AMOUNT';
+export type PromotionTargetType = 'PRODUCT' | 'SERVICE';
 
 export interface Promotion {
   id: string;
   name: string;
   description?: string;
+  targetType?: PromotionTargetType;
   discountType: DiscountType;
   discountValue: number;
   startDate: string;
@@ -14,6 +16,7 @@ export interface Promotion {
   usageLimit?: number;
   usageCount: number;
   applicableProducts?: ApplicableProduct[];
+  applicableServices?: ApplicableService[];
   organization_id?: string;
   created_at?: string;
   approvalStatus?: 'pending' | 'approved' | 'rejected';
@@ -28,9 +31,18 @@ export interface ApplicableProduct {
   category?: string;
 }
 
+export interface ApplicableService {
+  id: string;
+  name?: string;
+  category?: string | null;
+  price?: number | null;
+  duration_min?: number | null;
+}
+
 export interface PromotionCreateInput {
   name: string;
   description?: string;
+  targetType?: PromotionTargetType;
   discountType: DiscountType;
   discountValue: number;
   startDate: string;
@@ -39,6 +51,7 @@ export interface PromotionCreateInput {
   maxDiscountAmount?: number;
   usageLimit?: number;
   applicableProductIds?: string[];
+  applicableServiceIds?: string[];
 }
 
 export interface PromotionUpdateInput extends Partial<PromotionCreateInput> {

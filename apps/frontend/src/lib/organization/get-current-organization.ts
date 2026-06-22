@@ -15,6 +15,7 @@ export async function maybeGetCurrentOrganization() {
     slug: context.organization.slug || context.tenantKey,
     subdomain: context.organization.subdomain || null,
     custom_domain: context.organization.custom_domain || null,
+    vertical: context.organization.vertical || null,
   };
 }
 

@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { roleService, type RoleHierarchy, type Role } from '@/lib/services/role-service'
+import { useCurrentOrganizationId } from '@/hooks/use-current-organization'
 import { 
   ChevronDown, 
   ChevronRight, 
@@ -159,6 +160,7 @@ function TreeNode({
 }
 
 export function RoleHierarchyTree({ className, onRoleSelect }: RoleHierarchyTreeProps) {
+  const organizationId = useCurrentOrganizationId()
   const [hierarchy, setHierarchy] = useState<RoleHierarchy[]>([])
   const [allRoles, setAllRoles] = useState<Role[]>([])
   const [loading, setLoading] = useState(true)
@@ -166,15 +168,19 @@ export function RoleHierarchyTree({ className, onRoleSelect }: RoleHierarchyTree
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
 
   useEffect(() => {
+    if (!organizationId) {
+      setLoading(false)
+      return
+    }
     loadHierarchy()
     loadAllRoles()
-  }, [])
+  }, [organizationId])
 
   const loadHierarchy = async () => {
     try {
       setLoading(true)
       setError(null)
-      const data = await roleService.getRoleHierarchy()
+      const data = await roleService.getRoleHierarchy(organizationId)
       setHierarchy(data)
       
       // Expandir nodos raíz por defecto
@@ -189,7 +195,7 @@ export function RoleHierarchyTree({ className, onRoleSelect }: RoleHierarchyTree
 
   const loadAllRoles = async () => {
     try {
-      const roles = await roleService.getRoles(true)
+      const roles = await roleService.getRoles(true, organizationId)
       setAllRoles(roles)
     } catch (err) {
       console.error('Error loading all roles:', err)
@@ -208,7 +214,7 @@ export function RoleHierarchyTree({ className, onRoleSelect }: RoleHierarchyTree
 
   const handleParentChange = async (roleId: string, parentId: string | null) => {
     try {
-      await roleService.setParentRole(roleId, parentId)
+      await roleService.setParentRole(roleId, parentId, organizationId)
       await loadHierarchy() // Recargar jerarquía
     } catch (err: any) {
       console.error('Error updating parent role:', err)

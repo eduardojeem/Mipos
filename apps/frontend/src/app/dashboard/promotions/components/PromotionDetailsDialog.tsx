@@ -14,7 +14,7 @@ import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Calendar, Percent, Package, TrendingUp, Clock, ExternalLink, Eye } from 'lucide-react';
+import { Calendar, Percent, Package, TrendingUp, Clock, ExternalLink, Eye, Scissors } from 'lucide-react';
 import { formatDate, formatCurrency, cn } from '@/lib/utils';
 import { ProductsManager } from './ProductsManager';
 import { OfferPreview } from './OfferPreview';
@@ -22,6 +22,7 @@ import { useResponsiveLayout } from '@/hooks/useResponsiveLayout';
 import { useEnhancedTabs } from '@/hooks/useTabPersistence';
 import { validatePromotion, getPromotionStatus, getTimeRemaining, type Promotion } from '@/lib/validation/promotion-validation';
 import { ValidationErrors, TabContentWrapper } from '@/components/ui/states';
+import { useCurrentVertical } from '@/hooks/use-current-vertical';
 
 interface PromotionDetailsDialogProps {
   promotion: Promotion | null;
@@ -48,10 +49,13 @@ function PromotionDetailsContent({
   onOpenChange: (open: boolean) => void;
 }) {
   const { isMobile } = useResponsiveLayout();
+  const vertical = useCurrentVertical();
+  const isBarbershop = vertical === 'BARBERSHOP';
+  const isServicePromotion = promotion.targetType === 'SERVICE';
 
   const { activeTab, setActiveTab } = useEnhancedTabs(
     `promotion-${promotion.id}`,
-    ['overview', 'products', 'preview'],
+    isServicePromotion ? ['overview'] : ['overview', 'products', 'preview'],
     'overview',
     { sessionOnly: false, expireAfter: 24 * 60 * 60 * 1000, keyboardNavigation: true },
   );
@@ -99,21 +103,26 @@ function PromotionDetailsContent({
           </div>
 
           <div className={cn('flex gap-2 flex-shrink-0', isMobile ? 'flex-row justify-between' : 'items-center flex-row')}>
+            <Badge variant="outline" className="whitespace-nowrap">
+              {isServicePromotion ? 'Servicio' : 'Producto'}
+            </Badge>
             <Badge className={cn(statusCfg.className, 'whitespace-nowrap')}>
               {statusCfg.label}
               {status === 'active' && timeRemaining && (
                 <span className="ml-1 text-xs opacity-75">({timeRemaining})</span>
               )}
             </Badge>
-            <Button
-              variant="outline"
-              size={isMobile ? 'sm' : 'default'}
-              onClick={handleViewInPublicSite}
-              className="gap-2 whitespace-nowrap"
-            >
-              <ExternalLink className="h-4 w-4" />
-              {isMobile ? 'Ver' : 'Ver en sitio'}
-            </Button>
+            {!isServicePromotion && (
+              <Button
+                variant="outline"
+                size={isMobile ? 'sm' : 'default'}
+                onClick={handleViewInPublicSite}
+                className="gap-2 whitespace-nowrap"
+              >
+                <ExternalLink className="h-4 w-4" />
+                {isMobile ? 'Ver' : isBarbershop ? 'Ver ofertas web' : 'Ver en sitio'}
+              </Button>
+            )}
           </div>
         </div>
       </DialogHeader>
@@ -122,26 +131,34 @@ function PromotionDetailsContent({
       <div className="flex-1 min-h-0 overflow-hidden">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
           <TabsList
-            className={cn('grid w-full grid-cols-3 flex-shrink-0', isMobile ? 'mx-2 mt-2' : 'mx-6 mt-4')}
+            className={cn('grid w-full flex-shrink-0', isServicePromotion ? 'grid-cols-1' : 'grid-cols-3', isMobile ? 'mx-2 mt-2' : 'mx-6 mt-4')}
             aria-label="Secciones de la promoción"
           >
             <TabsTrigger value="overview" className="gap-2">
               <TrendingUp className="h-4 w-4" />
               <span className={isMobile ? 'hidden sm:inline' : ''}>Resumen</span>
             </TabsTrigger>
-            <TabsTrigger value="products" className="gap-2">
-              <Package className="h-4 w-4" />
-              <span className={isMobile ? 'hidden sm:inline' : ''}>Productos</span>
-              {promotion.applicableProducts && promotion.applicableProducts.length > 0 && (
-                <Badge variant="secondary" className="ml-1 h-5 min-w-5 px-1 text-xs">
-                  {promotion.applicableProducts.length}
-                </Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="preview" className="gap-2">
-              <Eye className="h-4 w-4" />
-              <span className={isMobile ? 'hidden sm:inline' : ''}>Vista Previa</span>
-            </TabsTrigger>
+            {!isServicePromotion && (
+              <TabsTrigger value="products" className="gap-2">
+                <Package className="h-4 w-4" />
+                <span className={isMobile ? 'hidden sm:inline' : ''}>
+                  {isBarbershop ? 'Productos web' : 'Productos'}
+                </span>
+                {promotion.applicableProducts && promotion.applicableProducts.length > 0 && (
+                  <Badge variant="secondary" className="ml-1 h-5 min-w-5 px-1 text-xs">
+                    {promotion.applicableProducts.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            )}
+            {!isServicePromotion && (
+              <TabsTrigger value="preview" className="gap-2">
+                <Eye className="h-4 w-4" />
+                <span className={isMobile ? 'hidden sm:inline' : ''}>
+                  {isBarbershop ? 'Vista web' : 'Vista Previa'}
+                </span>
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <div className="flex-1 min-h-0">
@@ -201,6 +218,48 @@ function PromotionDetailsContent({
                   </div>
 
                   <Separator />
+
+                  {isBarbershop && (
+                    <Card className="border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/30">
+                      <CardContent className="p-4 text-sm text-amber-950 dark:text-amber-100">
+                        {isServicePromotion
+                          ? 'Esta promoción se aplica sobre servicios de barbería. La vista pública de reservas todavía no usa esta promo como landing específica.'
+                          : 'Esta promoción impacta en ofertas y productos web. Las campañas de servicios y reservas todavía no se configuran desde este detalle.'}
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {isServicePromotion && promotion.applicableServices && promotion.applicableServices.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                        <Scissors className="h-4 w-4" />
+                        Servicios Aplicables ({promotion.applicableServices.length})
+                      </h3>
+                      <Card>
+                        <CardContent className="p-4">
+                          <div className="max-h-40 overflow-y-auto space-y-1">
+                            {promotion.applicableServices.map((service: any) => (
+                              <div
+                                key={service.id}
+                                className="flex items-center justify-between text-sm py-1.5 border-b last:border-0"
+                              >
+                                <div className="min-w-0">
+                                  <span className="truncate text-slate-900 dark:text-white">{service.name}</span>
+                                  {service.category ? (
+                                    <p className="text-xs text-slate-500">{service.category}</p>
+                                  ) : null}
+                                </div>
+                                <div className="ml-2 flex-shrink-0 text-right text-slate-500">
+                                  {service.price != null ? <div>{formatCurrency(service.price)}</div> : null}
+                                  {service.duration_min ? <div className="text-xs">{service.duration_min} min</div> : null}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  )}
 
                   {/* Usage stats */}
                   {!!promotion.usageLimit && (
@@ -298,18 +357,22 @@ function PromotionDetailsContent({
                 </TabsContent>
 
                 {/* ── PRODUCTS TAB ── */}
-                <TabsContent value="products" className="mt-4">
-                  <TabContentWrapper>
-                    <MemoizedProductsManager {...productsManagerProps} />
-                  </TabContentWrapper>
-                </TabsContent>
+                {!isServicePromotion && (
+                  <TabsContent value="products" className="mt-4">
+                    <TabContentWrapper>
+                      <MemoizedProductsManager {...productsManagerProps} />
+                    </TabContentWrapper>
+                  </TabsContent>
+                )}
 
                 {/* ── PREVIEW TAB ── */}
-                <TabsContent value="preview" className="mt-4">
-                  <TabContentWrapper>
-                    <MemoizedOfferPreview promotion={promotion} />
-                  </TabContentWrapper>
-                </TabsContent>
+                {!isServicePromotion && (
+                  <TabsContent value="preview" className="mt-4">
+                    <TabContentWrapper>
+                      <MemoizedOfferPreview promotion={promotion} />
+                    </TabContentWrapper>
+                  </TabsContent>
+                )}
 
               </div>
             </ScrollArea>

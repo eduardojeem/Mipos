@@ -10,6 +10,8 @@ const RESERVED_TENANT_PATH_SEGMENTS = new Set([
   'catalog',
   'orders',
   'account',
+  'reservar',
+  'profesionales',
   'inicio',
   'empresas',
   'onboarding',

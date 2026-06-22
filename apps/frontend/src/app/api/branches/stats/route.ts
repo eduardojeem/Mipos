@@ -66,6 +66,7 @@ export async function GET(request: NextRequest) {
       .from('cash_sessions')
       .select('branch_id, status')
       .in('branch_id', branchIds)
+      .eq('organization_id', orgId)
       .eq('status', 'OPEN'),
 
     // Sales today per branch
@@ -73,6 +74,7 @@ export async function GET(request: NextRequest) {
       .from('sales')
       .select('branch_id, total')
       .in('branch_id', branchIds)
+      .eq('organization_id', orgId)
       .gte('created_at', dayStart),
 
     // Sales this month per branch
@@ -80,8 +82,22 @@ export async function GET(request: NextRequest) {
       .from('sales')
       .select('branch_id, total')
       .in('branch_id', branchIds)
+      .eq('organization_id', orgId)
       .gte('created_at', monthStart),
   ]);
+
+  const statError =
+    userBranchesRes.error ||
+    cashSessionsRes.error ||
+    salesTodayRes.error ||
+    salesMonthRes.error;
+
+  if (statError) {
+    return NextResponse.json(
+      { error: statError.message || 'No se pudieron cargar metricas de sucursales' },
+      { status: 500 }
+    );
+  }
 
   // Aggregate per branch
   type BranchRow = { branch_id: string };

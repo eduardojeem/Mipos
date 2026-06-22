@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   ArrowRight,
   BarChart3,
+  Calendar,
   Clock3,
   DollarSign,
   ExternalLink,
@@ -14,6 +15,7 @@ import {
   Package,
   Plus,
   RefreshCw,
+  Scissors,
   ShoppingBag,
   ShoppingCart,
   Users,
@@ -46,6 +48,9 @@ import {
 } from "@/hooks/useOptimizedDashboard";
 import { createClient } from "@/lib/supabase";
 import { DashboardStatCard } from "./shared/DashboardStatCard";
+import { useCurrentVertical } from '@/hooks/use-current-vertical';
+import { useServices } from '@/app/admin/services/hooks/useServices';
+import { useStaff } from '@/app/admin/staff/hooks/useStaff';
 
 const RealtimeCharts = dynamic<{ showMetrics?: boolean }>(
   () =>
@@ -137,6 +142,69 @@ const quickActions: QuickAction[] = [
   },
 ];
 
+const barbershopQuickActions: QuickAction[] = [
+  {
+    id: "agenda",
+    title: "Ver Agenda",
+    description: "Administrar turnos y citas",
+    href: "/admin/agenda",
+    icon: Calendar,
+    accent: "bg-emerald-600",
+    roles: ["ADMIN", "CASHIER", "SUPER_ADMIN", "OWNER"],
+    category: "agenda",
+  },
+  {
+    id: "services",
+    title: "Servicios",
+    description: "Cargar o editar cortes",
+    href: "/admin/services",
+    icon: Scissors,
+    accent: "bg-blue-600",
+    roles: ["ADMIN", "SUPER_ADMIN", "OWNER"],
+    category: "services",
+  },
+  {
+    id: "staff",
+    title: "Profesionales",
+    description: "Horarios y comisiones",
+    href: "/admin/staff",
+    icon: Users,
+    accent: "bg-violet-600",
+    roles: ["ADMIN", "SUPER_ADMIN", "OWNER"],
+    category: "staff",
+  },
+  {
+    id: "sale",
+    title: "Nueva venta",
+    description: "Cobrar productos o servicios",
+    href: "/dashboard/pos",
+    icon: ShoppingCart,
+    accent: "bg-amber-600",
+    roles: ["ADMIN", "CASHIER", "SUPER_ADMIN", "OWNER"],
+    category: "sales",
+  },
+  {
+    id: "orders",
+    title: "Compras online",
+    description: "Pedidos web de productos",
+    href: "/dashboard/orders",
+    icon: ShoppingBag,
+    accent: "bg-cyan-600",
+    roles: ["ADMIN", "CASHIER", "SUPER_ADMIN", "OWNER"],
+    category: "sales",
+  },
+  {
+    id: "reports",
+    title: "Reportes",
+    description: "Analítica de la barbería",
+    href: "/dashboard/reports",
+    icon: BarChart3,
+    accent: "bg-slate-700",
+    roles: ["ADMIN", "SUPER_ADMIN", "OWNER"],
+    category: "analytics",
+  },
+];
+
 function formatTimestamp(value: string | undefined) {
   if (!value) return "Sin datos";
   const date = new Date(value);
@@ -207,6 +275,70 @@ function RecentSaleRow({
   );
 }
 
+function AppointmentRow({
+  appt,
+  formatCurrency,
+}: {
+  appt: any;
+  formatCurrency: (v: number) => string;
+}) {
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'BOOKED': return 'Reservado';
+      case 'CONFIRMED': return 'Confirmado';
+      case 'COMPLETED': return 'Completado';
+      case 'CANCELLED': return 'Cancelado';
+      case 'NO_SHOW': return 'No vino';
+      default: return status;
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'CONFIRMED': return 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
+      case 'COMPLETED': return 'bg-sky-500/10 text-sky-500 border-sky-500/20';
+      case 'CANCELLED': return 'bg-rose-500/10 text-rose-500 border-rose-500/20';
+      case 'NO_SHOW': return 'bg-amber-500/10 text-amber-500 border-amber-500/20';
+      default: return 'bg-slate-500/10 text-slate-400 border-white/5';
+    }
+  };
+
+  const timeStr = useMemo(() => {
+    try {
+      const d = new Date(appt.start_at);
+      return d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return '';
+    }
+  }, [appt.start_at]);
+
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white/50 dark:border-slate-800 dark:bg-slate-900/30 px-4 py-3 shadow-sm transition-all hover:border-slate-300 dark:hover:border-slate-700">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{timeStr}</span>
+          <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold", getStatusColor(appt.status))}>
+            {getStatusLabel(appt.status)}
+          </span>
+        </div>
+        <p className="mt-1 truncate text-sm font-semibold text-slate-900 dark:text-white">
+          {appt.customer_name || 'Cliente General'}
+        </p>
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
+          <span>Servicio: <span className="font-semibold text-slate-700 dark:text-slate-300">{appt.service?.name || 'Servicio'}</span></span>
+          <span className="text-slate-300 dark:text-slate-700">·</span>
+          <span>Profesional: <span className="font-semibold text-slate-700 dark:text-slate-300">{appt.staff?.name || 'Estilista'}</span></span>
+        </div>
+      </div>
+      <div className="text-right">
+        <p className="text-sm font-bold text-slate-950 dark:text-white">
+          {formatCurrency(appt.price || 0)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function MainDashboard({
   initialData = null,
 }: MainDashboardProps) {
@@ -216,19 +348,27 @@ export default function MainDashboard({
   const organizationName = useCurrentOrganizationName();
   const resolvedRole = useResolvedRole();
 
+  const vertical = useCurrentVertical();
+  const { services } = useServices();
+  const { staff } = useStaff();
+
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [loadingAppts, setLoadingAppts] = useState(false);
+
   // Slug de la org para construir la URL pública del tenant
   const organizationSlug = useMemo(() => {
     if (typeof window === 'undefined') return null;
     try {
-      // Cookie seteada por el middleware
-      const cookieMatch = document.cookie.match(/(?:^|; )x-organization-slug=([^;]*)/);
-      if (cookieMatch) return decodeURIComponent(cookieMatch[1]) || null;
-      // Fallback: localStorage
+      // Prioridad 1: localStorage (refleja la organización seleccionada en el dashboard de admin)
       const raw = window.localStorage.getItem('selected_organization');
       if (raw?.startsWith('{')) {
         const parsed = JSON.parse(raw);
-        return parsed?.slug || null;
+        if (parsed?.slug) return parsed.slug;
       }
+      
+      // Prioridad 2 (Fallback): Cookie seteada por el middleware (puede quedar stale si visitó otra web pública)
+      const cookieMatch = document.cookie.match(/(?:^|; )x-organization-slug=([^;]*)/);
+      if (cookieMatch) return decodeURIComponent(cookieMatch[1]) || null;
     } catch {}
     return null;
   }, [organizationId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -239,7 +379,40 @@ export default function MainDashboard({
 
   const stats = data ?? initialData;
 
-  // Realtime refresh: actualizar al cambiar ventas o movimientos de inventario.
+  useEffect(() => {
+    if (vertical !== 'BARBERSHOP' || !organizationId) return;
+
+    const fetchTodayAppointments = async () => {
+      setLoadingAppts(true);
+      try {
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+
+        // Rango [from, to) del día local pedido, en ISO absoluto.
+        const start = new Date(yyyy, today.getMonth(), today.getDate(), 0, 0, 0, 0);
+        const end = new Date(yyyy, today.getMonth(), today.getDate() + 1, 0, 0, 0, 0);
+
+        const res = await fetch(`/api/appointments?from=${encodeURIComponent(start.toISOString())}&to=${encodeURIComponent(end.toISOString())}`, {
+          headers: { 'x-organization-id': organizationId },
+          cache: 'no-store',
+        });
+        if (res.ok) {
+          const json = await res.json();
+          setAppointments(json.appointments || []);
+        }
+      } catch (e) {
+        console.error('Error fetching dashboard appointments:', e);
+      } finally {
+        setLoadingAppts(false);
+      }
+    };
+
+    fetchTodayAppointments();
+  }, [vertical, organizationId, stats?.lastUpdated]);
+
+  // Realtime refresh: actualizar al cambiar ventas o movimientos de inventario o turnos.
   // Refetch solo si el tab está visible — en background no tiene sentido pegar
   // /api/dashboard/* cada vez que llega un cambio (el usuario no lo ve y se
   // refresca de todos modos al volver a foco).
@@ -294,6 +467,16 @@ export default function MainDashboard({
         },
         debounceRefetch,
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "appointments",
+          filter: `organization_id=eq.${organizationId}`,
+        },
+        debounceRefetch,
+      )
       .subscribe();
 
     if (typeof document !== "undefined") {
@@ -323,6 +506,9 @@ export default function MainDashboard({
       0
     );
   }, [stats?.webOrders]);
+  const webOrdersCardTitle = vertical === "BARBERSHOP" ? "Compras online" : "Pedidos web";
+  const webOrdersCardDescription =
+    vertical === "BARBERSHOP" ? "Estado actual de compras de productos." : "Estado actual.";
 
   const alerts = useMemo(() => {
     if (!stats) return [];
@@ -333,7 +519,7 @@ export default function MainDashboard({
         label: `${stats.activeOrders} pedido${stats.activeOrders === 1 ? "" : "s"} activo${stats.activeOrders === 1 ? "" : "s"}`,
         tone: "amber",
       });
-    if (stats.lowStockCount > 0)
+    if (stats.lowStockCount > 0 && vertical !== 'BARBERSHOP')
       items.push({
         id: "stock",
         label: `${stats.lowStockCount} producto${stats.lowStockCount === 1 ? "" : "s"} con stock bajo`,
@@ -346,18 +532,20 @@ export default function MainDashboard({
         tone: "emerald",
       });
     return items;
-  }, [stats]);
+  }, [stats, vertical]);
 
   const visibleQuickActions = useMemo(
-    () =>
-      quickActions.filter((action) =>
+    () => {
+      const actions = vertical === 'BARBERSHOP' ? barbershopQuickActions : quickActions;
+      return actions.filter((action) =>
         canAccessDashboardItem(action, {
           userRole: resolvedRole || "CASHIER",
           permissions,
           isPlanResolved,
-        }),
-      ),
-    [isPlanResolved, permissions, resolvedRole],
+        })
+      );
+    },
+    [isPlanResolved, permissions, resolvedRole, vertical],
   );
 
   if (!organizationId) {
@@ -490,96 +678,194 @@ export default function MainDashboard({
       {/* Stat cards — la "Ventas de hoy" ocupa columna doble en xl
           para destacar como métrica primaria del día. */}
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <button
-          type="button"
-          onClick={() => router.push("/dashboard/sales")}
-          className="group relative overflow-hidden rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-5 text-left transition-colors hover:border-emerald-300 dark:border-emerald-900/40 dark:from-emerald-950/40 dark:to-slate-950 dark:hover:border-emerald-800 md:col-span-2 xl:col-span-2"
-        >
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
-                Ventas de hoy
-              </p>
-              <p className="mt-2 text-3xl font-bold text-slate-950 dark:text-white sm:text-4xl">
-                {formatCurrency(stats?.todaySales || 0)}
-              </p>
-              <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-                {stats?.todaySalesCount || 0} venta
-                {stats?.todaySalesCount === 1 ? "" : "s"}
-                {(stats?.averageTicket || 0) > 0 ? (
-                  <span className="text-slate-400 dark:text-slate-500">
-                    {" · ticket "}
-                    {formatCurrency(stats?.averageTicket || 0)}
-                  </span>
-                ) : null}
-              </p>
-            </div>
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm shadow-emerald-600/30">
-              <DollarSign className="h-5 w-5" />
-            </div>
-          </div>
-          <ArrowRight className="absolute bottom-5 right-5 h-4 w-4 text-emerald-600/50 transition-transform group-hover:translate-x-0.5 group-hover:text-emerald-600 dark:text-emerald-400/50 dark:group-hover:text-emerald-400" />
-        </button>
-        <DashboardStatCard
-          title="Clientes"
-          value={`${stats?.totalCustomers || 0}`}
-          description="Base de clientes"
-          icon={Users}
-          accent="bg-violet-600"
-          onClick={() => router.push("/dashboard/customers")}
-        />
-        <DashboardStatCard
-          title="Productos"
-          value={`${stats?.totalProducts || 0}`}
-          description={
-            (stats?.lowStockCount || 0) > 0
-              ? `${stats?.lowStockCount} con stock bajo`
-              : "Catálogo activo"
-          }
-          icon={Package}
-          accent={
-            (stats?.lowStockCount || 0) > 0 ? "bg-rose-600" : "bg-amber-600"
-          }
-          onClick={() => router.push("/dashboard/products")}
-        />
+        {vertical === 'BARBERSHOP' ? (
+          <>
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard/sales")}
+              className="group relative overflow-hidden rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-5 text-left transition-colors hover:border-emerald-300 dark:border-emerald-900/40 dark:from-emerald-950/40 dark:to-slate-950 dark:hover:border-emerald-800"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+                    Ventas de hoy
+                  </p>
+                  <p className="mt-2 text-2xl font-bold text-slate-950 dark:text-white sm:text-3xl">
+                    {formatCurrency(stats?.todaySales || 0)}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                    {stats?.todaySalesCount || 0} venta{stats?.todaySalesCount === 1 ? "" : "s"}
+                  </p>
+                </div>
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm shadow-emerald-600/30">
+                  <DollarSign className="h-5 w-5" />
+                </div>
+              </div>
+              <ArrowRight className="absolute bottom-5 right-5 h-4 w-4 text-emerald-600/50 transition-transform group-hover:translate-x-0.5 group-hover:text-emerald-600 dark:text-emerald-400/50 dark:group-hover:text-emerald-400" />
+            </button>
+            <DashboardStatCard
+              title="Clientes"
+              value={`${stats?.totalCustomers || 0}`}
+              description="Base de clientes"
+              icon={Users}
+              accent="bg-violet-600"
+              onClick={() => router.push("/dashboard/customers")}
+            />
+            <DashboardStatCard
+              title="Servicios"
+              value={`${services.length}`}
+              description="Servicios en catálogo"
+              icon={Scissors}
+              accent="bg-blue-600"
+              onClick={() => router.push("/admin/services")}
+            />
+            <DashboardStatCard
+              title="Profesionales"
+              value={`${staff.length}`}
+              description="Barberos activos"
+              icon={Users}
+              accent="bg-amber-600"
+              onClick={() => router.push("/admin/staff")}
+            />
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard/sales")}
+              className="group relative overflow-hidden rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-5 text-left transition-colors hover:border-emerald-300 dark:border-emerald-900/40 dark:from-emerald-950/40 dark:to-slate-950 dark:hover:border-emerald-800 md:col-span-2 xl:col-span-2"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+                    Ventas de hoy
+                  </p>
+                  <p className="mt-2 text-3xl font-bold text-slate-950 dark:text-white sm:text-4xl">
+                    {formatCurrency(stats?.todaySales || 0)}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+                    {stats?.todaySalesCount || 0} venta
+                    {stats?.todaySalesCount === 1 ? "" : "s"}
+                    {(stats?.averageTicket || 0) > 0 ? (
+                      <span className="text-slate-400 dark:text-slate-500">
+                        {" · ticket "}
+                        {formatCurrency(stats?.averageTicket || 0)}
+                      </span>
+                    ) : null}
+                  </p>
+                </div>
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm shadow-emerald-600/30">
+                  <DollarSign className="h-5 w-5" />
+                </div>
+              </div>
+              <ArrowRight className="absolute bottom-5 right-5 h-4 w-4 text-emerald-600/50 transition-transform group-hover:translate-x-0.5 group-hover:text-emerald-600 dark:text-emerald-400/50 dark:group-hover:text-emerald-400" />
+            </button>
+            <DashboardStatCard
+              title="Clientes"
+              value={`${stats?.totalCustomers || 0}`}
+              description="Base de clientes"
+              icon={Users}
+              accent="bg-violet-600"
+              onClick={() => router.push("/dashboard/customers")}
+            />
+            <DashboardStatCard
+              title="Productos"
+              value={`${stats?.totalProducts || 0}`}
+              description={
+                (stats?.lowStockCount || 0) > 0
+                  ? `${stats?.lowStockCount} con stock bajo`
+                  : "Catálogo activo"
+              }
+              icon={Package}
+              accent={
+                (stats?.lowStockCount || 0) > 0 ? "bg-rose-600" : "bg-amber-600"
+              }
+              onClick={() => router.push("/dashboard/products")}
+            />
+          </>
+        )}
       </section>
 
       {/* Main content: Recent sales + sidebar */}
       <section className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
-        <Card className="border-slate-200 bg-white shadow-none dark:border-slate-800 dark:bg-slate-950">
-          <CardHeader className="flex flex-row items-start justify-between gap-4">
-            <div>
-              <CardTitle className="text-base text-slate-950 dark:text-white">
-                Ultimas ventas
-              </CardTitle>
-              <CardDescription>
-                Movimientos recientes del negocio.
-              </CardDescription>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => router.push("/dashboard/sales")}
-            >
-              Ver todo
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {stats?.recentSales?.length ? (
-              stats.recentSales.map((sale: RecentSale) => (
-                <RecentSaleRow
-                  key={sale.id}
-                  sale={sale}
-                  formatCurrency={formatCurrency}
-                />
-              ))
-            ) : (
-              <div className="rounded-lg border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                Sin ventas recientes.
+        <div className="space-y-6">
+          {vertical === 'BARBERSHOP' && (
+            <Card className="border-slate-200 bg-white shadow-none dark:border-slate-800 dark:bg-slate-950">
+              <CardHeader className="flex flex-row items-start justify-between gap-4">
+                <div>
+                  <CardTitle className="text-base text-slate-950 dark:text-white">
+                    Agenda de Hoy
+                  </CardTitle>
+                  <CardDescription>
+                    Próximas citas agendadas para el día de hoy.
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => router.push("/admin/agenda")}
+                >
+                  Ver Agenda completa
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {loadingAppts ? (
+                  <div className="space-y-2 py-4">
+                    <Skeleton className="h-14 w-full rounded-xl" />
+                    <Skeleton className="h-14 w-full rounded-xl" />
+                  </div>
+                ) : appointments.length ? (
+                  appointments.map((appt: any) => (
+                    <AppointmentRow
+                      key={appt.id}
+                      appt={appt}
+                      formatCurrency={formatCurrency}
+                    />
+                  ))
+                ) : (
+                  <div className="rounded-lg border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                    No hay turnos agendados para hoy.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          <Card className="border-slate-200 bg-white shadow-none dark:border-slate-800 dark:bg-slate-950">
+            <CardHeader className="flex flex-row items-start justify-between gap-4">
+              <div>
+                <CardTitle className="text-base text-slate-950 dark:text-white">
+                  Últimas ventas
+                </CardTitle>
+                <CardDescription>
+                  Movimientos recientes del negocio.
+                </CardDescription>
               </div>
-            )}
-          </CardContent>
-        </Card>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push("/dashboard/sales")}
+              >
+                Ver todo
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {stats?.recentSales?.length ? (
+                stats.recentSales.map((sale: RecentSale) => (
+                  <RecentSaleRow
+                    key={sale.id}
+                    sale={sale}
+                    formatCurrency={formatCurrency}
+                  />
+                ))
+              ) : (
+                <div className="rounded-lg border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                  Sin ventas recientes.
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
 
         <div className="space-y-6">
           {/* Order status — hide entirely if no web orders are active.
@@ -589,9 +875,9 @@ export default function MainDashboard({
             <Card className="border-slate-200 bg-white shadow-none dark:border-slate-800 dark:bg-slate-950">
               <CardHeader>
                 <CardTitle className="text-base text-slate-950 dark:text-white">
-                  Pedidos web
+                  {webOrdersCardTitle}
                 </CardTitle>
-                <CardDescription>Estado actual.</CardDescription>
+                <CardDescription>{webOrdersCardDescription}</CardDescription>
               </CardHeader>
               <CardContent className="grid grid-cols-2 gap-3">
                 {[

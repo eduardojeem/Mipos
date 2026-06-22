@@ -4,6 +4,7 @@ import ProductDetailClient from './ProductDetailClient';
 import type { Product } from '@/types';
 import { maybeGetCurrentOrganization } from '@/lib/organization/get-current-organization';
 import { StaticBusinessConfigProvider } from '@/contexts/BusinessConfigContext';
+import { normalizeVertical } from '@/config/verticals';
 import { getPublicBusinessConfig } from '@/lib/public-site/data';
 import {
   fetchPublicCatalogProductById,
@@ -72,6 +73,7 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
   }
 
   const config = await getPublicBusinessConfig(organization);
+  const vertical = normalizeVertical(organization.vertical);
   if (!config.publicSite?.sections?.showCatalog) {
     return (
       <StaticBusinessConfigProvider
@@ -167,7 +169,7 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
         organizationId={organization.id}
         organizationName={organization.name}
       >
-        <ProductDetailClient product={product as Product} />
+        <ProductDetailClient product={product as Product} vertical={vertical} />
       </StaticBusinessConfigProvider>
     </>
   );

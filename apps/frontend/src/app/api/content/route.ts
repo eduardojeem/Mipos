@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { sanitizeSearch } from '@/app/api/_utils/search';
 
 export async function GET(request: NextRequest) {
   try {
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
     }
     
     if (search) {
-      query = query.or(`title.ilike.%${search}%,description.ilike.%${search}%`);
+      { const s = sanitizeSearch(search); query = query.or(`title.ilike.%${s}%,description.ilike.%${s}%`); }
     }
 
     const { data, error } = await query;

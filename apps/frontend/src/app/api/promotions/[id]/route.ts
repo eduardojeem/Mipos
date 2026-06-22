@@ -21,6 +21,18 @@ function normalizeProductIds(value: unknown): string[] {
   )
 }
 
+function normalizeServiceIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+
+  return Array.from(
+    new Set(
+      value
+        .map((serviceId: unknown) => String(serviceId || '').trim())
+        .filter((serviceId): serviceId is string => serviceId.length > 0)
+    )
+  )
+}
+
 async function getProductCount(
   supabase: Awaited<ReturnType<typeof createAdminClient>>,
   promotionId: string,
@@ -54,13 +66,17 @@ export async function PATCH(
 
     const body = await request.json() as Record<string, unknown>
     const supabase = await createAdminClient()
+    const requestedTargetType = body.targetType === 'SERVICE' ? 'SERVICE' : body.targetType === 'PRODUCT' ? 'PRODUCT' : null
     const requestedProductIds = body.applicableProductIds !== undefined
       ? normalizeProductIds(body.applicableProductIds)
+      : null
+    const requestedServiceIds = body.applicableServiceIds !== undefined
+      ? normalizeServiceIds(body.applicableServiceIds)
       : null
 
     const { data: existingPromotion, error: existingError } = await supabase
       .from('promotions')
-      .select('id')
+      .select('id, start_date, end_date, discount_type, target_type')
       .eq('id', promotionId)
       .eq('organization_id', orgId)
       .single()
@@ -69,7 +85,13 @@ export async function PATCH(
       return NextResponse.json({ success: false, message: 'Promocion no encontrada' }, { status: 404 })
     }
 
+    const effectiveTargetType = requestedTargetType || existingPromotion.target_type || 'PRODUCT'
+
     if (requestedProductIds !== null && requestedProductIds.length > 0) {
+      if (effectiveTargetType !== 'PRODUCT') {
+        return NextResponse.json({ success: false, message: 'Las promociones de servicios no aceptan productos asociados' }, { status: 400 })
+      }
+
       const { data: validProducts, error: productsError } = await supabase
         .from('products')
         .select('id')
@@ -96,6 +118,37 @@ export async function PATCH(
       }
     }
 
+    if (requestedServiceIds !== null && requestedServiceIds.length > 0) {
+      if (effectiveTargetType !== 'SERVICE') {
+        return NextResponse.json({ success: false, message: 'Las promociones de productos no aceptan servicios asociados' }, { status: 400 })
+      }
+
+      const { data: validServices, error: servicesError } = await supabase
+        .from('services')
+        .select('id')
+        .eq('organization_id', orgId)
+        .eq('is_active', true)
+        .in('id', requestedServiceIds)
+
+      if (servicesError) {
+        console.error('[PATCH /promotions/:id] Service validation error:', servicesError.message)
+        return NextResponse.json({ success: false, message: 'No se pudieron validar los servicios seleccionados' }, { status: 500 })
+      }
+
+      const validServiceIds = new Set(
+        ((validServices || []) as Array<{ id: string }>).map((service) => String(service.id))
+      )
+
+      if (validServiceIds.size !== requestedServiceIds.length) {
+        const invalidServiceIds = requestedServiceIds.filter((id) => !validServiceIds.has(id))
+        return NextResponse.json({
+          success: false,
+          message: 'Algunos servicios no existen, no estan activos o no pertenecen a la organizacion',
+          invalidServiceIds,
+        }, { status: 400 })
+      }
+    }
+
     // ── Validación de negocio en PATCH ────────────────────────────────────────
     if (body.name !== undefined) {
       const nameStr = typeof body.name === 'string' ? body.name.trim() : ''
@@ -108,15 +161,22 @@ export async function PATCH(
       if (isNaN(dv) || dv < 0) {
         return NextResponse.json({ success: false, message: 'El valor del descuento debe ser >= 0' }, { status: 400 })
       }
-      const dtype = (body.discountType ?? 'PERCENTAGE') as string
+      const dtype = String(body.discountType ?? existingPromotion.discount_type ?? 'PERCENTAGE')
       if (dtype === 'PERCENTAGE' && dv > 100) {
         return NextResponse.json({ success: false, message: 'El porcentaje de descuento no puede superar 100%' }, { status: 400 })
       }
     }
-    if (body.startDate !== undefined && body.endDate !== undefined) {
-      const s = new Date(body.startDate as string)
-      const e = new Date(body.endDate as string)
-      if (!isNaN(s.getTime()) && !isNaN(e.getTime()) && e <= s) {
+    if (body.startDate !== undefined || body.endDate !== undefined) {
+      const startValue = body.startDate !== undefined ? body.startDate : existingPromotion.start_date
+      const endValue = body.endDate !== undefined ? body.endDate : existingPromotion.end_date
+      const s = new Date(String(startValue))
+      const e = new Date(String(endValue))
+
+      if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) {
+        return NextResponse.json({ success: false, message: 'Las fechas de inicio y fin deben ser validas' }, { status: 400 })
+      }
+
+      if (e <= s) {
         return NextResponse.json({ success: false, message: 'La fecha de fin debe ser posterior a la fecha de inicio' }, { status: 400 })
       }
     }
@@ -125,6 +185,7 @@ export async function PATCH(
     const updatePayload: Record<string, unknown> = {}
     if (body.name !== undefined) updatePayload.name = body.name
     if (body.description !== undefined) updatePayload.description = body.description
+    if (requestedTargetType !== null) updatePayload.target_type = requestedTargetType
     if (body.discountType !== undefined) updatePayload.discount_type = body.discountType
     if (body.discountValue !== undefined) updatePayload.discount_value = Number(body.discountValue)
     if (body.startDate !== undefined) updatePayload.start_date = toISODate(body.startDate)
@@ -134,7 +195,7 @@ export async function PATCH(
     if (body.maxDiscountAmount !== undefined) updatePayload.max_discount_amount = Number(body.maxDiscountAmount) || 0
     if (body.usageLimit !== undefined) updatePayload.usage_limit = Number(body.usageLimit) || 0
 
-    if (Object.keys(updatePayload).length === 0 && requestedProductIds === null) {
+    if (Object.keys(updatePayload).length === 0 && requestedProductIds === null && requestedServiceIds === null) {
       return NextResponse.json({ success: false, message: 'No hay cambios para guardar' }, { status: 400 })
     }
 
@@ -160,7 +221,8 @@ export async function PATCH(
       updatedPromotion = data as Record<string, unknown>
     }
 
-    if (requestedProductIds !== null) {
+    if (requestedProductIds !== null || (requestedTargetType === 'PRODUCT' && existingPromotion.target_type === 'SERVICE')) {
+      const desiredProductIds = requestedProductIds ?? []
       const { data: currentLinks, error: currentLinksError } = await supabase
         .from('promotions_products')
         .select('product_id')
@@ -175,9 +237,9 @@ export async function PATCH(
       const currentProductIds = new Set(
         ((currentLinks || []) as Array<{ product_id: string }>).map((link) => String(link.product_id))
       )
-      const desiredProductIds = new Set(requestedProductIds)
-      const idsToAdd = requestedProductIds.filter((id) => !currentProductIds.has(id))
-      const idsToDelete = Array.from(currentProductIds).filter((id) => !desiredProductIds.has(id))
+      const desiredProductIdSet = new Set(desiredProductIds)
+      const idsToAdd = desiredProductIds.filter((id) => !currentProductIds.has(id))
+      const idsToDelete = Array.from(currentProductIds).filter((id) => !desiredProductIdSet.has(id))
 
       if (idsToAdd.length > 0) {
         const { error: addError } = await supabase
@@ -207,6 +269,58 @@ export async function PATCH(
         if (deleteError) {
           console.error('[PATCH /promotions/:id] Remove products error:', deleteError.message)
           return NextResponse.json({ success: false, message: 'Error al sincronizar productos de la promocion' }, { status: 500 })
+        }
+      }
+    }
+
+    if (requestedServiceIds !== null || (requestedTargetType === 'SERVICE' && existingPromotion.target_type !== 'SERVICE')) {
+      const desiredServiceIds = requestedServiceIds ?? []
+      const { data: currentLinks, error: currentLinksError } = await supabase
+        .from('promotions_services')
+        .select('service_id')
+        .eq('promotion_id', promotionId)
+        .eq('organization_id', orgId)
+
+      if (currentLinksError) {
+        console.error('[PATCH /promotions/:id] Current service links error:', currentLinksError.message)
+        return NextResponse.json({ success: false, message: 'Error al obtener servicios asociados' }, { status: 500 })
+      }
+
+      const currentServiceIds = new Set(
+        ((currentLinks || []) as Array<{ service_id: string }>).map((link) => String(link.service_id))
+      )
+      const desiredServiceIdSet = new Set(desiredServiceIds)
+      const idsToAdd = desiredServiceIds.filter((id) => !currentServiceIds.has(id))
+      const idsToDelete = Array.from(currentServiceIds).filter((id) => !desiredServiceIdSet.has(id))
+
+      if (idsToAdd.length > 0) {
+        const { error: addError } = await supabase
+          .from('promotions_services')
+          .insert(
+            idsToAdd.map((serviceId) => ({
+              promotion_id: promotionId,
+              service_id: serviceId,
+              organization_id: orgId,
+            }))
+          )
+
+        if (addError) {
+          console.error('[PATCH /promotions/:id] Add services error:', addError.message)
+          return NextResponse.json({ success: false, message: 'Error al asociar servicios a la promocion' }, { status: 500 })
+        }
+      }
+
+      if (idsToDelete.length > 0) {
+        const { error: deleteError } = await supabase
+          .from('promotions_services')
+          .delete()
+          .eq('promotion_id', promotionId)
+          .eq('organization_id', orgId)
+          .in('service_id', idsToDelete)
+
+        if (deleteError) {
+          console.error('[PATCH /promotions/:id] Remove services error:', deleteError.message)
+          return NextResponse.json({ success: false, message: 'Error al sincronizar servicios de la promocion' }, { status: 500 })
         }
       }
     }
@@ -274,6 +388,12 @@ export async function DELETE(
 
     await supabase
       .from('promotions_products')
+      .delete()
+      .eq('promotion_id', promotionId)
+      .eq('organization_id', orgId)
+
+    await supabase
+      .from('promotions_services')
       .delete()
       .eq('promotion_id', promotionId)
       .eq('organization_id', orgId)

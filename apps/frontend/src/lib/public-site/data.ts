@@ -1,8 +1,9 @@
 import 'server-only';
 
 import { unstable_cache } from 'next/cache';
+import { normalizeVertical } from '@/config/verticals';
 import { createAdminClient } from '@/lib/supabase/server';
-import { defaultBusinessConfig, type BusinessConfig } from '@/types/business-config';
+import { buildDefaultPublicSite, defaultBusinessConfig, type BusinessConfig } from '@/types/business-config';
 import { buildTenantHomeUrl } from '@/lib/domain/host-context';
 import type { PublicOrganization } from '@/lib/domain/request-tenant';
 
@@ -25,8 +26,6 @@ const PRODUCT_OPTIONAL_COLUMNS = [
   'created_at',
   'rating',
 ];
-const CATEGORY_BASE_COLUMNS = ['id', 'name'];
-
 type SettingsRow = {
   organization_id: string | null;
   value?: Record<string, unknown> | null;
@@ -172,12 +171,17 @@ function normalizeDisplayText(value: string | null | undefined, fallback = ''): 
   }
 }
 
-function mergeBusinessConfig(value: unknown, fallbackName?: string): BusinessConfig {
+function mergeBusinessConfig(value: unknown, fallbackName?: string, vertical?: string | null): BusinessConfig {
   const raw = value && typeof value === 'object' ? (value as Partial<BusinessConfig>) : {};
+  const publicSiteDefaults = buildDefaultPublicSite(normalizeVertical(vertical));
 
   return {
     ...defaultBusinessConfig,
     ...raw,
+    // SEGURIDAD: systemSettings (SMTP, seguridad, etc.) NUNCA debe salir al sitio
+    // público. El `...raw` lo arrastraría; lo borramos explícitamente para que no
+    // se serialice en el HTML público. Solo la API privada (super admin) lo expone.
+    systemSettings: undefined,
     businessName: raw.businessName || fallbackName || defaultBusinessConfig.businessName,
     legalInfo: {
       ...defaultBusinessConfig.legalInfo,
@@ -211,7 +215,7 @@ function mergeBusinessConfig(value: unknown, fallbackName?: string): BusinessCon
       ...defaultBusinessConfig.carousel,
       ...(raw.carousel || {}),
       images: Array.isArray(raw.carousel?.images)
-        ? raw.carousel.images
+        ? raw.carousel?.images
         : defaultBusinessConfig.carousel.images,
     },
     homeOffersCarousel: {
@@ -237,11 +241,11 @@ function mergeBusinessConfig(value: unknown, fallbackName?: string): BusinessCon
     },
     publicSite: {
       sections: {
-        ...defaultBusinessConfig.publicSite!.sections,
+        ...publicSiteDefaults.sections,
         ...(raw.publicSite?.sections || {}),
       },
       content: {
-        ...defaultBusinessConfig.publicSite!.content,
+        ...publicSiteDefaults.content,
         ...(raw.publicSite?.content || {}),
       },
     },
@@ -298,7 +302,7 @@ export async function getPublicBusinessConfig(organization: PublicOrganization):
         .eq('organization_id', orgId)
         .maybeSingle();
 
-      return mergeBusinessConfig((data as SettingsRow | null)?.value, orgName);
+      return mergeBusinessConfig((data as SettingsRow | null)?.value, orgName, organization.vertical);
     },
     [`business-config-${organization.id}`],
     { revalidate: 120, tags: ['business-config'] }
@@ -465,7 +469,7 @@ async function getGlobalMarketplaceHomeDataUncached(
 
   productRows.forEach((product) => {
     const org = product.organization_id ? organizationMap.get(product.organization_id) : null;
-    const mktCatId = org ? (org as any).marketplace_category_id : null;
+    const mktCatId = org?.marketplace_category_id ?? null;
     const mktCat = mktCatId ? mktCatMap.get(mktCatId) : null;
 
     const categoryName = mktCat ? mktCat.name : 'Otros';
@@ -508,7 +512,7 @@ async function getGlobalMarketplaceHomeDataUncached(
       }
 
       const org = product.organization_id ? organizationMap.get(product.organization_id) : null;
-      const mktCatId = org ? (org as any).marketplace_category_id : null;
+      const mktCatId = org?.marketplace_category_id ?? null;
       const mktCat = mktCatId ? mktCatMap.get(mktCatId) : null;
       const categoryName = mktCat ? mktCat.name : 'Otros';
 

@@ -31,10 +31,19 @@ export type Product = {
   category: string
 }
 
+export type Service = {
+  id: string
+  name: string
+  price?: number
+  category?: string | null
+  duration_min?: number | null
+}
+
 export type Promotion = {
   id: string
   name: string
   description: string
+  targetType?: 'PRODUCT' | 'SERVICE'
   discountType: 'PERCENTAGE' | 'FIXED_AMOUNT'
   discountValue: number
   startDate: string
@@ -45,6 +54,7 @@ export type Promotion = {
   usageLimit?: number
   usageCount: number
   applicableProducts: Product[]
+  applicableServices?: Service[]
   createdAt: string
   approvalStatus?: 'pending' | 'approved' | 'rejected'
   approvalComment?: string | null
@@ -76,6 +86,7 @@ function normalizePromotionRows(rows: any[]): Promotion[] {
     id: r.id,
     name: r.name,
     description: r.description ?? '',
+    targetType: r.targetType ?? r.target_type ?? 'PRODUCT',
     discountType: r.discountType ?? r.type,
     discountValue: r.discountValue ?? r.value,
     startDate: r.startDate ?? r.start_date,
@@ -86,6 +97,7 @@ function normalizePromotionRows(rows: any[]): Promotion[] {
     usageLimit: r.usageLimit ?? 0,
     usageCount: r.usageCount ?? 0,
     applicableProducts: Array.isArray(r.applicableProducts) ? r.applicableProducts : [] as any[],
+    applicableServices: Array.isArray(r.applicableServices) ? r.applicableServices : [] as any[],
     createdAt: r.createdAt ?? new Date().toISOString()
   })) as Promotion[]
 }
@@ -246,7 +258,7 @@ export const useStore = create<RootState>()(
 
         const MAX_RETRIES = 2
         const TIMEOUT_MS = 25000 // 25 segundos
-        const PAGE_SIZE = 100
+        const PAGE_SIZE = 50
 
         try {
           const apiMod = await import('@/lib/api')
@@ -269,7 +281,6 @@ export const useStore = create<RootState>()(
 
           const response = await fetchWithTimeout as any
           const data = response?.data
-          const totalPages = Math.max(Number(data?.pages || 1), 1)
 
           // Validar que tengamos datos
           if (!data && retryCount < MAX_RETRIES) {
@@ -278,24 +289,9 @@ export const useStore = create<RootState>()(
             return get().fetchPromotions(params, retryCount + 1)
           }
 
-          let raw = extractPromotionRows(data)
-          if (totalPages > 1) {
-            const additionalResponses = await Promise.all(
-              Array.from({ length: totalPages - 1 }, (_, index) =>
-                api.get('/promotions', {
-                  params: {
-                    ...(params || {}),
-                    page: index + 2,
-                    limit: PAGE_SIZE,
-                  },
-                })
-              )
-            )
-
-            raw = raw.concat(
-              additionalResponses.flatMap((pageResponse: any) => extractPromotionRows(pageResponse?.data))
-            )
-          }
+          // Solo cargamos la primera página — la UI pagina client-side sobre este batch.
+          // Para orgs con muchas promociones, 50 es suficiente para la vista activa.
+          const raw = extractPromotionRows(data)
 
           const list = normalizePromotionRows(raw)
 
