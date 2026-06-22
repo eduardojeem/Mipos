@@ -48,16 +48,12 @@ import { COMPANY_FEATURE_KEYS, COMPANY_PERMISSIONS } from '@/lib/company-access'
 import { buildTenantPublicBaseUrl } from '@/lib/domain/host-context'
 import { getCanonicalPlanDisplayName, normalizePlanSlug } from '@/lib/plan-catalog'
 
-const BusinessInfoForm = lazy(() => import('./components/BusinessInfoForm').then((m) => ({ default: m.BusinessInfoForm })))
-const MarketplaceCategoryForm = lazy(() => import('./components/MarketplaceCategoryForm').then((m) => ({ default: m.MarketplaceCategoryForm })))
-const VerticalForm = lazy(() => import('./components/VerticalForm').then((m) => ({ default: m.VerticalForm })))
+const ContentTabLayout = lazy(() => import('./components/ContentTabLayout').then((m) => ({ default: m.ContentTabLayout })))
 const DomainSettingsForm = lazy(() => import('./components/DomainSettingsForm').then((m) => ({ default: m.DomainSettingsForm })))
 const LegalInfoForm = lazy(() => import('./components/LegalInfoForm').then((m) => ({ default: m.LegalInfoForm })))
 const ContactForm = lazy(() => import('./components/ContactForm').then((m) => ({ default: m.ContactForm })))
 const BrandingForm = lazy(() => import('./components/BrandingForm').then((m) => ({ default: m.BrandingForm })))
-const PublicExperienceForm = lazy(() => import('./components/PublicExperienceForm').then((m) => ({ default: m.PublicExperienceForm })))
 const StoreSettingsForm = lazy(() => import('./components/StoreSettingsForm').then((m) => ({ default: m.StoreSettingsForm })))
-const CarouselEditor = lazy(() => import('./components/CarouselEditor').then((m) => ({ default: m.CarouselEditor })))
 const ConfigPreview = lazy(() => import('./components/ConfigPreview').then((m) => ({ default: m.ConfigPreview })))
 const OrganizationSelectorForConfig = lazy(() => import('./components/OrganizationSelectorForConfig').then((m) => ({ default: m.OrganizationSelectorForConfig })))
 
@@ -654,15 +650,7 @@ export default function BusinessConfigPage() {
   const renderActiveTab = () => {
     switch (activeTab) {
       case 'content':
-        return (
-          <div className="space-y-6">
-            <VerticalForm />
-            <BusinessInfoForm config={currentConfig} onUpdate={handleConfigUpdate} />
-            <MarketplaceCategoryForm />
-            <PublicExperienceForm config={currentConfig} onUpdate={handleConfigUpdate} />
-            <CarouselEditor config={currentConfig} onUpdate={handleConfigUpdate} onSave={handleSave} />
-          </div>
-        )
+        return <ContentTabLayout config={currentConfig} onUpdate={handleConfigUpdate} onSave={handleSave} />
       case 'brand':
         return <BrandingForm config={currentConfig} onUpdate={handleConfigUpdate} />
       case 'contact':

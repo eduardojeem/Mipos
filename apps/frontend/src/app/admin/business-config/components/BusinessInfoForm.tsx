@@ -36,21 +36,23 @@ export function BusinessInfoForm({ config, onUpdate }: BusinessInfoFormProps) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Building2 className="h-5 w-5" />
-            Identidad comercial
+            Quién eres
           </CardTitle>
           <CardDescription>
-            Nombre visible, promesa principal y mensaje corto para la parte publica del negocio.
+            Nombre de la empresa y propuesta de valor que verán los clientes.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="grid gap-4 md:grid-cols-2">
+        <CardContent className="space-y-6">
+          {/* Nombre base */}
+          <div className="space-y-3 border-b pb-6">
+            <h4 className="text-sm font-semibold text-foreground">Nombre del negocio</h4>
             <div className="space-y-2">
-              <Label htmlFor="businessName">Nombre del negocio *</Label>
+              <Label htmlFor="businessName">Nombre visible *</Label>
               <Input
                 id="businessName"
                 value={config.businessName}
@@ -61,52 +63,79 @@ export function BusinessInfoForm({ config, onUpdate }: BusinessInfoFormProps) {
               {getFieldError('businessName') && (
                 <p className="text-sm text-red-500">{getFieldError('businessName')}</p>
               )}
+              <p className="text-xs text-muted-foreground">
+                Aparece en header, footer y metadatos de SEO
+              </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="tagline">Tagline</Label>
+              <Label htmlFor="tagline">Tagline (subtítulo)</Label>
               <Input
                 id="tagline"
                 value={config.tagline}
                 onChange={(event) => handleChange('tagline', event.target.value)}
                 placeholder="Calidad y servicio de excelencia"
               />
+              <p className="text-xs text-muted-foreground">
+                Frase corta que describe tu propuesta de valor
+              </p>
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="heroTitle">Titulo principal *</Label>
-            <Input
-              id="heroTitle"
-              value={config.heroTitle}
-              onChange={(event) => handleChange('heroTitle', event.target.value)}
-              placeholder="Bienvenidos a"
-              className={getFieldError('heroTitle') ? 'border-red-500' : ''}
-            />
-            {getFieldError('heroTitle') && (
-              <p className="text-sm text-red-500">{getFieldError('heroTitle')}</p>
-            )}
-          </div>
+          {/* Hero section */}
+          <div className="space-y-3">
+            <h4 className="text-sm font-semibold text-foreground">Mensaje principal (Hero)</h4>
+            <p className="text-xs text-muted-foreground">
+              Este es el contenido destacado que ven los clientes al entrar a tu página.
+            </p>
 
-          <div className="space-y-2">
-            <Label htmlFor="heroHighlight">Texto destacado</Label>
-            <Input
-              id="heroHighlight"
-              value={config.heroHighlight}
-              onChange={(event) => handleChange('heroHighlight', event.target.value)}
-              placeholder="nuestro negocio"
-            />
-          </div>
+            <div className="space-y-2">
+              <Label htmlFor="heroTitle">Título principal *</Label>
+              <Input
+                id="heroTitle"
+                value={config.heroTitle}
+                onChange={(event) => handleChange('heroTitle', event.target.value)}
+                placeholder="Bienvenidos a"
+                className={getFieldError('heroTitle') ? 'border-red-500' : ''}
+              />
+              {getFieldError('heroTitle') && (
+                <p className="text-sm text-red-500">{getFieldError('heroTitle')}</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Primera línea que ve el cliente (ej: "Bienvenidos a", "Descubre", "Explora")
+              </p>
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="heroDescription">Descripcion principal</Label>
-            <Textarea
-              id="heroDescription"
-              value={config.heroDescription}
-              onChange={(event) => handleChange('heroDescription', event.target.value)}
-              placeholder="Describe en una frase clara que vende el negocio y por que deberian comprar aqui."
-              rows={4}
-            />
+            <div className="space-y-2">
+              <Label htmlFor="heroHighlight">Texto destacado (en negrita)</Label>
+              <Input
+                id="heroHighlight"
+                value={config.heroHighlight}
+                onChange={(event) => handleChange('heroHighlight', event.target.value)}
+                placeholder="nuestro negocio"
+              />
+              <p className="text-xs text-muted-foreground">
+                Se muestra en negrita junto al título (ej: "nuestro negocio", "tu tienda online")
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="heroDescription">Descripción comercial *</Label>
+              <Textarea
+                id="heroDescription"
+                value={config.heroDescription}
+                onChange={(event) => handleChange('heroDescription', event.target.value)}
+                placeholder="Describe en una frase clara qué vende el negocio y por qué deberían comprar aquí."
+                rows={3}
+                className={getFieldError('heroDescription') ? 'border-red-500' : ''}
+              />
+              {getFieldError('heroDescription') && (
+                <p className="text-sm text-red-500">{getFieldError('heroDescription')}</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Bajo el título y highlight. Máximo 2-3 líneas que atraigan al cliente.
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -115,38 +144,56 @@ export function BusinessInfoForm({ config, onUpdate }: BusinessInfoFormProps) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Clock3 className="h-5 w-5" />
-            Horarios publicados
+            Horarios de atención
           </CardTitle>
           <CardDescription>
-            Estos horarios se usan en home, footer y contacto cuando el modulo esta visible.
+            Se muestran en home, footer y sección de contacto cuando están habilitados.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          {config.businessHours.map((hour, index) => (
-            <div key={index} className="flex items-center gap-2">
-              <Input
-                value={hour}
-                onChange={(event) => updateBusinessHour(index, event.target.value)}
-                placeholder="Lunes a Viernes: 08:00 a 18:00"
-              />
-              {config.businessHours.length > 1 && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  className="shrink-0"
-                  onClick={() => removeBusinessHour(index)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-          ))}
+        <CardContent className="space-y-4">
+          <div className="space-y-3">
+            {config.businessHours.map((hour, index) => (
+              <div key={index} className="flex items-end gap-2">
+                <div className="flex-1">
+                  <Label className="text-xs text-muted-foreground mb-1 block">Horario {index + 1}</Label>
+                  <Input
+                    value={hour}
+                    onChange={(event) => updateBusinessHour(index, event.target.value)}
+                    placeholder="Lunes a Viernes: 08:00 - 18:00"
+                    className="text-sm"
+                  />
+                </div>
+                {config.businessHours.length > 1 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="shrink-0 h-10 w-10"
+                    onClick={() => removeBusinessHour(index)}
+                    title="Eliminar horario"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
 
-          <Button type="button" variant="outline" className="gap-2" onClick={addBusinessHour}>
+          <Button
+            type="button"
+            variant="outline"
+            className="gap-2 w-full"
+            onClick={addBusinessHour}
+          >
             <Plus className="h-4 w-4" />
             Agregar horario
           </Button>
+
+          <div className="rounded-lg bg-blue-50 p-3 dark:bg-blue-950/20">
+            <p className="text-xs text-blue-900 dark:text-blue-200">
+              <span className="font-medium">Ejemplos:</span> "Lunes a Viernes: 09:00 - 18:00" o "Sábado: 09:00 - 14:00"
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>
