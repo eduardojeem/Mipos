@@ -17,7 +17,7 @@ import { usePlans } from '@/hooks/use-plans';
 import { buildPublicRegistrationPath } from '@/lib/public-plan-utils';
 import { LANDING_CONTENT_DEFAULTS, type LandingContent } from '@/lib/web-content/types';
 import './landing.css';
-import { Footer, HeroSection, HowItWorksSection, LandingHeader, LoginSection } from './components';
+import { CreateAccountSection, Footer, HeroSection, HowItWorksSection, LandingHeader } from './components';
 
 const BENEFIT_ICONS = [Zap, Shield, BarChart3, Users];
 const BENEFIT_ACCENTS = ['text-amber-300', 'text-emerald-300', 'text-sky-300', 'text-violet-300'];
@@ -59,6 +59,8 @@ export default function InicioPageClient({ landingContent }: InicioPageClientPro
         <HeroSection content={landingContent.hero} />
 
         <HowItWorksSection content={landingContent.howItWorks} />
+
+        <CreateAccountSection />
 
         <section className="py-20 lg:py-24">
           <div className="landing-container">
@@ -134,8 +136,6 @@ export default function InicioPageClient({ landingContent }: InicioPageClientPro
             </div>
           </div>
         </section>
-
-        <LoginSection />
       </main>
 
       <Footer />

@@ -93,26 +93,10 @@ export function LandingHeader() {
     return 'Ventas, inventario y operacion';
   }, [isPlansPage, isRegistrationPage]);
 
-  const primaryCta = useMemo(() => {
-    if (isRegistrationPage) {
-      return {
-        href: '/inicio/planes',
-        label: 'Cambiar plan',
-      };
-    }
-
-    if (isPlansPage) {
-      return {
-        href: buildPublicRegistrationPath(),
-        label: 'Ir al registro',
-      };
-    }
-
-    return {
-      href: '/inicio/planes',
-      label: 'Ver planes',
-    };
-  }, [isPlansPage, isRegistrationPage]);
+  const primaryCta = useMemo(() => ({
+    href: buildPublicRegistrationPath(),
+    label: 'Crear cuenta',
+  }), []);
 
   const scrollToSection = (sectionId: string) => {
     if (!isLandingPage) {

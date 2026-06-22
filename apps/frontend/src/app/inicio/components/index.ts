@@ -4,6 +4,7 @@ export { LandingHeader } from './LandingHeader';
 export { AssociatedBusinesses } from './AssociatedBusinesses';
 export { HeroSection } from './HeroSection';
 export { HowItWorksSection } from './HowItWorksSection';
+export { CreateAccountSection } from './CreateAccountSection';
 export { TrustedBusinesses } from './TrustedBusinesses';
 export { PricingSection } from './PricingSection';
 export { PricingCard } from './PricingCard';
