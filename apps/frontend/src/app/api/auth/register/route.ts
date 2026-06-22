@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase-admin';
 import { getPlanRecord, syncOrganizationSubscriptionState } from '@/app/api/subscription/_lib';
 import { normalizePlanSlug } from '@/lib/plan-catalog';
+import { resolveSignupVertical } from './vertical';
+import { sendEmail, buildWelcomeEmail } from '@/lib/email';
 
 // Plans whose subscription is provisioned immediately on signup. Anything
 // else (paid plans) must go through the billing flow  registration only
@@ -126,6 +128,7 @@ export async function POST(request: NextRequest) {
         const organizationName = typeof body.organizationName === 'string' ? body.organizationName.trim() : '';
         const { planSlug } = body;
         const requestedBillingCycle = body.billingCycle === 'yearly' ? 'yearly' : 'monthly';
+        const verticalResult = resolveSignupVertical(body.vertical);
 
         // Validacion de datos
         if (!email || !password || !name || !organizationName) {
@@ -134,6 +137,15 @@ export async function POST(request: NextRequest) {
                 error: 'Todos los campos son requeridos'
             }, { status: 400 });
         }
+
+        if (!verticalResult.ok) {
+            return NextResponse.json({
+                success: false,
+                error: verticalResult.error
+            }, { status: 400 });
+        }
+
+        const businessVertical = verticalResult.vertical;
 
         // Validar formato de email
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -259,6 +271,7 @@ export async function POST(request: NextRequest) {
                 slug: `${orgSlug}-${Date.now()}`,
                 subscription_plan: 'FREE',
                 subscription_status: 'ACTIVE',
+                vertical: businessVertical,
                 settings: {
                     requestedPlan,
                     requestedBillingCycle,
@@ -370,6 +383,14 @@ export async function POST(request: NextRequest) {
             }, { status: 500 });
         }
 
+        // Enviar email de bienvenida (fire-and-forget)
+        const welcomeEmail = buildWelcomeEmail({
+          userName: name,
+          organizationName,
+          loginUrl: `${request.nextUrl.origin}/onboarding`,
+        })
+        void sendEmail({ to: email, ...welcomeEmail, template: 'welcome' }).catch(() => { /* non-critical */ })
+
         return NextResponse.json({
             success: true,
             message: linkedExistingUser
@@ -387,7 +408,8 @@ export async function POST(request: NextRequest) {
             },
             organization: {
                 id: orgData.id,
-                name: orgData.name
+                name: orgData.name,
+                vertical: businessVertical,
             }
         });
 

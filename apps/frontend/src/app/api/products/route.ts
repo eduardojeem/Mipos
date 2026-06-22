@@ -5,6 +5,7 @@ import { isMockAuthEnabled } from '@/lib/env';
 import { assertCsrf } from '@/app/api/_utils/csrf';
 import { requireOrganization } from '@/lib/organization';
 import { requirePOSPermissions } from '@/app/api/_utils/role-validation';
+import { getPlanEntitlements, isPlanLimitReached } from '@/app/api/_utils/plan-entitlements';
 
 // Schema de validación para productos
 const productSchema = z.object({
@@ -235,6 +236,23 @@ export async function POST(request: NextRequest) {
 
     // Usar el admin client centralizado (no import dinámico)
     const adminClient = await createAdminClient();
+
+    // Límite de productos del plan (defensa server-side, no solo en la UI).
+    const entitlements = await getPlanEntitlements(orgId);
+    const { count: productCount, error: productCountError } = await adminClient
+      .from('products')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
+      .is('deleted_at', null);
+    if (!productCountError && isPlanLimitReached(Number(productCount || 0), entitlements.limits.maxProducts)) {
+      return NextResponse.json(
+        {
+          error: `Tu plan permite hasta ${entitlements.limits.maxProducts} productos. Actualiza el plan para cargar mas.`,
+          code: 'PLAN_LIMIT_REACHED',
+        },
+        { status: 403 },
+      );
+    }
 
     // Verificar que la categoría existe y pertenece a la organización
     const { data: category, error: categoryError } = await adminClient

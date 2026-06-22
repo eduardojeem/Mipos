@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getValidatedOrganizationId } from '@/lib/organization';
+import { requirePlanFeature } from '@/app/api/_utils/plan-entitlements';
 
 const FINANCIAL_REPORT_CACHE_TTL_MS = 120_000;
 const financialReportCache = new Map<string, { data: unknown; expiresAt: number }>();
@@ -21,6 +22,10 @@ export async function GET(request: NextRequest) {
     if (!orgId) {
       return NextResponse.json({ error: 'Organization header missing' }, { status: 400 });
     }
+
+    // El reporte financiero es parte de "Reportes avanzados" (Pro+).
+    const denied = await requirePlanFeature(orgId, 'advanced_reports');
+    if (denied) return denied;
 
     const cacheKey = `${orgId}:${searchParams.toString()}`;
     const cached = financialReportCache.get(cacheKey);

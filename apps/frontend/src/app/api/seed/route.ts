@@ -1,7 +1,16 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-admin'
+import { assertSuperAdmin } from '@/app/api/_utils/auth'
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // SECURITY: seed de datos con service role. Solo dev y solo SUPER_ADMIN.
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'No disponible' }, { status: 404 })
+  }
+  const auth = await assertSuperAdmin(request)
+  if (!('ok' in auth) || auth.ok === false) {
+    return NextResponse.json(auth.body, { status: auth.status })
+  }
   try {
     const admin = createAdminClient()
 

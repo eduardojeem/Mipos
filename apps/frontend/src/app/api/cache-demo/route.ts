@@ -47,6 +47,9 @@ function getTTLForPath(pathname: string) {
 }
 
 export async function GET(req: NextRequest) {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'No disponible' }, { status: 404 });
+  }
   const { pathname, search } = new URL(req.url);
   const key = `cache:${pathname}${search}`;
 
@@ -66,6 +69,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'No disponible' }, { status: 404 });
+  }
   const body = await req.json();
   const prefix = body?.prefix ?? '/api/products';
   

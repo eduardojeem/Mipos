@@ -3,6 +3,10 @@ import { getValidatedOrganizationId } from '@/lib/organization'
 import { createAdminClient } from '@/lib/supabase-admin'
 
 export async function GET(request: NextRequest) {
+  // SECURITY: endpoint de debug. No disponible en producción.
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'No disponible' }, { status: 404 })
+  }
   try {
     const orgId = await getValidatedOrganizationId(request)
     if (!orgId) {

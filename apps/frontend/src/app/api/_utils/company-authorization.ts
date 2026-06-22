@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { PLAN_FEATURES, PLANS, normalizePlan } from '@/config/plans'
-import { getCanonicalPlanAliases, normalizePlanCode, normalizePlanSlug } from '@/lib/plan-catalog'
+import { getCanonicalPlanAliases, normalizePlanCode, normalizePlanSlug, sanitizePlanFeatures } from '@/lib/plan-catalog'
 import {
   COMPANY_FEATURE_KEYS,
   COMPANY_PERMISSIONS,
@@ -119,9 +119,9 @@ async function getPlanFeatures(
 
   const rawFeatures = new Set<string>()
   const jsonFeatures = Array.isArray(planRecord.features)
-    ? planRecord.features
+    ? sanitizePlanFeatures(planRecord.features, normalizedPlan)
     : (typeof planRecord.features === 'object' && planRecord.features !== null
-      ? Object.keys(planRecord.features).filter((key) => Boolean((planRecord.features as Record<string, unknown>)[key]))
+      ? sanitizePlanFeatures(planRecord.features, normalizedPlan)
       : [])
 
   for (const feature of jsonFeatures) {
@@ -139,11 +139,7 @@ async function getPlanFeatures(
     if (key) rawFeatures.add(key)
   }
 
-  if (rawFeatures.size === 0) {
-    return mergeFeatureAliases(getFallbackFeatures(normalizedPlan))
-  }
-
-  return mergeFeatureAliases(rawFeatures)
+  return mergeFeatureAliases(rawFeatures.size > 0 ? rawFeatures : getFallbackFeatures(normalizedPlan))
 }
 
 async function getActiveRoleNames(
