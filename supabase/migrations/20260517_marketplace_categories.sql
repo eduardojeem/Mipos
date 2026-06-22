@@ -225,26 +225,24 @@ COMMENT ON FUNCTION public.get_marketplace_categories_with_counts() IS
 
 -- ---------------------------------------------------------------------------
 -- SEED: Categorías iniciales del marketplace (mercado hispanohablante)
--- Basado en los rubros más comunes de Mercado Libre, Rappi, Shopify México
+-- Basado en los verticales implementados: RETAIL (tienda) y BARBERSHOP (servicios)
+-- Solo se activan categorías que el sistema puede soportar operativamente.
 -- ---------------------------------------------------------------------------
 INSERT INTO public.marketplace_categories
     (name, slug, description, icon, color, is_active, is_featured, sort_order)
 VALUES
-    ('Restaurantes',                'restaurantes',                 'Comida, bebidas y experiencias gastronómicas',                 'UtensilsCrossed',  '#f59e0b', TRUE, TRUE,   10),
-    ('Tecnología',                  'tecnologia',                   'Electrónica, gadgets, software y servicios tech',              'Laptop',           '#6366f1', TRUE, TRUE,   20),
+    ('Belleza y Cuidado',           'belleza-y-cuidado',            'Barberías, peluquerías, salones de belleza y cuidado personal', 'Sparkles',         '#a855f7', TRUE, TRUE,   10),
+    ('Almacén y Despensa',          'supermercados',                'Minimercados, almacenes, despensas y kioscos',                 'ShoppingCart',     '#10b981', TRUE, TRUE,   20),
     ('Moda y Ropa',                 'moda-y-ropa',                  'Ropa, calzado y accesorios de moda',                           'Shirt',            '#ec4899', TRUE, TRUE,   30),
-    ('Supermercados',               'supermercados',                'Abarrotes, frescos y productos del hogar',                     'ShoppingCart',     '#10b981', TRUE, TRUE,   40),
+    ('Tecnología',                  'tecnologia',                   'Electrónica, celulares, accesorios y computación',              'Laptop',           '#6366f1', TRUE, TRUE,   40),
     ('Farmacias y Salud',           'farmacias-y-salud',            'Medicamentos, suplementos y productos de salud',               'Pill',             '#ef4444', TRUE, TRUE,   50),
-    ('Belleza y Cuidado',           'belleza-y-cuidado',            'Cosméticos, cuidado personal y salones de belleza',            'Sparkles',         '#a855f7', TRUE, FALSE,  60),
-    ('Hogar y Decoración',          'hogar-y-decoracion',           'Muebles, decoración y artículos del hogar',                    'Home',             '#84cc16', TRUE, FALSE,  70),
-    ('Deportes y Fitness',          'deportes-y-fitness',           'Equipamiento deportivo, ropa deportiva y nutrición',           'Dumbbell',         '#f97316', TRUE, FALSE,  80),
-    ('Educación',                   'educacion',                    'Cursos, libros, tutorías y material educativo',                'BookOpen',         '#0ea5e9', TRUE, FALSE,  90),
-    ('Servicios Profesionales',     'servicios-profesionales',      'Contabilidad, legal, consultoría y servicios B2B',             'Briefcase',        '#64748b', TRUE, FALSE, 100),
-    ('Automotriz',                  'automotriz',                   'Repuestos, servicio técnico y accesorios para autos',          'Car',              '#78716c', TRUE, FALSE, 110),
-    ('Mascotas',                    'mascotas',                     'Alimentos, accesorios y veterinarias para mascotas',           'PawPrint',         '#22c55e', TRUE, FALSE, 120),
-    ('Construcción y Ferretería',   'construccion-y-ferreteria',    'Materiales, herramientas y acabados para construcción',        'Hammer',           '#92400e', TRUE, FALSE, 130),
-    ('Entretenimiento',             'entretenimiento',              'Juegos, música, cine y actividades recreativas',               'Gamepad2',         '#f43f5e', TRUE, FALSE, 140),
-    ('Otros',                       'otros',                        'Negocios y servicios que no encajan en otra categoría',        'Store',            '#94a3b8', TRUE, FALSE, 999)
+    ('Hogar y Decoración',          'hogar-y-decoracion',           'Muebles, decoración y artículos del hogar',                    'Home',             '#84cc16', TRUE, FALSE,  60),
+    ('Deportes y Fitness',          'deportes-y-fitness',           'Equipamiento deportivo, ropa deportiva y nutrición',           'Dumbbell',         '#f97316', TRUE, FALSE,  70),
+    ('Mascotas',                    'mascotas',                     'Alimentos, accesorios y veterinarias para mascotas',           'PawPrint',         '#22c55e', TRUE, FALSE,  80),
+    ('Construcción y Ferretería',   'construccion-y-ferreteria',    'Materiales, herramientas y acabados para construcción',        'Hammer',           '#92400e', TRUE, FALSE,  90),
+    ('Automotriz',                  'automotriz',                   'Repuestos, servicio técnico y accesorios para vehículos',      'Car',              '#78716c', TRUE, FALSE, 100),
+    ('Librería y Papelería',        'libreria-y-papeleria',         'Libros, útiles escolares y artículos de oficina',              'BookOpen',         '#0ea5e9', TRUE, FALSE, 110),
+    ('Otros',                       'otros',                        'Tiendas y negocios que no encajan en otra categoría',          'Store',            '#94a3b8', TRUE, FALSE, 999)
 ON CONFLICT (slug) DO NOTHING;
 
 COMMIT;
