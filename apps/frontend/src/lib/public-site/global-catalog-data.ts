@@ -288,35 +288,61 @@ async function fetchMarketplaceCategoryBySlug(slug: string): Promise<ActiveMarke
 
 /**
  * Resuelve slugs de marketplace_categories a IDs de organización.
- * Usado para filtrar el catálogo por rubro público (?category=restaurantes).
- * Retorna Set vacío si los slugs no coinciden con ninguna categoría activa.
+ * Busca en dos formas:
+ * 1. Orgs con marketplace_category_id explícito asignado
+ * 2. Orgs con productos en categorías internas que coincidan (fallback)
+ *
+ * Esto asegura que orgs sin marketplace_category_id pero con productos en la categoría
+ * aparezcan en las búsquedas de marketplace.
  */
 async function resolveMarketplaceCategoryOrgIds(slugs: string[]): Promise<Set<string>> {
   if (slugs.length === 0) return new Set();
 
   const client = await createAdminClient();
 
-  // Obtener los IDs de las marketplace_categories activas que coincidan con los slugs
+  // 1. Obtener los IDs de las marketplace_categories activas que coincidan con los slugs
   const { data: mktCats, error: mktError } = await client
     .from("marketplace_categories")
-    .select("id")
+    .select("id, name")
     .in("slug", slugs)
     .eq("is_active", true);
 
   if (mktError || !mktCats || mktCats.length === 0) return new Set();
 
   const mktCatIds = mktCats.map((c: { id: string }) => c.id);
+  const mktCatNames = mktCats.map((c: { name: string }) => c.name);
 
-  // Obtener organizaciones vinculadas a esas categorías
-  const { data: orgs, error: orgsError } = await client
+  // 2. Obtener orgs con marketplace_category_id explícito
+  const { data: orgsWithExplicitCat, error: orgsError } = await client
     .from("organizations")
     .select("id")
     .in("marketplace_category_id", mktCatIds)
     .in("subscription_status", PUBLIC_ORGANIZATION_STATUSES);
 
-  if (orgsError || !orgs) return new Set();
+  if (orgsError) {
+    console.warn('[resolveMarketplaceCategoryOrgIds] Error fetching orgs with explicit category:', orgsError);
+    return new Set();
+  }
 
-  return new Set(orgs.map((o: { id: string }) => o.id));
+  const orgIds = new Set(
+    (orgsWithExplicitCat || []).map((o: { id: string }) => o.id)
+  );
+
+  // 3. FALLBACK: Buscar orgs que tengan productos en categorías internas
+  // que coincidan con los nombres de marketplace_categories
+  // Esto atrapa orgs sin marketplace_category_id pero con productos en la categoría
+  const { data: orgsWithMatchingProducts, error: fallbackError } = await client
+    .rpc("get_organizations_by_internal_category", {
+      category_names: mktCatNames,
+      statuses: PUBLIC_ORGANIZATION_STATUSES,
+    })
+    .returns<Array<{ id: string }>>();
+
+  if (!fallbackError && orgsWithMatchingProducts) {
+    orgsWithMatchingProducts.forEach((o: { id: string }) => orgIds.add(o.id));
+  }
+
+  return orgIds;
 }
 
 async function fetchActiveOrganizations(filterOrgIds?: Set<string>): Promise<{
