@@ -156,7 +156,7 @@ export function ContentTabLayout({ config, onUpdate, onSave }: ContentTabLayoutP
         </Card>
       ) : (
         <div className="space-y-3">
-          {sections.map((section, idx) => {
+          {sections.map((section) => {
             const isExpanded = expandedSections.has(section.id);
             const Icon = section.icon;
 
@@ -201,7 +201,7 @@ export function ContentTabLayout({ config, onUpdate, onSave }: ContentTabLayoutP
 
       {/* Helper hint */}
       {vertical && (
-        <Card className="border-border/40 bg-gradient-to-r from-blue/5 to-cyan/2">
+        <Card className="border-border/40 bg-gradient-to-r from-blue-500/5 to-cyan-500/5">
           <CardContent className="flex items-start gap-3 pt-6">
             <Sparkles className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-600 dark:text-blue-400" />
             <div className="min-w-0 space-y-1">
@@ -215,161 +215,6 @@ export function ContentTabLayout({ config, onUpdate, onSave }: ContentTabLayoutP
           </CardContent>
         </Card>
       )}
-    </div>
-  );
-}
-
-      {/* Progreso de contenido */}
-      <Card className="border-border/60 bg-background/80">
-        <CardHeader>
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-primary" />
-                Progreso de contenido
-              </CardTitle>
-              <CardDescription>
-                Completa las secciones en este orden para una experiencia pública consistente.
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            <div className="flex items-center gap-3 rounded-lg border border-border/50 p-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-                {heroComplete ? (
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                ) : (
-                  <span className="text-xs font-bold text-primary">1</span>
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-foreground">Identidad comercial</p>
-                <p className="text-xs text-muted-foreground">
-                  {heroComplete ? '✓ Completado' : 'Nombre, título y descripción principal'}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 rounded-lg border border-border/50 p-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-                {carouselComplete ? (
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                ) : (
-                  <span className="text-xs font-bold text-primary">2</span>
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-foreground">Contenido visual</p>
-                <p className="text-xs text-muted-foreground">
-                  {carouselComplete ? `✓ ${config.carousel?.images?.length || 0} imágenes` : 'Carrusel con imágenes'}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 rounded-lg border border-border/50 p-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-                <span className="text-xs font-bold text-primary">3</span>
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-foreground">Experiencia pública</p>
-                <p className="text-xs text-muted-foreground">Módulos visibles y textos personalizados</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 rounded-lg border border-border/50 p-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-                <span className="text-xs font-bold text-primary">4</span>
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-foreground">Visibilidad en marketplace</p>
-                <p className="text-xs text-muted-foreground">Categoría para encontrarte en el directorio</p>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* 1. Tipo de negocio */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-2 px-1">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-            1
-          </span>
-          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-            Fundamentales del negocio
-          </h3>
-        </div>
-        <VerticalForm />
-      </section>
-
-      {/* 2. Identidad comercial */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-2 px-1">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-            1
-          </span>
-          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-            Identidad comercial
-          </h3>
-        </div>
-        <BusinessInfoForm config={config} onUpdate={onUpdate} />
-      </section>
-
-      {/* 3. Contenido visual */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-2 px-1">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-            2
-          </span>
-          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-            Contenido visual
-          </h3>
-        </div>
-        <CarouselEditor config={config} onUpdate={onUpdate} onSave={onSave} />
-      </section>
-
-      {/* 4. Experiencia pública */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-2 px-1">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-            3
-          </span>
-          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-            Experiencia pública
-          </h3>
-        </div>
-        <PublicExperienceForm config={config} onUpdate={onUpdate} />
-      </section>
-
-      {/* 5. Visibilidad en marketplace */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-2 px-1">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-            4
-          </span>
-          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-            Visibilidad en marketplace
-          </h3>
-        </div>
-        <MarketplaceCategoryForm />
-      </section>
-
-      {/* Helper hint */}
-      <Card className="border-border/40 bg-gradient-to-r from-primary/5 to-primary/2">
-        <CardContent className="flex items-start gap-3 pt-6">
-          <Sparkles className="mt-0.5 h-4 w-4 flex-shrink-0 text-primary" />
-          <div className="min-w-0 space-y-1">
-            <p className="text-xs font-medium text-foreground">
-              Consejo: Mantén la coherencia entre el tipo de negocio, identidad visual y módulos públicos.
-            </p>
-            <p className="text-xs text-muted-foreground">
-              El carrusel y los textos personalizados deben reflejar el tipo de experiencia que ofreces.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
