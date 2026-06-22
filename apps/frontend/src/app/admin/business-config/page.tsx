@@ -58,6 +58,7 @@ const BrandingForm = lazy(() => import('./components/BrandingForm').then((m) => 
 const StoreSettingsForm = lazy(() => import('./components/StoreSettingsForm').then((m) => ({ default: m.StoreSettingsForm })))
 const ConfigPreview = lazy(() => import('./components/ConfigPreview').then((m) => ({ default: m.ConfigPreview })))
 const OrganizationSelectorForConfig = lazy(() => import('./components/OrganizationSelectorForConfig').then((m) => ({ default: m.OrganizationSelectorForConfig })))
+const SectionVisibilityPanel = lazy(() => import('./components/SectionVisibilityPanel').then((m) => ({ default: m.SectionVisibilityPanel })))
 
 type TabConfig = {
   id: string
@@ -111,6 +112,12 @@ const TAB_CONFIG: TabConfig[] = [
     label: 'Publicacion',
     icon: Globe,
     description: 'Ruta publica, accesos directos y salida visible del negocio.',
+  },
+  {
+    id: 'visibility',
+    label: 'Visibilidad',
+    icon: Eye,
+    description: 'Controla qué secciones se muestran en tu página pública.',
   },
   {
     id: 'preview',
@@ -687,6 +694,8 @@ export default function BusinessConfigPage() {
             config={currentConfig}
           />
         )
+      case 'visibility':
+        return <SectionVisibilityPanel config={currentConfig} onUpdate={handleConfigUpdate} />
       case 'preview':
         return <ConfigPreview config={currentConfig} onUpdate={handleConfigUpdate} onReset={handleReset} />
       default:
