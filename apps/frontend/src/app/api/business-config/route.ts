@@ -8,6 +8,11 @@ import { defaultBusinessConfig } from '@/types/business-config'
 import { getCachedConfig, setCachedConfig } from './cache'
 import { requireCompanyAccess } from '@/app/api/_utils/company-authorization'
 import { COMPANY_FEATURE_KEYS, COMPANY_PERMISSIONS } from '@/lib/company-access'
+import {
+  VALIDATION_CONSTRAINTS,
+  VALIDATION_PATTERNS,
+  isValidSocialMediaUrl,
+} from '@/lib/validation/business-config-rules'
 
 function revalidateBusinessConfigConsumers() {
   try {
@@ -177,12 +182,18 @@ export async function PUT(request: NextRequest) {
     }
     const b = (v: any, d: boolean) => (typeof v === 'boolean' ? v : d)
     const arrStr = (v: any, d: string[]) => (Array.isArray(v) ? v.filter((x: any) => typeof x === 'string') : d)
-    // Bloquea esquemas peligrosos (javascript:, data:, vbscript:) que permitirían
-    // XSS si el valor se renderiza como href en el sitio público. Conserva URLs
-    // http(s) y handles/paths normales, así no rompe datos existentes.
+    // Bloquea esquemas peligrosos (javascript:, data:, vbscript:) y requiere HTTPS para redes sociales
     const safeUrl = (v: any) => {
       const str = typeof v === 'string' ? v.trim() : ''
-      return /^\s*(javascript|data|vbscript):/i.test(str) ? '' : str
+      if (/^\s*(javascript|data|vbscript):/i.test(str)) return ''
+      return str
+    }
+
+    // Valida URLs de redes sociales requiriendo HTTPS
+    const validateSocialUrl = (v: any) => {
+      const str = typeof v === 'string' ? v.trim() : ''
+      if (!str) return ''
+      return isValidSocialMediaUrl(str) ? str : ''
     }
     const baselineSystemSettings = prevConfig?.systemSettings || defaultBusinessConfig.systemSettings!
     const systemSettings: NonNullable<BusinessConfig['systemSettings']> =
@@ -229,7 +240,7 @@ export async function PUT(request: NextRequest) {
         phone: cleanPublicString(raw?.contact?.phone),
         email: cleanPublicString(raw?.contact?.email),
         whatsapp: cleanPublicString(raw?.contact?.whatsapp),
-        website: safeUrl(cleanPublicString(raw?.contact?.website)),
+        website: validateSocialUrl(cleanPublicString(raw?.contact?.website)),
         landline: cleanPublicString(raw?.contact?.landline),
       },
       address: {
@@ -247,11 +258,11 @@ export async function PUT(request: NextRequest) {
         mapEmbedUrl: s(raw?.address?.mapEmbedUrl),
       },
       socialMedia: {
-        facebook: safeUrl(raw?.socialMedia?.facebook),
-        instagram: safeUrl(raw?.socialMedia?.instagram),
-        twitter: safeUrl(raw?.socialMedia?.twitter),
-        tiktok: safeUrl(raw?.socialMedia?.tiktok),
-        linkedin: safeUrl(raw?.socialMedia?.linkedin),
+        facebook: validateSocialUrl(raw?.socialMedia?.facebook),
+        instagram: validateSocialUrl(raw?.socialMedia?.instagram),
+        twitter: validateSocialUrl(raw?.socialMedia?.twitter),
+        tiktok: validateSocialUrl(raw?.socialMedia?.tiktok),
+        linkedin: validateSocialUrl(raw?.socialMedia?.linkedin),
       },
       businessHours: arrStr(raw?.businessHours, defaultBusinessConfig.businessHours),
       branding: {
@@ -288,6 +299,8 @@ export async function PUT(request: NextRequest) {
         enableBarcodeScanner: b(raw?.storeSettings?.enableBarcodeScanner, !!defaultBusinessConfig.storeSettings.enableBarcodeScanner),
         printReceipts: b(raw?.storeSettings?.printReceipts, !!defaultBusinessConfig.storeSettings.printReceipts),
         enableCashDrawer: b(raw?.storeSettings?.enableCashDrawer, !!defaultBusinessConfig.storeSettings.enableCashDrawer),
+        maxDiscountPercentage: Math.min(VALIDATION_CONSTRAINTS.DISCOUNT_PERCENTAGE_MAX, Math.max(VALIDATION_CONSTRAINTS.DISCOUNT_PERCENTAGE_MIN, n(raw?.storeSettings?.maxDiscountPercentage, defaultBusinessConfig.storeSettings.maxDiscountPercentage || 50))),
+        requireCustomerInfo: b(raw?.storeSettings?.requireCustomerInfo, !!defaultBusinessConfig.storeSettings.requireCustomerInfo),
         decimalPlaces: n(raw?.storeSettings?.decimalPlaces, raw?.storeSettings?.currency === 'PYG' ? 0 : 2),
         autoPrintOnSale: b(raw?.storeSettings?.autoPrintOnSale, !!defaultBusinessConfig.storeSettings.autoPrintOnSale),
         autoShareReceipt: {
@@ -298,12 +311,12 @@ export async function PUT(request: NextRequest) {
       systemSettings,
       carousel: {
         enabled: b(raw?.carousel?.enabled, defaultBusinessConfig.carousel.enabled),
-        transitionSeconds: Math.min(10, Math.max(3, n(raw?.carousel?.transitionSeconds, defaultBusinessConfig.carousel.transitionSeconds))),
-        ratio: (Number.isFinite(Number(raw?.carousel?.ratio)) && Number(raw?.carousel?.ratio) > 0)
+        transitionSeconds: Math.min(VALIDATION_CONSTRAINTS.CAROUSEL_TRANSITION_MAX, Math.max(VALIDATION_CONSTRAINTS.CAROUSEL_TRANSITION_MIN, n(raw?.carousel?.transitionSeconds, defaultBusinessConfig.carousel.transitionSeconds))),
+        ratio: (Number.isFinite(Number(raw?.carousel?.ratio)) && Number(raw?.carousel?.ratio) > VALIDATION_CONSTRAINTS.CAROUSEL_RATIO_MIN && Number(raw?.carousel?.ratio) <= VALIDATION_CONSTRAINTS.CAROUSEL_RATIO_MAX)
           ? Number(raw?.carousel?.ratio)
           : defaultBusinessConfig.carousel.ratio,
         autoplay: b(raw?.carousel?.autoplay, !!defaultBusinessConfig.carousel.autoplay),
-        transitionMs: Math.min(5000, Math.max(0, n(raw?.carousel?.transitionMs, defaultBusinessConfig.carousel.transitionMs || 800))),
+        transitionMs: Math.min(VALIDATION_CONSTRAINTS.CAROUSEL_TRANSITION_MS_MAX, Math.max(VALIDATION_CONSTRAINTS.CAROUSEL_TRANSITION_MS_MIN, n(raw?.carousel?.transitionMs, defaultBusinessConfig.carousel.transitionMs || 800))),
         images: Array.isArray(raw?.carousel?.images)
           ? raw.carousel.images.map((img: any) => ({ id: s(img?.id, ''), url: s(img?.url, ''), alt: s(img?.alt) })).filter((img: any) => !!img.url)
           : defaultBusinessConfig.carousel.images,

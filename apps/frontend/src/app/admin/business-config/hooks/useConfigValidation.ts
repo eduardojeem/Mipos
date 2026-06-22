@@ -2,6 +2,15 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { BusinessConfig } from '@/types/business-config';
+import {
+  VALIDATION_CONSTRAINTS,
+  isValidEmail,
+  isValidHexColor,
+  isValidPhoneFormat,
+  isValidRucFormat,
+  isValidTaxRate,
+  isValidDiscountPercentage,
+} from '@/lib/validation/business-config-rules';
 
 export interface ValidationError {
   field: string;
@@ -51,12 +60,12 @@ export function useConfigValidation() {
     // ── Contacto (requeridos) ──
     if (!config.contact?.phone?.trim()) {
       allErrors.push({ field: 'contact.phone', message: 'Teléfono público es obligatorio', tab: 'contact', required: true });
-    } else if (config.contact.phone.replace(/\D/g, '').length < 6) {
-      allErrors.push({ field: 'contact.phone', message: 'Teléfono debe tener al menos 6 dígitos', tab: 'contact', required: true });
+    } else if (!isValidPhoneFormat(config.contact.phone)) {
+      allErrors.push({ field: 'contact.phone', message: `Teléfono debe tener al menos ${VALIDATION_CONSTRAINTS.MIN_PHONE_DIGITS} dígitos`, tab: 'contact', required: true });
     }
 
     // ── Contacto (opcionales con formato) ──
-    if (config.contact?.email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(config.contact.email)) {
+    if (config.contact?.email?.trim() && !isValidEmail(config.contact.email)) {
       allErrors.push({ field: 'contact.email', message: 'Email no tiene formato válido', tab: 'contact', required: false });
     }
 
@@ -66,16 +75,15 @@ export function useConfigValidation() {
     }
 
     // ── Legal (opcionales con formato) ──
-    if (config.legalInfo?.ruc && !/^\d{6,}/.test(config.legalInfo.ruc.replace(/\D/g, ''))) {
-      allErrors.push({ field: 'legalInfo.ruc', message: 'RUC debe tener al menos 6 dígitos', tab: 'contact', required: false });
+    if (config.legalInfo?.ruc && !isValidRucFormat(config.legalInfo.ruc)) {
+      allErrors.push({ field: 'legalInfo.ruc', message: `RUC debe tener al menos ${VALIDATION_CONSTRAINTS.MIN_RUC_DIGITS} dígitos`, tab: 'contact', required: false });
     }
 
     // ── Branding (requeridos) ──
-    const colorRegex = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/;
-    if (config.branding?.primaryColor && !colorRegex.test(config.branding.primaryColor)) {
+    if (config.branding?.primaryColor && !isValidHexColor(config.branding.primaryColor)) {
       allErrors.push({ field: 'branding.primaryColor', message: 'Color primario debe ser hexadecimal (#RRGGBB)', tab: 'brand', required: true });
     }
-    if (config.branding?.secondaryColor && !colorRegex.test(config.branding.secondaryColor)) {
+    if (config.branding?.secondaryColor && !isValidHexColor(config.branding.secondaryColor)) {
       allErrors.push({ field: 'branding.secondaryColor', message: 'Color secundario debe ser hexadecimal (#RRGGBB)', tab: 'brand', required: true });
     }
 
@@ -86,10 +94,11 @@ export function useConfigValidation() {
     if (!config.storeSettings?.currencySymbol?.trim()) {
       allErrors.push({ field: 'storeSettings.currencySymbol', message: 'Símbolo de moneda es obligatorio (ej: Gs., $)', tab: 'commerce', required: true });
     }
-    if (config.storeSettings?.taxRate !== undefined) {
-      if (config.storeSettings.taxRate < 0 || config.storeSettings.taxRate > 1) {
-        allErrors.push({ field: 'storeSettings.taxRate', message: 'IVA debe estar entre 0 y 1 (ej: 0.10 para 10%)', tab: 'commerce', required: true });
-      }
+    if (config.storeSettings?.taxRate !== undefined && !isValidTaxRate(config.storeSettings.taxRate)) {
+      allErrors.push({ field: 'storeSettings.taxRate', message: 'IVA debe estar entre 0 y 1 (ej: 0.10 para 10%)', tab: 'commerce', required: true });
+    }
+    if (config.storeSettings?.maxDiscountPercentage !== undefined && !isValidDiscountPercentage(config.storeSettings.maxDiscountPercentage)) {
+      allErrors.push({ field: 'storeSettings.maxDiscountPercentage', message: 'Descuento máximo debe estar entre 0 y 100%', tab: 'commerce', required: false });
     }
 
     setErrors(allErrors);
