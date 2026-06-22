@@ -12,7 +12,7 @@ import {
   updateUserRecord,
   checkEmailExists,
 } from './signup-service';
-import { rateLimiter, getClientIp } from './rate-limiter';
+import { redisRateLimiter } from './rate-limiter-redis';
 
 // Plans whose subscription is provisioned immediately on signup. Anything
 // else (paid plans) must go through the billing flow  registration only
@@ -20,6 +20,14 @@ import { rateLimiter, getClientIp } from './rate-limiter';
 const FREE_REGISTRATION_PLANS = new Set(['free']);
 
 const FREE_REGISTRATION_PLANS = new Set(['free']);
+
+function getClientIp(headers: Headers): string {
+  const forwarded = headers.get('x-forwarded-for');
+  if (forwarded) {
+    return forwarded.split(',')[0]?.trim() || 'unknown';
+  }
+  return headers.get('x-real-ip') || 'unknown';
+}
 
 function isAlreadyRegisteredError(error: { message?: string } | null | undefined) {
   const message = (error?.message || '').toLowerCase();
@@ -32,9 +40,9 @@ function isAlreadyRegisteredError(error: { message?: string } | null | undefined
 
 export async function POST(request: NextRequest) {
   try {
-    // Rate limiting
+    // Rate limiting (Redis or in-memory fallback)
     const ip = getClientIp(request.headers);
-    const rateCheck = await rateLimiter.check(ip);
+    const rateCheck = await redisRateLimiter.check(ip);
     if (!rateCheck.allowed) {
       return NextResponse.json(
         {
@@ -270,8 +278,10 @@ export async function POST(request: NextRequest) {
       // Non-critical
     });
 
-    // Reset rate limit after successful signup
-    rateLimiter.reset(ip);
+    // Reset rate limit after successful signup (async, non-blocking)
+    redisRateLimiter.reset(ip).catch((err) => {
+      console.error('[register] Failed to reset rate limit:', err);
+    });
 
     return NextResponse.json({
       success: true,
