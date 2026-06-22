@@ -47,6 +47,8 @@ import { useConfigValidation } from './hooks/useConfigValidation'
 import { COMPANY_FEATURE_KEYS, COMPANY_PERMISSIONS } from '@/lib/company-access'
 import { buildTenantPublicBaseUrl } from '@/lib/domain/host-context'
 import { getCanonicalPlanDisplayName, normalizePlanSlug } from '@/lib/plan-catalog'
+import { BusinessConfigDirtyContext } from './context/business-config-dirty'
+import { ConfigSetupGuide } from './components/ConfigSetupGuide'
 
 const ContentTabLayout = lazy(() => import('./components/ContentTabLayout').then((m) => ({ default: m.ContentTabLayout })))
 const DomainSettingsForm = lazy(() => import('./components/DomainSettingsForm').then((m) => ({ default: m.DomainSettingsForm })))
@@ -325,7 +327,12 @@ export default function BusinessConfigPage() {
   const [localChanges, setLocalChanges] = useState<Partial<BusinessConfig>>({})
   const [showResetDialog, setShowResetDialog] = useState(false)
   const previousOrganizationId = useRef<string | null>(null)
+  const dirtyRef = useRef(false)
   const { validateAll, getTabErrorCount, errors: validationErrors } = useConfigValidation()
+
+  const setDirty = useCallback((dirty: boolean) => {
+    dirtyRef.current = dirty
+  }, [])
 
   const accessQuery = useCompanyAccess({
     permission: COMPANY_PERMISSIONS.MANAGE_COMPANY,
@@ -477,6 +484,15 @@ export default function BusinessConfigPage() {
     setHasUnsavedChanges(true)
     setLocalChanges((prev) => mergeConfig(prev as BusinessConfig, updates))
   }, [])
+
+  const handleTabChange = (nextTab: string) => {
+    if (nextTab !== activeTab && dirtyRef.current) {
+      const ok = window.confirm('Tenés cambios sin guardar. ¿Descartarlos y cambiar de pestaña?')
+      if (!ok) return
+      dirtyRef.current = false
+    }
+    setActiveTab(nextTab)
+  }
 
   const handleOrganizationSelection = useCallback((organization: Organization) => {
     if (hasUnsavedChanges && !window.confirm('Hay cambios sin guardar. Deseas cambiar de organizacion y descartarlos?')) {
@@ -732,7 +748,11 @@ export default function BusinessConfigPage() {
   }
 
   return (
+    <BusinessConfigDirtyContext.Provider value={{ setDirty }}>
     <div className="mx-auto max-w-7xl space-y-6 p-6">
+      {/* Setup Guide */}
+      <ConfigSetupGuide activeTab={activeTab} onTabChange={handleTabChange} config={currentConfig} />
+
       <div className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
         <Card className="overflow-hidden border-border/60 bg-gradient-to-br from-background via-background to-primary/5">
           <CardHeader className="space-y-4">
@@ -1146,5 +1166,6 @@ export default function BusinessConfigPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </BusinessConfigDirtyContext.Provider>
   )
 }
