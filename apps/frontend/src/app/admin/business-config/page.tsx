@@ -309,7 +309,9 @@ function cleanupRemovedAssets(previous: BusinessConfig, next: BusinessConfig) {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url, public: true }),
-    }).catch(() => undefined)
+    }).catch((error) => {
+      console.warn('Failed to delete orphaned asset:', { url, error })
+    })
   })
 }
 
