@@ -319,7 +319,8 @@ const fetchCachedCategoriesSnapshot = unstable_cache(
 ```
 ✅ FIX #1: COMPLETADO - Migration + RPC fallback
 ✅ FIX #2: COMPLETADO - RPC filters updated
-⏳ FIX #3: TODO
+✅ FIX #3A: COMPLETADO - Product count filters in category-organizations-data.ts
+✅ FIX #3B: COMPLETADO - Added fallback RPC for internal categories
 ⏳ FIX #4: TODO
 ⏳ FIX #5: TODO
 ⏳ FIX #6: TODO
@@ -328,4 +329,43 @@ const fetchCachedCategoriesSnapshot = unstable_cache(
 
 ---
 
-**Documento preparado para implementación. Fixes #1 y #2 ya desplegados.**
+## 🔧 ADDITIONAL FIXES APPLIED
+
+### Fix #3A: Product Filters in Category Page (2026-06-22)
+
+**Location:** `lib/public-site/category-organizations-data.ts:76-81`
+
+**Problem:**
+The category-specific page (`/home/categorias/[slug]`) was counting ALL products, including inactive and unpublic ones.
+
+**Before:**
+```typescript
+.eq('is_active', true)  // Only checks active, missing is_public and deleted_at
+```
+
+**After:**
+```typescript
+.eq('is_active', true)
+.eq('is_public', true)
+.is('deleted_at', null)
+```
+
+**Impact:** Now correctly counts only publishable products in category cards.
+
+---
+
+### Fix #3B: Org Fallback for Category Page (2026-06-22)
+
+**Location:** `lib/public-site/category-organizations-data.ts:55-80`
+
+**Problem:**
+Only showed orgs with explicit `marketplace_category_id`. Missed orgs with internal categories matching the marketplace category name.
+
+**Solution:**
+Added fallback RPC call `get_organizations_by_internal_category()` to find orgs without explicit marketplace_category_id but with matching internal categories.
+
+**Impact:** Now shows all relevant orgs in category page, not just those with explicit assignment.
+
+---
+
+**Documento actualizado con todos los fixes aplicados.**
