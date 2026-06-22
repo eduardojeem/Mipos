@@ -213,6 +213,9 @@ AS $$
         AND o.subscription_status IN ('ACTIVE', 'TRIAL')
     LEFT JOIN public.products p
         ON  p.organization_id = o.id
+        AND p.is_active = TRUE
+        AND p.is_public = TRUE
+        AND p.deleted_at IS NULL
     WHERE mc.is_active = TRUE
     GROUP BY mc.id, mc.name, mc.slug, mc.description, mc.icon, mc.color,
              mc.image_url, mc.is_featured, mc.sort_order

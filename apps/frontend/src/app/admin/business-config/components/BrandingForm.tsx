@@ -595,7 +595,7 @@ export function BrandingForm({ config, onUpdate }: BrandingFormProps) {
                       PNG, JPG, WebP o SVG · Máximo 1MB
                     </p>
                   </div>
-                )}}
+                )}
 
                 {/* Action Buttons */}
                 <div className="flex gap-2">
