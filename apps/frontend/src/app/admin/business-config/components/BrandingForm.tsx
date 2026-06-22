@@ -508,43 +508,78 @@ export function BrandingForm({ config, onUpdate }: BrandingFormProps) {
               {/* Logo Preview & Controls */}
               <div className="space-y-4">
                 {config.branding.logo ? (
-                  <div className="relative group">
-                    <div className="p-6 rounded-2xl border-2 border-dashed border-amber-200 dark:border-amber-800 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20">
-                      <div className="flex items-center justify-center min-h-24">
-                        <OptimizedImage
-                          src={config.branding.logo}
-                          alt="Logo del negocio"
-                          className="max-h-20 max-w-full object-contain"
-                          lazy={false}
-                        />
+                  <div className="space-y-3">
+                    {/* Preview principal */}
+                    <div className="relative group">
+                      <div className="p-6 rounded-2xl border-2 border-dashed border-amber-200 dark:border-amber-800 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20">
+                        <div className="flex items-center justify-center min-h-24">
+                          <OptimizedImage
+                            src={config.branding.logo}
+                            alt="Logo del negocio"
+                            className="max-h-20 max-w-full object-contain"
+                            lazy={false}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Overlay con acciones */}
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all rounded-2xl flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => setShowLogoUploader(true)}
+                          className="gap-2"
+                        >
+                          <Upload className="h-4 w-4" />
+                          Cambiar
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => handleBrandingChange('logo', '')}
+                          className="gap-2"
+                        >
+                          <X className="h-4 w-4" />
+                          Quitar
+                        </Button>
                       </div>
                     </div>
 
-                    {/* Overlay con acciones */}
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all rounded-2xl flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => setShowLogoUploader(true)}
-                        className="gap-2"
-                      >
-                        <Upload className="h-4 w-4" />
-                        Cambiar
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => handleBrandingChange('logo', '')}
-                        className="gap-2"
-                      >
-                        <X className="h-4 w-4" />
-                        Quitar
-                      </Button>
+                    {/* Preview en contextos */}
+                    <div className="grid grid-cols-2 gap-2">
+                      {/* Fondo claro */}
+                      <div className="rounded-xl border bg-white p-3 text-center">
+                        <p className="text-[10px] uppercase tracking-wider text-slate-400 mb-2">Fondo claro</p>
+                        <div className="flex items-center justify-center h-10">
+                          <img src={config.branding.logo} alt="Logo" className="max-h-10 max-w-full object-contain" />
+                        </div>
+                      </div>
+                      {/* Fondo oscuro */}
+                      <div className="rounded-xl border bg-slate-900 p-3 text-center">
+                        <p className="text-[10px] uppercase tracking-wider text-slate-500 mb-2">Fondo oscuro</p>
+                        <div className="flex items-center justify-center h-10">
+                          <img src={config.branding.logo} alt="Logo" className="max-h-10 max-w-full object-contain" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Preview tipo ticket/receipt */}
+                    <div className="rounded-xl border border-dashed border-slate-200 dark:border-slate-700 p-4 bg-white dark:bg-slate-950">
+                      <p className="text-[10px] uppercase tracking-wider text-slate-400 mb-3">Vista previa: Ticket de venta</p>
+                      <div className="text-center space-y-1">
+                        <img src={config.branding.logo} alt="Logo" className="max-h-8 mx-auto object-contain" />
+                        <p className="text-[11px] font-medium text-slate-700 dark:text-slate-300">{config.businessName || 'Mi Negocio'}</p>
+                        <div className="border-t border-dashed border-slate-200 dark:border-slate-700 my-2" />
+                        <p className="text-[10px] text-slate-400">Producto ejemplo × 2 ··· Gs. 50.000</p>
+                        <p className="text-[10px] text-slate-400">Servicio ejemplo × 1 ··· Gs. 30.000</p>
+                        <div className="border-t border-dashed border-slate-200 dark:border-slate-700 my-2" />
+                        <p className="text-xs font-bold text-slate-700 dark:text-slate-300">TOTAL: Gs. 80.000</p>
+                      </div>
                     </div>
                   </div>
                 ) : (
                   <div
-                    className="p-8 rounded-2xl border-2 border-dashed border-amber-200 dark:border-amber-800 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 text-center cursor-pointer hover:border-amber-300 transition-all"
+                    className="p-8 rounded-2xl border-2 border-dashed border-amber-200 dark:border-amber-800 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 text-center cursor-pointer hover:border-amber-300 hover:shadow-md transition-all"
                     onClick={() => setShowLogoUploader(true)}
                   >
                     <div className="w-16 h-16 rounded-2xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mx-auto mb-4">
@@ -553,11 +588,14 @@ export function BrandingForm({ config, onUpdate }: BrandingFormProps) {
                     <p className="font-medium text-amber-900 dark:text-amber-100 mb-2">
                       Subir Logo
                     </p>
-                    <p className="text-sm text-amber-700 dark:text-amber-300">
-                      Haz clic para seleccionar o arrastra tu logo aquí
+                    <p className="text-sm text-amber-700 dark:text-amber-300 mb-3">
+                      Arrastrá tu logo aquí o hacé clic para seleccionar
+                    </p>
+                    <p className="text-xs text-amber-600/70 dark:text-amber-400/70">
+                      PNG, JPG, WebP o SVG · Máximo 1MB
                     </p>
                   </div>
-                )}
+                )}}
 
                 {/* Action Buttons */}
                 <div className="flex gap-2">
