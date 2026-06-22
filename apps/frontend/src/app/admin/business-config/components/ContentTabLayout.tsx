@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertCircle, CheckCircle2, Sparkles, ChevronDown, ChevronUp } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Sparkles, ChevronDown, ChevronUp, Lock } from 'lucide-react';
 import { useEffect, useState, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -16,6 +16,8 @@ import { BusinessInfoForm } from './BusinessInfoForm';
 import { CarouselEditor } from './CarouselEditor';
 import { PublicExperienceForm } from './PublicExperienceForm';
 import { MarketplaceCategoryForm } from './MarketplaceCategoryForm';
+import { SectionLocked } from './SectionLocked';
+import { useBusinessConfigAccess } from '../hooks/useBusinessConfigAccess';
 
 interface ContentTabLayoutProps {
   config: BusinessConfig;
@@ -25,6 +27,7 @@ interface ContentTabLayoutProps {
 
 export function ContentTabLayout({ config, onUpdate, onSave }: ContentTabLayoutProps) {
   const { vertical } = useVertical();
+  const { checkSectionAccess, currentPlan, isPlanResolved } = useBusinessConfigAccess();
   const [lastVertical, setLastVertical] = useState<BusinessVertical | null>(vertical || null);
   const [showVerticalSync, setShowVerticalSync] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Set<SectionId>>(new Set());
@@ -159,38 +162,68 @@ export function ContentTabLayout({ config, onUpdate, onSave }: ContentTabLayoutP
           {sections.map((section) => {
             const isExpanded = expandedSections.has(section.id);
             const Icon = section.icon;
+            const access = checkSectionAccess(`business_config_${section.id}`);
+            const isLocked = !access.isAllowed;
 
             return (
               <Card
                 key={section.id}
                 className={cn(
                   'border-border/60 bg-background/80 transition-all',
-                  isExpanded && 'ring-1 ring-primary/30'
+                  isExpanded && 'ring-1 ring-primary/30',
+                  isLocked && 'border-amber-200/50 bg-amber-50/20 dark:border-amber-900/30 dark:bg-amber-950/10'
                 )}
               >
                 <button
-                  onClick={() => toggleSection(section.id)}
-                  className="flex w-full items-center justify-between gap-4 px-6 py-4 text-left hover:bg-muted/30 transition-colors"
+                  onClick={() => !isLocked && toggleSection(section.id)}
+                  disabled={isLocked}
+                  className={cn(
+                    'flex w-full items-center justify-between gap-4 px-6 py-4 text-left transition-colors',
+                    !isLocked && 'hover:bg-muted/30 cursor-pointer',
+                    isLocked && 'cursor-not-allowed opacity-75'
+                  )}
                 >
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary flex-shrink-0">
-                      <Icon className="h-4 w-4" />
+                    <div className={cn(
+                      'flex h-8 w-8 items-center justify-center rounded-lg flex-shrink-0',
+                      isLocked ? 'bg-amber-100 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400' : 'bg-primary/10 text-primary'
+                    )}>
+                      {isLocked ? <Lock className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-foreground">{section.label}</p>
                       <p className="text-xs text-muted-foreground">{section.description}</p>
+                      {isLocked && (
+                        <p className="text-xs font-medium text-amber-600 dark:text-amber-400 mt-1">
+                          Requiere plan {access.requiredPlan}
+                        </p>
+                      )}
                     </div>
                   </div>
-                  {isExpanded ? (
-                    <ChevronUp className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                  ) : (
-                    <ChevronDown className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                  {!isLocked && (
+                    <>
+                      {isExpanded ? (
+                        <ChevronUp className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                      ) : (
+                        <ChevronDown className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                      )}
+                    </>
                   )}
                 </button>
 
-                {isExpanded && (
+                {isExpanded && !isLocked && (
                   <div className="border-t border-border/60 px-6 py-4">
                     {renderSectionComponent(section)}
+                  </div>
+                )}
+
+                {isLocked && isExpanded && (
+                  <div className="border-t border-amber-200/50 dark:border-amber-900/30 px-6 py-4">
+                    <SectionLocked
+                      sectionLabel={section.label}
+                      requiredPlan={access.requiredPlan || 'superior'}
+                      currentPlan={currentPlan}
+                    />
                   </div>
                 )}
               </Card>

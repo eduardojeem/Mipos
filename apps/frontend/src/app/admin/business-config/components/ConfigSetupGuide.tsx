@@ -17,9 +17,11 @@ import {
   Globe,
   Eye,
   Info,
+  Lock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { BusinessConfig } from '@/types/business-config';
+import { useBusinessConfigAccess } from '../hooks/useBusinessConfigAccess';
 
 interface ConfigSetupGuideProps {
   activeTab: string;
@@ -29,6 +31,7 @@ interface ConfigSetupGuideProps {
 
 export function ConfigSetupGuide({ activeTab, onTabChange, config }: ConfigSetupGuideProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const { checkSectionAccess } = useBusinessConfigAccess();
 
   useEffect(() => {
     const stored = localStorage.getItem('business-config-setup-guide-collapsed');
@@ -171,21 +174,30 @@ export function ConfigSetupGuide({ activeTab, onTabChange, config }: ConfigSetup
             {steps.map((step) => {
               const StepIcon = step.icon;
               const isActive = activeTab === step.id;
+              const access = checkSectionAccess(`business_config_${step.id}`);
+              const isLocked = !access.isAllowed;
+
               return (
                 <button
                   key={step.id}
                   type="button"
-                  onClick={() => onTabChange(step.id)}
+                  onClick={() => !isLocked && onTabChange(step.id)}
+                  disabled={isLocked}
                   className={cn(
-                    'text-left flex items-start gap-3 rounded-xl border p-3 transition-all hover:scale-[1.01] active:scale-[0.99]',
+                    'text-left flex items-start gap-3 rounded-xl border p-3 transition-all',
+                    !isLocked && 'hover:scale-[1.01] active:scale-[0.99] cursor-pointer',
+                    isLocked && 'cursor-not-allowed opacity-75',
                     isActive
                       ? 'border-primary bg-primary/5 ring-1 ring-primary/10 shadow-sm'
                       : 'border-border bg-card hover:bg-muted/30 hover:border-muted-foreground/30',
-                    step.isCompleted && !isActive && 'border-emerald-100 dark:border-emerald-900/20 bg-emerald-50/5'
+                    step.isCompleted && !isActive && !isLocked && 'border-emerald-100 dark:border-emerald-900/20 bg-emerald-50/5',
+                    isLocked && 'border-amber-200/50 dark:border-amber-900/30 bg-amber-50/10 dark:bg-amber-950/10'
                   )}
                 >
                   <div className="mt-0.5 shrink-0">
-                    {step.isCompleted ? (
+                    {isLocked ? (
+                      <Lock className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                    ) : step.isCompleted ? (
                       <CheckCircle2 className="h-5 w-5 text-emerald-500 fill-emerald-100 dark:fill-transparent" />
                     ) : (
                       <Circle className="h-5 w-5 text-muted-foreground/60" />
@@ -195,14 +207,19 @@ export function ConfigSetupGuide({ activeTab, onTabChange, config }: ConfigSetup
                     <p
                       className={cn(
                         'text-xs font-bold leading-none flex items-center gap-1.5',
-                        step.isCompleted ? 'text-emerald-700 dark:text-emerald-400' : 'text-foreground',
-                        isActive && 'text-primary'
+                        isLocked ? 'text-amber-700 dark:text-amber-400' : step.isCompleted ? 'text-emerald-700 dark:text-emerald-400' : 'text-foreground',
+                        isActive && !isLocked && 'text-primary'
                       )}
                     >
                       <StepIcon className="h-3.5 w-3.5 shrink-0" />
                       {step.label}
                     </p>
                     <p className="text-[10px] text-muted-foreground leading-normal line-clamp-2">{step.description}</p>
+                    {isLocked && (
+                      <p className="text-[9px] font-medium text-amber-600 dark:text-amber-400 mt-0.5">
+                        Plan {access.requiredPlan} requerido
+                      </p>
+                    )}
                   </div>
                 </button>
               );
