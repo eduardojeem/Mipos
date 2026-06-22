@@ -257,11 +257,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Send welcome email
+    // Send welcome email with verification link
+    const verifyUrl = `${request.nextUrl.origin}/verify-email?userId=${authUser.id}&email=${encodeURIComponent(email)}`;
     const welcomeEmail = buildWelcomeEmail({
       userName: name,
       organizationName,
       loginUrl: `${request.nextUrl.origin}/onboarding`,
+      verifyUrl,
     });
     sendEmail({ to: email, ...welcomeEmail, template: 'welcome' }).catch((err) => {
       console.error('[register] Email send error:', err);

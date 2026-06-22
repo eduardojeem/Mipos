@@ -6,10 +6,11 @@ export interface WelcomeEmailData {
   userName: string
   organizationName: string
   loginUrl: string
+  verifyUrl?: string
 }
 
 export function buildWelcomeEmail(data: WelcomeEmailData): { subject: string; html: string; text: string } {
-  const { userName, organizationName, loginUrl } = data
+  const { userName, organizationName, loginUrl, verifyUrl } = data
 
   const subject = `¡Bienvenido a MiPOS, ${userName}!`
 
@@ -41,15 +42,35 @@ export function buildWelcomeEmail(data: WelcomeEmailData): { subject: string; ht
               <p style="margin:0 0 16px;color:#475569;font-size:15px;line-height:1.6;">
                 Tu empresa <strong>${organizationName}</strong> ya está lista en MiPOS.
               </p>
+              ${verifyUrl ? `
+              <div style="margin:24px 0;padding:16px;background-color:#f0fdf4;border:1px solid #dcfce7;border-radius:8px;">
+                <p style="margin:0 0 12px;color:#1b7f3a;font-size:14px;font-weight:600;">
+                  ⚠️ Verifica tu email antes de continuar
+                </p>
+                <p style="margin:0 0 12px;color:#4a7c59;font-size:13px;line-height:1.5;">
+                  Por seguridad, necesitamos confirmar que este email es tuyo. Haz clic en el botón de abajo:
+                </p>
+                <table width="100%" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td align="center">
+                      <a href="${verifyUrl}" style="display:inline-block;background-color:#16a34a;color:#ffffff;padding:10px 24px;border-radius:6px;font-size:14px;font-weight:600;text-decoration:none;">
+                        Verificar email
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+              </div>
+              ` : ''}
               <p style="margin:0 0 16px;color:#475569;font-size:15px;line-height:1.6;">
                 Próximos pasos:
               </p>
               <ul style="margin:0 0 24px;padding-left:20px;color:#475569;font-size:14px;line-height:2;">
+                <li>Verificá tu email</li>
                 <li>Completá la configuración inicial de tu negocio</li>
                 <li>Cargá tus productos o servicios</li>
                 <li>Empezá a vender desde el punto de venta</li>
               </ul>
-              <!-- CTA Button -->
+              <!-- Main CTA Button -->
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td align="center">
@@ -83,7 +104,11 @@ export function buildWelcomeEmail(data: WelcomeEmailData): { subject: string; ht
 
 Tu empresa ${organizationName} ya está lista en MiPOS.
 
+${verifyUrl ? `IMPORTANTE: Verifica tu email
+Por seguridad, necesitamos confirmar que este email es tuyo.
+Haz clic aquí: ${verifyUrl}\n` : ''}
 Próximos pasos:
+- Verifica tu email
 - Completá la configuración inicial
 - Cargá tus productos o servicios
 - Empezá a vender
