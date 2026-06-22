@@ -67,18 +67,53 @@ export async function fetchCategoryOrgsSnapshot(
 
   const orgList = (orgs || []) as PublicOrganization[];
 
+  // 2b. FALLBACK: Also include orgs without explicit marketplace_category_id but with
+  // internal categories matching the marketplace category name
+  const { data: fallbackOrgs, error: fallbackError } = await (client as any)
+    .rpc('get_organizations_by_internal_category', {
+      category_names: [cat.name],
+      statuses: PUBLIC_STATUSES,
+    });
+
+  if (!fallbackError && fallbackOrgs && fallbackOrgs.length > 0) {
+    const existingOrgIds = new Set(orgList.map((o) => o.id));
+    const newOrgs = (fallbackOrgs as Array<{ id: string }>) || [];
+
+    // Fetch full org data for fallback orgs
+    const newOrgIds = newOrgs
+      .map((o) => o.id)
+      .filter((id) => !existingOrgIds.has(id));
+
+    if (newOrgIds.length > 0) {
+      const { data: newOrgDetails } = await (client as any)
+        .from('organizations')
+        .select('id,name,slug,subscription_status')
+        .in('id', newOrgIds)
+        .in('subscription_status', PUBLIC_STATUSES);
+
+      if (newOrgDetails) {
+        orgList.push(...(newOrgDetails as PublicOrganization[]));
+      }
+    }
+  }
+
+  // Sort all orgs by name
+  orgList.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es'));
+
   if (orgList.length === 0) {
     return { category: cat, organizations: [], totalOrganizations: 0, totalProducts: 0 };
   }
 
   const orgIds = orgList.map((o) => o.id);
 
-  // 3. Count products per org in a single query (solo activos, no eliminados)
+  // 3. Count products per org in a single query (solo activos, públicos, no eliminados)
   const { data: products } = await (client as any)
     .from('products')
     .select('organization_id')
     .in('organization_id', orgIds)
-    .eq('is_active', true);
+    .eq('is_active', true)
+    .eq('is_public', true)
+    .is('deleted_at', null);
 
   const productCountMap = new Map<string, number>();
   for (const p of (products || []) as Array<{ organization_id: string }>) {
