@@ -49,6 +49,7 @@ import { buildTenantPublicBaseUrl } from '@/lib/domain/host-context'
 import { getCanonicalPlanDisplayName, normalizePlanSlug } from '@/lib/plan-catalog'
 import { BusinessConfigDirtyContext } from './context/business-config-dirty'
 import { ConfigSetupGuide } from './components/ConfigSetupGuide'
+import { useBusinessConfigAccess } from './hooks/useBusinessConfigAccess'
 
 const ContentTabLayout = lazy(() => import('./components/ContentTabLayout').then((m) => ({ default: m.ContentTabLayout })))
 const DomainSettingsForm = lazy(() => import('./components/DomainSettingsForm').then((m) => ({ default: m.DomainSettingsForm })))
@@ -353,13 +354,20 @@ export default function BusinessConfigPage() {
   const canUseCustomBranding =
     isSuperAdmin || Boolean(accessContext?.features?.includes(COMPANY_FEATURE_KEYS.CUSTOM_BRANDING))
 
+  const { canAccessBranding, canAccessCommerce, canAccessPublication } = useBusinessConfigAccess()
+
   const availableTabs = useMemo(
     () =>
       TAB_CONFIG.filter((tab) => {
+        // Filtrar tabs según acceso de plan
+        if (tab.id === 'brand' && !canAccessBranding) return false
+        if (tab.id === 'commerce' && !canAccessCommerce) return false
+        if (tab.id === 'publication' && !canAccessPublication) return false
+        // Mantener el filtro legacy de customBranding
         if (tab.id === 'brand' && !canUseCustomBranding) return false
         return true
       }),
-    [canUseCustomBranding]
+    [canAccessBranding, canAccessCommerce, canAccessPublication, canUseCustomBranding]
   )
   const currentConfig = useMemo(() => mergeConfig(config, localChanges), [config, localChanges])
 
