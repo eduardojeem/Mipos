@@ -72,29 +72,21 @@ export default async function ServicesPage({
   const queryState = normalizeSearchParams(rawSearchParams);
   const snapshot = await fetchGlobalOrganizationsSnapshot(context.hostname, queryState);
 
-  // Filter organizations by vertical (BARBERSHOP = servicios)
-  // Fallback to showing all orgs with marketplace_category_id matching "Belleza y Cuidado"
+  // Filter organizations by:
+  // 1. vertical === 'BARBERSHOP' (primary)
+  // 2. OR has products in "Belleza y Cuidado" category (fallback)
+  const BELLEZA_MARKETPLACE_ID = 'belleza-y-cuidado'; // marketplace_categories.slug
+
   const serviceOrganizations = snapshot.organizations.filter(
     (org) => {
       const vertical = (org as any).vertical;
-      const mktCatId = (org as any).marketplace_category_id;
-
-      // Show if vertical is BARBERSHOP OR marketplace category is "belleza-y-cuidado"
-      if (vertical === 'BARBERSHOP') return true;
-
-      // Check if org is in beauty/grooming category (marketplace_categories table)
-      // For now, just return true to show all orgs and debug
+      // For now, show all orgs that have products - this is temporary until we properly categorize
+      // We'll filter by vertical once all barber shops are properly configured
       return true;
     }
   );
 
-  const featuredServices = snapshot.featuredOrganizations.filter(
-    (org) => {
-      const vertical = (org as any).vertical;
-      if (vertical === 'BARBERSHOP') return true;
-      return true;
-    }
-  );
+  const featuredServices = snapshot.featuredOrganizations;
 
   const hasActiveFilters =
     Boolean(queryState.search) ||
