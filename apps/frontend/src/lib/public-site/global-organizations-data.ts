@@ -562,23 +562,21 @@ export async function fetchGlobalOrganizationsSnapshot(
   const settingsMap = new Map(settingsEntries);
   const allOrganizations = buildOrganizationCards(organizations, settingsMap, productStats, requestHost);
 
-  // Only include organizations with at least 1 valid product
-  const organizationsWithProducts = allOrganizations.filter((org) => org.productCount > 0);
-
-  const departments = buildLocationOptions(organizationsWithProducts, 'department');
+  // Show ALL active organizations (with or without products)
+  const departments = buildLocationOptions(allOrganizations, 'department');
   const organizationsForCities = input.department
-    ? organizationsWithProducts.filter(
+    ? allOrganizations.filter(
         (organization) =>
           normalizeLocationValue(organization.department) === normalizeLocationValue(input.department)
       )
-    : organizationsWithProducts;
+    : allOrganizations;
   const cities = buildLocationOptions(organizationsForCities, 'city');
-  const filteredOrganizations = filterOrganizations(organizationsWithProducts, input);
+  const filteredOrganizations = filterOrganizations(allOrganizations, input);
   const sortedOrganizations = sortOrganizations(filteredOrganizations, input.sortBy);
   const featuredOrganizations = sortOrganizations(filteredOrganizations, 'featured').slice(0, 5);
-  const totalProducts = organizationsWithProducts.reduce((sum, organization) => sum + Number(organization.productCount || 0), 0);
+  const totalProducts = allOrganizations.reduce((sum, organization) => sum + Number(organization.productCount || 0), 0);
   const uniqueMarketplaceCategories = new Set(
-    organizationsWithProducts
+    allOrganizations
       .map((org) => (org as unknown as { marketplace_category_id?: string | null }).marketplace_category_id)
       .filter((id): id is string => typeof id === 'string' && id.length > 0)
   );
@@ -587,12 +585,12 @@ export async function fetchGlobalOrganizationsSnapshot(
   return {
     organizations: sortedOrganizations,
     featuredOrganizations,
-    totalOrganizations: organizationsWithProducts.length,
+    totalOrganizations: allOrganizations.length,
     visibleOrganizations: sortedOrganizations.length,
     totalProducts,
     totalCategories,
     averageProductsPerOrganization:
-      organizationsWithProducts.length > 0 ? Math.round((totalProducts / organizationsWithProducts.length) * 10) / 10 : 0,
+      allOrganizations.length > 0 ? Math.round((totalProducts / allOrganizations.length) * 10) / 10 : 0,
     departments,
     cities,
   };
