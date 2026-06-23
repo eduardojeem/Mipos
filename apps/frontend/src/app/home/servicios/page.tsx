@@ -149,9 +149,11 @@ export default async function ServicesPage({
           <OrganizationsFilterBar
             search={queryState.search}
             sortBy={queryState.sortBy}
-            totalOrganizations={serviceOrganizations.length}
-            visibleOrganizations={serviceOrganizations.length}
-            totalProducts={snapshot.totalProducts}
+            department={queryState.department}
+            city={queryState.city}
+            departments={snapshot.departments}
+            cities={snapshot.cities}
+            resultCount={serviceOrganizations.length}
           />
         </div>
 
