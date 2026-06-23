@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { getValidatedOrganizationId } from '@/lib/organization'
 import { sanitizeSearch } from '@/app/api/_utils/search'
+import { rateLimit, RATE_LIMITS } from '@/lib/middleware/rate-limit'
 
 type CategoryRow = {
   id: string
@@ -59,7 +60,13 @@ async function getProductCountMap(
   return productCountMap
 }
 
+const readRateLimiter = rateLimit(RATE_LIMITS.READ);
+const writeRateLimiter = rateLimit(RATE_LIMITS.WRITE);
+
 export async function GET(request: NextRequest) {
+  const rateLimitResponse = readRateLimiter(request);
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     const supabase = await createClient()
     const adminSupabase = await createAdminClient()
@@ -142,6 +149,9 @@ export async function GET(request: NextRequest) {
 
 // Create category
 export async function POST(request: NextRequest) {
+  const rateLimitResponse = writeRateLimiter(request);
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     const supabase = await createClient()
     const { data: { user }, error: userError } = await (supabase as any).auth.getUser()
