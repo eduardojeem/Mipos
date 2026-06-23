@@ -2,13 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { getValidatedOrganizationId } from '@/lib/organization';
+import { rateLimit, RATE_LIMITS } from '@/lib/middleware/rate-limit';
+import { validateBulkRequest, createBulkValidationErrorResponse } from '@/lib/middleware/bulk-validator';
 
 const bulkSchema = z.object({
-  ids: z.array(z.string().min(1)).min(1).max(500),
+  ids: z.array(z.string().min(1)).min(1).max(100),
   action: z.enum(['activate', 'deactivate', 'delete']),
 });
 
+const bulkRateLimiter = rateLimit(RATE_LIMITS.BULK);
+
 export async function POST(request: NextRequest) {
+  const rateLimitResponse = bulkRateLimiter(request);
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     const supabase = await createClient();
     const { data: { user }, error: userError } = await (supabase as any).auth.getUser();
