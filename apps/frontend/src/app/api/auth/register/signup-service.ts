@@ -1,5 +1,9 @@
-import { v4 as uuidv4 } from 'uuid';
+import crypto from 'crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
+
+function uuidv4(): string {
+  return crypto.randomUUID();
+}
 
 export interface SignupInput {
   email: string;
