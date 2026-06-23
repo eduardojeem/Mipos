@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { getValidatedOrganizationId } from '@/lib/organization';
+import { rateLimit } from '@/lib/middleware/rate-limit';
 
 function isMissingColumnError(error: unknown, column: string): boolean {
   const message = String((error as { message?: unknown })?.message || '').toLowerCase();
@@ -24,7 +25,19 @@ const FALLBACK_SUMMARY = {
   lastUpdated: new Date().toISOString(),
 };
 
+const rateLimiter = rateLimit({
+  maxRequests: 200,
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  message: 'Too many summary requests. Please wait before making more requests.',
+});
+
 export async function GET(request: NextRequest) {
+  // Apply rate limiting
+  const rateLimitResponse = rateLimiter(request);
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
   try {
     const orgId = await getValidatedOrganizationId(request);
     if (!orgId) {
@@ -35,27 +48,31 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = await createAdminClient();
-    const { searchParams } = new URL(request.url);
-    const isActiveParam = searchParams.get('isActive');
-    const normalizedIsActive =
-      isActiveParam === 'true' ? true : isActiveParam === 'false' ? false : null;
 
-    // Camino óptimo: agregación en SQL (no transfiere la tabla de productos).
-    const rpc = await supabase.rpc('get_products_summary', {
-      p_org_id: orgId,
-      p_is_active: normalizedIsActive,
+    // Use optimized RPC to avoid loading all products
+    // This returns aggregated statistics from the database
+    const rpc = await supabase.rpc('get_product_statistics', {
+      org_id: orgId,
     });
+
     if (!rpc.error && rpc.data) {
-      const d = rpc.data as Record<string, number | string>;
-      return NextResponse.json({
-        totalProducts: Number(d.totalProducts) || 0,
-        lowStockProducts: Number(d.lowStockProducts) || 0,
-        outOfStockProducts: Number(d.outOfStockProducts) || 0,
-        totalValue: Number(d.totalValue) || 0,
-        recentlyAdded: Number(d.recentlyAdded) || 0,
-        topCategory: (d.topCategory as string) || 'N/A',
+      const d = rpc.data as Record<string, unknown>;
+      const response = NextResponse.json({
+        totalProducts: Number(d.total_products) || 0,
+        lowStockProducts: Number(d.low_stock_products) || 0,
+        outOfStockProducts: Number(d.out_of_stock_products) || 0,
+        totalValue: Number(d.total_inventory_value) || 0,
+        recentlyAdded: Number(d.recently_added_count) || 0,
+        topCategory: (d.top_category_name as string) || 'N/A',
         lastUpdated: new Date().toISOString(),
       });
+
+      // Add CORS headers
+      response.headers.set('Access-Control-Allow-Origin', process.env.CORS_ORIGIN || 'http://localhost:3000');
+      response.headers.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+      return response;
     }
     // Fallback (RPC aún no aplicado): cálculo en JS heredado.
 
@@ -162,11 +179,19 @@ export async function GET(request: NextRequest) {
       lastUpdated: new Date().toISOString(),
     };
 
-    return NextResponse.json(summary);
+    const response = NextResponse.json(summary);
+    response.headers.set('Access-Control-Allow-Origin', process.env.CORS_ORIGIN || 'http://localhost:3000');
+    response.headers.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    return response;
   } catch (error) {
-    console.error('Products summary error:', error);
+    console.error('Products summary error:', {
+      errorCode: (error as any)?.code,
+      organizationId: 'masked',
+      timestamp: new Date().toISOString(),
+    });
 
-    return NextResponse.json(
+    const errorResponse = NextResponse.json(
       {
         ...FALLBACK_SUMMARY,
         lastUpdated: new Date().toISOString(),
@@ -174,5 +199,8 @@ export async function GET(request: NextRequest) {
       },
       { status: 500 },
     );
+    errorResponse.headers.set('Access-Control-Allow-Origin', process.env.CORS_ORIGIN || 'http://localhost:3000');
+    errorResponse.headers.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    return errorResponse;
   }
 }

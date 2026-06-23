@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { getValidatedOrganizationId } from '@/lib/organization';
 import { sanitizeSearch } from '@/app/api/_utils/search';
+import { rateLimit } from '@/lib/middleware/rate-limit';
 
 const RICH_PRODUCT_SELECT = `
   id,
@@ -249,7 +250,19 @@ function normalizeProduct(
   };
 }
 
+const rateLimiter = rateLimit({
+  maxRequests: 100,
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  message: 'Too many requests. Please wait before making more requests.',
+});
+
 export async function GET(request: NextRequest) {
+  // Apply rate limiting
+  const rateLimitResponse = rateLimiter(request);
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
   try {
     const orgId = await getValidatedOrganizationId(request);
     if (!orgId) {
@@ -379,7 +392,7 @@ export async function GET(request: NextRequest) {
     const total = stockStatus ? stockFilteredProducts.length : (count || 0);
     const totalPages = Math.ceil(total / limit);
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       products: finalProducts,
       pagination: {
         page,
@@ -391,6 +404,14 @@ export async function GET(request: NextRequest) {
       },
       lastUpdated: new Date().toISOString(),
     });
+
+    // Add CORS headers
+    response.headers.set('Access-Control-Allow-Origin', process.env.CORS_ORIGIN || 'http://localhost:3000');
+    response.headers.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    response.headers.set('Access-Control-Allow-Credentials', 'true');
+
+    return response;
   } catch (error) {
     console.error('Products list error:', error);
     return NextResponse.json(
