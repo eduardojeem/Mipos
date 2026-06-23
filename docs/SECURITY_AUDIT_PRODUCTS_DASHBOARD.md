@@ -1,402 +1,81 @@
-# SECURITY AUDIT - PRODUCTS DASHBOARD
-**Fecha:** 2026-06-22  
-**Alcance:** `/dashboard/products` (Frontend + Backend)  
-**Status:** ✅ AUDIT COMPLETADO
+# Revisión de seguridad — Dashboard de productos
+
+**Fecha:** 2026-06-22
+**Alcance revisado:** `/dashboard/products` y endpoints `/api/products/*`, más una pasada a otros endpoints del dashboard.
+
+> Nota de honestidad: una versión previa de este documento incluía cifras de
+> ahorro ($/mes), porcentajes de reducción y "scores" de seguridad que **no
+> fueron medidos** — eran estimaciones presentadas como hechos. Se eliminaron.
+> Este documento solo contiene lo verificable.
 
 ---
 
-## 📊 RESUMEN EJECUTIVO
-
-```
-VULNERABILIDADES CRÍTICAS:    0 ✅
-PROBLEMAS DE ALTO RIESGO:     2 ⚠️ (Mitigados)
-PROBLEMAS MEDIOS:             3 🟡
-RECOMENDACIONES:              5 💡
-
-OVERALL SECURITY SCORE:       8.5/10 (Bueno)
-```
-
----
-
-## ✅ PUNTOS FUERTES
-
-### **1. Autenticación & Autorización**
-```
-✅ Verificación de organización en todos los endpoints
-✅ getValidatedOrganizationId() previene acceso entre tenants
-✅ Permisos granulares (canCreate, canEdit, canDelete)
-✅ Middleware de autenticación en rutas protegidas
-✅ Control de acceso basado en roles (RBAC)
-```
-
-**Código seguro:** `api/products/list/route.ts:106`
-```typescript
-let scopedQuery = query.eq('organization_id', orgId);
-// Siempre limita resultados a la org del usuario
-```
-
-### **2. Validación de Entrada**
-```
-✅ sanitizeSearch() en búsquedas
-✅ parsePositiveInt() para números
-✅ URLSearchParams parsing con validación
-✅ Trim y validación de strings
-✅ Type casting seguro en normalización
-```
-
-**Validación de precios:** `api/products/list/route.ts:136-144`
-```typescript
-if (minPrice) {
-  scopedQuery = query.gte('sale_price', Number.parseFloat(minPrice));
-}
-// parseFloat es seguro, no inyecta SQL
-```
-
-### **3. Queries Supabase Optimizadas**
-```
-✅ Selects explícitos (no SELECT *)
-✅ Joins normalizados (sin N+1)
-✅ Paginación con límites (max 100)
-✅ Índices en organization_id y deleted_at
-✅ Cache TTL de 30s (sin staleness extremo)
-```
-
-### **4. Gestión de Datos Sensibles**
-```
-✅ cost_price NO exponida en endpoints públicos
-✅ supplier_id limitado a usuarios autenticados
-✅ No se loguean passwords, tokens, precios
-✅ Errores no exponencialmente detallados
-```
-
----
-
-## ⚠️ PROBLEMAS ENCONTRADOS
-
-### **PROBLEMA #1: Over-fetching en /products/summary (ALTO)**
-
-**Ubicación:** `api/products/summary/route.ts`
-
-**Issue:**
-```typescript
-const { data: products } = await query;
-// Obtiene TODOS los productos, luego filtra en memoria
-// Costo de Supabase: O(total_products)
-```
-
-**Impacto:**
-- Consultas > 10,000 productos cargan TODA la tabla
-- Consumo excesivo de datos de Supabase
-- Lentitud al calcular estadísticas
-
-**Recomendación:** Mover agregación a Supabase RPC
-```sql
-CREATE OR REPLACE FUNCTION get_product_stats(org_id UUID)
-RETURNS TABLE (
-  total_count BIGINT,
-  low_stock_count BIGINT,
-  out_of_stock_count BIGINT,
-  total_value NUMERIC
-) AS $$
-SELECT
-  COUNT(*) as total_count,
-  COUNT(CASE WHEN stock_quantity <= min_stock THEN 1 END) as low_stock_count,
-  COUNT(CASE WHEN stock_quantity = 0 THEN 1 END) as out_of_stock_count,
-  COALESCE(SUM(cost_price * stock_quantity), 0) as total_value
-FROM products
-WHERE organization_id = org_id AND deleted_at IS NULL
-$$ LANGUAGE sql;
-```
-
-**Estimación de ahorro:**
-- Antes: 15-30 MB por request (10k products × 2-3 KB/row)
-- Después: < 1 KB por request
-- Mejora: **99.9% reducción de datos**
-
----
-
-### **PROBLEMA #2: Falta de Rate Limiting en Endpoints API (ALTO)**
-
-**Ubicación:** Todos los endpoints en `api/products/`
-
-**Issue:**
-```typescript
-// ❌ SIN RATE LIMIT
-export async function GET(request: NextRequest) {
-  const params = request.nextUrl.searchParams;
-  // Cualquiera puede hacer 1000 requests en segundos
-}
-```
-
-**Riesgo:**
-- DoS attacks (denial of service)
-- Exfiltración de datos
-- Abuso de recursos Supabase
-- Costos no controlados
-
-**Recomendación:** Implementar rate limiting
-```typescript
-import { Ratelimit } from '@upstash/ratelimit';
-
-const ratelimit = new Ratelimit({
-  redis: Redis.fromEnv(),
-  limiter: Ratelimit.slidingWindow(100, '15 m'),
-});
-
-export async function GET(request: NextRequest) {
-  const ip = request.headers.get('x-forwarded-for') || 'unknown';
-  const { success } = await ratelimit.limit(ip);
-
-  if (!success) {
-    return NextResponse.json(
-      { error: 'Too many requests' },
-      { status: 429 }
-    );
-  }
-  // ...rest of handler
-}
-```
-
----
-
-### **PROBLEMA #3: Logging de Datos Sensibles (MEDIO)**
-
-**Ubicación:** Handlers de error y console.logs
-
-**Issue:**
-```typescript
-// ❌ POTENCIALMENTE INSEGURO
-console.error('[executeDelete] Error al eliminar producto:', productId, err);
-// Si err contiene data de productos, se loguea
-```
-
-**Recomendación:**
-```typescript
-// ✅ SEGURO
-console.error('[executeDelete] Error al eliminar producto', {
-  productId,
-  errorCode: (err as SupabaseError)?.code,
-  // NO loguear el objeto completo
-});
-```
-
----
-
-### **PROBLEMA #4: Stock Filter Logic Inconsistency (MEDIO)**
-
-**Ubicación:** `api/products/list/route.ts:163-182`
-
-**Issue:**
-```typescript
-// low_stock, in_stock, critical todas hacen .gt('stock_quantity', 0)
-// 🔴 INCORRECTO: No diferencia entre tipos de stock
-case 'low_stock':
-  scopedQuery = scopedQuery.gt('stock_quantity', 0);  // Debería ser: <= min_stock
-  break;
-case 'critical':
-  scopedQuery = scopedQuery.gt('stock_quantity', 0);  // Debería ser: < crítico
-  break;
-```
-
-**Impacto:** Filters retornan resultados incorrectos
-
-**Fix:**
-```typescript
-case 'low_stock':
-  scopedQuery = scopedQuery
-    .gt('stock_quantity', 0)
-    .lte('stock_quantity', 'min_stock');  // Con columna min_stock
-  break;
-case 'critical':
-  scopedQuery = scopedQuery.lt('stock_quantity', 5);  // Hardcoded critical threshold
-  break;
-```
-
----
-
-### **PROBLEMA #5: Missing CORS Headers (MEDIO)**
-
-**Ubicación:** API routes
-
-**Issue:**
-```typescript
-// ❌ NO TIENE CORS HEADERS
-export async function GET(request: NextRequest) {
-  return NextResponse.json(data);
-  // NextResponse no configura CORS por defecto
-}
-```
-
-**Recomendación:**
-```typescript
-// ✅ CON CORS
-export async function GET(request: NextRequest) {
-  const response = NextResponse.json(data);
-  response.headers.set('Access-Control-Allow-Origin', process.env.CORS_ORIGIN || 'http://localhost:3000');
-  response.headers.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  response.headers.set('Access-Control-Allow-Headers', 'Content-Type');
-  return response;
-}
-```
-
----
-
-## 🔍 ANÁLISIS DETALLADO DE SUPABASE QUERIES
-
-### **Over-fetching Analysis**
-
-```
-ENDPOINT          │ ROWS/REQUEST │ BYTES/REQUEST │ MONTHLY COST*
-─────────────────┼──────────────┼───────────────┼───────────────
-/products/list    │ 100 (avg)    │ 200 KB        │ $4.20
-/products/summary │ 10,000 (❌)  │ 20 MB         │ $420.00
-/products/route   │ 1-50         │ 50-100 KB     │ $1.05
-```
-
-*Estimado a $0.02 por GB de datos leídos (Supabase)
-
-### **Query Optimization Recommendations**
-
-| Query | Current | Optimized | Savings |
-|-------|---------|-----------|---------|
-| GET /products/list | 200 KB (100 rows) | 180 KB (same, better index) | ~10% |
-| GET /products/summary | 20 MB (all rows) | < 1 KB (RPC) | **99.9%** |
-| GET /products/:id | 50 KB (full select) | 30 KB (needed fields) | ~40% |
-| BULK DELETE | 5 MB (read all) | 1 KB (count only) | **99.9%** |
-
----
-
-## 🛡️ CHECKLIST DE SEGURIDAD
-
-### **Autenticación**
-- ✅ Usuarios autenticados requeridos en /dashboard
-- ✅ Token JWT validado en cada request
-- ✅ Sessions httpOnly, secure, sameSite
-- ✅ Password hasheado con bcrypt
-
-### **Autorización**
-- ✅ Organization ID validado en todos los endpoints
-- ✅ Usuarios solo ven sus propias organizaciones
-- ✅ Role-based access control (RBAC) implementado
-- ✅ Permisos granulares (read, write, delete)
-
-### **Input Validation**
-- ✅ Search sanitizado
-- ✅ Números parseados de forma segura
-- ✅ IDs validados (UUID format)
-- ✅ Enums validados (stockStatus, sortOrder)
-- ⚠️ Precios sin validación de rango (recomendación: min 0, max 999,999,999)
-
-### **Data Protection**
-- ✅ cost_price NO exponida en endpoints públicos
-- ✅ supplier_id limitado a autenticados
-- ✅ deleted_at respeta soft-delete
-- ✅ Queries organizadas por org_id
-
-### **API Security**
-- ❌ Rate limiting FALTA
-- ⚠️ CORS headers FALTA
-- ✅ Parameterized queries (Supabase ORM)
-- ✅ No SQL injection possible
-- ✅ Error messages no exponen internals
-
-### **Performance**
-- ✅ React Query caching (30s TTL)
-- ✅ Paginación (max 100 items)
-- ⚠️ Over-fetching en /summary (CRÍTICO)
-- ✅ Índices en org_id, deleted_at
-- ✅ N+1 evitado con select explícitos
-
----
-
-## 📋 PLAN DE CORRECCIÓN
-
-### **INMEDIATO (Esta semana)**
-
-1. **Implementar Rate Limiting**
-   - Effort: 2h
-   - Tools: @upstash/ratelimit
-   - Impact: Alto (seguridad)
-
-2. **Mover /products/summary a RPC**
-   - Effort: 3h
-   - Impact: Alto (performance, costos)
-   - Ahorro: 99.9% en datos
-
-3. **Agregar CORS Headers**
-   - Effort: 1h
-   - Impact: Crítico (security)
-
-### **CORTO PLAZO (2 semanas)**
-
-4. **Fixing Stock Filter Logic**
-   - Effort: 1h
-   - Impact: Corrección funcional
-
-5. **Precio Range Validation**
-   - Effort: 1h
-   - Impact: Medio (validación)
-
-### **MONITOREO**
-
-```typescript
-// Agregar en logging
-console.log({
-  endpoint: 'GET /products/list',
-  orgId: maskedOrgId,
-  resultCount: products.length,
-  queryTimeMs: duration,
-  dataTransferred: bytes,
-});
-```
-
----
-
-## ✅ CONCLUSIÓN
-
-**Status: ✅ SEGURO (Mejoras Implementadas)**
-
-### Puntos Fuertes:
-- ✅ Autenticación y autorización robustas
-- ✅ Input validation adecuada
-- ✅ No hay vulnerabilidades de inyección SQL
-- ✅ Data privacy respetada
-- ✅ **Rate limiting implementado** (NUEVO)
-- ✅ **CORS headers configurados** (NUEVO)
-- ✅ **RPC optimization deployed** (NUEVO)
-
-### Áreas Mejoradas:
-- ✅ Rate limiting (IMPLEMENTADO 2026-06-22)
-  - /products/list: 100 req/15min
-  - /products/summary: 200 req/15min
-  - /products/bulk-delete: 50 req/15min
-- ✅ Over-fetching en /summary (RESUELTO)
-  - Antes: 20 MB por request → Ahora: <1 KB
-  - Estimado: $420/mo → $4/mo (99.9% reduction)
-- ✅ CORS headers (AGREGADOS)
-- ⚠️ Stock filter logic (pendiente fix menor)
-
-### Timeline de Implementación:
-```
-2026-06-22 10:00 - Rate limiting middleware creado
-2026-06-22 10:15 - RPC get_product_statistics() creado
-2026-06-22 10:30 - Aplicado a /products/list
-2026-06-22 10:45 - Aplicado a /products/summary
-2026-06-22 11:00 - Aplicado a /products/bulk-delete
-2026-06-22 11:15 - CORS headers en todos endpoints
-2026-06-22 11:30 - Audit documentation actualizado
-```
-
-### Status Recomendaciones:
-- ✅ Implementar Rate Limiting — COMPLETADO
-- ✅ Mover /products/summary a RPC — COMPLETADO
-- ✅ Agregar CORS Headers — COMPLETADO
-- 🟡 Fixing Stock Filter Logic — PRÓXIMA PRIORIDAD
-- 🟡 Precio Range Validation — PRÓXIMA PRIORIDAD
-
----
-
-**Reporte generado:** 2026-06-22  
-**Última actualización:** 2026-06-22 (Implementaciones completadas)  
-**Próximo audit:** 2026-09-22 (3 meses)
-
+## Lo que se verificó
+
+- **Aislamiento por organización:** los endpoints de productos filtran por
+  `organization_id` (ej. `api/products/list/route.ts`). Correcto.
+- **Queries parametrizadas:** se usa el cliente de Supabase (no concatenación
+  SQL). No se observó inyección SQL.
+- **Búsqueda saneada:** `sanitizeSearch()` se aplica en el filtro de búsqueda.
+- **`cost_price`** no se expone en el endpoint público de productos.
+- **Catálogo público:** `lib/public-site/global-catalog-data.ts` filtra
+  `is_public = true` a nivel de query (línea ~454), además de un filtro
+  defensivo en JS. Los productos privados no se exponen.
+
+## Hallazgos reales
+
+1. **`/api/products/summary` devolvía ceros en un caso.** Tras mi refactor, una
+   variable (`normalizedIsActive`) quedó referenciada pero sin declarar en el
+   camino de fallback → `ReferenceError` → `catch` → respuesta en ceros cuando
+   el RPC no estaba aplicado. **Corregido** y verificado con `tsc`.
+
+2. **El build ignora errores de tipo.** `next.config.js` tiene
+   `typescript.ignoreBuildErrors: true` y `eslint.ignoreDuringBuilds: true`.
+   Implica que errores de TypeScript **no** rompen el deploy; hay que correr
+   `npx tsc --noEmit` manualmente para detectarlos.
+
+3. **Rate limiting en memoria no sirve en este deploy.** El proyecto corre en
+   **Vercel (serverless)**. Un limitador basado en `Map` en memoria de módulo
+   es por-instancia y efímero, así que no protege de forma fiable. Se decidió
+   usar **Vercel WAF** en su lugar (ver abajo). El limitador en memoria que se
+   había agregado fue **removido** para no dar falsa sensación de seguridad.
+
+4. **Ya existía rate limiting previo** en `src/lib/rate-limit.ts`
+   (usado por `orders/route.ts`) y en `auth/register/` (con variante Redis).
+   No se modificaron.
+
+## Optimización aplicada (RPC)
+
+Se creó `get_product_statistics(org_id)` para que `/api/products/summary`
+agregue en Postgres en lugar de traer todas las filas y sumar en JS.
+
+- Migración: `supabase/migrations/20260622_optimize_product_stats_rpc.sql`
+- **Estado:** la primera versión falló por desajuste de tipos (UUID vs text);
+  se corrigió con casts explícitos. **Pendiente de validar** ejecutándola en
+  Supabase con un `org_id` real.
+- El endpoint usa el RPC si existe y mantiene un fallback en JS si no.
+
+También se crearon (pero **no validadas en Supabase**):
+- `20260622_optimize_orders_stats_rpc.sql` (`get_orders_statistics`)
+- `20260622_optimize_customers_analytics_rpc.sql` (`get_customers_analytics`)
+
+> Estas dos no están conectadas todavía a sus endpoints. Son borradores hasta
+> validarlas.
+
+## Decisión sobre rate limiting: Vercel WAF
+
+Configurar en el dashboard de Vercel (Project → Firewall) o vía reglas:
+- Límite por IP en rutas sensibles (ej. `/api/reports/export`, búsquedas).
+- No requiere código de aplicación ni dependencias nuevas.
+- Funciona a nivel de edge, antes de invocar la función.
+
+Documentación: https://vercel.com/docs/security/vercel-waf
+
+## Pendiente / no hecho
+
+- Validar las 3 migraciones RPC en Supabase dev.
+- Conectar `get_orders_statistics` y `get_customers_analytics` a sus endpoints
+  (hoy siguen con el cálculo en JS).
+- Configurar las reglas de Vercel WAF (acción del usuario en el dashboard).
+- `products-export.ts`: 2 advertencias de tipo de `jspdf-autotable` (colores y
+  margen) — funcionan en runtime, no se forzaron con `as any`.
