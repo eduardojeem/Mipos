@@ -9,10 +9,13 @@ import {
   ArrowUpDown,
   Edit,
   Eye,
+  EyeOff,
   Package,
   RotateCcw,
   Trash2,
   TrendingUp,
+  Lock,
+  Unlock,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -36,6 +39,7 @@ interface ProductsTableViewProps {
   onDelete?: (id: string) => void;
   onView?: (product: Product) => void;
   onRestore?: (id: string) => void;
+  onTogglePrivacy?: (id: string, isPublic: boolean) => Promise<void>;
   showDeleted?: boolean;
   onSort?: (field: string, order: 'asc' | 'desc') => void;
   sortField?: string;
@@ -44,6 +48,7 @@ interface ProductsTableViewProps {
   selectedIds?: Set<string>;
   onSelectProduct?: (id: string) => void;
   onSelectAll?: (ids: string[]) => void;
+  togglingIds?: Set<string>;
 }
 
 interface SortableHeaderProps {
@@ -143,11 +148,13 @@ function MarginIndicator({ sale, cost }: { sale: number; cost?: number }) {
 
 // ── Product row ──────────────────────────────────────────────────────────────
 const ProductRow = memo(function ProductRow({
-  product, onEdit, onDelete, onView, onRestore, showDeleted = false, isSelected, onSelect, index,
+  product, onEdit, onDelete, onView, onRestore, onTogglePrivacy, showDeleted = false, isSelected, onSelect, index, isToggling = false,
 }: {
   product: Product;
   onEdit?: (product: Product) => void;
   onDelete?: (id: string) => void;
+  onTogglePrivacy?: (id: string, isPublic: boolean) => Promise<void>;
+  isToggling?: boolean;
   onView?: (product: Product) => void;
   onRestore?: (id: string) => void;
   showDeleted?: boolean;
@@ -297,6 +304,43 @@ const ProductRow = memo(function ProductRow({
         </div>
       </TableCell>
 
+      {/* Visibilidad Pública */}
+      {!showDeleted && (
+        <TableCell className="hidden sm:table-cell">
+          <div className="flex items-center gap-2">
+            {product.is_public ? (
+              <Badge className="gap-1 rounded-lg border-sky-200 bg-sky-50 text-[11px] text-sky-700 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-400">
+                <Eye className="h-2.5 w-2.5" />
+                Público
+              </Badge>
+            ) : (
+              <Badge className="gap-1 rounded-lg border-slate-200 bg-slate-50 text-[11px] text-slate-700 dark:border-slate-700 dark:bg-slate-900/30 dark:text-slate-400">
+                <Lock className="h-2.5 w-2.5" />
+                Privado
+              </Badge>
+            )}
+            {onTogglePrivacy && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => onTogglePrivacy(product.id, !product.is_public)}
+                disabled={isToggling}
+                className="h-6 w-6 rounded-md text-muted-foreground hover:text-foreground"
+                title={product.is_public ? 'Ocultar del catálogo' : 'Mostrar en catálogo'}
+              >
+                {isToggling ? (
+                  <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-border border-t-primary" />
+                ) : product.is_public ? (
+                  <EyeOff className="h-3.5 w-3.5" />
+                ) : (
+                  <Eye className="h-3.5 w-3.5" />
+                )}
+              </Button>
+            )}
+          </div>
+        </TableCell>
+      )}
+
       {/* Acciones */}
       <TableCell className="w-28 py-2">
         <div className="flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
@@ -360,6 +404,7 @@ export const ProductsTableView = memo(function ProductsTableView({
   onDelete,
   onView,
   onRestore,
+  onTogglePrivacy,
   showDeleted = false,
   onSort,
   sortField,
@@ -368,6 +413,7 @@ export const ProductsTableView = memo(function ProductsTableView({
   selectedIds = new Set(),
   onSelectProduct,
   onSelectAll,
+  togglingIds = new Set(),
 }: ProductsTableViewProps) {
   const allVisibleSelected = useMemo(() => {
     if (!products.length) return false;
@@ -455,6 +501,11 @@ export const ProductsTableView = memo(function ProductsTableView({
               Estado
             </TableHead>
 
+            {/* Visibilidad */}
+            <TableHead className="hidden text-xs font-medium text-muted-foreground sm:table-cell">
+              Visibilidad
+            </TableHead>
+
             {/* Acciones */}
             <TableHead className="w-28 text-xs font-medium text-muted-foreground">
               Acciones
@@ -471,10 +522,12 @@ export const ProductsTableView = memo(function ProductsTableView({
               onDelete={onDelete}
               onView={onView}
               onRestore={onRestore}
+              onTogglePrivacy={onTogglePrivacy}
               showDeleted={showDeleted}
               isSelected={selectedIds.has(product.id)}
               onSelect={onSelectProduct}
               index={index}
+              isToggling={togglingIds.has(product.id)}
             />
           ))}
         </TableBody>

@@ -37,6 +37,7 @@ import { toast } from '@/lib/toast';
 import { useAuth } from '@/hooks/use-auth';
 import { usePermissionsContext } from '@/hooks/use-unified-permissions';
 import { LoginModal } from '@/components/auth/LoginModal';
+import { exportProductsToPdf } from '@/lib/pdf/products-export';
 import type { Product } from '@/types';
 import { cn } from '@/lib/utils';
 import { canCreateProducts, canDeleteProducts, canEditProducts } from '../utils/product-permissions';
@@ -174,6 +175,7 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
   const [isSaving, setIsSaving] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
   const [pendingDelete, setPendingDelete] = useState<Set<string>>(new Set());
   const [loginModal, setLoginModal] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState<{
@@ -271,6 +273,33 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
     finally { setIsExporting(false); }
   }, []);
 
+  const exportPdf = useCallback(async (items: Product[], label: string) => {
+    if (!items.length) { toast.info('No hay productos para exportar'); return; }
+    setIsExporting(true);
+    try {
+      await exportProductsToPdf(items, {
+        title: `Catálogo de Productos - ${label}`,
+        includeStats: true,
+        stats: {
+          total: items.length,
+          totalValue: items.reduce((sum, p) => sum + ((p.cost_price || 0) * (p.stock_quantity || 0)), 0),
+          inStock: items.filter((p) => (p.stock_quantity || 0) > 0).length,
+          lowStock: items.filter((p) => {
+            const stock = p.stock_quantity || 0;
+            const minStock = p.min_stock || 5;
+            return stock > 0 && stock <= minStock;
+          }).length,
+        },
+      });
+      toast.success(`${items.length} productos exportados a PDF`);
+    } catch (err) {
+      console.error('[exportPdf] Error:', err);
+      toast.error(getErrorMessage(err));
+    } finally {
+      setIsExporting(false);
+    }
+  }, []);
+
   // ── CRUD ──────────────────────────────────────────────────────────────────
   const executeDelete = useCallback(async (productId: string) => {
     setPendingDelete((p) => new Set(p).add(productId));
@@ -361,6 +390,24 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
       setIsSaving(false);
     }
   }, [editModal.product, refreshProducts]);
+
+  const handleTogglePrivacy = useCallback(async (productId: string, isPublic: boolean) => {
+    setTogglingIds((prev) => new Set(prev).add(productId));
+    try {
+      await api.put(`/products/${productId}`, { is_public: isPublic });
+      await refreshProducts();
+      toast.success(isPublic ? 'Producto visible en catálogo' : 'Producto ocultado del catálogo');
+    } catch (err) {
+      console.error('[handleTogglePrivacy] Error:', productId, err);
+      toast.error(getErrorMessage(err));
+    } finally {
+      setTogglingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(productId);
+        return next;
+      });
+    }
+  }, [refreshProducts]);
 
   const handleRefresh = useCallback(async () => {
     try { await refreshAll(); toast.success('Catálogo actualizado'); }
@@ -455,16 +502,28 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
                 </div>
 
                 {canExport && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => exportCsv(products, 'vista')}
-                    disabled={isExporting || !products.length}
-                    className="h-9 gap-1.5 rounded-xl text-xs"
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">{isExporting ? 'Exportando…' : 'Exportar CSV'}</span>
-                  </Button>
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => exportCsv(products, 'vista')}
+                      disabled={isExporting || !products.length}
+                      className="h-9 gap-1.5 rounded-xl text-xs"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">CSV</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => exportPdf(products, 'vista')}
+                      disabled={isExporting || !products.length}
+                      className="h-9 gap-1.5 rounded-xl text-xs"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">PDF</span>
+                    </Button>
+                  </>
                 )}
 
                 <Button
@@ -636,6 +695,7 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
                 onEdit={canEdit ? handleEdit : undefined}
                 onDelete={canDelete ? handleDelete : undefined}
                 onRestore={handleRestore}
+                onTogglePrivacy={handleTogglePrivacy}
                 showDeleted={filters.showDeleted}
                 onView={(p) => setDetailsModal({ open: true, product: p })}
                 onSort={(field, order) => setFilters((p) => ({ ...p, sortBy: field, sortOrder: order, page: 1 }))}
@@ -652,6 +712,7 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
                   });
                 }}
                 onSelectAll={(ids) => setSelected(new Set(ids))}
+                togglingIds={togglingIds}
               />
             )}
           </div>
@@ -709,6 +770,16 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
                 >
                   <Download className="h-3.5 w-3.5" />
                   CSV
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={isExporting}
+                  onClick={() => exportPdf(selectedVisible, 'seleccion')}
+                  className="h-8 gap-1 rounded-lg"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  PDF
                 </Button>
                 {canDelete && (
                   <Button
