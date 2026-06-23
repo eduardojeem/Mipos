@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
@@ -579,7 +579,7 @@ export default function AccountPage() {
         <Footer config={displayConfig} onNavigate={handleNavigate} />
       ) : (
         <footer className="border-t border-slate-200/60 bg-white/50 py-10 text-center text-sm text-slate-500 backdrop-blur-sm dark:border-slate-800/70 dark:bg-slate-950/60 dark:text-slate-400">
-          MiPOS Marketplace
+          MITIENDA Marketplace
         </footer>
       )}
     </div>

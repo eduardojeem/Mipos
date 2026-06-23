@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { assertSuperAdmin } from '@/app/api/_utils/auth'
 import { buildInvitationEmail } from '@/lib/email/templates/invitation'
 import { buildWelcomeEmail } from '@/lib/email/templates/welcome'
@@ -13,9 +13,9 @@ export async function GET(request: NextRequest) {
     const { html } = buildInvitationEmail({
       inviteeName: 'Juan',
       organizationName: 'Mi Barbería',
-      inviterName: 'admin@mipos.app',
+      inviterName: 'admin@MITIENDA.app',
       roleName: 'Cajero',
-      inviteUrl: 'https://app.mipos.com/invite?token=demo-preview-token',
+      inviteUrl: 'https://app.MITIENDA.com/invite?token=demo-preview-token',
       expiresInDays: 7,
     })
     return NextResponse.json({ html })
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     const { html } = buildWelcomeEmail({
       userName: 'Juan',
       organizationName: 'Mi Barbería',
-      loginUrl: 'https://app.mipos.com/onboarding',
+      loginUrl: 'https://app.MITIENDA.com/onboarding',
     })
     return NextResponse.json({ html })
   }

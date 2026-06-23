@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -64,7 +64,7 @@ export function DomainSettingsForm({
   const baseHostLabel = useMemo(() => {
     const rawHost = typeof window !== 'undefined'
       ? window.location.host
-      : (process.env.NEXT_PUBLIC_BASE_DOMAIN || 'miposparaguay.vercel.app');
+      : (process.env.NEXT_PUBLIC_BASE_DOMAIN || 'MITIENDAparaguay.vercel.app');
     return normalizeHostname(rawHost);
   }, []);
 

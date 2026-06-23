@@ -1,11 +1,11 @@
-import { redirect } from 'next/navigation'
+﻿import { redirect } from 'next/navigation'
 import type { Metadata } from 'next'
 import { createClient } from '@/lib/supabase/server'
 import { AdminLayoutWrapper } from '@/components/admin/admin-layout-wrapper'
 
 export const metadata: Metadata = {
-  title: 'Administracion - MiPOS',
-  description: 'Panel de administracion de MiPOS. Acceso restringido.',
+  title: 'Administracion - MITIENDA',
+  description: 'Panel de administracion de MITIENDA. Acceso restringido.',
   robots: {
     index: false,
     follow: false,

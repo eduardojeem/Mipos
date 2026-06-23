@@ -208,9 +208,24 @@ AS $$
         COUNT(DISTINCT o.id)  AS org_count,
         COUNT(DISTINCT p.id)  AS product_count
     FROM public.marketplace_categories mc
-    LEFT JOIN public.organizations o
-        ON  o.marketplace_category_id = mc.id
-        AND o.subscription_status IN ('ACTIVE', 'TRIAL')
+    LEFT JOIN (
+        -- Explicit marketplace_category_id
+        SELECT DISTINCT o.id, mc.id as marketplace_category_id
+        FROM public.organizations o
+        WHERE o.subscription_status IN ('ACTIVE', 'TRIAL')
+        UNION
+        -- Fallback: organizations with internal categories matching marketplace category name
+        SELECT DISTINCT o.id, mc.id as marketplace_category_id
+        FROM public.organizations o
+        INNER JOIN public.products p ON p.organization_id = o.id
+            AND p.is_active = TRUE
+            AND p.is_public = TRUE
+            AND p.deleted_at IS NULL
+        INNER JOIN public.categories c ON c.id = p.category_id
+            AND LOWER(TRIM(c.name)) = LOWER(TRIM(mc.name))
+        WHERE o.subscription_status IN ('ACTIVE', 'TRIAL')
+            AND o.marketplace_category_id IS NULL
+    ) o ON o.marketplace_category_id = mc.id
     LEFT JOIN public.products p
         ON  p.organization_id = o.id
         AND p.is_active = TRUE
