@@ -5,6 +5,7 @@ import {
   resolveCustomerOrganizationId,
   transformCustomerRecord,
 } from "@/app/api/customers/_lib";
+import { rateLimit, RATE_LIMITS } from "@/lib/middleware/rate-limit";
 
 /**
  * Customer Search API - Phase 5 Optimization
@@ -32,7 +33,13 @@ interface ScoredItem {
   matchedFields: string[];
 }
 
+const searchRateLimiter = rateLimit(RATE_LIMITS.SEARCH);
+
 export async function GET(request: NextRequest) {
+  // Rate limiting (500 searches per 15 minutes)
+  const rateLimitResponse = searchRateLimiter(request);
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     const auth = await validateRole(request, {
       roles: [

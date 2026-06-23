@@ -2,9 +2,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { api } from '@/lib/api'
 import { createClient } from '@/lib/supabase/server'
 import { isMockAuthEnabled } from '@/lib/env'
+import { rateLimit, RATE_LIMITS } from '@/lib/middleware/rate-limit'
+
+// Rate limiter for exports (very strict: 10 per 15 minutes)
+const exportRateLimiter = rateLimit(RATE_LIMITS.EXPORT)
 
 // GET /api/reports/export -> proxy to backend POST `/api/reports/:type/export/:format`
 export async function GET(request: NextRequest) {
+  // Rate limiting (10 exports per 15 minutes)
+  const rateLimitResponse = exportRateLimiter(request)
+  if (rateLimitResponse) return rateLimitResponse
+
   try {
     const { searchParams } = new URL(request.url)
     const type = searchParams.get('type') || 'sales'

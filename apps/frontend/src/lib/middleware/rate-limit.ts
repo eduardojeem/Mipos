@@ -95,6 +95,54 @@ export function addRateLimitHeaders(response: NextResponse, config: RateLimitCon
 }
 
 /**
+ * Predefined rate limit configs by operation type
+ */
+export const RATE_LIMITS = {
+  // Read operations (loose)
+  READ: {
+    maxRequests: 1000,
+    windowMs: 15 * 60 * 1000,
+    message: 'Too many read requests. Please wait.',
+  },
+  // Write operations (moderate)
+  WRITE: {
+    maxRequests: 100,
+    windowMs: 15 * 60 * 1000,
+    message: 'Too many write requests. Please wait.',
+  },
+  // Bulk operations (strict)
+  BULK: {
+    maxRequests: 50,
+    windowMs: 15 * 60 * 1000,
+    message: 'Too many bulk operations. Please wait.',
+  },
+  // Export operations (very strict)
+  EXPORT: {
+    maxRequests: 10,
+    windowMs: 15 * 60 * 1000,
+    message: 'Too many export requests. Please wait 15 minutes.',
+  },
+  // Admin operations (strict)
+  ADMIN: {
+    maxRequests: 50,
+    windowMs: 15 * 60 * 1000,
+    message: 'Too many admin operations. Please wait.',
+  },
+  // Search operations (moderate)
+  SEARCH: {
+    maxRequests: 500,
+    windowMs: 15 * 60 * 1000,
+    message: 'Too many search requests. Please wait.',
+  },
+  // Auth operations (very strict)
+  AUTH: {
+    maxRequests: 10,
+    windowMs: 15 * 60 * 1000,
+    message: 'Too many authentication attempts. Please wait 15 minutes.',
+  },
+};
+
+/**
  * Clean up old entries periodically (run in background)
  */
 export function cleanupRateLimitStore() {
