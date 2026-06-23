@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { api, getErrorMessage } from '@/lib/api'
-import { rateLimit, RATE_LIMITS } from '@/lib/middleware/rate-limit'
 
 // Timeout helper
 const fetchWithTimeout = async (promise: Promise<any>, timeoutMs: number) => {
@@ -10,12 +9,8 @@ const fetchWithTimeout = async (promise: Promise<any>, timeoutMs: number) => {
   return Promise.race([promise, timeout])
 }
 
-const rateLimiter = rateLimit(RATE_LIMITS.READ)
 
 export async function GET(request: NextRequest) {
-  const rateLimitResponse = rateLimiter(request)
-  if (rateLimitResponse) return rateLimitResponse
-
   try {
     const { searchParams } = new URL(request.url)
     const params = Object.fromEntries(searchParams.entries())

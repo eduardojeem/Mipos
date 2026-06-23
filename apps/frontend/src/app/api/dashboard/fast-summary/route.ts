@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { requireOrganization } from '@/lib/organization';
-import { rateLimit, RATE_LIMITS } from '@/lib/middleware/rate-limit';
 
 /**
  * Fast Dashboard Summary API — ultra-fast parallel queries con multi-tenant.
@@ -47,13 +46,8 @@ async function countVisibleActiveProducts(orgId: string): Promise<number | null>
   return Number(result.count ?? 0);
 }
 
-const rateLimiter = rateLimit(RATE_LIMITS.READ);
 
 export async function GET(request: NextRequest) {
-  // Rate limiting
-  const rateLimitResponse = rateLimiter(request);
-  if (rateLimitResponse) return rateLimitResponse;
-
   try {
     const orgId = await requireOrganization(request);
     const supabase = await createClient();

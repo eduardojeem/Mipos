@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { validateRole } from '@/app/api/_utils/role-validation';
 import { resolveCustomerOrganizationId } from '@/app/api/customers/_lib';
-import { rateLimit, RATE_LIMITS } from '@/lib/middleware/rate-limit';
 
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -37,12 +36,8 @@ type ExportCustomerRow = {
  * Optimized for performance with batch processing and proper error handling.
  */
 
-const bulkRateLimiter = rateLimit(RATE_LIMITS.BULK);
 
 export async function POST(request: NextRequest) {
-  const rateLimitResponse = bulkRateLimiter(request);
-  if (rateLimitResponse) return rateLimitResponse;
-
   try {
     const body = await request.json();
     const auth = await authorizeCustomerBulkAction(request, body?.action);

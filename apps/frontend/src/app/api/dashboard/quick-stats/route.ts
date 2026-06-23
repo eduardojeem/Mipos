@@ -1,19 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { requireOrganization } from '@/lib/organization';
-import { rateLimit, RATE_LIMITS } from '@/lib/middleware/rate-limit';
 
 /**
  * Quick Dashboard Stats API - Ultra Fast Version with Multitenancy
  * Uses server-side Supabase client for proper auth context
  */
 
-const rateLimiter = rateLimit(RATE_LIMITS.READ);
 
 export async function GET(request: NextRequest) {
-  const rateLimitResponse = rateLimiter(request);
-  if (rateLimitResponse) return rateLimitResponse;
-
   try {
     const orgId = await requireOrganization(request);
     const supabase = await createClient();

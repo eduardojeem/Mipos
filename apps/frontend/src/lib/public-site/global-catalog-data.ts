@@ -50,6 +50,7 @@ type ProductRow = {
   created_at?: string | null;
   rating?: number | null;
   is_active?: boolean | null;
+  is_public?: boolean | null;
 };
 
 type CategoryRow = {

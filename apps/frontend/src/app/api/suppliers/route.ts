@@ -4,7 +4,6 @@ import { createServerClient } from '@/lib/supabase'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getErrorMessage } from '@/lib/api'
 import { getValidatedOrganizationId } from '@/lib/organization'
-import { rateLimit, RATE_LIMITS } from '@/lib/middleware/rate-limit'
 
 // Modo mock deshabilitado: requerir datos reales de Supabase
 
@@ -79,14 +78,9 @@ function mapSupplierRow(supplier: any) {
   }
 }
 
-const readRateLimiter = rateLimit(RATE_LIMITS.READ);
-const writeRateLimiter = rateLimit(RATE_LIMITS.WRITE);
 
 // GET /api/suppliers
 export async function GET(request: NextRequest) {
-  const rateLimitResponse = readRateLimiter(request);
-  if (rateLimitResponse) return rateLimitResponse;
-
   try {
     const { searchParams } = new URL(request.url)
     const page = parseInt(searchParams.get('page') || '1')
@@ -220,9 +214,6 @@ export async function GET(request: NextRequest) {
 
 // POST /api/suppliers
 export async function POST(request: NextRequest) {
-  const rateLimitResponse = writeRateLimiter(request);
-  if (rateLimitResponse) return rateLimitResponse;
-
   try {
     const body = await request.json()
     const cookieStore = await cookies()

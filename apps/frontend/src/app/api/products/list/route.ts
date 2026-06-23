@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { getValidatedOrganizationId } from '@/lib/organization';
 import { sanitizeSearch } from '@/app/api/_utils/search';
-import { rateLimit } from '@/lib/middleware/rate-limit';
 
 const RICH_PRODUCT_SELECT = `
   id,
@@ -250,19 +249,8 @@ function normalizeProduct(
   };
 }
 
-const rateLimiter = rateLimit({
-  maxRequests: 100,
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  message: 'Too many requests. Please wait before making more requests.',
-});
 
 export async function GET(request: NextRequest) {
-  // Apply rate limiting
-  const rateLimitResponse = rateLimiter(request);
-  if (rateLimitResponse) {
-    return rateLimitResponse;
-  }
-
   try {
     const orgId = await getValidatedOrganizationId(request);
     if (!orgId) {

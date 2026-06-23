@@ -3,7 +3,6 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { requireOrganization } from '@/lib/organization';
 import { requirePOSPermissions } from '@/app/api/_utils/role-validation';
 import { assertCsrf } from '@/app/api/_utils/csrf';
-import { rateLimit } from '@/lib/middleware/rate-limit';
 
 // La columna deleted_at puede no existir todavía (42703)
 function isMissingDeletedAt(error: { code?: string; message?: string } | null) {
@@ -11,19 +10,8 @@ function isMissingDeletedAt(error: { code?: string; message?: string } | null) {
   return error?.code === '42703' || (message.includes('deleted_at') && message.includes('column'));
 }
 
-const rateLimiter = rateLimit({
-  maxRequests: 50,
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  message: 'Too many bulk delete requests. Please wait before making more requests.',
-});
 
 export async function POST(request: NextRequest) {
-  // Apply rate limiting
-  const rateLimitResponse = rateLimiter(request);
-  if (rateLimitResponse) {
-    return rateLimitResponse;
-  }
-
   try {
     const csrf = assertCsrf(request);
     if (!csrf.ok) return csrf.response;

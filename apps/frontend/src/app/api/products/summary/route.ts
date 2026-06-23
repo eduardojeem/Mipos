@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import { getValidatedOrganizationId } from '@/lib/organization';
-import { rateLimit } from '@/lib/middleware/rate-limit';
 
 function isMissingColumnError(error: unknown, column: string): boolean {
   const message = String((error as { message?: unknown })?.message || '').toLowerCase();
@@ -25,19 +24,8 @@ const FALLBACK_SUMMARY = {
   lastUpdated: new Date().toISOString(),
 };
 
-const rateLimiter = rateLimit({
-  maxRequests: 200,
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  message: 'Too many summary requests. Please wait before making more requests.',
-});
 
 export async function GET(request: NextRequest) {
-  // Apply rate limiting
-  const rateLimitResponse = rateLimiter(request);
-  if (rateLimitResponse) {
-    return rateLimitResponse;
-  }
-
   try {
     const orgId = await getValidatedOrganizationId(request);
     if (!orgId) {
