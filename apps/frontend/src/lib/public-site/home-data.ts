@@ -115,11 +115,14 @@ async function fetchTenantHomeSnapshotUncached(organizationId: string): Promise<
     countsByCategory.set(categoryId, (countsByCategory.get(categoryId) || 0) + 1);
   });
 
-  const categories: HomeCategoryPreview[] = categoryRows.map((category) => ({
-    id: String(category.id),
-    name: String(category.name || 'Categoria'),
-    productCount: countsByCategory.get(String(category.id)) || 0,
-  }));
+  // Only include categories with at least 1 valid product
+  const categories: HomeCategoryPreview[] = categoryRows
+    .filter((category) => (countsByCategory.get(String(category.id)) || 0) > 0)
+    .map((category) => ({
+      id: String(category.id),
+      name: String(category.name || 'Categoria'),
+      productCount: countsByCategory.get(String(category.id)) || 0,
+    }));
 
   const categoryNameById = new Map(categories.map((category) => [category.id, category.name]));
   const enrichedProducts = await enrichPublicCatalogProductsWithOffers(organizationId, productRows);
