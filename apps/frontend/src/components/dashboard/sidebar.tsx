@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useMemo, useCallback } from 'react';
 import Link from 'next/link';
@@ -552,7 +552,7 @@ export function Sidebar() {
                   <span>Sistema en linea</span>
                 </div>
                 <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
-                  © {new Date().getFullYear()} MiPOS
+                  © {new Date().getFullYear()} MITIENDA
                 </p>
               </div>
             </div>

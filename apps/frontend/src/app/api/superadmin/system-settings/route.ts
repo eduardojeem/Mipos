@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { assertSuperAdmin } from '@/app/api/_utils/auth';
 import { createAdminClient } from '@/lib/supabase-admin';
 
@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const baseDomain = settings?.value?.domain || process.env.NEXT_PUBLIC_BASE_DOMAIN || 'miposparaguay.vercel.app';
+    const baseDomain = settings?.value?.domain || process.env.NEXT_PUBLIC_BASE_DOMAIN || 'MITIENDAparaguay.vercel.app';
 
     return NextResponse.json({ baseDomain });
   } catch (error) {

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { SuperAdminGuard } from '../components/SuperAdminGuard';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -61,8 +61,8 @@ interface SystemSettings {
 }
 
 const DEFAULT_SETTINGS: SystemSettings = {
-  system_name: 'MiPOS SaaS',
-  system_email: 'admin@mipos.com',
+  system_name: 'MITIENDA SaaS',
+  system_email: 'admin@MITIENDA.com',
   maintenance_mode: false,
   allow_registrations: true,
   require_email_verification: true,
@@ -319,7 +319,7 @@ export default function SettingsPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `mipos-config-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `MITIENDA-config-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
     toast.success('Configuración exportada');

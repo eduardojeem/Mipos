@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
@@ -132,7 +132,7 @@ export function LandingHeader() {
                 <Building2 className="h-5 w-5 text-white" />
               </div>
               <div className="min-w-0">
-                <p className="truncate text-base font-semibold text-white">MiPOS</p>
+                <p className="truncate text-base font-semibold text-white">MITIENDA</p>
                 <p className="truncate text-xs text-slate-400">{statusLabel}</p>
               </div>
             </Link>

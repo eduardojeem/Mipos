@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
@@ -76,7 +76,7 @@ export function TrustedBusinesses() {
             Negocios publicados
           </div>
           <h2 className="mt-6 text-3xl font-semibold tracking-tight text-white md:text-4xl lg:text-5xl">
-            Empresas que ya operan dentro del ecosistema MiPOS
+            Empresas que ya operan dentro del ecosistema MITIENDA
           </h2>
           <p className="mt-4 text-lg leading-8 text-slate-300">
             Directorio vivo de negocios que usan la plataforma para vender, administrar catalogo y crecer con una base ordenada.

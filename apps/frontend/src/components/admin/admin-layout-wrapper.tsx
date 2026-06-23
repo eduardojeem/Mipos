@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
@@ -44,7 +44,7 @@ function AdminLayoutContent({ children }: { children: ReactNode }) {
               <p className="font-medium">Panel administrativo orientado a empresa, operación, análisis y seguridad.</p>
               <div className="flex items-center gap-4">
                 <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500"></span>Control por plan y rol</span>
-                <span className="font-semibold text-foreground/80">MiPOS Admin</span>
+                <span className="font-semibold text-foreground/80">MITIENDA Admin</span>
               </div>
             </div>
           </footer>

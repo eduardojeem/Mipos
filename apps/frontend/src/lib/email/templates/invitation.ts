@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Template de email para invitaciones de equipo.
  * Inline HTML puro — no necesita React en runtime.
  */
@@ -15,7 +15,7 @@ export interface InvitationEmailData {
 export function buildInvitationEmail(data: InvitationEmailData): { subject: string; html: string; text: string } {
   const { inviteeName, organizationName, inviterName, roleName, inviteUrl, expiresInDays = 7 } = data
 
-  const subject = `Te invitaron a ${organizationName} en MiPOS`
+  const subject = `Te invitaron a ${organizationName} en MITIENDA`
 
   const html = `
 <!DOCTYPE html>
@@ -33,7 +33,7 @@ export function buildInvitationEmail(data: InvitationEmailData): { subject: stri
           <!-- Header -->
           <tr>
             <td style="background-color:#059669;padding:32px 40px;text-align:center;">
-              <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:600;">MiPOS</h1>
+              <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:600;">MITIENDA</h1>
             </td>
           </tr>
           <!-- Body -->
@@ -67,7 +67,7 @@ export function buildInvitationEmail(data: InvitationEmailData): { subject: stri
           <tr>
             <td style="padding:24px 40px;border-top:1px solid #e2e8f0;text-align:center;">
               <p style="margin:0;color:#94a3b8;font-size:12px;">
-                MiPOS — Sistema de gestión para tu negocio
+                MITIENDA — Sistema de gestión para tu negocio
               </p>
             </td>
           </tr>
@@ -86,7 +86,7 @@ Aceptá la invitación acá: ${inviteUrl}
 
 Este link vence en ${expiresInDays} días.
 
-— MiPOS`
+— MITIENDA`
 
   return { subject, html, text }
 }

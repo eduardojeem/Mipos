@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -197,7 +197,7 @@ export default function SignUpPage() {
           </div>
           
           <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 bg-clip-text text-transparent mb-2">
-            {isCustomerSignup ? 'Cuenta de cliente' : 'Unete a MiPOS'}
+            {isCustomerSignup ? 'Cuenta de cliente' : 'Unete a MITIENDA'}
           </h1>
           <p className="text-slate-600 dark:text-slate-400 font-medium text-lg">
             {isCustomerSignup ? 'Guarda tus datos y consulta tus pedidos facilmente' : 'Crea tu cuenta y comienza a gestionar tu negocio'}

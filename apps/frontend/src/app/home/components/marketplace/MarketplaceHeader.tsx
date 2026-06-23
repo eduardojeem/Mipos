@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
@@ -81,7 +81,7 @@ export function MarketplaceHeader({ searchQuery = '' }: MarketplaceHeaderProps) 
           </div>
           <div className="hidden sm:block">
             <p className="text-sm font-bold tracking-tight text-slate-950 dark:text-slate-50">
-              MiPOS <span className="text-emerald-600 dark:text-emerald-400">Marketplace</span>
+              MITIENDA <span className="text-emerald-600 dark:text-emerald-400">Marketplace</span>
             </p>
             <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
               Directorio comercial

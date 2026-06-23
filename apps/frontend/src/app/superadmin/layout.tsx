@@ -1,12 +1,12 @@
-import type { Metadata } from 'next';
+﻿import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/server';
 import SuperAdminClientLayout from './SuperAdminClientLayout';
 
 export const metadata: Metadata = {
-  title: 'Super Admin - MiPOS | Panel de Administración del Sistema',
-  description: 'Panel de administración del sistema MiPOS. Gestión de organizaciones, usuarios, planes y configuración global. Acceso restringido solo para super administradores.',
+  title: 'Super Admin - MITIENDA | Panel de Administración del Sistema',
+  description: 'Panel de administración del sistema MITIENDA. Gestión de organizaciones, usuarios, planes y configuración global. Acceso restringido solo para super administradores.',
   keywords: [
     'super admin',
     'administración sistema',
@@ -14,13 +14,13 @@ export const metadata: Metadata = {
     'gestión organizaciones',
     'gestión usuarios',
     'configuración global',
-    'MiPOS admin',
+    'MITIENDA admin',
   ],
   authors: [
-    { name: 'MiPOS Team' },
+    { name: 'MITIENDA Team' },
   ],
-  creator: 'MiPOS',
-  publisher: 'MiPOS',
+  creator: 'MITIENDA',
+  publisher: 'MITIENDA',
   robots: {
     index: false,
     follow: false,

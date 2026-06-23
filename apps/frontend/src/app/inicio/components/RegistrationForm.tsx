@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
@@ -184,7 +184,7 @@ export function RegistrationForm({ selectedPlan, billingCycle = 'monthly', onSuc
       }
 
       toast.success('Cuenta creada', {
-        description: String(data.message || 'Bienvenido a MiPOS'),
+        description: String(data.message || 'Bienvenido a MITIENDA'),
       });
 
       window.setTimeout(() => onSuccess(), 1000);

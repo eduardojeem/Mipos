@@ -1,4 +1,4 @@
-import { Metadata } from 'next';
+﻿import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { unstable_cache } from 'next/cache';
 import HomeClient from './HomeClient';
@@ -213,9 +213,9 @@ export async function generateMetadata(): Promise<Metadata> {
   }
 
   return {
-    title: 'MiPOS Marketplace | Catálogo global y empresas activas',
+    title: 'MITIENDA Marketplace | Catálogo global y empresas activas',
     description:
-      'Explora productos públicos, categorías globales y empresas activas desde el dominio principal de MiPOS.',
+      'Explora productos públicos, categorías globales y empresas activas desde el dominio principal de MITIENDA.',
     alternates: {
       canonical: '/home',
     },
@@ -224,15 +224,15 @@ export async function generateMetadata(): Promise<Metadata> {
       follow: true,
     },
     openGraph: {
-      title: 'MiPOS Marketplace',
+      title: 'MITIENDA Marketplace',
       description:
         'Dominio principal público con catálogo global, categorías y empresas destacadas.',
       type: 'website',
-      siteName: 'MiPOS Marketplace',
+      siteName: 'MITIENDA Marketplace',
     },
     twitter: {
       card: 'summary_large_image',
-      title: 'MiPOS Marketplace',
+      title: 'MITIENDA Marketplace',
       description:
         'Marketplace global para descubrir empresas activas y acceder a sus subdominios.',
     },

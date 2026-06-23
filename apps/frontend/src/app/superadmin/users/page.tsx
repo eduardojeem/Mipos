@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -271,7 +271,7 @@ export default function SuperAdminUsersPage() {
             </div>
             <h1 className="text-3xl font-bold tracking-tight text-foreground md:text-4xl">Gestión de Usuarios</h1>
             <p className="max-w-2xl text-sm text-muted-foreground">
-              Todos los usuarios registrados en el sistema SaaS de MiPOS.
+              Todos los usuarios registrados en el sistema SaaS de MITIENDA.
             </p>
           </div>
           <div className="flex items-center gap-3">

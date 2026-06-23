@@ -1,4 +1,4 @@
-import { Metadata } from 'next';
+﻿import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import {
@@ -48,34 +48,34 @@ export async function generateMetadata({
     const snapshot = await fetchGlobalCategoriesSnapshot({ search: '', sortBy: 'products' });
     const cat = snapshot.categories.find((c) => c.slug === categorySlug);
     if (cat) {
-      const title = `Productos de ${cat.name} | MiPOS Marketplace`;
-      const description = `Explora ${cat.productCount} productos de ${cat.organizationCount} empresas de ${cat.name} en el marketplace MiPOS.`;
+      const title = `Productos de ${cat.name} | MITIENDA Marketplace`;
+      const description = `Explora ${cat.productCount} productos de ${cat.organizationCount} empresas de ${cat.name} en el marketplace MITIENDA.`;
       return {
         title,
         description,
         alternates: { canonical: `/home/catalogo?category=${categorySlug}` },
         robots: { index: true, follow: true },
-        openGraph: { title, description, type: 'website', siteName: 'MiPOS Marketplace' },
+        openGraph: { title, description, type: 'website', siteName: 'MITIENDA Marketplace' },
         twitter: { card: 'summary_large_image', title, description },
       };
     }
   }
 
   return {
-    title: 'Catálogo global | MiPOS Marketplace',
-    description: 'Explora productos de todas las empresas activas en MiPOS. Filtra por categoría, precio, ubicación y más.',
+    title: 'Catálogo global | MITIENDA Marketplace',
+    description: 'Explora productos de todas las empresas activas en MITIENDA. Filtra por categoría, precio, ubicación y más.',
     alternates: { canonical: '/home/catalogo' },
     robots: { index: true, follow: true },
     openGraph: {
-      title: 'Catálogo global | MiPOS Marketplace',
-      description: 'Todos los productos disponibles en el marketplace de MiPOS.',
+      title: 'Catálogo global | MITIENDA Marketplace',
+      description: 'Todos los productos disponibles en el marketplace de MITIENDA.',
       type: 'website',
-      siteName: 'MiPOS Marketplace',
+      siteName: 'MITIENDA Marketplace',
     },
     twitter: {
       card: 'summary_large_image',
-      title: 'Catálogo global | MiPOS Marketplace',
-      description: 'Todos los productos disponibles en el marketplace de MiPOS.',
+      title: 'Catálogo global | MITIENDA Marketplace',
+      description: 'Todos los productos disponibles en el marketplace de MITIENDA.',
     },
   };
 }

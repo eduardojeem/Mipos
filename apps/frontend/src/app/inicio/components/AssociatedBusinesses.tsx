@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import { Building2, Loader2 } from 'lucide-react';
@@ -89,7 +89,7 @@ export function AssociatedBusinesses({ open, onClose }: AssociatedBusinessesProp
             Negocios publicados
           </DialogTitle>
           <DialogDescription className="text-sm leading-6 text-slate-400">
-            Directorio resumido de empresas visibles dentro del ecosistema publico de MiPOS.
+            Directorio resumido de empresas visibles dentro del ecosistema publico de MITIENDA.
           </DialogDescription>
         </DialogHeader>
 

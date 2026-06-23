@@ -1,8 +1,8 @@
-import { Metadata } from 'next';
+﻿import { Metadata } from 'next';
 import './landing.css';
 
 export const metadata: Metadata = {
-    title: 'MiPOS - Sistema de Punto de Venta en la Nube | Gestiona tu Negocio',
+    title: 'MITIENDA - Sistema de Punto de Venta en la Nube | Gestiona tu Negocio',
     description: 'Plataforma SaaS completa para gestionar tu punto de venta. Control de inventario, ventas, clientes y reportes en tiempo real. Prueba gratis 14 días sin tarjeta de crédito.',
     keywords: [
         'POS',
@@ -17,41 +17,41 @@ export const metadata: Metadata = {
         'facturación electrónica',
         'gestión empresarial',
         'software para negocios',
-        'MiPOS',
+        'MITIENDA',
         'punto de venta online',
         'sistema de gestión',
     ],
     authors: [
-        { name: 'MiPOS Team' },
+        { name: 'MITIENDA Team' },
     ],
-    creator: 'MiPOS',
-    publisher: 'MiPOS',
+    creator: 'MITIENDA',
+    publisher: 'MITIENDA',
     metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'),
     alternates: {
         canonical: '/inicio',
     },
     openGraph: {
-        title: 'MiPOS - Sistema de Punto de Venta en la Nube',
+        title: 'MITIENDA - Sistema de Punto de Venta en la Nube',
         description: 'Gestiona tu negocio con inteligencia. Inventario, ventas, clientes y reportes en un solo lugar.',
         type: 'website',
         locale: 'es_ES',
         url: '/inicio',
-        siteName: 'MiPOS',
+        siteName: 'MITIENDA',
         images: [
             {
                 url: '/og-image-inicio.png',
                 width: 1200,
                 height: 630,
-                alt: 'MiPOS - Sistema de Punto de Venta',
+                alt: 'MITIENDA - Sistema de Punto de Venta',
                 type: 'image/png',
             },
         ],
     },
     twitter: {
         card: 'summary_large_image',
-        title: 'MiPOS - Sistema de Punto de Venta en la Nube',
+        title: 'MITIENDA - Sistema de Punto de Venta en la Nube',
         description: 'Gestiona tu negocio con inteligencia. Prueba gratis 14 días.',
-        creator: '@MiPOS',
+        creator: '@MITIENDA',
         images: ['/twitter-image-inicio.png'],
     },
     robots: {

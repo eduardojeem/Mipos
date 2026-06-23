@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import Link from 'next/link'
 import { ChevronLeft, LogOut, Shield } from 'lucide-react'
@@ -25,7 +25,7 @@ export function AdminSidebar() {
         <div className="flex h-16 items-center justify-between border-b border-border/50 px-4">
           {!isCollapsed && (
             <div className="min-w-0">
-              <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">MiPOS</p>
+              <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">MITIENDA</p>
               <h2 className="truncate text-base font-semibold text-foreground">Administracion</h2>
             </div>
           )}

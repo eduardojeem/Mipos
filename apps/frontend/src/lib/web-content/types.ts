@@ -1,4 +1,4 @@
-export interface HeroSignal {
+﻿export interface HeroSignal {
   title: string;
   description: string;
 }
@@ -56,7 +56,7 @@ export const LANDING_CONTENT_DEFAULTS: LandingContent = {
     badge: 'Plataforma SaaS para retail y servicios',
     headline: 'Gestiona ventas, turnos e inventario desde una sola base operativa',
     subtext:
-      'MiPOS unifica punto de venta, control de stock y agenda de turnos en una misma plataforma. Lo uses como tienda, como negocio de servicios o las dos cosas, todo cae en la misma caja.',
+      'MITIENDA unifica punto de venta, control de stock y agenda de turnos en una misma plataforma. Lo uses como tienda, como negocio de servicios o las dos cosas, todo cae en la misma caja.',
     ctaPrimary: 'Ver planes y capacidad',
     ctaSecondary: 'Ver como funciona',
     signals: [
@@ -75,7 +75,7 @@ export const LANDING_CONTENT_DEFAULTS: LandingContent = {
     ],
   },
   howItWorks: {
-    headline: 'Como se activa MiPOS en un negocio real',
+    headline: 'Como se activa MITIENDA en un negocio real',
     subtext: 'Primero defines capacidad, despues abres la cuenta y luego preparas la operacion.',
     tracks: [
       {
@@ -158,7 +158,7 @@ export const LANDING_CONTENT_DEFAULTS: LandingContent = {
   benefits: {
     headline: 'Diseno pensado para trabajar, no para esconder informacion importante',
     subtext:
-      'MiPOS concentra las piezas criticas del negocio en una interfaz sobria, rapida y preparada para mas de una sucursal o equipo.',
+      'MITIENDA concentra las piezas criticas del negocio en una interfaz sobria, rapida y preparada para mas de una sucursal o equipo.',
     items: [
       {
         title: 'Operacion rapida',
@@ -221,7 +221,7 @@ export const MARKETPLACE_CONTENT_DEFAULTS: MarketplaceContent = {
   hero: {
     badge: 'Ecosistema publico multiempresa',
     headline: 'Directorio comercial',
-    headlineHighlight: 'conectado a MiPOS',
+    headlineHighlight: 'conectado a MITIENDA',
     description:
       'El dominio principal concentra empresas, categorias y productos publicados, mientras cada negocio conserva su catalogo, marca y operacion propia.',
     ctaPrimary: 'Explorar catalogo global',

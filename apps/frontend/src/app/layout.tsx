@@ -1,4 +1,4 @@
-import './globals.css'
+﻿import './globals.css'
 import '@/app/premium.css'
 import '@/styles/touch-optimized.css'
 import '@/styles/pos-redesign.css'
@@ -20,7 +20,7 @@ export async function generateMetadata(): Promise<Metadata> {
   // Business config will be loaded dynamically in the client via BusinessConfigContext
   const config = defaultBusinessConfig;
 
-  const businessName = config.businessName || 'MiPOS';
+  const businessName = config.businessName || 'MITIENDA';
   const tagline = config.tagline || 'Sistema de Punto de Venta para Cosméticos';
   const description = config.heroDescription || 'Sistema de punto de venta profesional especializado en productos de belleza y cosméticos. Gestión de inventario, ventas, clientes y reportes en tiempo real.';
 

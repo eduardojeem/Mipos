@@ -1,11 +1,11 @@
-import type { Metadata } from 'next';
+﻿import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import DashboardClientLayout from './DashboardClientLayout';
 
 export const metadata: Metadata = {
-  title: 'Dashboard - MiPOS',
-  description: 'Panel de control de MiPOS. Gestiona tu negocio de forma eficiente.',
+  title: 'Dashboard - MITIENDA',
+  description: 'Panel de control de MITIENDA. Gestiona tu negocio de forma eficiente.',
   robots: {
     index: false,
     follow: false,

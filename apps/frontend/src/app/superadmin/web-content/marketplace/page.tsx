@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useState } from 'react';
 import { AlertCircle, CheckCircle2, Loader2, RotateCcw, Save } from 'lucide-react';
@@ -186,7 +186,7 @@ export default function MarketplaceContentPage() {
                   <Input
                     value={content.hero.headlineHighlight}
                     onChange={(e) => setHeroField('headlineHighlight', e.target.value)}
-                    placeholder="conectado a MiPOS"
+                    placeholder="conectado a MITIENDA"
                   />
                 </div>
               </div>

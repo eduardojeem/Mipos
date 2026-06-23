@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { assertSuperAdmin } from '@/app/api/_utils/auth';
 import { createAdminClient } from '@/lib/supabase-admin';
 
@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
   let dbLatencyMs: number | null = null;
   let totalOrganizations = 0;
   let totalUsers = 0;
-  let baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || 'miposparaguay.vercel.app';
+  let baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || 'MITIENDAparaguay.vercel.app';
 
   try {
     const admin = createAdminClient();
@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     app: {
-      name: 'MiPOS',
+      name: 'MITIENDA',
       version: process.env.NEXT_PUBLIC_APP_VERSION || '0.1.0',
       environment: process.env.NODE_ENV || 'development',
       nodeVersion: process.version,

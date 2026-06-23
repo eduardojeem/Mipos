@@ -1,4 +1,4 @@
-import { Metadata } from 'next';
+﻿import { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowRight, Building2, Layers3, PackageSearch, Sparkles } from 'lucide-react';
@@ -45,10 +45,10 @@ export async function generateMetadata({
   const raw = await searchParams;
   const search = readFirstValue(raw.search) || readFirstValue(raw.q);
   const title = search
-    ? `"${search}" — Rubros | MiPOS Marketplace`
-    : 'Rubros del Marketplace | MiPOS';
+    ? `"${search}" — Rubros | MITIENDA Marketplace`
+    : 'Rubros del Marketplace | MITIENDA';
   const description = search
-    ? `Resultados de rubros para "${search}" en el marketplace MiPOS.`
+    ? `Resultados de rubros para "${search}" en el marketplace MITIENDA.`
     : 'Explora todos los rubros del marketplace: Restaurantes, Tecnología, Moda, Supermercados y más. Encuentra empresas y productos por categoría.';
 
   return {
@@ -56,7 +56,7 @@ export async function generateMetadata({
     description,
     alternates: { canonical: '/home/categorias' },
     robots: { index: true, follow: true },
-    openGraph: { title, description, type: 'website', siteName: 'MiPOS Marketplace' },
+    openGraph: { title, description, type: 'website', siteName: 'MITIENDA Marketplace' },
     twitter: { card: 'summary_large_image', title, description },
   };
 }

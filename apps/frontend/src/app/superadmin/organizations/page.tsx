@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -198,7 +198,7 @@ function getPrimaryDomain(org: Organization) {
       subdomain: org.subdomain,
       custom_domain: org.custom_domain,
     },
-    process.env.NEXT_PUBLIC_BASE_DOMAIN || 'miposparaguay.vercel.app'
+    process.env.NEXT_PUBLIC_BASE_DOMAIN || 'MITIENDAparaguay.vercel.app'
   );
 }
 
@@ -376,7 +376,7 @@ export default function OrganizationsPage() {
         Creada: formatDate(org.created_at),
       }));
 
-      await exportCSV(data as Record<string, unknown>[], 'organizaciones_mipos');
+      await exportCSV(data as Record<string, unknown>[], 'organizaciones_MITIENDA');
       toast.success('CSV exportado correctamente');
     } catch {
       toast.error('No se pudo exportar el CSV');
@@ -401,7 +401,7 @@ export default function OrganizationsPage() {
         Creada: formatDate(org.created_at),
       }));
 
-      await exportExcel(data as Record<string, unknown>[], 'organizaciones_mipos', 'Organizaciones');
+      await exportExcel(data as Record<string, unknown>[], 'organizaciones_MITIENDA', 'Organizaciones');
       toast.success('Excel exportado correctamente');
     } catch {
       toast.error('No se pudo exportar el Excel');

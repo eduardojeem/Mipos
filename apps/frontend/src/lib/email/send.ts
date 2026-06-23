@@ -1,4 +1,4 @@
-import { Resend } from 'resend'
+﻿import { Resend } from 'resend'
 
 let _resend: Resend | null = null
 
@@ -10,7 +10,7 @@ function getResend(): Resend | null {
   return _resend
 }
 
-const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'MiPOS <noreply@mipos.app>'
+const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'MITIENDA <noreply@MITIENDA.app>'
 
 export interface SendEmailOptions {
   to: string

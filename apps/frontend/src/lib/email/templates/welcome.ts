@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Template de email de bienvenida post-registro.
  */
 
@@ -12,7 +12,7 @@ export interface WelcomeEmailData {
 export function buildWelcomeEmail(data: WelcomeEmailData): { subject: string; html: string; text: string } {
   const { userName, organizationName, loginUrl, verifyUrl } = data
 
-  const subject = `¡Bienvenido a MiPOS, ${userName}!`
+  const subject = `¡Bienvenido a MITIENDA, ${userName}!`
 
   const html = `
 <!DOCTYPE html>
@@ -30,7 +30,7 @@ export function buildWelcomeEmail(data: WelcomeEmailData): { subject: string; ht
           <!-- Header -->
           <tr>
             <td style="background-color:#059669;padding:32px 40px;text-align:center;">
-              <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:600;">MiPOS</h1>
+              <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:600;">MITIENDA</h1>
             </td>
           </tr>
           <!-- Body -->
@@ -40,7 +40,7 @@ export function buildWelcomeEmail(data: WelcomeEmailData): { subject: string; ht
                 ¡Hola, ${userName}! 🎉
               </h2>
               <p style="margin:0 0 16px;color:#475569;font-size:15px;line-height:1.6;">
-                Tu empresa <strong>${organizationName}</strong> ya está lista en MiPOS.
+                Tu empresa <strong>${organizationName}</strong> ya está lista en MITIENDA.
               </p>
               ${verifyUrl ? `
               <div style="margin:24px 0;padding:16px;background-color:#f0fdf4;border:1px solid #dcfce7;border-radius:8px;">
@@ -89,7 +89,7 @@ export function buildWelcomeEmail(data: WelcomeEmailData): { subject: string; ht
           <tr>
             <td style="padding:24px 40px;border-top:1px solid #e2e8f0;text-align:center;">
               <p style="margin:0;color:#94a3b8;font-size:12px;">
-                MiPOS — Sistema de gestión para tu negocio
+                MITIENDA — Sistema de gestión para tu negocio
               </p>
             </td>
           </tr>
@@ -102,7 +102,7 @@ export function buildWelcomeEmail(data: WelcomeEmailData): { subject: string; ht
 
   const text = `¡Hola, ${userName}!
 
-Tu empresa ${organizationName} ya está lista en MiPOS.
+Tu empresa ${organizationName} ya está lista en MITIENDA.
 
 ${verifyUrl ? `IMPORTANTE: Verifica tu email
 Por seguridad, necesitamos confirmar que este email es tuyo.
@@ -115,7 +115,7 @@ Próximos pasos:
 
 Ir a mi negocio: ${loginUrl}
 
-— MiPOS`
+— MITIENDA`
 
   return { subject, html, text }
 }

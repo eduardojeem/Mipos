@@ -1,4 +1,4 @@
-import Link from 'next/link';
+﻿import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Building2, Package, Tag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -15,13 +15,13 @@ import { OrganizationsFilterBar } from './OrganizationsFilterBar';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Directorio de empresas | MiPOS Marketplace',
+  title: 'Directorio de empresas | MITIENDA Marketplace',
   description:
     'Explora negocios activos, compara presencia publica y entra directo a la tienda de cada empresa desde un directorio real.',
   openGraph: {
-    title: 'Directorio de empresas | MiPOS Marketplace',
+    title: 'Directorio de empresas | MITIENDA Marketplace',
     description:
-      'Directorio publico de organizaciones activas con catalogo y presencia comercial en MiPOS.',
+      'Directorio publico de organizaciones activas con catalogo y presencia comercial en MITIENDA.',
     type: 'website',
     locale: 'es_PY',
     url: '/home/empresas',

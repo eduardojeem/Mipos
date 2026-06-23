@@ -1,11 +1,11 @@
-import { Metadata } from 'next';
+﻿import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Empresas publicadas en MiPOS | Directorio comercial',
+  title: 'Empresas publicadas en MITIENDA | Directorio comercial',
   description:
-    'Explora organizaciones activas, revisa su presencia publica y entra a sus catalogos desde un directorio real de MiPOS.',
+    'Explora organizaciones activas, revisa su presencia publica y entra a sus catalogos desde un directorio real de MITIENDA.',
   keywords: [
-    'empresas MiPOS',
+    'empresas MITIENDA',
     'directorio de empresas',
     'negocios publicados',
     'catalogo publico',
@@ -14,36 +14,36 @@ export const metadata: Metadata = {
     'tiendas publicadas',
     'empresas con catalogo',
   ],
-  authors: [{ name: 'MiPOS Team' }],
-  creator: 'MiPOS',
-  publisher: 'MiPOS',
+  authors: [{ name: 'MITIENDA Team' }],
+  creator: 'MITIENDA',
+  publisher: 'MITIENDA',
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'),
   alternates: {
     canonical: '/empresas',
   },
   openGraph: {
-    title: 'Empresas publicadas en MiPOS | Directorio comercial',
+    title: 'Empresas publicadas en MITIENDA | Directorio comercial',
     description:
-      'Conoce organizaciones activas, su catalogo publico y su cobertura comercial dentro del ecosistema MiPOS.',
+      'Conoce organizaciones activas, su catalogo publico y su cobertura comercial dentro del ecosistema MITIENDA.',
     type: 'website',
     locale: 'es_PY',
     url: '/empresas',
-    siteName: 'MiPOS',
+    siteName: 'MITIENDA',
     images: [
       {
         url: '/og-image-empresas.png',
         width: 1200,
         height: 630,
-        alt: 'MiPOS - Directorio de empresas publicadas',
+        alt: 'MITIENDA - Directorio de empresas publicadas',
         type: 'image/png',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Empresas publicadas en MiPOS',
+    title: 'Empresas publicadas en MITIENDA',
     description: 'Directorio publico de organizaciones activas con catalogo y presencia comercial.',
-    creator: '@MiPOS',
+    creator: '@MITIENDA',
     images: ['/twitter-image-empresas.png'],
   },
   robots: {

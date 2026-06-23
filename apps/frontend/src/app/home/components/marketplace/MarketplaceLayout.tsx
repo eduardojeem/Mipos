@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { MarketplaceHeader } from './MarketplaceHeader';
 
@@ -24,7 +24,7 @@ export function MarketplaceLayout({ children, searchQuery }: MarketplaceLayoutPr
       <footer className="border-t border-slate-200/60 bg-white/50 py-12 backdrop-blur-sm dark:border-slate-800/70 dark:bg-slate-950/60">
         <div className="mx-auto max-w-7xl px-4 text-center sm:px-6 lg:px-8">
           <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
-            &copy; {new Date().getFullYear()} MiPOS Marketplace. Todos los derechos reservados.
+            &copy; {new Date().getFullYear()} MITIENDA Marketplace. Todos los derechos reservados.
           </p>
         </div>
       </footer>

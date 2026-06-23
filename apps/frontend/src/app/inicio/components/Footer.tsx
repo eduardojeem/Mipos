@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -27,7 +27,7 @@ export function Footer() {
                 <Building2 className="h-5 w-5 text-white" aria-hidden="true" />
               </div>
               <div>
-                <p className="text-lg font-semibold text-white">MiPOS</p>
+                <p className="text-lg font-semibold text-white">MITIENDA</p>
                 <p className="text-xs text-slate-400">Ventas, inventario y operacion</p>
               </div>
             </div>
@@ -98,8 +98,8 @@ export function Footer() {
             <ul className="space-y-3 text-sm text-slate-400">
               <li className="flex items-center gap-2">
                 <Mail className="h-4 w-4 text-amber-300" aria-hidden="true" />
-                <a href="mailto:soporte@mipos.com.py" className="transition-colors hover:text-emerald-300">
-                  soporte@mipos.com.py
+                <a href="mailto:soporte@MITIENDA.com.py" className="transition-colors hover:text-emerald-300">
+                  soporte@MITIENDA.com.py
                 </a>
               </li>
               <li className="flex items-start gap-2">
@@ -111,7 +111,7 @@ export function Footer() {
         </div>
 
         <div className="landing-divider mt-10 flex flex-col items-start justify-between gap-4 border-t pt-8 text-sm text-slate-500 md:flex-row md:items-center">
-          <p>&copy; {currentYear} MiPOS. Todos los derechos reservados.</p>
+          <p>&copy; {currentYear} MITIENDA. Todos los derechos reservados.</p>
           <div className="flex gap-6">
             <Link href="/inicio" className="transition-colors hover:text-emerald-300">
               Terminos

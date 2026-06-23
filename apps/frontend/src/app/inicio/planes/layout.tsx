@@ -1,10 +1,10 @@
-import { Metadata } from 'next';
+﻿import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-    title: 'Planes y Precios - MiPOS | Elige el Plan Perfecto para tu Negocio',
-    description: 'Compara los planes de MiPOS, revisa precios actualizados y elige la opcion que mejor se adapte a tu negocio.',
+    title: 'Planes y Precios - MITIENDA | Elige el Plan Perfecto para tu Negocio',
+    description: 'Compara los planes de MITIENDA, revisa precios actualizados y elige la opcion que mejor se adapte a tu negocio.',
     keywords: [
-        'planes MiPOS',
+        'planes MITIENDA',
         'precios punto de venta',
         'planes POS',
         'suscripcion POS',
@@ -19,36 +19,36 @@ export const metadata: Metadata = {
         'comparacion planes',
     ],
     authors: [
-        { name: 'MiPOS Team' },
+        { name: 'MITIENDA Team' },
     ],
-    creator: 'MiPOS',
-    publisher: 'MiPOS',
+    creator: 'MITIENDA',
+    publisher: 'MITIENDA',
     metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'),
     alternates: {
         canonical: '/inicio/planes',
     },
     openGraph: {
-        title: 'Planes y Precios - MiPOS',
+        title: 'Planes y Precios - MITIENDA',
         description: 'Planes flexibles para cada tipo de negocio con informacion de precios actualizada.',
         type: 'website',
         locale: 'es_ES',
         url: '/inicio/planes',
-        siteName: 'MiPOS',
+        siteName: 'MITIENDA',
         images: [
             {
                 url: '/og-image-planes.png',
                 width: 1200,
                 height: 630,
-                alt: 'MiPOS - Planes y Precios',
+                alt: 'MITIENDA - Planes y Precios',
                 type: 'image/png',
             },
         ],
     },
     twitter: {
         card: 'summary_large_image',
-        title: 'Planes y Precios - MiPOS',
-        description: 'Compara planes y precios actualizados de MiPOS.',
-        creator: '@MiPOS',
+        title: 'Planes y Precios - MITIENDA',
+        description: 'Compara planes y precios actualizados de MITIENDA.',
+        creator: '@MITIENDA',
         images: ['/twitter-image-planes.png'],
     },
     robots: {

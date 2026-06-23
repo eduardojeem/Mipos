@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from 'next/link';
 import {
@@ -89,7 +89,7 @@ function FooterComponent({ config, onNavigate }: FooterProps) {
         <div className="space-y-3">
           <p className="text-sm font-semibold text-white">Tienda</p>
           <p className="text-sm leading-7 text-slate-400">
-            {config.tagline || config.heroDescription || 'Negocio publicado en MiPOS.'}
+            {config.tagline || config.heroDescription || 'Negocio publicado en MITIENDA.'}
           </p>
         </div>
 

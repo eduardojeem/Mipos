@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -394,7 +394,7 @@ export default function SuperAdminPromotionCodesPage() {
               <Input
                 value={redeemForm.code}
                 onChange={(event) => setRedeemForm((current) => ({ ...current, code: event.target.value }))}
-                placeholder="MIPOS-XXXX-XXXX-XXXX"
+                placeholder="MITIENDA-XXXX-XXXX-XXXX"
               />
             </div>
             <Button className="w-full" onClick={() => redeemMutation.mutate()} disabled={!canRedeem}>

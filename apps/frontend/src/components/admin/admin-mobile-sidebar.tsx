@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
@@ -43,7 +43,7 @@ export function AdminMobileSidebar() {
             <div className="border-b border-border px-5 py-5">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">MiPOS</p>
+                  <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">MITIENDA</p>
                   <h2 className="text-lg font-semibold text-foreground">Administracion</h2>
                 </div>
                 <Badge variant="outline" className="gap-1">

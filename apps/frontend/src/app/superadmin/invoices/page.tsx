@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -307,7 +307,7 @@ export default function InvoicesPage() {
           </div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground md:text-4xl">Facturas SaaS</h1>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            Control de cobranza para planes MiPOS: vencimientos, pagos, anulaciones y seguimiento por organización.
+            Control de cobranza para planes MITIENDA: vencimientos, pagos, anulaciones y seguimiento por organización.
           </p>
         </div>
         <Button

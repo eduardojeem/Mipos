@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState, type Dispatch, type FormEvent, type SetStateAction } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -57,7 +57,7 @@ const LOGIN_TYPE_CONTENT: Record<LoginType, {
     title: 'Acceso Admin SaaS',
     description: 'Gestiona empresas, planes, soporte y configuracion global.',
     badge: 'Control global',
-    emailPlaceholder: 'admin@mipos.com',
+    emailPlaceholder: 'admin@MITIENDA.com',
     passwordLabel: 'Contrasena segura',
     submitLabel: 'Entrar al SaaS',
   },

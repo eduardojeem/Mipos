@@ -1,4 +1,4 @@
-import { randomBytes, createHash } from 'crypto';
+﻿import { randomBytes, createHash } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { assertSuperAdmin } from '@/app/api/_utils/auth';
 import { createAdminClient } from '@/lib/supabase/server';
@@ -44,7 +44,7 @@ function generateCode() {
     token += randomBytes(9).toString('base64url').toUpperCase().replace(/[^A-Z0-9]/g, '');
   }
   token = token.slice(0, 12);
-  return `MIPOS-${token.slice(0, 4)}-${token.slice(4, 8)}-${token.slice(8, 12)}`;
+  return `MITIENDA-${token.slice(0, 4)}-${token.slice(4, 8)}-${token.slice(8, 12)}`;
 }
 
 function formatCode(row: PromotionCodeRow, plansById: Map<string, PlanRow>) {

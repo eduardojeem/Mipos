@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -42,7 +42,7 @@ export function EmptyState({ type, onCreateClick, onClearFilters }: EmptyStatePr
               variant="outline"
               size="lg"
               className="gap-2"
-              onClick={() => window.open('https://docs.mipos.com/promotions', '_blank')}
+              onClick={() => window.open('https://docs.MITIENDA.com/promotions', '_blank')}
             >
               <Tag className="h-4 w-4" />
               Ver guía

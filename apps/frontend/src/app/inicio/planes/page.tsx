@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -535,7 +535,7 @@ export default function PlanesPage() {
                   </p>
                 </div>
                 <a
-                  href="mailto:contacto@mipos.app?subject=Consulta%20Enterprise"
+                  href="mailto:contacto@MITIENDA.app?subject=Consulta%20Enterprise"
                   className="shrink-0 rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-center text-xs font-bold text-slate-200 hover:bg-white/10 hover:text-white"
                 >
                   Consultar Enterprise

@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useMemo, useState } from 'react'
 import {
@@ -314,7 +314,7 @@ export function BookingWizard({
               {/* Barcode estético */}
               <div className="flex flex-col items-center justify-center pt-2 opacity-35 dark:opacity-20">
                 <div className="h-8 w-48 bg-[repeating-linear-gradient(90deg,transparent,transparent_2px,#000_2px,#000_4px,transparent_4px,transparent_6px,#000_6px,#000_10px)] dark:bg-[repeating-linear-gradient(90deg,transparent,transparent_2px,#fff_2px,#fff_4px,transparent_4px,transparent_6px,#fff_6px,#fff_10px)]" />
-                <span className="mt-1 text-[9px] tracking-[0.25em]">MIPOS-BOOKING-{organizationId.slice(0,6).toUpperCase()}</span>
+                <span className="mt-1 text-[9px] tracking-[0.25em]">MITIENDA-BOOKING-{organizationId.slice(0,6).toUpperCase()}</span>
               </div>
             </div>
           </div>

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { useDebounce } from "use-debounce";
@@ -709,7 +709,7 @@ export default function OptimizedPOSLayout() {
               <span className="font-black text-xs">POS</span>
             </div>
             <h1 className="text-lg font-black tracking-tighter uppercase italic truncate max-w-[200px]">
-              {config?.businessName || 'MiPOS'}
+              {config?.businessName || 'MITIENDA'}
             </h1>
           </div>
 

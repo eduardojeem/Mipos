@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
@@ -342,7 +342,7 @@ export default function SuperAdminClientLayout({ children }: SuperAdminLayoutPro
             {!collapsed && (
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold leading-tight text-foreground">
-                  MiPOS
+                  MITIENDA
                 </p>
                 <p className="truncate text-[11px] text-muted-foreground">
                   Super Admin
