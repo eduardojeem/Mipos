@@ -62,12 +62,14 @@
 
 ---
 
-### 🔴 NUEVO #4: Ofertas Mostrando Productos No Públicos
+### ✅ ARREGLADO #4: Ofertas Mostrando Productos No Públicos
 
 **Severity:** 🔴 CRÍTICA  
 **Ubicación:** `lib/public-site/offers-data.ts:340-353`
 
-**Problema:**
+**Status:** ✅ **ARREGLADO** (Commit: cd8cc2c)
+
+**Problem (was):**
 ```typescript
 const runProductsQuery = async (selectClause: string, opts?: { skipDeleted?: boolean }) => {
   let q = supabase
@@ -86,12 +88,12 @@ const runProductsQuery = async (selectClause: string, opts?: { skipDeleted?: boo
 };
 ```
 
-**Impact:**
+**Impact (was):**
 - Ofertas de productos privados visibles en `/home/ofertas`
 - Data leak potencial
 - User experience: Productos no disponibles en carrito
 
-**Fix Recomendado:**
+**Fix Applied:**
 ```typescript
 const runProductsQuery = async (selectClause: string, opts?: { skipDeleted?: boolean }) => {
   let q = supabase
@@ -99,7 +101,7 @@ const runProductsQuery = async (selectClause: string, opts?: { skipDeleted?: boo
     .select(selectClause)
     .eq('organization_id', organizationId)
     .eq('is_active', true)
-    .eq('is_public', true)  // ← NUEVO
+    .eq('is_public', true)  // ← AGREGADO
     .in('id', productIds);
 
   if (!opts?.skipDeleted) {
@@ -112,12 +114,14 @@ const runProductsQuery = async (selectClause: string, opts?: { skipDeleted?: boo
 
 ---
 
-### 🟠 NUEVO #5: Conteos de Organizaciones Sin Filtro de Productos
+### ✅ ARREGLADO #5: Conteos de Organizaciones Sin Filtro de Productos
 
 **Severity:** 🟠 ALTO  
-**Ubicación:** `lib/public-site/global-organizations-data.ts:244-273`
+**Ubicación:** `lib/public-site/global-organizations-data.ts:562-594`
 
-**Problema:**
+**Status:** ✅ **ARREGLADO** (Commit: cd8cc2c)
+
+**Problem (was):**
 ```
 Las organizaciones se cuentan por número de productos activos/públicos.
 PERO:
@@ -136,15 +140,21 @@ Org "Farmacia 24h"
 PERO: Org sigue apareciendo en /home/empresas ✗ INCORRECTO
 ```
 
-**Fix Recomendado:**
+**Fix Applied:**
 ```typescript
-// Línea 373 en /home/empresas/page.tsx
-const visibleOrganizations = allOrganizations.filter(org => 
-  org.productCount > 0  // Solo orgs con productos válidos
-);
+// Line 562-566
+const settingsMap = new Map(settingsEntries);
+const allOrganizations = buildOrganizationCards(organizations, settingsMap, productStats, requestHost);
 
-// Luego usar visibleOrganizations en lugar de allOrganizations
+// Only include organizations with at least 1 valid product
+const organizationsWithProducts = allOrganizations.filter((org) => org.productCount > 0);
+// Luego usar organizationsWithProducts en lugar de allOrganizations
 ```
+
+**Impact:**
+- ✅ Solo orgs con productos válidos en /home/empresas
+- ✅ Conteos correctos en estadísticas
+- ✅ Better UX: No hay "empresas vacías"
 
 ---
 
@@ -229,40 +239,44 @@ export async function fetchPublicOffersSnapshot(
 | 1 | Conteos RPC incorrectos | 🔴 | marketplace_categories.sql | ✅ | 1h |
 | 2 | Productos desaparecen | 🔴 | global-catalog-data.ts | ✅ | 2h |
 | 3 | Categoría sin filtros | 🔴 | category-organizations-data.ts | ✅ | 1h |
-| 4 | Ofertas no filtran público | 🔴 | offers-data.ts | ⏳ | 1h |
-| 5 | Orgs vacías visibles | 🟠 | global-organizations-data.ts | ⏳ | 2h |
+| 4 | Ofertas no filtran público | 🔴 | offers-data.ts | ✅ | 1h |
+| 5 | Orgs vacías visibles | 🟠 | global-organizations-data.ts | ✅ | 2h |
 | 6 | Búsqueda sin fuzzy | 🟠 | global-organizations-data.ts | ⏳ | 3h |
 | 7 | Stats incorrectos | 🟠 | empresas/page.tsx | ⏳ | 2h |
 | 8 | Sin caching ofertas | 🟡 | offers-data.ts | ⏳ | 1h |
 
 ---
 
-## 🚀 PLAN DE CORRECCIONES INMEDIATAS
+## 🚀 PLAN DE CORRECCIONES
 
-### Fase 1 (HOY - 2 horas)
-- [ ] Fix #4: Agregar `is_public` a offers-data.ts
-- [ ] Fix #5: Filtrar orgs con 0 productos
+### Fase 1 (COMPLETADA - 4 horas)
+- ✅ Fix #1: Conteos RPC incorrectos
+- ✅ Fix #2: Productos desapareciendo  
+- ✅ Fix #3: Categoría sin filtros
+- ✅ Fix #4: Ofertas sin is_public
+- ✅ Fix #5: Orgs vacías en directorio
 
-### Fase 2 (Mañana - 3 horas)
-- [ ] Fix #6: Implementar fuzzy search en orgs
-- [ ] Fix #7: Stats dinámicos con filtros
-- [ ] Fix #8: Agregar caching a ofertas
+### Fase 2 (Próxima - 3 horas)
+- ⏳ Fix #6: Implementar fuzzy search en orgs
+- ⏳ Fix #7: Stats dinámicos con filtros
+- ⏳ Fix #8: Agregar caching a ofertas
 
 ---
 
-## ✅ STATUS ACTUAL
+## ✅ STATUS FINAL
 
 ```
-Fixes Aplicados:     3 de 8 (37.5%)
-Bugs Críticos:       0 pendientes (3/3 arreglados)
-Bugs Altos:          3 pendientes
+Fixes Aplicados:     5 de 8 (62.5%) ✅
+Bugs Críticos:       0 pendientes (5/5 ARREGLADOS)
+Bugs Altos:          2 pendientes
 Bugs Medios:         1 pendiente
 
 SECTORES:
-✅ /home/catalogo          - SEGURO
-✅ /home/categorias        - SEGURO
-⚠️  /home/empresas         - TIENE ISSUES
-⚠️  Ofertas/Promotions    - TIENE ISSUES
+✅ /home/catalogo          - SEGURO + CORRECTO
+✅ /home/categorias        - SEGURO + CORRECTO
+✅ /home/categorias/[slug] - SEGURO + CORRECTO
+✅ /home/empresas         - SEGURO (orgs con productos)
+✅ Ofertas/Promotions    - SEGURO (solo public)
 ✅ Conteos RPC            - CORRECTO
 ```
 
