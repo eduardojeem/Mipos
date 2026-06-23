@@ -49,6 +49,7 @@ async function fetchTenantHomeSnapshotUncached(organizationId: string): Promise<
         .select('id', { count: 'exact', head: true })
         .eq('organization_id', organizationId)
         .eq('is_active', true)
+        .eq('is_public', true)
         .is('deleted_at', null),
       adminClient
         .from('categories')
@@ -85,6 +86,7 @@ async function fetchTenantHomeSnapshotUncached(organizationId: string): Promise<
         `)
         .eq('organization_id', organizationId)
         .eq('is_active', true)
+        .eq('is_public', true)
         .is('deleted_at', null)
         .order('updated_at', { ascending: false })
         .limit(8),
@@ -93,6 +95,7 @@ async function fetchTenantHomeSnapshotUncached(organizationId: string): Promise<
         .select('category_id')
         .eq('organization_id', organizationId)
         .eq('is_active', true)
+        .eq('is_public', true)
         .is('deleted_at', null),
     ]);
 
