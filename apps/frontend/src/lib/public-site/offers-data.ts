@@ -343,6 +343,7 @@ async function fetchOffersDataset(
       .select(selectClause)
       .eq('organization_id', organizationId)
       .eq('is_active', true)
+      .eq('is_public', true)
       .in('id', productIds);
 
     if (!opts?.skipDeleted) {
