@@ -37,8 +37,8 @@ WITH product_stats AS (
 ),
 top_category AS (
   SELECT
-    c.id,
-    c.name,
+    c.id::UUID as category_id,
+    c.name as category_name,
     COUNT(*) as product_count
   FROM public.products p
   LEFT JOIN public.categories c ON p.category_id = c.id
@@ -49,15 +49,15 @@ top_category AS (
   LIMIT 1
 )
 SELECT
-  ps.total,
-  ps.low_stock,
-  ps.out_of_stock,
-  ps.total_value,
-  ps.recently_added,
-  tc.id,
-  tc.name
+  ps.total::BIGINT,
+  ps.low_stock::BIGINT,
+  ps.out_of_stock::BIGINT,
+  ps.total_value::NUMERIC,
+  ps.recently_added::BIGINT,
+  COALESCE(tc.category_id, NULL::UUID) as top_category_id,
+  COALESCE(tc.category_name, 'N/A') as top_category_name
 FROM product_stats ps
-CROSS JOIN top_category tc;
+CROSS JOIN LATERAL (SELECT * FROM top_category LIMIT 1) tc;
 $$
 LANGUAGE sql
 STABLE
