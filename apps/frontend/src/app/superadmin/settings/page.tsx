@@ -34,6 +34,8 @@ import {
   CheckCircle2,
   XCircle,
   EyeOff,
+  Palette,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -46,6 +48,10 @@ import { toast } from '@/lib/toast';
 interface SystemSettings {
   system_name: string;
   system_email: string;
+  platform_logo: string;
+  platform_tagline: string;
+  platform_primary_color: string;
+  platform_support_email: string;
   maintenance_mode: boolean;
   allow_registrations: boolean;
   require_email_verification: boolean;
@@ -63,6 +69,10 @@ interface SystemSettings {
 const DEFAULT_SETTINGS: SystemSettings = {
   system_name: 'MITIENDA SaaS',
   system_email: 'admin@mitienda.com',
+  platform_logo: '',
+  platform_tagline: 'Sistema de gestión para tu negocio',
+  platform_primary_color: '#059669',
+  platform_support_email: 'soporte@mitienda.com',
   maintenance_mode: false,
   allow_registrations: true,
   require_email_verification: true,
@@ -419,8 +429,9 @@ export default function SettingsPage() {
 
         {/* ── Tabs ── */}
         <Tabs defaultValue="general" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5">
+          <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6">
             <TabsTrigger value="general" className="gap-1.5"><Settings className="h-3.5 w-3.5" /> General</TabsTrigger>
+            <TabsTrigger value="brand" className="gap-1.5"><Palette className="h-3.5 w-3.5" /> Marca</TabsTrigger>
             <TabsTrigger value="security" className="gap-1.5"><Lock className="h-3.5 w-3.5" /> Acceso</TabsTrigger>
             <TabsTrigger value="notifications" className="gap-1.5"><Bell className="h-3.5 w-3.5" /> Avisos</TabsTrigger>
             <TabsTrigger value="flags" className="gap-1.5"><Flag className="h-3.5 w-3.5" /> Features</TabsTrigger>
