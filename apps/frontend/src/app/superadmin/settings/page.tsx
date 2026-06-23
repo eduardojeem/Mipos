@@ -438,6 +438,138 @@ export default function SettingsPage() {
             <TabsTrigger value="system" className="gap-1.5"><ServerCog className="h-3.5 w-3.5" /> Sistema</TabsTrigger>
           </TabsList>
 
+          {/* ════════ MARCA / PLATAFORMA ════════ */}
+          <TabsContent value="brand" className="mt-4 space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Palette className="h-5 w-5 text-emerald-600" /> Identidad de la Plataforma
+                </CardTitle>
+                <CardDescription>Nombre, logo y colores de la marca que ven todos los usuarios del sistema.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Nombre y tagline */}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="platformName" className="text-xs">Nombre de la plataforma</Label>
+                    <Input
+                      id="platformName"
+                      value={settings.system_name}
+                      onChange={(e) => setSettings({ ...settings, system_name: e.target.value })}
+                      placeholder="MITIENDA"
+                    />
+                    <p className="text-[11px] text-muted-foreground">Aparece en el sidebar, emails y footer.</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="platformTagline" className="text-xs">Tagline / Eslogan</Label>
+                    <Input
+                      id="platformTagline"
+                      value={settings.platform_tagline}
+                      onChange={(e) => setSettings({ ...settings, platform_tagline: e.target.value })}
+                      placeholder="Sistema de gestión para tu negocio"
+                    />
+                    <p className="text-[11px] text-muted-foreground">Descripción corta usada en emails y meta tags.</p>
+                  </div>
+                </div>
+
+                {/* Logo */}
+                <div className="space-y-2">
+                  <Label className="text-xs">Logo de la plataforma</Label>
+                  <div className="flex items-center gap-4">
+                    {settings.platform_logo ? (
+                      <div className="flex h-14 w-14 items-center justify-center rounded-xl border bg-white p-2">
+                        <img src={settings.platform_logo} alt="Logo" className="max-h-10 max-w-full object-contain" />
+                      </div>
+                    ) : (
+                      <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-dashed bg-slate-50 dark:bg-slate-900">
+                        <ImageIcon className="h-6 w-6 text-slate-400" />
+                      </div>
+                    )}
+                    <div className="flex-1 space-y-1.5">
+                      <Input
+                        value={settings.platform_logo}
+                        onChange={(e) => setSettings({ ...settings, platform_logo: e.target.value })}
+                        placeholder="https://tu-dominio.com/logo.png"
+                        className="font-mono text-sm"
+                      />
+                      <p className="text-[11px] text-muted-foreground">URL pública del logo. Subí la imagen desde /admin/business-config o pega un link directo.</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Color primario */}
+                <div className="space-y-2">
+                  <Label className="text-xs">Color primario de la plataforma</Label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={settings.platform_primary_color}
+                      onChange={(e) => setSettings({ ...settings, platform_primary_color: e.target.value })}
+                      className="h-10 w-10 cursor-pointer rounded-lg border p-0.5"
+                    />
+                    <Input
+                      value={settings.platform_primary_color}
+                      onChange={(e) => setSettings({ ...settings, platform_primary_color: e.target.value })}
+                      placeholder="#059669"
+                      className="max-w-[140px] font-mono text-sm"
+                    />
+                    <div
+                      className="flex h-10 flex-1 items-center justify-center rounded-lg text-xs font-medium text-white"
+                      style={{ backgroundColor: settings.platform_primary_color }}
+                    >
+                      Vista previa del color
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">Se usa en botones CTA, headers de emails y acentos de la UI pública.</p>
+                </div>
+
+                {/* Emails */}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="platformEmail" className="text-xs">Email del sistema (sender)</Label>
+                    <Input
+                      id="platformEmail"
+                      type="email"
+                      value={settings.system_email}
+                      onChange={(e) => setSettings({ ...settings, system_email: e.target.value })}
+                      placeholder="admin@mitienda.com"
+                    />
+                    <p className="text-[11px] text-muted-foreground">Aparece como remitente en emails transaccionales.</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="supportEmail" className="text-xs">Email de soporte</Label>
+                    <Input
+                      id="supportEmail"
+                      type="email"
+                      value={settings.platform_support_email}
+                      onChange={(e) => setSettings({ ...settings, platform_support_email: e.target.value })}
+                      placeholder="soporte@mitienda.com"
+                    />
+                    <p className="text-[11px] text-muted-foreground">Donde los usuarios escriben si tienen problemas.</p>
+                  </div>
+                </div>
+
+                {/* Preview */}
+                <div className="rounded-xl border bg-slate-50 p-4 dark:bg-slate-900">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-3">Vista previa — Header de email</p>
+                  <div className="overflow-hidden rounded-lg border">
+                    <div className="p-4 text-center" style={{ backgroundColor: settings.platform_primary_color }}>
+                      {settings.platform_logo ? (
+                        <img src={settings.platform_logo} alt="Logo" className="mx-auto max-h-8 object-contain" />
+                      ) : (
+                        <span className="text-lg font-bold text-white">{settings.system_name}</span>
+                      )}
+                    </div>
+                    <div className="bg-white p-4 text-center dark:bg-slate-950">
+                      <p className="text-sm font-medium">{settings.system_name}</p>
+                      <p className="text-xs text-muted-foreground">{settings.platform_tagline}</p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           {/* ════════ GENERAL ════════ */}
           <TabsContent value="general" className="mt-4 space-y-4">
             <Card>
