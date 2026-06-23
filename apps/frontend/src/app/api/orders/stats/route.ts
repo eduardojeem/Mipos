@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient, createClient } from '@/lib/supabase/server';
 import { getValidatedOrganizationId } from '@/lib/organization';
+import { rateLimit, RATE_LIMITS } from '@/lib/middleware/rate-limit';
 
 function startOfTodayIso(): string {
   const now = new Date();
@@ -8,7 +9,12 @@ function startOfTodayIso(): string {
   return now.toISOString();
 }
 
+const rateLimiter = rateLimit(RATE_LIMITS.READ);
+
 export async function GET(request: NextRequest) {
+  const rateLimitResponse = rateLimiter(request);
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     const authClient = await createClient();
     const {

@@ -6,6 +6,7 @@ import {
   resolveCustomerOrganizationId,
   transformCustomerRecord,
 } from '@/app/api/customers/_lib';
+import { rateLimit, RATE_LIMITS } from '@/lib/middleware/rate-limit';
 
 /**
  * Customer List API - Phase 5 Optimization
@@ -14,7 +15,12 @@ import {
  * Optimized for performance with minimal data transfer and efficient queries.
  */
 
+const rateLimiter = rateLimit(RATE_LIMITS.READ);
+
 export async function GET(request: NextRequest) {
+  const rateLimitResponse = rateLimiter(request);
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     const auth = await validateRole(request, {
       roles: ['OWNER', 'ADMIN', 'SUPER_ADMIN', 'MANAGER', 'EMPLOYEE', 'CASHIER']
