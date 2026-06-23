@@ -50,9 +50,11 @@ Se creó `get_product_statistics(org_id)` para que `/api/products/summary`
 agregue en Postgres en lugar de traer todas las filas y sumar en JS.
 
 - Migración: `supabase/migrations/20260622_optimize_product_stats_rpc.sql`
-- **Estado:** la primera versión falló por desajuste de tipos (UUID vs text);
-  se corrigió con casts explícitos. **Pendiente de validar** ejecutándola en
-  Supabase con un `org_id` real.
+- **Estado:** ✅ validada en Supabase dev (2026-06-22). La primera versión
+  falló por desajuste de tipos (UUID vs text); se corrigió con casts
+  explícitos. Verificada contra una org con 19 productos: los conteos del RPC
+  (total/stock bajo/sin stock/valor) coinciden exactamente con un conteo
+  manual.
 - El endpoint usa el RPC si existe y mantiene un fallback en JS si no.
 
 También se crearon (pero **no validadas en Supabase**):
