@@ -76,12 +76,12 @@ export async function exportProductsToPdf(
   // Título
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(24);
-  doc.setFont(undefined, 'bold');
+  doc.setFont('helvetica', 'bold');
   doc.text(title, margin, 15);
 
   // Fecha
   doc.setFontSize(10);
-  doc.setFont(undefined, 'normal');
+  doc.setFont('helvetica', 'normal');
   doc.setTextColor(200, 200, 200);
   const today = new Date().toLocaleDateString('es-PY', {
     year: 'numeric',
@@ -96,12 +96,12 @@ export async function exportProductsToPdf(
   if (includeStats && stats) {
     doc.setTextColor(30, 41, 59);
     doc.setFontSize(11);
-    doc.setFont(undefined, 'bold');
+    doc.setFont('helvetica', 'bold');
     doc.text('Resumen', margin, currentY);
     currentY += 8;
 
     doc.setFontSize(9);
-    doc.setFont(undefined, 'normal');
+    doc.setFont('helvetica', 'normal');
     const statsWidth = (pageWidth - 2 * margin) / 4;
 
     // Stat boxes
@@ -119,9 +119,9 @@ export async function exportProductsToPdf(
       doc.setTextColor(100, 116, 139);
       doc.text(stat.label, x + 3, currentY + 5);
       doc.setTextColor(30, 41, 59);
-      doc.setFont(undefined, 'bold');
+      doc.setFont('helvetica', 'bold');
       doc.text(String(stat.value), x + 3, currentY + 11);
-      doc.setFont(undefined, 'normal');
+      doc.setFont('helvetica', 'normal');
     });
 
     currentY += 22;
@@ -129,7 +129,7 @@ export async function exportProductsToPdf(
 
   // Construir columnas dinámicamente
   const tableHeaders: string[] = [];
-  const columnWidths: Record<string, number> = {};
+  const columnWidths: Record<string, { cellWidth?: number; halign?: 'left' | 'center' | 'right' }> = {};
   let widthIndex = 0;
 
   if (columns.sku) {

@@ -489,10 +489,17 @@ export default function BarbershopHomeClient({ initialData, organizationId, vert
                         </a>
                       ) : null}
                       {sections.showLocation && config.address?.city ? (
-                        <span className="flex items-center gap-2">
-                          <MapPin className="h-4 w-4" style={{ color: primary }} />
-                          {[config.address.street, config.address.city].filter(Boolean).join(', ')}
-                        </span>
+                        config.address?.mapUrl ? (
+                          <a href={config.address.mapUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 hover:text-slate-900 dark:hover:text-slate-200">
+                            <MapPin className="h-4 w-4" style={{ color: primary }} />
+                            {[config.address.street, config.address.city].filter(Boolean).join(', ')}
+                          </a>
+                        ) : (
+                          <span className="flex items-center gap-2">
+                            <MapPin className="h-4 w-4" style={{ color: primary }} />
+                            {[config.address.street, config.address.city].filter(Boolean).join(', ')}
+                          </span>
+                        )
                       ) : null}
                     </div>
                     {whatsappHref ? (
@@ -517,6 +524,19 @@ export default function BarbershopHomeClient({ initialData, organizationId, vert
                     </div>
                   ) : null}
                 </div>
+                {sections.showLocation && config.address?.mapEmbedEnabled && config.address?.mapEmbedUrl ? (
+                  <div className="mt-6 w-full overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
+                    <iframe
+                      src={config.address.mapEmbedUrl}
+                      width="100%"
+                      height="300"
+                      style={{ border: 0 }}
+                      allowFullScreen={false}
+                      loading="lazy"
+                      referrerPolicy="no-referrer-when-downgrade"
+                    />
+                  </div>
+                ) : null}
               </CardContent>
             </Card>
           </section>

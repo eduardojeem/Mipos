@@ -48,6 +48,10 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = await createAdminClient();
+    const { searchParams } = new URL(request.url);
+    const isActiveParam = searchParams.get('isActive');
+    const normalizedIsActive =
+      isActiveParam === 'true' ? true : isActiveParam === 'false' ? false : null;
 
     // Use optimized RPC to avoid loading all products
     // This returns aggregated statistics from the database

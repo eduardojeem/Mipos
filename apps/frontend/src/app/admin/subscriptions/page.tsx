@@ -592,7 +592,7 @@ export default function AdminSubscriptionsPage() {
                           <div className={cn("mt-0.5 rounded-full p-1", isPremium ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
                             <Check className="h-3 w-3" strokeWidth={3} />
                           </div>
-                          <span className="text-sm font-medium leading-tight">{feature}</span>
+                          <span className="text-sm font-medium leading-tight">{getCanonicalFeatureLabel(feature)}</span>
                         </li>
                       ))}
                     </ul>
@@ -626,6 +626,93 @@ export default function AdminSubscriptionsPage() {
               </Card>
             )
           })}
+        </div>
+      </section>
+
+      {/* Feature Comparison Table */}
+      <section className="space-y-6 pt-10 mt-10 border-t border-border/40">
+        <div className="text-center max-w-2xl mx-auto mb-10">
+          <h3 className="text-3xl font-extrabold tracking-tight">Comparativa de Planes</h3>
+          <p className="text-muted-foreground mt-2">
+            Descubre todas las características incluidas en cada uno de nuestros planes.
+          </p>
+        </div>
+        
+        <div className="overflow-x-auto pb-4">
+          <Table className="w-full min-w-[800px] border-collapse bg-card rounded-2xl overflow-hidden shadow-sm border border-border/50">
+            <TableHeader className="bg-muted/30">
+              <TableRow>
+                <TableHead className="w-[30%] py-6 pl-6 text-base font-bold text-foreground">Característica</TableHead>
+                {sortedPlans.map(plan => (
+                  <TableHead key={plan.id} className="py-6 px-4 text-center">
+                    <div className="font-bold text-base text-foreground">{formatPlanName(plan.slug, plan.name)}</div>
+                    <div className="text-xs text-muted-foreground font-normal mt-1">{plan.currency === 'USD' ? '$' : plan.currency}{billingCycle === 'yearly' ? plan.priceYearly : plan.priceMonthly}/mes</div>
+                  </TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {/* Límite de usuarios etc */}
+              <TableRow className="bg-muted/10 border-b-border/50">
+                <TableCell colSpan={sortedPlans.length + 1} className="py-3 pl-6 font-bold text-sm text-foreground">
+                  Límites Principales
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell className="py-4 pl-6 font-medium text-muted-foreground">Usuarios Máximos</TableCell>
+                {sortedPlans.map(plan => (
+                  <TableCell key={plan.id} className="text-center font-semibold">
+                    {plan.limits.maxUsers === 999999 || !plan.limits.maxUsers ? 'Ilimitado' : plan.limits.maxUsers}
+                  </TableCell>
+                ))}
+              </TableRow>
+              <TableRow>
+                <TableCell className="py-4 pl-6 font-medium text-muted-foreground">Sucursales</TableCell>
+                {sortedPlans.map(plan => (
+                  <TableCell key={plan.id} className="text-center font-semibold">
+                    {plan.limits.maxLocations === 999999 || !plan.limits.maxLocations ? 'Ilimitado' : plan.limits.maxLocations}
+                  </TableCell>
+                ))}
+              </TableRow>
+              <TableRow>
+                <TableCell className="py-4 pl-6 font-medium text-muted-foreground">Productos</TableCell>
+                {sortedPlans.map(plan => (
+                  <TableCell key={plan.id} className="text-center font-semibold">
+                    {plan.limits.maxProducts === 999999 || !plan.limits.maxProducts ? 'Ilimitado' : plan.limits.maxProducts}
+                  </TableCell>
+                ))}
+              </TableRow>
+              <TableRow>
+                <TableCell className="py-4 pl-6 font-medium text-muted-foreground">Transacciones / mes</TableCell>
+                {sortedPlans.map(plan => (
+                  <TableCell key={plan.id} className="text-center font-semibold">
+                    {plan.limits.maxTransactionsPerMonth === 999999 || !plan.limits.maxTransactionsPerMonth ? 'Ilimitadas' : plan.limits.maxTransactionsPerMonth}
+                  </TableCell>
+                ))}
+              </TableRow>
+              
+              {/* All unique features */}
+              <TableRow className="bg-muted/10 border-b-border/50">
+                <TableCell colSpan={sortedPlans.length + 1} className="py-3 pl-6 font-bold text-sm text-foreground">
+                  Funcionalidades Incluidas
+                </TableCell>
+              </TableRow>
+              {Array.from(new Set(sortedPlans.flatMap(p => p.features || []))).map(feature => (
+                <TableRow key={feature} className="hover:bg-muted/5">
+                  <TableCell className="py-4 pl-6 font-medium text-muted-foreground">{getCanonicalFeatureLabel(feature)}</TableCell>
+                  {sortedPlans.map(plan => (
+                    <TableCell key={`${plan.id}-${feature}`} className="text-center">
+                      {(plan.features || []).includes(feature) ? (
+                        <Check className="h-5 w-5 mx-auto text-emerald-500" strokeWidth={3} />
+                      ) : (
+                        <span className="text-muted/40 font-bold">-</span>
+                      )}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       </section>
     </div>
