@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/server';
 import { requireOrganization } from '@/lib/organization';
 import { requirePOSPermissions } from '@/app/api/_utils/role-validation';
 import { assertCsrf } from '@/app/api/_utils/csrf';
+import { rateLimit } from '@/lib/middleware/rate-limit';
 
 // La columna deleted_at puede no existir todavía (42703)
 function isMissingDeletedAt(error: { code?: string; message?: string } | null) {
@@ -10,7 +11,19 @@ function isMissingDeletedAt(error: { code?: string; message?: string } | null) {
   return error?.code === '42703' || (message.includes('deleted_at') && message.includes('column'));
 }
 
+const rateLimiter = rateLimit({
+  maxRequests: 50,
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  message: 'Too many bulk delete requests. Please wait before making more requests.',
+});
+
 export async function POST(request: NextRequest) {
+  // Apply rate limiting
+  const rateLimitResponse = rateLimiter(request);
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
   try {
     const csrf = assertCsrf(request);
     if (!csrf.ok) return csrf.response;
@@ -61,28 +74,37 @@ export async function POST(request: NextRequest) {
         .select('id');
       if (deactErr) throw deactErr;
       const count = deactivated?.length || 0;
-      return NextResponse.json({
+      const response = NextResponse.json({
         success: true,
         results: { deleted: 0, deactivated: count, errors: [] },
         message: `${count} producto(s) desactivado(s). Migra deleted_at para habilitar la papelera.`,
       });
+      response.headers.set('Access-Control-Allow-Origin', process.env.CORS_ORIGIN || 'http://localhost:3000');
+      return response;
     }
     if (error) throw error;
 
     const count = trashed?.length || 0;
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       results: { deleted: 0, deactivated: 0, trashed: count, errors: [] },
       message: `${count} producto(s) movido(s) a la papelera.`,
     });
+    response.headers.set('Access-Control-Allow-Origin', process.env.CORS_ORIGIN || 'http://localhost:3000');
+    return response;
   } catch (error) {
-    console.error('Bulk delete products error:', error);
-    return NextResponse.json(
+    console.error('Bulk delete products error:', {
+      errorCode: (error as any)?.code,
+      timestamp: new Date().toISOString(),
+    });
+    const errorResponse = NextResponse.json(
       {
         error: 'Failed to delete products',
         details: error instanceof Error ? error.message : 'Unknown error',
       },
       { status: 500 }
     );
+    errorResponse.headers.set('Access-Control-Allow-Origin', process.env.CORS_ORIGIN || 'http://localhost:3000');
+    return errorResponse;
   }
 }
