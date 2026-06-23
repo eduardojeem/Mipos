@@ -19,8 +19,6 @@ import { redisRateLimiter } from './rate-limiter-redis';
 // creates the org and the user lands on the upgrade screen.
 const FREE_REGISTRATION_PLANS = new Set(['free']);
 
-const FREE_REGISTRATION_PLANS = new Set(['free']);
-
 function getClientIp(headers: Headers): string {
   const forwarded = headers.get('x-forwarded-for');
   if (forwarded) {
