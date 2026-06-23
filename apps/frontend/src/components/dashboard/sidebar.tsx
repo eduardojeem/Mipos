@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useMemo, useCallback } from 'react';
 import Link from 'next/link';
@@ -78,23 +78,11 @@ export const navigation: NavItem[] = [
     borderColor: 'border-blue-200 dark:border-blue-800'
   },
   {
-    name: 'Agenda',
-    href: '/dashboard/agenda',
-    icon: CalendarDays,
-    roles: ['ADMIN', 'CASHIER', 'SUPER_ADMIN', 'OWNER'],
-    category: 'barbershop',
-    description: 'Turnos del día: reservar, confirmar y cobrar',
-    verticals: ['BARBERSHOP'],
-    color: 'text-fuchsia-600 dark:text-fuchsia-400',
-    bgColor: 'bg-fuchsia-50 dark:bg-fuchsia-900/20',
-    borderColor: 'border-fuchsia-200 dark:border-fuchsia-800'
-  },
-  {
     name: 'Punto de Venta',
     href: '/dashboard/pos',
     icon: ShoppingCart,
     roles: ['ADMIN', 'CASHIER', 'SUPER_ADMIN', 'OWNER'],
-    category: 'sales',
+    category: 'main',
     description: 'Procesar ventas y transacciones',
     color: 'text-emerald-600 dark:text-emerald-400',
     bgColor: 'bg-emerald-50 dark:bg-emerald-900/20',
@@ -102,11 +90,23 @@ export const navigation: NavItem[] = [
     badge: 'Activo'
   },
   {
+    name: 'Agenda',
+    href: '/dashboard/agenda',
+    icon: CalendarDays,
+    roles: ['ADMIN', 'CASHIER', 'SUPER_ADMIN', 'OWNER'],
+    category: 'main',
+    description: 'Turnos del día: reservar, confirmar y cobrar',
+    verticals: ['BARBERSHOP'],
+    color: 'text-fuchsia-600 dark:text-fuchsia-400',
+    bgColor: 'bg-fuchsia-50 dark:bg-fuchsia-900/20',
+    borderColor: 'border-fuchsia-200 dark:border-fuchsia-800'
+  },
+  {
     name: 'Caja',
     href: '/dashboard/cash',
     icon: DollarSign,
     roles: ['ADMIN', 'CASHIER', 'SUPER_ADMIN', 'OWNER'],
-    category: 'sales',
+    category: 'operations',
     description: 'Estado, movimientos y arqueos de caja',
     color: 'text-emerald-600 dark:text-emerald-400',
     bgColor: 'bg-emerald-50 dark:bg-emerald-900/20',
@@ -117,19 +117,8 @@ export const navigation: NavItem[] = [
     href: '/dashboard/sales',
     icon: FileText,
     roles: ['ADMIN', 'CASHIER', 'SUPER_ADMIN', 'OWNER'],
-    category: 'sales',
+    category: 'operations',
     description: 'Ver y gestionar ventas realizadas',
-    color: 'text-emerald-600 dark:text-emerald-400',
-    bgColor: 'bg-emerald-50 dark:bg-emerald-900/20',
-    borderColor: 'border-emerald-200 dark:border-emerald-800'
-  },
-  {
-    name: 'Promociones',
-    href: '/dashboard/promotions',
-    icon: Percent,
-    roles: ['ADMIN', 'CASHIER', 'SUPER_ADMIN', 'OWNER'],
-    category: 'sales',
-    description: 'Administra ofertas y descuentos',
     color: 'text-emerald-600 dark:text-emerald-400',
     bgColor: 'bg-emerald-50 dark:bg-emerald-900/20',
     borderColor: 'border-emerald-200 dark:border-emerald-800'
@@ -139,42 +128,20 @@ export const navigation: NavItem[] = [
     href: '/dashboard/orders',
     icon: ShoppingBag,
     roles: ['ADMIN', 'CASHIER', 'SUPER_ADMIN', 'OWNER'],
-    category: 'sales',
+    category: 'operations',
     description: 'Gestión de pedidos online',
     color: 'text-emerald-600 dark:text-emerald-400',
     bgColor: 'bg-emerald-50 dark:bg-emerald-900/20',
     borderColor: 'border-emerald-200 dark:border-emerald-800'
   },
   {
-    name: 'Clientes',
-    href: '/dashboard/customers',
-    icon: Users,
-    roles: ['ADMIN', 'CASHIER', 'SUPER_ADMIN', 'OWNER'],
-    category: 'management',
-    description: 'Gestión de base de clientes',
-    color: 'text-amber-600 dark:text-amber-400',
-    bgColor: 'bg-amber-50 dark:bg-amber-900/20',
-    borderColor: 'border-amber-200 dark:border-amber-800'
-  },
-  {
     name: 'Devoluciones',
     href: '/dashboard/returns',
     icon: RotateCcw,
     roles: ['ADMIN', 'CASHIER', 'SUPER_ADMIN', 'OWNER'],
-    category: 'management',
+    category: 'operations',
     verticals: ['RETAIL'],
     description: 'Gestiona devoluciones y reembolsos',
-    color: 'text-amber-600 dark:text-amber-400',
-    bgColor: 'bg-amber-50 dark:bg-amber-900/20',
-    borderColor: 'border-amber-200 dark:border-amber-800'
-  },
-  {
-    name: 'Lealtad',
-    href: '/dashboard/loyalty',
-    icon: Star,
-    roles: ['ADMIN', 'CASHIER', 'SUPER_ADMIN', 'OWNER'],
-    category: 'management',
-    description: 'Programas de fidelización',
     color: 'text-amber-600 dark:text-amber-400',
     bgColor: 'bg-amber-50 dark:bg-amber-900/20',
     borderColor: 'border-amber-200 dark:border-amber-800'
@@ -214,6 +181,39 @@ export const navigation: NavItem[] = [
     borderColor: 'border-violet-200 dark:border-violet-800'
   },
   {
+    name: 'Clientes',
+    href: '/dashboard/customers',
+    icon: Users,
+    roles: ['ADMIN', 'CASHIER', 'SUPER_ADMIN', 'OWNER'],
+    category: 'marketing',
+    description: 'Gestión de base de clientes',
+    color: 'text-amber-600 dark:text-amber-400',
+    bgColor: 'bg-amber-50 dark:bg-amber-900/20',
+    borderColor: 'border-amber-200 dark:border-amber-800'
+  },
+  {
+    name: 'Promociones',
+    href: '/dashboard/promotions',
+    icon: Percent,
+    roles: ['ADMIN', 'CASHIER', 'SUPER_ADMIN', 'OWNER'],
+    category: 'marketing',
+    description: 'Administra ofertas y descuentos',
+    color: 'text-emerald-600 dark:text-emerald-400',
+    bgColor: 'bg-emerald-50 dark:bg-emerald-900/20',
+    borderColor: 'border-emerald-200 dark:border-emerald-800'
+  },
+  {
+    name: 'Lealtad',
+    href: '/dashboard/loyalty',
+    icon: Star,
+    roles: ['ADMIN', 'CASHIER', 'SUPER_ADMIN', 'OWNER'],
+    category: 'marketing',
+    description: 'Programas de fidelización',
+    color: 'text-amber-600 dark:text-amber-400',
+    bgColor: 'bg-amber-50 dark:bg-amber-900/20',
+    borderColor: 'border-amber-200 dark:border-amber-800'
+  },
+  {
     name: 'Reportes',
     href: '/dashboard/reports',
     icon: BarChart3,
@@ -231,9 +231,9 @@ export const navigation: NavItem[] = [
     roles: ['ADMIN'],
     category: 'admin',
     description: 'Panel de administración del sistema',
-    color: 'text-red-600 dark:text-red-400',
-    bgColor: 'bg-red-50 dark:bg-red-900/20',
-    borderColor: 'border-red-200 dark:border-red-800'
+    color: 'text-slate-600 dark:text-slate-400',
+    bgColor: 'bg-slate-50 dark:bg-slate-900/20',
+    borderColor: 'border-slate-200 dark:border-slate-800'
   },
   {
     name: 'Panel SaaS',
@@ -242,9 +242,9 @@ export const navigation: NavItem[] = [
     roles: ['SUPER_ADMIN'],
     category: 'admin',
     description: 'Gestión Global SaaS',
-    color: 'text-red-600 dark:text-red-400',
-    bgColor: 'bg-red-50 dark:bg-red-900/20',
-    borderColor: 'border-red-200 dark:border-red-800'
+    color: 'text-slate-600 dark:text-slate-400',
+    bgColor: 'bg-slate-50 dark:bg-slate-900/20',
+    borderColor: 'border-slate-200 dark:border-slate-800'
   },
 ];
 
@@ -255,26 +255,20 @@ const categories = {
     bgColor: 'bg-blue-50 dark:bg-blue-900/30',
     gradient: 'from-blue-500 to-cyan-500'
   },
-  barbershop: {
-    name: 'Barbería',
-    color: 'text-fuchsia-600 dark:text-fuchsia-400',
-    bgColor: 'bg-fuchsia-50 dark:bg-fuchsia-900/30',
-    gradient: 'from-fuchsia-500 to-pink-500'
-  },
-  sales: { 
-    name: 'Ventas', 
+  operations: { 
+    name: 'Operaciones', 
     color: 'text-emerald-600 dark:text-emerald-400', 
     bgColor: 'bg-emerald-50 dark:bg-emerald-900/30',
     gradient: 'from-emerald-500 to-teal-500'
   },
   inventory: { 
-    name: 'Inventario', 
+    name: 'Catálogo & Inventario', 
     color: 'text-violet-600 dark:text-violet-400', 
     bgColor: 'bg-violet-50 dark:bg-violet-900/30',
     gradient: 'from-violet-500 to-purple-500'
   },
-  management: { 
-    name: 'Gestión', 
+  marketing: { 
+    name: 'Marketing & Clientes', 
     color: 'text-amber-600 dark:text-amber-400', 
     bgColor: 'bg-amber-50 dark:bg-amber-900/30',
     gradient: 'from-amber-500 to-orange-500'
@@ -285,17 +279,11 @@ const categories = {
     bgColor: 'bg-indigo-50 dark:bg-indigo-900/30',
     gradient: 'from-indigo-500 to-blue-500'
   },
-  content: { 
-    name: 'Contenido', 
-    color: 'text-cyan-600 dark:text-cyan-400', 
-    bgColor: 'bg-cyan-50 dark:bg-cyan-900/30',
-    gradient: 'from-cyan-500 to-blue-500'
-  },
   admin: { 
-    name: 'Administración', 
-    color: 'text-red-600 dark:text-red-400', 
-    bgColor: 'bg-red-50 dark:bg-red-900/30',
-    gradient: 'from-red-500 to-rose-500'
+    name: 'Configuración', 
+    color: 'text-slate-600 dark:text-slate-400', 
+    bgColor: 'bg-slate-50 dark:bg-slate-900/30',
+    gradient: 'from-slate-500 to-gray-500'
   },
 };
 

@@ -38,6 +38,8 @@ import { useAuth } from '@/hooks/use-auth';
 import { usePermissionsContext } from '@/hooks/use-unified-permissions';
 import { LoginModal } from '@/components/auth/LoginModal';
 import { exportProductsToPdf } from '@/lib/pdf/products-export';
+import { exportProductsToCSV } from '@/lib/csv/products-export';
+import { ExportConfigDialog, type ExportConfig } from '@/components/products/ExportConfigDialog';
 import type { Product } from '@/types';
 import { cn } from '@/lib/utils';
 import { canCreateProducts, canDeleteProducts, canEditProducts } from '../utils/product-permissions';
@@ -178,6 +180,11 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
   const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
   const [pendingDelete, setPendingDelete] = useState<Set<string>>(new Set());
   const [loginModal, setLoginModal] = useState(false);
+  const [exportDialog, setExportDialog] = useState<{ open: boolean; items: Product[]; type: 'pdf' | 'csv' }>({
+    open: false,
+    items: [],
+    type: 'pdf',
+  });
   const [deleteDialog, setDeleteDialog] = useState<{
     open: boolean;
     product: Product | null;
@@ -253,52 +260,47 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
   }, [setStoredView]);
 
   // ── Export ────────────────────────────────────────────────────────────────
-  const exportCsv = useCallback(async (items: Product[], label: string) => {
-    if (!items.length) { toast.info('No hay productos para exportar'); return; }
-    setIsExporting(true);
-    try {
-      const rows = [
-        ['Nombre','SKU','Categoría','Precio venta','Precio costo','Stock','Estado','Actualizado']
-          .map(esc).join(','),
-        ...items.map((p) => [
-          p.name, p.sku,
-          typeof p.category === 'object' ? p.category?.name : '',
-          p.sale_price ?? 0, p.cost_price ?? 0, p.stock_quantity ?? 0,
-          p.is_active ? 'Activo' : 'Inactivo', p.updated_at ?? '',
-        ].map(esc).join(',')),
-      ];
-      downloadCsv(`productos-${label}-${new Date().toISOString().slice(0,10)}.csv`, rows);
-      toast.success(`${items.length} productos exportados`);
-    } catch { toast.error('No se pudo exportar'); }
-    finally { setIsExporting(false); }
+  const openExportDialog = useCallback((items: Product[], type: 'pdf' | 'csv') => {
+    if (!items.length) {
+      toast.info('No hay productos para exportar');
+      return;
+    }
+    setExportDialog({ open: true, items, type });
   }, []);
 
-  const exportPdf = useCallback(async (items: Product[], label: string) => {
-    if (!items.length) { toast.info('No hay productos para exportar'); return; }
+  const handleExportWithConfig = useCallback(async (config: ExportConfig) => {
     setIsExporting(true);
     try {
-      await exportProductsToPdf(items, {
-        title: `Catálogo de Productos - ${label}`,
-        includeStats: true,
-        stats: {
-          total: items.length,
-          totalValue: items.reduce((sum, p) => sum + ((p.cost_price || 0) * (p.stock_quantity || 0)), 0),
-          inStock: items.filter((p) => (p.stock_quantity || 0) > 0).length,
-          lowStock: items.filter((p) => {
-            const stock = p.stock_quantity || 0;
-            const minStock = p.min_stock || 5;
-            return stock > 0 && stock <= minStock;
-          }).length,
-        },
-      });
-      toast.success(`${items.length} productos exportados a PDF`);
+      const { items, type } = exportDialog;
+
+      if (type === 'pdf') {
+        await exportProductsToPdf(items, {
+          title: 'Catálogo de Productos',
+          includeStats: config.includeStats,
+          columns: config.columns,
+          stats: {
+            total: items.length,
+            totalValue: items.reduce((sum, p) => sum + ((p.cost_price || 0) * (p.stock_quantity || 0)), 0),
+            inStock: items.filter((p) => (p.stock_quantity || 0) > 0).length,
+            lowStock: items.filter((p) => {
+              const stock = p.stock_quantity || 0;
+              const minStock = p.min_stock || 5;
+              return stock > 0 && stock <= minStock;
+            }).length,
+          },
+        });
+        toast.success(`${items.length} productos exportados a PDF`);
+      } else {
+        exportProductsToCSV(items, { columns: config.columns });
+        toast.success(`${items.length} productos exportados a CSV`);
+      }
     } catch (err) {
-      console.error('[exportPdf] Error:', err);
+      console.error('[handleExportWithConfig] Error:', err);
       toast.error(getErrorMessage(err));
     } finally {
       setIsExporting(false);
     }
-  }, []);
+  }, [exportDialog]);
 
   // ── CRUD ──────────────────────────────────────────────────────────────────
   const executeDelete = useCallback(async (productId: string) => {
@@ -506,7 +508,7 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => exportCsv(products, 'vista')}
+                      onClick={() => openExportDialog(products, 'csv')}
                       disabled={isExporting || !products.length}
                       className="h-9 gap-1.5 rounded-xl text-xs"
                     >
@@ -516,7 +518,7 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => exportPdf(products, 'vista')}
+                      onClick={() => openExportDialog(products, 'pdf')}
                       disabled={isExporting || !products.length}
                       className="h-9 gap-1.5 rounded-xl text-xs"
                     >
@@ -765,7 +767,7 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
                   size="sm"
                   variant="outline"
                   disabled={isExporting}
-                  onClick={() => exportCsv(selectedVisible, 'seleccion')}
+                  onClick={() => openExportDialog(selectedVisible, 'csv')}
                   className="h-8 gap-1 rounded-lg"
                 >
                   <Download className="h-3.5 w-3.5" />
@@ -775,7 +777,7 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
                   size="sm"
                   variant="outline"
                   disabled={isExporting}
-                  onClick={() => exportPdf(selectedVisible, 'seleccion')}
+                  onClick={() => openExportDialog(selectedVisible, 'pdf')}
                   className="h-8 gap-1 rounded-lg"
                 >
                   <Download className="h-3.5 w-3.5" />
@@ -846,6 +848,15 @@ export function OptimizedProductsPage({ className = '' }: OptimizedProductsPageP
           executeBulkDelete();
         }}
         onCancel={() => setBulkDeleteDialog(false)}
+      />
+
+      {/* ═══ EXPORT CONFIG DIALOG ═══════════════════════════════════════════ */}
+      <ExportConfigDialog
+        open={exportDialog.open}
+        onOpenChange={(open) => setExportDialog((prev) => ({ ...prev, open }))}
+        onExport={handleExportWithConfig}
+        isLoading={isExporting}
+        selectedCount={exportDialog.items.length}
       />
     </>
   );

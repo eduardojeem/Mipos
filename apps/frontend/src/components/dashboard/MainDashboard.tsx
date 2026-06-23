@@ -567,6 +567,7 @@ export default function MainDashboard({
   if (isLoading && !stats) return <DashboardSkeleton />;
 
   return (
+  return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -635,11 +636,31 @@ export default function MainDashboard({
               {isFetching ? "Actualizando" : "Actualizar"}
             </span>
           </Button>
-          <Button size="sm" onClick={() => router.push("/dashboard/pos")}>
-            <ShoppingCart className="mr-2 h-4 w-4" />
-            Ir al POS
-          </Button>
         </div>
+      </div>
+
+      {/* Acciones Rápidas (Pills) */}
+      <div className="flex flex-wrap gap-3">
+        {visibleQuickActions.map((action) => {
+          const Icon = action.icon;
+          return (
+            <button
+              key={action.id}
+              type="button"
+              onClick={() => router.push(action.href)}
+              title={action.description}
+              className={cn(
+                "group flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-all hover:shadow-md",
+                "bg-white border-slate-200 hover:border-violet-300 dark:bg-slate-900/50 dark:border-slate-800 dark:hover:border-violet-700 text-slate-700 dark:text-slate-200 hover:text-violet-700 dark:hover:text-violet-400"
+              )}
+            >
+              <div className={cn("flex h-6 w-6 items-center justify-center rounded-full text-white shadow-sm transition-transform group-hover:scale-110", action.accent)}>
+                <Icon className="h-3.5 w-3.5" />
+              </div>
+              {action.title}
+            </button>
+          );
+        })}
       </div>
 
       {/* Alerts */}
@@ -675,29 +696,34 @@ export default function MainDashboard({
         </Alert>
       )}
 
-      {/* Stat cards — la "Ventas de hoy" ocupa columna doble en xl
-          para destacar como métrica primaria del día. */}
+      {/* Stat cards */}
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {vertical === 'BARBERSHOP' ? (
           <>
             <button
               type="button"
               onClick={() => router.push("/dashboard/sales")}
-              className="group relative overflow-hidden rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-5 text-left transition-colors hover:border-emerald-300 dark:border-emerald-900/40 dark:from-emerald-950/40 dark:to-slate-950 dark:hover:border-emerald-800"
+              className="group relative overflow-hidden rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-5 text-left transition-colors hover:border-emerald-300 dark:border-emerald-900/40 dark:from-emerald-950/40 dark:to-slate-950 dark:hover:border-emerald-800 md:col-span-2"
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-xs font-medium uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
                     Ventas de hoy
                   </p>
-                  <p className="mt-2 text-2xl font-bold text-slate-950 dark:text-white sm:text-3xl">
+                  <p className="mt-2 text-3xl font-bold text-slate-950 dark:text-white sm:text-4xl">
                     {formatCurrency(stats?.todaySales || 0)}
                   </p>
-                  <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                  <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
                     {stats?.todaySalesCount || 0} venta{stats?.todaySalesCount === 1 ? "" : "s"}
+                    {(stats?.averageTicket || 0) > 0 ? (
+                      <span className="text-slate-400 dark:text-slate-500">
+                        {" · ticket "}
+                        {formatCurrency(stats?.averageTicket || 0)}
+                      </span>
+                    ) : null}
                   </p>
                 </div>
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm shadow-emerald-600/30">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm shadow-emerald-600/30">
                   <DollarSign className="h-5 w-5" />
                 </div>
               </div>
@@ -710,14 +736,6 @@ export default function MainDashboard({
               icon={Users}
               accent="bg-violet-600"
               onClick={() => router.push("/dashboard/customers")}
-            />
-            <DashboardStatCard
-              title="Servicios"
-              value={`${services.length}`}
-              description="Servicios en catálogo"
-              icon={Scissors}
-              accent="bg-blue-600"
-              onClick={() => router.push("/admin/services")}
             />
             <DashboardStatCard
               title="Profesionales"
@@ -786,11 +804,14 @@ export default function MainDashboard({
         )}
       </section>
 
+      {/* Charts — Protagonista en el medio */}
+      <LazyChartsSection />
+
       {/* Main content: Recent sales + sidebar */}
       <section className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
         <div className="space-y-6">
           {vertical === 'BARBERSHOP' && (
-            <Card className="border-slate-200 bg-white shadow-none dark:border-slate-800 dark:bg-slate-950">
+            <Card className="border-slate-200 bg-white/50 backdrop-blur-sm shadow-sm hover:shadow-md transition-shadow dark:border-slate-800 dark:bg-slate-900/40">
               <CardHeader className="flex flex-row items-start justify-between gap-4">
                 <div>
                   <CardTitle className="text-base text-slate-950 dark:text-white">
@@ -831,7 +852,7 @@ export default function MainDashboard({
             </Card>
           )}
 
-          <Card className="border-slate-200 bg-white shadow-none dark:border-slate-800 dark:bg-slate-950">
+          <Card className="border-slate-200 bg-white/50 backdrop-blur-sm shadow-sm hover:shadow-md transition-shadow dark:border-slate-800 dark:bg-slate-900/40">
             <CardHeader className="flex flex-row items-start justify-between gap-4">
               <div>
                 <CardTitle className="text-base text-slate-950 dark:text-white">
@@ -868,11 +889,9 @@ export default function MainDashboard({
         </div>
 
         <div className="space-y-6">
-          {/* Order status — hide entirely if no web orders are active.
-              Avoids permanently empty card for tenants that don't use the
-              web orders module. */}
+          {/* Order status */}
           {hasActiveWebOrders ? (
-            <Card className="border-slate-200 bg-white shadow-none dark:border-slate-800 dark:bg-slate-950">
+            <Card className="border-slate-200 bg-white/50 backdrop-blur-sm shadow-sm hover:shadow-md transition-shadow dark:border-slate-800 dark:bg-slate-900/40">
               <CardHeader>
                 <CardTitle className="text-base text-slate-950 dark:text-white">
                   {webOrdersCardTitle}
@@ -890,7 +909,7 @@ export default function MainDashboard({
                   .map((item) => (
                     <div
                       key={item.label}
-                      className="rounded-lg border border-slate-200 p-3 dark:border-slate-800"
+                      className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-950"
                     >
                       <p className="text-xs text-slate-500 dark:text-slate-400">
                         {item.label}
@@ -903,50 +922,8 @@ export default function MainDashboard({
               </CardContent>
             </Card>
           ) : null}
-
-          {/* Quick actions — grid 2 cols, más compacto. Cada botón muestra
-              solo título + icon (sin description) para que la tarjeta entera
-              ocupe menos espacio vertical en mobile y desktop. */}
-          <Card className="border-slate-200 bg-white shadow-none dark:border-slate-800 dark:bg-slate-950">
-            <CardHeader>
-              <CardTitle className="text-base text-slate-950 dark:text-white">
-                Acciones rápidas
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-2">
-              {visibleQuickActions.map((action) => {
-                const Icon = action.icon;
-                return (
-                  <button
-                    key={action.id}
-                    type="button"
-                    onClick={() => router.push(action.href)}
-                    title={action.description}
-                    className="group flex flex-col items-start gap-2 rounded-lg border border-slate-200 p-3 text-left transition-colors hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:hover:border-slate-700 dark:hover:bg-slate-900"
-                  >
-                    <div
-                      className={cn(
-                        "flex h-8 w-8 items-center justify-center rounded-lg text-white",
-                        action.accent,
-                      )}
-                    >
-                      <Icon className="h-4 w-4" />
-                    </div>
-                    <p className="text-sm font-medium text-slate-950 dark:text-white">
-                      {action.title}
-                    </p>
-                  </button>
-                );
-              })}
-            </CardContent>
-          </Card>
         </div>
       </section>
-
-      {/* Charts — lazy-mounted via IntersectionObserver to avoid pulling
-          the recharts/d3 bundle (~150kb gz) on first paint when the user
-          may never scroll down. */}
-      <LazyChartsSection />
     </div>
   );
 }
