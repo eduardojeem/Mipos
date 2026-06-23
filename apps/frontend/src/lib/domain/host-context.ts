@@ -1,8 +1,8 @@
-﻿export const DOMAIN_CONTEXT_HEADER = 'x-MITIENDA-domain-context';
-export const TENANT_SOURCE_HEADER = 'x-MITIENDA-tenant-source';
-export const TENANT_KEY_HEADER = 'x-MITIENDA-tenant-key';
-export const ORIGINAL_HOST_HEADER = 'x-MITIENDA-request-host';
-export const PATH_TENANT_HEADER = 'x-MITIENDA-path-tenant';
+﻿export const DOMAIN_CONTEXT_HEADER = 'x-mitienda-domain-context';
+export const TENANT_SOURCE_HEADER = 'x-mitienda-tenant-source';
+export const TENANT_KEY_HEADER = 'x-mitienda-tenant-key';
+export const ORIGINAL_HOST_HEADER = 'x-mitienda-request-host';
+export const PATH_TENANT_HEADER = 'x-mitienda-path-tenant';
 
 export type DomainContextKind = 'root' | 'tenant' | 'tenant-unresolved';
 export type TenantSource = 'path' | 'subdomain' | 'custom_domain';

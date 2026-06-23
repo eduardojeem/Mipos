@@ -5,7 +5,7 @@
  * Prioridad:
  * 1. Base de datos (system_settings)
  * 2. Variable de entorno NEXT_PUBLIC_BASE_DOMAIN
- * 3. Valor por defecto: MITIENDAparaguay.vercel.app
+ * 3. Valor por defecto: mitienda.vercel.app
  */
 export async function getBaseDomain(): Promise<string> {
   try {
@@ -25,7 +25,7 @@ export async function getBaseDomain(): Promise<string> {
   }
 
   // Fallback a variable de entorno o valor por defecto
-  return process.env.NEXT_PUBLIC_BASE_DOMAIN || 'MITIENDAparaguay.vercel.app';
+  return process.env.NEXT_PUBLIC_BASE_DOMAIN || 'mitienda.vercel.app';
 }
 
 /**
@@ -33,7 +33,7 @@ export async function getBaseDomain(): Promise<string> {
  * Útil para middleware y contextos donde no se puede hacer async
  */
 export function getBaseDomainSync(): string {
-  return process.env.NEXT_PUBLIC_BASE_DOMAIN || 'MITIENDAparaguay.vercel.app';
+  return process.env.NEXT_PUBLIC_BASE_DOMAIN || 'mitienda.vercel.app';
 }
 
 /**

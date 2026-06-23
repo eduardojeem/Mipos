@@ -198,7 +198,7 @@ function getPrimaryDomain(org: Organization) {
       subdomain: org.subdomain,
       custom_domain: org.custom_domain,
     },
-    process.env.NEXT_PUBLIC_BASE_DOMAIN || 'MITIENDAparaguay.vercel.app'
+    process.env.NEXT_PUBLIC_BASE_DOMAIN || 'mitienda.vercel.app'
   );
 }
 

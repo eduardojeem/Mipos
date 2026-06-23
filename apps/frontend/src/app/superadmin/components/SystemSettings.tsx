@@ -65,7 +65,7 @@ export function SystemSettings({ onUpdate }: SystemSettingsProps) {
     if (!domainRegex.test(baseDomain)) {
       toast({
         title: 'Error',
-        description: 'El formato del dominio no es válido. Ejemplo: MITIENDAparaguay.vercel.app',
+        description: 'El formato del dominio no es válido. Ejemplo: mitienda.vercel.app',
         variant: 'destructive',
       });
       return;
@@ -136,8 +136,8 @@ export function SystemSettings({ onUpdate }: SystemSettingsProps) {
         <Info className="h-4 w-4 text-blue-600" />
         <AlertDescription className="text-sm text-blue-900 dark:text-blue-100">
           <strong>Importante:</strong> Este dominio base se usará para construir los subdominios de cada organización.
-          Por ejemplo, si configuras <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">MITIENDAparaguay.vercel.app</code>,
-          las organizaciones tendrán URLs como <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">tienda1.MITIENDAparaguay.vercel.app</code>
+          Por ejemplo, si configuras <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">mitienda.vercel.app</code>,
+          las organizaciones tendrán URLs como <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">tienda1.mitienda.vercel.app</code>
         </AlertDescription>
       </Alert>
 
@@ -162,7 +162,7 @@ export function SystemSettings({ onUpdate }: SystemSettingsProps) {
                 id="baseDomain"
                 value={baseDomain}
                 onChange={(e) => setBaseDomain(e.target.value.toLowerCase())}
-                placeholder="MITIENDAparaguay.vercel.app"
+                placeholder="mitienda.vercel.app"
                 className="pl-10 font-mono"
               />
               <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -254,7 +254,7 @@ export function SystemSettings({ onUpdate }: SystemSettingsProps) {
               Solo necesitas configurar el dominio base en tu proyecto.
             </p>
             <div className="flex items-center gap-2 text-xs bg-slate-100 dark:bg-slate-800 p-2 rounded">
-              <code>*.MITIENDAparaguay.vercel.app</code>
+              <code>*.mitienda.vercel.app</code>
               <Badge variant="secondary" className="text-xs">Auto-configurado</Badge>
             </div>
           </div>
@@ -281,7 +281,7 @@ export function SystemSettings({ onUpdate }: SystemSettingsProps) {
               Asegúrate de configurar estas variables en tu archivo .env:
             </p>
             <div className="space-y-1 text-xs bg-slate-100 dark:bg-slate-800 p-3 rounded font-mono">
-              <div>NEXT_PUBLIC_BASE_DOMAIN={baseDomain || 'MITIENDAparaguay.vercel.app'}</div>
+              <div>NEXT_PUBLIC_BASE_DOMAIN={baseDomain || 'mitienda.vercel.app'}</div>
             </div>
           </div>
 

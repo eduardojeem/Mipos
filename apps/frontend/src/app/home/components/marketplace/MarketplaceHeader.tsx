@@ -46,7 +46,7 @@ const navItems = [
   { name: 'Inicio', href: '/home' },
   { name: 'Catalogo', href: '/home/catalogo' },
   { name: 'Rubros', href: '/home/categorias' },
-  { name: 'Empresas', href: '/home/empresas' },
+  { name: 'Tiendas', href: '/home/empresas' },
 ];
 
 export function MarketplaceHeader({ searchQuery = '' }: MarketplaceHeaderProps) {

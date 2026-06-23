@@ -62,7 +62,7 @@ interface SystemSettings {
 
 const DEFAULT_SETTINGS: SystemSettings = {
   system_name: 'MITIENDA SaaS',
-  system_email: 'admin@MITIENDA.com',
+  system_email: 'admin@mitienda.com',
   maintenance_mode: false,
   allow_registrations: true,
   require_email_verification: true,

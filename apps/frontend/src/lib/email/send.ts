@@ -10,7 +10,7 @@ function getResend(): Resend | null {
   return _resend
 }
 
-const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'MITIENDA <noreply@MITIENDA.app>'
+const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'MITIENDA <noreply@mitienda.app>'
 
 export interface SendEmailOptions {
   to: string

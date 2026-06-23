@@ -13,9 +13,9 @@ export async function GET(request: NextRequest) {
     const { html } = buildInvitationEmail({
       inviteeName: 'Juan',
       organizationName: 'Mi Barbería',
-      inviterName: 'admin@MITIENDA.app',
+      inviterName: 'admin@mitienda.app',
       roleName: 'Cajero',
-      inviteUrl: 'https://app.MITIENDA.com/invite?token=demo-preview-token',
+      inviteUrl: 'https://app.mitienda.com/invite?token=demo-preview-token',
       expiresInDays: 7,
     })
     return NextResponse.json({ html })
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     const { html } = buildWelcomeEmail({
       userName: 'Juan',
       organizationName: 'Mi Barbería',
-      loginUrl: 'https://app.MITIENDA.com/onboarding',
+      loginUrl: 'https://app.mitienda.com/onboarding',
     })
     return NextResponse.json({ html })
   }

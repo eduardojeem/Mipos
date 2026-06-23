@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
   let dbLatencyMs: number | null = null;
   let totalOrganizations = 0;
   let totalUsers = 0;
-  let baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || 'MITIENDAparaguay.vercel.app';
+  let baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || 'mitienda.vercel.app';
 
   try {
     const admin = createAdminClient();

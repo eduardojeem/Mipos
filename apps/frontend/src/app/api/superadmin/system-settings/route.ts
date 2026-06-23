@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const baseDomain = settings?.value?.domain || process.env.NEXT_PUBLIC_BASE_DOMAIN || 'MITIENDAparaguay.vercel.app';
+    const baseDomain = settings?.value?.domain || process.env.NEXT_PUBLIC_BASE_DOMAIN || 'mitienda.vercel.app';
 
     return NextResponse.json({ baseDomain });
   } catch (error) {

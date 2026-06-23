@@ -64,7 +64,7 @@ export function DomainSettingsForm({
   const baseHostLabel = useMemo(() => {
     const rawHost = typeof window !== 'undefined'
       ? window.location.host
-      : (process.env.NEXT_PUBLIC_BASE_DOMAIN || 'MITIENDAparaguay.vercel.app');
+      : (process.env.NEXT_PUBLIC_BASE_DOMAIN || 'mitienda.vercel.app');
     return normalizeHostname(rawHost);
   }, []);
 

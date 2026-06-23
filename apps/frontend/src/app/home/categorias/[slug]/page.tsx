@@ -33,20 +33,20 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const snapshot = await fetchCategoryOrgsSnapshot(slug);
 
   if (!snapshot) {
-    return { title: 'Rubro no encontrado | MiPOS' };
+    return { title: 'Rubro no encontrado | MITIENDA' };
   }
 
   const { category } = snapshot;
-  const title       = category.seo_title       || `${category.name} | MiPOS Marketplace`;
+  const title       = category.seo_title       || `${category.name} | MITIENDA Marketplace`;
   const description = category.seo_description || category.description
-    || `Explora las mejores empresas de ${category.name} en el marketplace MiPOS. ${snapshot.totalOrganizations} empresas, ${snapshot.totalProducts} productos.`;
+    || `Explora las mejores empresas de ${category.name} en el marketplace MITIENDA. ${snapshot.totalOrganizations} empresas, ${snapshot.totalProducts} productos.`;
 
   return {
     title,
     description,
     alternates: { canonical: `/home/categorias/${slug}` },
     robots:     { index: true, follow: true },
-    openGraph:  { title, description, type: 'website', siteName: 'MiPOS Marketplace' },
+    openGraph:  { title, description, type: 'website', siteName: 'MITIENDA Marketplace' },
     twitter:    { card: 'summary_large_image', title, description },
   };
 }
