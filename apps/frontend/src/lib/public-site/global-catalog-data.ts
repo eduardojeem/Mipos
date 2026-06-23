@@ -729,9 +729,9 @@ function mapProductsToCards(
         return null;
       }
 
-      // Filtro de seguridad: descartar productos inactivos que hayan
+      // Filtro de seguridad: descartar productos inactivos o no públicos que hayan
       // escapado la query (ej: is_active era NULL, tipo text, o cache stale)
-      if (product.is_active === false) {
+      if (product.is_active === false || product.is_public === false) {
         return null;
       }
 
