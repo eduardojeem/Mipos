@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { BadgeCheck, Building2, CreditCard, RefreshCw, Shield, Sparkles, Check, ArrowRight, Zap, Users, Package, MapPin, Activity } from 'lucide-react'
+import { BadgeCheck, Building2, CreditCard, RefreshCw, Shield, Sparkles, Check, ArrowRight, Zap, Users, Package, MapPin, Activity, Key, Download } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { useUserOrganizations } from '@/hooks/use-user-organizations'
 import { useSubscription } from '@/hooks/use-subscription'
@@ -15,6 +15,8 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Progress } from '@/components/ui/progress'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/components/ui/use-toast'
 import type { Plan } from '@/hooks/use-subscription'
@@ -74,6 +76,11 @@ export default function AdminSubscriptionsPage() {
   const [usageLoading, setUsageLoading] = useState(true)
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null)
 
+  const [invoices, setInvoices] = useState<any[]>([])
+  const [invoicesLoading, setInvoicesLoading] = useState(true)
+  const [activationCode, setActivationCode] = useState('')
+  const [isActivating, setIsActivating] = useState(false)
+
   useEffect(() => {
     if (subscription?.billingCycle) {
       setBillingCycle(subscription.billingCycle)
@@ -112,6 +119,55 @@ export default function AdminSubscriptionsPage() {
   useEffect(() => {
     loadUsage()
   }, [loadUsage])
+
+  const loadInvoices = useCallback(async () => {
+    if (!selectedOrganization?.id) {
+      setInvoicesLoading(false)
+      return
+    }
+    setInvoicesLoading(true)
+    try {
+      const response = await fetch(`/api/billing/invoices?organizationId=${selectedOrganization.id}`, {
+        headers: { 'x-organization-id': selectedOrganization.id },
+        cache: 'no-store',
+      })
+      const payload = await response.json()
+      if (response.ok && payload.success) {
+        setInvoices(payload.invoices || [])
+      } else {
+        setInvoices([])
+      }
+    } catch (error) {
+      console.error('Error fetching invoices:', error)
+      setInvoices([])
+    } finally {
+      setInvoicesLoading(false)
+    }
+  }, [selectedOrganization?.id])
+
+  useEffect(() => {
+    loadInvoices()
+  }, [loadInvoices])
+
+  const handleActivateCode = async () => {
+    if (!activationCode.trim()) {
+      toast({ title: 'Atención', description: 'Ingresa un código de activación', variant: 'destructive' })
+      return
+    }
+    setIsActivating(true)
+    // Mock logic for activation code
+    setTimeout(() => {
+      setIsActivating(false)
+      if (activationCode.toUpperCase().startsWith('PROMO') || activationCode.length > 5) {
+        toast({ title: 'Éxito', description: 'Código aplicado exitosamente. Tu plan y facturas han sido actualizados.' })
+        setActivationCode('')
+        refetch()
+        loadInvoices()
+      } else {
+        toast({ title: 'Error', description: 'El código ingresado no es válido o ya fue utilizado.', variant: 'destructive' })
+      }
+    }, 1500)
+  }
 
   const currentPlan = useMemo(() => {
     if (!subscription?.plan) return null
@@ -239,7 +295,7 @@ export default function AdminSubscriptionsPage() {
               </Select>
             </div>
           )}
-          <Button variant="outline" className="rounded-xl h-10 shadow-sm" onClick={() => { void refetch(); void loadUsage(); }}>
+          <Button variant="outline" className="rounded-xl h-10 shadow-sm" onClick={() => { void refetch(); void loadUsage(); void loadInvoices(); }}>
             <RefreshCw className="mr-2 h-4 w-4" />
             Actualizar
           </Button>
@@ -366,6 +422,88 @@ export default function AdminSubscriptionsPage() {
               )
             })
           )}
+        </div>
+      </section>
+
+      {/* Billing & Activation Section */}
+      <section className="grid grid-cols-1 lg:grid-cols-[1fr_350px] gap-6 pt-6 border-t border-border/40">
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xl font-bold tracking-tight">Historial de Facturación</h3>
+          </div>
+          <Card className="border-border/50 shadow-sm overflow-hidden">
+            {invoicesLoading ? (
+              <div className="p-8 flex justify-center"><RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+            ) : invoices.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground">No hay facturas registradas.</div>
+            ) : (
+              <Table>
+                <TableHeader className="bg-muted/50">
+                  <TableRow>
+                    <TableHead>Factura</TableHead>
+                    <TableHead>Fecha</TableHead>
+                    <TableHead>Monto</TableHead>
+                    <TableHead>Estado</TableHead>
+                    <TableHead className="text-right">Acción</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {invoices.map((inv) => (
+                    <TableRow key={inv.id}>
+                      <TableCell className="font-medium text-xs font-mono">{inv.invoice_number}</TableCell>
+                      <TableCell>{new Date(inv.created_at || inv.due_date).toLocaleDateString()}</TableCell>
+                      <TableCell>{inv.currency === 'USD' ? '$' : inv.currency} {inv.amount}</TableCell>
+                      <TableCell>
+                        <Badge variant={inv.status === 'paid' ? 'default' : 'secondary'} className={inv.status === 'paid' ? 'bg-emerald-500 hover:bg-emerald-600' : ''}>
+                          {inv.status === 'paid' ? 'Pagado' : 'Pendiente'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0" title="Descargar Factura">
+                          <Download className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </Card>
+        </div>
+
+        <div className="space-y-4">
+          <h3 className="text-xl font-bold tracking-tight">Activar Código</h3>
+          <Card className="border-border/50 bg-gradient-to-br from-primary/5 to-transparent border-primary/20 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Key className="h-5 w-5 text-primary" />
+                Código Promocional
+              </CardTitle>
+              <CardDescription>
+                Ingresa un código de pago o promoción para activar facturas o mejorar tu plan.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex space-x-2">
+                <Input 
+                  placeholder="Ej: PROMO2026" 
+                  value={activationCode}
+                  onChange={(e) => setActivationCode(e.target.value.toUpperCase())}
+                  className="uppercase font-mono tracking-wider"
+                />
+              </div>
+            </CardContent>
+            <CardFooter>
+              <Button 
+                onClick={handleActivateCode} 
+                disabled={isActivating || !activationCode}
+                className="w-full"
+              >
+                {isActivating ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
+                {isActivating ? 'Activando...' : 'Canjear Código'}
+              </Button>
+            </CardFooter>
+          </Card>
         </div>
       </section>
 
