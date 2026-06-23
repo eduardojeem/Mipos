@@ -165,16 +165,16 @@ function applyDevelopmentDebugHeaders(
     return;
   }
 
-  response.headers.set('x-mipos-debug-path-tenant', pathTenantSlug || '');
-  response.headers.set('x-mipos-debug-rewrite-path', rewritePath || '');
-  response.headers.set('x-mipos-debug-context', tenantContext.kind);
+  response.headers.set('x-mitienda-debug-path-tenant', pathTenantSlug || '');
+  response.headers.set('x-mitienda-debug-rewrite-path', rewritePath || '');
+  response.headers.set('x-mitienda-debug-context', tenantContext.kind);
 
   if (tenantContext.kind === 'tenant' || tenantContext.kind === 'tenant-unresolved') {
-    response.headers.set('x-mipos-debug-tenant-key', tenantContext.tenantKey);
-    response.headers.set('x-mipos-debug-source', tenantContext.source);
+    response.headers.set('x-mitienda-debug-tenant-key', tenantContext.tenantKey);
+    response.headers.set('x-mitienda-debug-source', tenantContext.source);
   } else {
-    response.headers.delete('x-mipos-debug-tenant-key');
-    response.headers.delete('x-mipos-debug-source');
+    response.headers.delete('x-mitienda-debug-tenant-key');
+    response.headers.delete('x-mitienda-debug-source');
   }
 }
 

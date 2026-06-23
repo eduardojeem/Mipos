@@ -57,7 +57,7 @@ const LOGIN_TYPE_CONTENT: Record<LoginType, {
     title: 'Acceso Admin SaaS',
     description: 'Gestiona empresas, planes, soporte y configuracion global.',
     badge: 'Control global',
-    emailPlaceholder: 'admin@MITIENDA.com',
+    emailPlaceholder: 'admin@mitienda.com',
     passwordLabel: 'Contrasena segura',
     submitLabel: 'Entrar al SaaS',
   },

@@ -98,8 +98,8 @@ export function Footer() {
             <ul className="space-y-3 text-sm text-slate-400">
               <li className="flex items-center gap-2">
                 <Mail className="h-4 w-4 text-amber-300" aria-hidden="true" />
-                <a href="mailto:soporte@MITIENDA.com.py" className="transition-colors hover:text-emerald-300">
-                  soporte@MITIENDA.com.py
+                <a href="mailto:soporte@mitienda.com.py" className="transition-colors hover:text-emerald-300">
+                  soporte@mitienda.com.py
                 </a>
               </li>
               <li className="flex items-start gap-2">

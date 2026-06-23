@@ -129,7 +129,7 @@ export function PricingCard({ plan, billingCycle, onSelect, isSelected, isPopula
 
                 {isEnterprise ? (
                     <a
-                        href="mailto:contacto@MITIENDA.app?subject=Consulta%20Enterprise"
+                        href="mailto:contacto@mitienda.app?subject=Consulta%20Enterprise"
                         className={cn(
                             'mt-8 inline-flex h-11 w-full items-center justify-center rounded-xl px-4 text-xs font-bold transition-all duration-300',
                             'border border-white/10 bg-white/5 text-slate-200 hover:text-white hover:bg-white/10 hover:border-white/20'
