@@ -113,10 +113,10 @@ export function Footer() {
         <div className="landing-divider mt-10 flex flex-col items-start justify-between gap-4 border-t pt-8 text-sm text-slate-500 md:flex-row md:items-center">
           <p>&copy; {currentYear} MITIENDA. Todos los derechos reservados.</p>
           <div className="flex gap-6">
-            <Link href="/inicio" className="transition-colors hover:text-emerald-300">
-              Terminos
+            <Link href="/terms" className="transition-colors hover:text-emerald-300">
+              Términos
             </Link>
-            <Link href="/inicio" className="transition-colors hover:text-emerald-300">
+            <Link href="/privacy" className="transition-colors hover:text-emerald-300">
               Privacidad
             </Link>
           </div>

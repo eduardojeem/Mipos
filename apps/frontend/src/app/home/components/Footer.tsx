@@ -20,6 +20,7 @@ import {
   getTenantPublicContent,
   getTenantPublicSections,
 } from '@/lib/public-site/tenant-public-config';
+import { PLATFORM_NAME } from '@/lib/legal/terms';
 
 interface FooterProps {
   config: BusinessConfig;
@@ -185,11 +186,25 @@ function FooterComponent({ config, onNavigate }: FooterProps) {
       </div>
 
       <div className="border-t border-white/10">
-        <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-5 text-xs text-slate-500 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <p>
-            {new Date().getFullYear()} {config.businessName}. Todos los derechos reservados.
+        <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
+          <p className="text-xs leading-6 text-slate-500">
+            {config.businessName} opera de forma independiente. {PLATFORM_NAME} es una
+            plataforma tecnológica; los productos, precios, stock, ventas y entregas
+            mostrados son responsabilidad exclusiva de esta tienda.
           </p>
-          <p>Frontend publico del tenant sincronizado con Business Config.</p>
+          <div className="mt-3 flex flex-col gap-3 text-xs text-slate-500 lg:flex-row lg:items-center lg:justify-between">
+            <p>
+              {new Date().getFullYear()} {config.businessName}. Todos los derechos reservados.
+            </p>
+            <div className="flex items-center gap-4">
+              <Link href="/terms" className="transition-colors hover:text-white">
+                Términos
+              </Link>
+              <Link href="/privacy" className="transition-colors hover:text-white">
+                Privacidad
+              </Link>
+            </div>
+          </div>
         </div>
       </div>
     </footer>
