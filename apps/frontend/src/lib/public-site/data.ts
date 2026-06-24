@@ -9,9 +9,9 @@ import type { PublicOrganization } from '@/lib/domain/request-tenant';
 
 const PUBLIC_ORGANIZATION_STATUSES = ['ACTIVE', 'TRIAL'];
 const MARKETPLACE_ORGANIZATION_SELECT =
-  'id,name,slug,subscription_status,created_at,marketplace_category_id';
+  'id,name,slug,subscription_status,created_at,marketplace_category_id,vertical';
 const MARKETPLACE_ORGANIZATION_SELECT_FALLBACK =
-  'id,name,slug,subscription_status,created_at,marketplace_category_id';
+  'id,name,slug,subscription_status,created_at,marketplace_category_id,vertical';
 const PRODUCT_BASE_COLUMNS = ['id', 'name', 'sale_price', 'organization_id', 'is_active'];
 const PRODUCT_OPTIONAL_COLUMNS = [
   'description',
@@ -70,6 +70,7 @@ export interface FeaturedOrganizationCard {
   createdAt?: string | null;
   city?: string;
   department?: string;
+  vertical?: string | null;
 }
 
 export interface GlobalCategoryCard {
@@ -452,6 +453,7 @@ async function getGlobalMarketplaceHomeDataUncached(
           'Explora el catalogo publico de esta empresa dentro del marketplace.'
         ),
         location: locationParts.length > 0 ? locationParts.join(', ') : 'Marketplace activo',
+        vertical: organization.vertical || null,
       } satisfies FeaturedOrganizationCard;
     })
     .filter((organization) => {
@@ -688,6 +690,7 @@ async function _getGlobalMarketplaceHomeDataLegacy(
           config?.heroDescription ||
           'Explora el catálogo público de esta empresa dentro del marketplace.',
         location: locationParts.length > 0 ? locationParts.join(', ') : 'Marketplace activo',
+        vertical: organization.vertical || null,
       } satisfies FeaturedOrganizationCard;
     })
     .filter((organization) => {

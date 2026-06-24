@@ -16,7 +16,7 @@ import type { FeaturedOrganizationCard } from '@/lib/public-site/data';
 const PUBLIC_ORGANIZATION_STATUSES = ['ACTIVE', 'TRIAL'];
 const ORGANIZATION_BATCH_SIZE = 250;
 const PRODUCT_BATCH_SIZE = 500;
-const ORGANIZATION_BASE_COLUMNS = ['id', 'name', 'slug', 'created_at', 'marketplace_category_id'];
+const ORGANIZATION_BASE_COLUMNS = ['id', 'name', 'slug', 'created_at', 'marketplace_category_id', 'vertical'];
 const ORGANIZATION_OPTIONAL_COLUMNS = ['branding'];
 const PRODUCT_BASE_COLUMNS = ['id', 'organization_id', 'category_id', 'is_active'];
 const PRODUCT_OPTIONAL_COLUMNS: string[] = [];
@@ -368,6 +368,7 @@ function buildOrganizationCards(
       createdAt: organization.created_at || null,
       city: config.city || undefined,
       department: config.department || undefined,
+      vertical: organization.vertical || null,
     } satisfies FeaturedOrganizationCard;
   });
 }

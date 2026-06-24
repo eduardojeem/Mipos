@@ -137,7 +137,7 @@ export function OrganizationGrid({ organizations, className }: OrganizationGridP
               </div>
 
               {/* CTA */}
-              <Link href={org.href} className="mt-3">
+              <a href={org.href} className="mt-3">
                 <Button
                   size="sm"
                   className="h-8 w-full rounded-lg bg-slate-950 text-xs text-white transition-all duration-300 hover:bg-sky-700 hover:shadow-lg hover:shadow-sky-500/25 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white dark:hover:shadow-white/10"
@@ -145,7 +145,7 @@ export function OrganizationGrid({ organizations, className }: OrganizationGridP
                   Ver empresa
                   <ArrowRight className="ml-1.5 h-3 w-3" />
                 </Button>
-              </Link>
+              </a>
             </div>
           </motion.article>
         );

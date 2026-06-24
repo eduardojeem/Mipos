@@ -79,14 +79,13 @@ export default async function ServicesPage({
 
   const serviceOrganizations = snapshot.organizations.filter(
     (org) => {
-      const vertical = (org as any).vertical;
-      // For now, show all orgs that have products - this is temporary until we properly categorize
-      // We'll filter by vertical once all barber shops are properly configured
-      return true;
+      return org.vertical === 'BARBERSHOP';
     }
   );
 
-  const featuredServices = snapshot.featuredOrganizations;
+  const featuredServices = snapshot.featuredOrganizations.filter(
+    (org) => org.vertical === 'BARBERSHOP'
+  );
 
   const hasActiveFilters =
     Boolean(queryState.search) ||
@@ -99,16 +98,16 @@ export default async function ServicesPage({
       <div className="mx-auto max-w-7xl px-4 pb-24 sm:px-6 lg:px-8">
 
         {/* ── Hero section ── */}
-        <header className="relative mt-8 overflow-hidden rounded-2xl bg-gradient-to-br from-purple-600 via-pink-600 to-purple-700 px-6 py-10 sm:px-10 sm:py-14">
+        <header className="relative mt-8 overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-zinc-900 to-neutral-900 border border-slate-800 px-6 py-10 sm:px-10 sm:py-14 shadow-xl">
           {/* Decorative blobs */}
-          <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-purple-400/20 blur-3xl" />
-          <div className="pointer-events-none absolute -left-12 bottom-0 h-48 w-48 rounded-full bg-pink-400/15 blur-3xl" />
-          <div className="pointer-events-none absolute right-1/3 top-1/2 h-32 w-32 rounded-full bg-purple-400/10 blur-2xl" />
+          <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-amber-500/10 blur-3xl" />
+          <div className="pointer-events-none absolute -left-12 bottom-0 h-48 w-48 rounded-full bg-rose-500/10 blur-3xl" />
+          <div className="pointer-events-none absolute right-1/3 top-1/2 h-32 w-32 rounded-full bg-slate-500/10 blur-2xl" />
 
           <div className="relative">
             {/* Badge */}
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/8 px-3 py-1.5 text-xs font-semibold tracking-wide text-white/70">
-              <Sparkles className="h-3 w-3 text-pink-200" />
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold tracking-wide text-white/80">
+              <Sparkles className="h-3 w-3 text-amber-400" />
               Servicios de Belleza
             </span>
 
@@ -122,14 +121,14 @@ export default async function ServicesPage({
 
             {/* Stats */}
             <div className="mt-6 flex flex-wrap gap-4">
-              <div className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 backdrop-blur-md">
-                <Building2 className="h-4 w-4 text-pink-200" />
-                <span className="text-sm font-semibold text-white">
+              <div className="flex items-center gap-2 rounded-full bg-white/5 border border-white/10 px-4 py-2 backdrop-blur-md">
+                <Building2 className="h-4 w-4 text-amber-400" />
+                <span className="text-sm font-medium text-white">
                   {serviceOrganizations.length} {serviceOrganizations.length === 1 ? 'local' : 'locales'}
                 </span>
               </div>
-              <div className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 backdrop-blur-md">
-                <Package className="h-4 w-4 text-pink-200" />
+              <div className="flex items-center gap-2 rounded-full bg-white/5 border border-white/10 px-4 py-2 backdrop-blur-md">
+                <Package className="h-4 w-4 text-amber-400" />
                 <span className="text-sm font-semibold text-white">
                   {snapshot.totalProducts} servicios
                 </span>

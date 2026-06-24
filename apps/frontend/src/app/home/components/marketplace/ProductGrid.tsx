@@ -203,17 +203,17 @@ function ProductDetailModal({
 
           {/* CTAs */}
           <div className="flex gap-3 pt-2">
-            <Link href={detailHref} className="flex-1">
+            <a href={detailHref} className="flex-1">
               <Button className="w-full rounded-xl bg-emerald-600 font-semibold text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600">
                 Ir a tienda
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
-            </Link>
-            <Link href={organizationHref}>
+            </a>
+            <a href={organizationHref}>
               <Button variant="outline" className="rounded-xl border-slate-200 dark:border-slate-700">
                 Ver local
               </Button>
-            </Link>
+            </a>
           </div>
         </div>
       </motion.div>
@@ -337,7 +337,7 @@ export function ProductCard({
               </p>
             )}
           </div>
-          <Link href={detailHref}>
+          <a href={detailHref}>
             <Button
               size="sm"
               className="rounded-lg bg-emerald-600 font-semibold text-white shadow-sm hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600"
@@ -345,11 +345,11 @@ export function ProductCard({
               Ir a tienda
               <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
             </Button>
-          </Link>
+          </a>
         </div>
 
         <div className="mt-4 flex items-center gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
-          <Link
+          <a
             href={organizationHref}
             className="flex min-w-0 flex-1 items-center gap-2 transition-colors hover:text-emerald-700 dark:hover:text-emerald-300"
           >
@@ -363,7 +363,7 @@ export function ProductCard({
                 {product.city}
               </span>
             ) : null}
-          </Link>
+          </a>
         </div>
       </div>
     </motion.article>

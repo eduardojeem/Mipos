@@ -200,9 +200,9 @@ export default function BarbershopHomeClient({ initialData, organizationId, vert
         </div>
       ) : null}
 
-      <main className="mx-auto max-w-7xl space-y-14 px-4 py-6 sm:px-6 lg:px-8">
+      <main className="mx-auto max-w-7xl space-y-20 px-4 pb-24 pt-8 sm:px-6 lg:px-8 lg:space-y-32 lg:pt-12">
         <section id="inicio" className="scroll-mt-[calc(var(--public-nav-height,4rem)+1rem)] overflow-hidden rounded-3xl border border-slate-200 bg-slate-950 text-white shadow-sm dark:border-slate-800">
-          <div className="grid gap-8 p-6 sm:p-8 lg:grid-cols-[1.1fr_0.9fr] lg:p-10">
+          <div className="grid gap-10 p-8 sm:p-10 lg:grid-cols-[1.1fr_0.9fr] lg:gap-16 lg:p-16">
             <div className="flex flex-col justify-center">
               <Badge className="w-fit border-0 bg-white/10 text-white">
                 <Scissors className="mr-1.5 h-3.5 w-3.5" />
@@ -260,7 +260,7 @@ export default function BarbershopHomeClient({ initialData, organizationId, vert
           </div>
         </section>
 
-        <section id="servicios" className="scroll-mt-[calc(var(--public-nav-height,4rem)+1rem)] space-y-5">
+        <section id="servicios" className="scroll-mt-[calc(var(--public-nav-height,4rem)+1rem)] space-y-8 lg:space-y-10">
           <div className="flex items-end justify-between gap-4">
             <div>
               <p className="text-sm font-semibold" style={{ color: primary }}>Servicios</p>
@@ -314,7 +314,7 @@ export default function BarbershopHomeClient({ initialData, organizationId, vert
           )}
         </section>
 
-        <section id="profesionales" className="scroll-mt-[calc(var(--public-nav-height,4rem)+1rem)] space-y-5">
+        <section id="profesionales" className="scroll-mt-[calc(var(--public-nav-height,4rem)+1rem)] space-y-8 lg:space-y-10">
           <div>
             <p className="text-sm font-semibold" style={{ color: primary }}>Profesionales</p>
             <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Equipo disponible</h2>
@@ -369,7 +369,7 @@ export default function BarbershopHomeClient({ initialData, organizationId, vert
         </section>
 
         {(sections.showFeaturedProducts || sections.showCatalog) && products.length > 0 ? (
-          <section id="productos" className="scroll-mt-[calc(var(--public-nav-height,4rem)+1rem)] space-y-5">
+          <section id="productos" className="scroll-mt-[calc(var(--public-nav-height,4rem)+1rem)] space-y-8 lg:space-y-10">
             <div className="flex items-end justify-between gap-4">
               <div>
                 <p className="text-sm font-semibold" style={{ color: primary }}>Productos</p>
@@ -447,7 +447,7 @@ export default function BarbershopHomeClient({ initialData, organizationId, vert
         ) : null}
 
         {sections.showOffers && offers.length > 0 ? (
-          <section className="rounded-2xl border border-border/50 bg-white/60 p-5 backdrop-blur-xl dark:bg-slate-900/60">
+          <section className="rounded-3xl border border-border/50 bg-white/60 p-8 shadow-sm backdrop-blur-xl lg:p-10 dark:bg-slate-900/60">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="flex items-center gap-2 text-sm font-semibold" style={{ color: primary }}>
@@ -467,9 +467,9 @@ export default function BarbershopHomeClient({ initialData, organizationId, vert
 
         {(sections.showContactInfo || sections.showLocation || sections.showBusinessHours) ? (
           <section id="contacto" className="scroll-mt-[calc(var(--public-nav-height,4rem)+1rem)]">
-            <Card className="overflow-hidden rounded-2xl border-border/50 bg-white/60 shadow-sm backdrop-blur-xl transition-all hover:shadow-md dark:bg-slate-900/60">
+            <Card className="overflow-hidden rounded-3xl border-border/50 bg-white/60 shadow-sm backdrop-blur-xl transition-all hover:shadow-md dark:bg-slate-900/60">
               <div className="h-1 w-full" style={{ backgroundColor: primary }} />
-              <CardContent className="p-6">
+              <CardContent className="p-8 lg:p-12">
                 <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
                   <div className="space-y-4">
                     <h2 className="text-xl font-bold text-slate-900 dark:text-slate-50">

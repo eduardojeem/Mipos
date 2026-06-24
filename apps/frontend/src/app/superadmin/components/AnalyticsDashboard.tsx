@@ -1,67 +1,192 @@
 'use client';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { 
-  TrendingUp, 
-  DollarSign, 
-  Users, 
+import { useState, useMemo } from 'react';
+import {
   Activity,
-  Building2,
-  PieChart as PieChartIcon,
-  BarChart3,
-  Loader2,
   AlertTriangle,
-  RefreshCw
+  ArrowUpRight,
+  BarChart3,
+  Building2,
+  Clock,
+  DollarSign,
+  Loader2,
+  Medal,
+  PieChart as PieChartIcon,
+  RefreshCw,
+  Sparkles,
+  TrendingDown,
+  TrendingUp,
+  Users,
+  Zap,
 } from 'lucide-react';
 import { useAnalytics } from '../hooks/useAnalytics';
 import { Button } from '@/components/ui/button';
-import { 
-  LineChart, 
-  Line, 
-  PieChart, 
-  Pie, 
-  Cell, 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  Legend, 
-  ResponsiveContainer 
+import { Badge } from '@/components/ui/badge';
+import {
+  LineChart,
+  Line,
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  Area,
+  AreaChart,
 } from 'recharts';
 
-const COLORS = {
-  Free: '#94a3b8',
-  Starter: '#3b82f6',
-  Professional: '#8b5cf6',
-  Pro: '#8b5cf6',
-  Enterprise: '#f59e0b',
+// ── Paleta unificada ─────────────────────────────────────────────────────────
+const CHART_COLORS = {
+  indigo:  '#6366f1',
+  violet:  '#8b5cf6',
+  sky:     '#38bdf8',
+  emerald: '#34d399',
+  amber:   '#fbbf24',
+  rose:    '#fb7185',
+  slate:   '#64748b',
 };
 
+const PLAN_COLORS: Record<string, string> = {
+  Free:         CHART_COLORS.slate,
+  Starter:      CHART_COLORS.sky,
+  Professional: CHART_COLORS.indigo,
+  Pro:          CHART_COLORS.indigo,
+  Enterprise:   CHART_COLORS.violet,
+};
+
+const TOOLTIP_STYLE = {
+  backgroundColor: '#0f172a',
+  border: '1px solid #1e293b',
+  borderRadius: '10px',
+  color: '#e2e8f0',
+  fontSize: '12px',
+  boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
+};
+
+const AXIS_STYLE = { stroke: '#334155', style: { fontSize: '11px', fill: '#64748b' } };
+const GRID_STYLE = { strokeDasharray: '3 3', stroke: '#1e293b' };
+
+// ── Componente de KPI Card ────────────────────────────────────────────────────
+function KpiCard({
+  label,
+  subtitle,
+  value,
+  sub,
+  icon: Icon,
+  accent,
+  accentBg,
+  accentBorder,
+  trend,
+  trendLabel,
+}: {
+  label: string;
+  subtitle: string;
+  value: string | number;
+  sub?: string;
+  icon: React.ComponentType<{ className?: string }>;
+  accent: string;
+  accentBg: string;
+  accentBorder: string;
+  trend?: number;
+  trendLabel?: string;
+}) {
+  const isPositive = (trend ?? 0) > 0;
+  const isNegative = (trend ?? 0) < 0;
+
+  return (
+    <div className={`group relative overflow-hidden rounded-xl border bg-slate-900/70 p-5 backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg ${accentBorder}`}>
+      <div className={`pointer-events-none absolute -right-4 -top-4 h-24 w-24 rounded-full ${accentBg} blur-3xl opacity-50 transition-opacity group-hover:opacity-80`} />
+
+      <div className="relative flex items-start justify-between gap-2">
+        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${accentBg} border ${accentBorder}`}>
+          <Icon className={`h-4 w-4 ${accent}`} />
+        </div>
+        {typeof trend === 'number' && (
+          <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums border ${
+            isPositive ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+              : isNegative ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+              : 'bg-slate-800 text-slate-500 border-slate-700'
+          }`}>
+            {isPositive ? <TrendingUp className="h-2.5 w-2.5" /> : isNegative ? <TrendingDown className="h-2.5 w-2.5" /> : null}
+            {trend > 0 ? '+' : ''}{trend}%
+          </span>
+        )}
+      </div>
+
+      <div className="relative mt-4">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">{subtitle}</p>
+        <div className={`mt-1 text-3xl font-black tabular-nums tracking-tight ${accent}`}>{value}</div>
+        {sub && <p className="mt-1 text-xs text-slate-500">{sub}</p>}
+        {trendLabel && <p className="mt-1 text-xs text-slate-400">{trendLabel}</p>}
+      </div>
+    </div>
+  );
+}
+
+// ── Panel Section Header ──────────────────────────────────────────────────────
+function SectionHeader({ subtitle, title, icon: Icon, accentColor = 'text-indigo-400' }: {
+  subtitle: string;
+  title: string;
+  icon: React.ComponentType<{ className?: string }>;
+  accentColor?: string;
+}) {
+  return (
+    <div className="mb-5 flex items-center gap-3">
+      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 border border-slate-700">
+        <Icon className={`h-4 w-4 ${accentColor}`} />
+      </div>
+      <div>
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">{subtitle}</p>
+        <h3 className="text-sm font-bold text-slate-100">{title}</h3>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Component ────────────────────────────────────────────────────────────
 export function AnalyticsDashboard() {
   const { analytics, loading, error, refresh } = useAnalytics();
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await refresh();
+    setIsRefreshing(false);
+  };
+
+  // ── Loading ──
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px] flex-col gap-4">
-        <Loader2 className="h-10 w-10 animate-spin text-purple-600" />
-        <p className="text-slate-500 font-medium">Cargando analytics...</p>
+      <div className="flex min-h-[500px] flex-col items-center justify-center gap-5">
+        <div className="relative flex h-20 w-20 items-center justify-center rounded-2xl border border-indigo-500/20 bg-indigo-500/10">
+          <Loader2 className="h-9 w-9 animate-spin text-indigo-400" />
+          <div className="absolute inset-0 rounded-2xl bg-indigo-500/5 blur-xl" />
+        </div>
+        <div className="text-center">
+          <p className="text-sm font-semibold text-slate-300">Cargando analíticas</p>
+          <p className="text-xs text-slate-500">Consultando la base de datos…</p>
+        </div>
       </div>
     );
   }
 
+  // ── Error ──
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] gap-6 text-center max-w-md mx-auto">
-        <div className="w-20 h-20 bg-rose-50 dark:bg-rose-950/20 rounded-full flex items-center justify-center">
-          <AlertTriangle className="h-10 w-10 text-rose-500" />
+      <div className="flex min-h-[500px] flex-col items-center justify-center gap-6 text-center">
+        <div className="flex h-20 w-20 items-center justify-center rounded-2xl border border-rose-500/20 bg-rose-500/10">
+          <AlertTriangle className="h-9 w-9 text-rose-400" />
         </div>
         <div>
-          <h2 className="text-3xl font-black text-slate-900 dark:text-white">Error al cargar</h2>
-          <p className="text-slate-500 mt-2">{error}</p>
+          <h2 className="text-xl font-bold text-slate-100">Error al cargar datos</h2>
+          <p className="mt-1 max-w-sm text-sm text-slate-500">{error}</p>
         </div>
-        <Button onClick={() => refresh()} className="gap-2">
+        <Button onClick={handleRefresh} className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white">
           <RefreshCw className="h-4 w-4" />
           Reintentar
         </Button>
@@ -71,307 +196,244 @@ export function AnalyticsDashboard() {
 
   const { growthData, planDistribution, activityData, revenueData, topOrganizations } = analytics;
 
-  // Calculate growth percentage
   const currentMonth = growthData[growthData.length - 1]?.count || 0;
   const previousMonth = growthData[growthData.length - 2]?.count || 0;
-  const growthPercentage = previousMonth > 0 
-    ? Math.round(((currentMonth - previousMonth) / previousMonth) * 100) 
+  const growthPct = previousMonth > 0
+    ? Math.round(((currentMonth - previousMonth) / previousMonth) * 100)
     : 0;
+
+  const totalOrgsFromGrowth = growthData.reduce((sum, d) => sum + d.count, 0);
 
   return (
     <div className="space-y-6">
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* Total Organizations */}
-        <Card className="backdrop-blur-xl bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950/30 dark:to-purple-900/20 border-purple-200 dark:border-purple-800">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium text-purple-700 dark:text-purple-300">
-                Total Organizaciones
-              </CardTitle>
-              <div className="p-2 rounded-xl bg-purple-500 shadow-lg">
-                <Building2 className="h-4 w-4 text-white" />
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-purple-900 dark:text-purple-100">
-              {growthData.reduce((sum, item) => sum + item.count, 0)}
-            </div>
-            <p className="text-xs text-purple-600 dark:text-purple-400 mt-1 flex items-center gap-1">
-              <TrendingUp className="h-3 w-3" />
-              +{currentMonth} este mes
-            </p>
-          </CardContent>
-        </Card>
 
-        {/* Monthly Revenue */}
-        <Card className="backdrop-blur-xl bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-950/30 dark:to-emerald-900/20 border-emerald-200 dark:border-emerald-800">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
-                MRR (Ingresos Mensuales)
-              </CardTitle>
-              <div className="p-2 rounded-xl bg-emerald-500 shadow-lg">
-                <DollarSign className="h-4 w-4 text-white" />
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-emerald-900 dark:text-emerald-100">
-              ${revenueData.mrr.toLocaleString()}
-            </div>
-            <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
-              ARR: ${revenueData.arr.toLocaleString()}
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Active Subscriptions */}
-        <Card className="backdrop-blur-xl bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950/30 dark:to-blue-900/20 border-blue-200 dark:border-blue-800">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium text-blue-700 dark:text-blue-300">
-                Suscripciones Activas
-              </CardTitle>
-              <div className="p-2 rounded-xl bg-blue-500 shadow-lg">
-                <Users className="h-4 w-4 text-white" />
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-blue-900 dark:text-blue-100">
-              {revenueData.activeSubscriptions}
-            </div>
-            <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-              Prom: ${revenueData.averageRevenuePerSub.toFixed(2)}/sub
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Growth Rate */}
-        <Card className="backdrop-blur-xl bg-gradient-to-br from-amber-50 to-amber-100 dark:from-amber-950/30 dark:to-amber-900/20 border-amber-200 dark:border-amber-800">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium text-amber-700 dark:text-amber-300">
-                Tasa de Crecimiento
-              </CardTitle>
-              <div className="p-2 rounded-xl bg-amber-500 shadow-lg">
-                <Activity className="h-4 w-4 text-white" />
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-amber-900 dark:text-amber-100">
-              {growthPercentage > 0 ? '+' : ''}{growthPercentage}%
-            </div>
-            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-              vs mes anterior
-            </p>
-          </CardContent>
-        </Card>
+      {/* ── Refresh strip ── */}
+      <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-2.5">
+        <div className="flex items-center gap-2">
+          <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-xs text-slate-400">
+            Generado {new Date(analytics.generatedAt).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}
+          </span>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+          className="h-7 gap-1.5 text-xs text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+          Actualizar
+        </Button>
       </div>
 
-      {/* Charts Row 1 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Growth Chart */}
-        <Card className="backdrop-blur-xl bg-white/95 dark:bg-slate-900/95 border-slate-200 dark:border-slate-800">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <BarChart3 className="h-5 w-5 text-purple-600" />
-                  Crecimiento de Organizaciones
-                </CardTitle>
-                <CardDescription>Últimos 6 meses</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={growthData}>
-                <defs>
-                  <linearGradient id="colorGrowth" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.8}/>
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.1}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.2} />
-                <XAxis 
-                  dataKey="month" 
-                  stroke="#64748b"
-                  style={{ fontSize: '12px' }}
-                />
-                <YAxis 
-                  stroke="#64748b"
-                  style={{ fontSize: '12px' }}
-                />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: '#1e293b', 
-                    border: '1px solid #475569',
-                    borderRadius: '8px',
-                    color: '#f1f5f9'
-                  }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="count" 
-                  stroke="#8b5cf6" 
-                  strokeWidth={3}
-                  fill="url(#colorGrowth)"
-                  dot={{ fill: '#8b5cf6', r: 5 }}
-                  activeDot={{ r: 7 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        {/* Plan Distribution */}
-        <Card className="backdrop-blur-xl bg-white/95 dark:bg-slate-900/95 border-slate-200 dark:border-slate-800">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <PieChartIcon className="h-5 w-5 text-blue-600" />
-                  Distribución de Planes
-                </CardTitle>
-                <CardDescription>Por cantidad de organizaciones</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={planDistribution}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  outerRadius={100}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {planDistribution.map((entry, index) => (
-                    <Cell 
-                      key={`cell-${index}`} 
-                      fill={COLORS[entry.name as keyof typeof COLORS] || '#94a3b8'} 
-                    />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: '#1e293b', 
-                    border: '1px solid #475569',
-                    borderRadius: '8px',
-                    color: '#f1f5f9'
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+      {/* ── KPI Cards ── */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard
+          label="orgs"
+          subtitle="TOTAL ORGANIZACIONES"
+          value={totalOrgsFromGrowth}
+          sub={`+${currentMonth} este mes`}
+          icon={Building2}
+          accent="text-indigo-400"
+          accentBg="bg-indigo-500/10"
+          accentBorder="border-indigo-500/20"
+          trend={growthPct}
+          trendLabel="vs mes anterior"
+        />
+        <KpiCard
+          label="mrr"
+          subtitle="MRR ESTIMADO"
+          value={`$${revenueData.mrr.toLocaleString()}`}
+          sub={`ARR: $${revenueData.arr.toLocaleString()}`}
+          icon={DollarSign}
+          accent="text-emerald-400"
+          accentBg="bg-emerald-500/10"
+          accentBorder="border-emerald-500/20"
+        />
+        <KpiCard
+          label="subs"
+          subtitle="SUSCRIPCIONES ACTIVAS"
+          value={revenueData.activeSubscriptions}
+          sub={`Prom: $${revenueData.averageRevenuePerSub.toFixed(2)}/sub`}
+          icon={Sparkles}
+          accent="text-violet-400"
+          accentBg="bg-violet-500/10"
+          accentBorder="border-violet-500/20"
+        />
+        <KpiCard
+          label="growth"
+          subtitle="TASA DE CRECIMIENTO"
+          value={`${growthPct > 0 ? '+' : ''}${growthPct}%`}
+          sub="vs mes anterior"
+          icon={Activity}
+          accent="text-amber-400"
+          accentBg="bg-amber-500/10"
+          accentBorder="border-amber-500/20"
+          trend={growthPct}
+        />
       </div>
 
-      {/* Charts Row 2 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* User Activity */}
-        <Card className="backdrop-blur-xl bg-white/95 dark:bg-slate-900/95 border-slate-200 dark:border-slate-800">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Users className="h-5 w-5 text-emerald-600" />
-                  Actividad de Usuarios
-                </CardTitle>
-                <CardDescription>Activos vs Inactivos por mes</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={activityData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.2} />
-                <XAxis 
-                  dataKey="month" 
-                  stroke="#64748b"
-                  style={{ fontSize: '12px' }}
-                />
-                <YAxis 
-                  stroke="#64748b"
-                  style={{ fontSize: '12px' }}
-                />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: '#1e293b', 
-                    border: '1px solid #475569',
-                    borderRadius: '8px',
-                    color: '#f1f5f9'
-                  }}
-                />
-                <Legend />
-                <Bar dataKey="active" fill="#10b981" name="Activos" radius={[8, 8, 0, 0]} />
-                <Bar dataKey="inactive" fill="#64748b" name="Inactivos" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+      {/* ── Charts Row 1: Growth + Plan Distribution ── */}
+      <div className="grid gap-4 lg:grid-cols-5">
 
-        {/* Top Organizations */}
-        <Card className="backdrop-blur-xl bg-white/95 dark:bg-slate-900/95 border-slate-200 dark:border-slate-800">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5 text-amber-600" />
-                  Top 5 Organizaciones
-                </CardTitle>
-                <CardDescription>Por cantidad de usuarios</CardDescription>
+        {/* Growth line chart — 3 cols */}
+        <div className="lg:col-span-3 rounded-xl border border-slate-800 bg-slate-900/70 p-5 backdrop-blur-sm">
+          <SectionHeader subtitle="ÚLTIMOS 6 MESES" title="Crecimiento de Organizaciones" icon={BarChart3} accentColor="text-indigo-400" />
+          <ResponsiveContainer width="100%" height={260}>
+            <AreaChart data={growthData} margin={{ left: -20, right: 8 }}>
+              <defs>
+                <linearGradient id="gradIndigo" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={CHART_COLORS.indigo} stopOpacity={0.35} />
+                  <stop offset="95%" stopColor={CHART_COLORS.indigo} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid {...GRID_STYLE} />
+              <XAxis dataKey="month" {...AXIS_STYLE} />
+              <YAxis {...AXIS_STYLE} />
+              <Tooltip contentStyle={TOOLTIP_STYLE} />
+              <Area
+                type="monotone"
+                dataKey="count"
+                stroke={CHART_COLORS.indigo}
+                strokeWidth={2.5}
+                fill="url(#gradIndigo)"
+                dot={{ fill: CHART_COLORS.indigo, r: 4, strokeWidth: 0 }}
+                activeDot={{ r: 6, fill: CHART_COLORS.indigo, stroke: '#1e1b4b', strokeWidth: 2 }}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Pie chart — 2 cols */}
+        <div className="lg:col-span-2 rounded-xl border border-slate-800 bg-slate-900/70 p-5 backdrop-blur-sm">
+          <SectionHeader subtitle="POR ORGANIZACIONES" title="Distribución de Planes" icon={PieChartIcon} accentColor="text-violet-400" />
+          <ResponsiveContainer width="100%" height={200}>
+            <PieChart>
+              <Pie
+                data={planDistribution}
+                cx="50%"
+                cy="50%"
+                innerRadius={52}
+                outerRadius={82}
+                paddingAngle={3}
+                dataKey="value"
+              >
+                {planDistribution.map((entry, index) => (
+                  <Cell
+                    key={`cell-${index}`}
+                    fill={PLAN_COLORS[entry.name] || CHART_COLORS.slate}
+                    stroke="transparent"
+                  />
+                ))}
+              </Pie>
+              <Tooltip contentStyle={TOOLTIP_STYLE} />
+            </PieChart>
+          </ResponsiveContainer>
+
+          {/* Legend */}
+          <div className="mt-1 space-y-1.5">
+            {planDistribution.map((entry, i) => (
+              <div key={i} className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="h-2 w-2 rounded-full shrink-0"
+                    style={{ backgroundColor: PLAN_COLORS[entry.name] || CHART_COLORS.slate }}
+                  />
+                  <span className="text-slate-400">{entry.name}</span>
+                </div>
+                <span className="font-semibold tabular-nums text-slate-300">{entry.value}</span>
               </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {topOrganizations.map((org, index) => (
-                <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className={`
-                      w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm
-                      ${index === 0 ? 'bg-amber-500 text-white' : ''}
-                      ${index === 1 ? 'bg-slate-400 text-white' : ''}
-                      ${index === 2 ? 'bg-orange-600 text-white' : ''}
-                      ${index > 2 ? 'bg-slate-300 text-slate-700' : ''}
-                    `}>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Charts Row 2: Activity + Top Orgs ── */}
+      <div className="grid gap-4 lg:grid-cols-5">
+
+        {/* Bar chart — 3 cols */}
+        <div className="lg:col-span-3 rounded-xl border border-slate-800 bg-slate-900/70 p-5 backdrop-blur-sm">
+          <SectionHeader subtitle="ACTIVOS VS INACTIVOS" title="Actividad de Usuarios por Mes" icon={Users} accentColor="text-emerald-400" />
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={activityData} margin={{ left: -20, right: 8 }} barSize={10}>
+              <CartesianGrid {...GRID_STYLE} />
+              <XAxis dataKey="month" {...AXIS_STYLE} />
+              <YAxis {...AXIS_STYLE} />
+              <Tooltip contentStyle={TOOLTIP_STYLE} />
+              <Legend
+                wrapperStyle={{ fontSize: '11px', color: '#64748b', paddingTop: '12px' }}
+                formatter={(value) => <span style={{ color: '#94a3b8' }}>{value}</span>}
+              />
+              <Bar dataKey="active" fill={CHART_COLORS.emerald} name="Activos" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="inactive" fill={CHART_COLORS.slate} name="Inactivos" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Top orgs — 2 cols */}
+        <div className="lg:col-span-2 rounded-xl border border-slate-800 bg-slate-900/70 p-5 backdrop-blur-sm">
+          <SectionHeader subtitle="POR CANTIDAD DE USUARIOS" title="Top Organizaciones" icon={Medal} accentColor="text-amber-400" />
+
+          <div className="space-y-2">
+            {topOrganizations.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-center">
+                <Building2 className="mb-2 h-8 w-8 text-slate-700" />
+                <p className="text-xs text-slate-500">Sin datos disponibles</p>
+              </div>
+            ) : (
+              topOrganizations.map((org, index) => {
+                const MEDAL_COLORS = [
+                  'bg-amber-500/20 text-amber-400 border-amber-500/30',
+                  'bg-slate-500/20 text-slate-300 border-slate-500/30',
+                  'bg-orange-500/20 text-orange-400 border-orange-500/30',
+                ];
+                const medalClass = MEDAL_COLORS[index] || 'bg-slate-800 text-slate-500 border-slate-700';
+                const maxCount = topOrganizations[0]?.user_count || 1;
+                const barPct = (org.user_count / maxCount) * 100;
+
+                return (
+                  <div key={index} className="group flex items-center gap-3 rounded-lg border border-slate-800/60 bg-slate-950/40 px-3 py-2.5 transition-colors hover:border-slate-700 hover:bg-slate-900">
+                    <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border text-xs font-black ${medalClass}`}>
                       {index + 1}
                     </div>
-                    <span className="font-medium text-slate-900 dark:text-slate-100">
-                      {org.name}
-                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-xs font-semibold text-slate-200">{org.name}</p>
+                      <div className="mt-1 h-1 overflow-hidden rounded-full bg-slate-800">
+                        <div
+                          className="h-full rounded-full bg-indigo-500/70 transition-all"
+                          style={{ width: `${barPct}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Users className="h-3 w-3 text-slate-600" />
+                      <span className="text-xs font-bold tabular-nums text-slate-300">{org.user_count}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Users className="h-4 w-4 text-slate-400" />
-                    <span className="text-slate-700 dark:text-slate-300 font-semibold">
-                      {org.user_count}
-                    </span>
-                  </div>
-                </div>
-              ))}
-              {topOrganizations.length === 0 && (
-                <div className="text-center py-8 text-slate-500">
-                  No hay datos disponibles
-                </div>
-              )}
+                );
+              })
+            )}
+          </div>
+
+          {/* Revenue quick stat */}
+          <div className="mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Zap className="h-3.5 w-3.5 text-emerald-400" />
+                <span className="text-xs font-semibold text-slate-300">ARPU estimado</span>
+              </div>
+              <span className="text-sm font-black text-emerald-400">
+                ${revenueData.activeSubscriptions > 0
+                  ? (revenueData.mrr / revenueData.activeSubscriptions).toFixed(0)
+                  : '0'}
+                <span className="text-[10px] font-medium text-slate-500">/sub</span>
+              </span>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
 
-      {/* Footer */}
-      <div className="text-xs text-slate-500 text-center">
-        Última actualización: {new Date(analytics.generatedAt).toLocaleString('es-ES')}
-      </div>
     </div>
   );
 }

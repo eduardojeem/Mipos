@@ -1,8 +1,7 @@
 'use client';
 
 import React, { memo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Building2, CreditCard, Users, DollarSign, TrendingUp, TrendingDown } from 'lucide-react';
+import { Building2, CreditCard, Users, DollarSign, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { AdminStats as AdminStatsType } from '../hooks/useAdminData';
 import {
   Tooltip,
@@ -21,70 +20,86 @@ interface AdminStatsProps {
   };
 }
 
-export const AdminStats = memo(function AdminStats({ stats, trends }: AdminStatsProps) {
-  const formatMoney = (amount: number | undefined) => new Intl.NumberFormat('es-PY', {
+const formatMoney = (amount: number | undefined) =>
+  new Intl.NumberFormat('es-PY', {
     style: 'currency',
     currency: 'PYG',
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(Number(amount || 0));
 
+export const AdminStats = memo(function AdminStats({ stats, trends }: AdminStatsProps) {
   const statCards = [
     {
-      title: 'Total Organizaciones',
+      title: 'Organizaciones',
+      subtitle: 'TOTAL REGISTRADAS',
       value: stats.totalOrganizations,
-      description: 'Empresas registradas',
+      description: 'empresas en la plataforma',
       icon: Building2,
       trend: trends?.organizations,
-      color: 'text-slate-600 dark:text-slate-400',
-      bgColor: 'bg-slate-50 dark:bg-slate-900/50',
-      borderColor: 'border-l-slate-500',
+      accentColor: 'text-indigo-400',
+      accentBg: 'bg-indigo-500/10',
+      accentBorder: 'border-indigo-500/20',
+      glowColor: 'shadow-indigo-500/10',
+      dotColor: 'bg-indigo-400',
     },
     {
-      title: 'Usuarios Totales',
-      value: stats.totalUsers,
-      description: 'Usuarios en todas las orgs',
+      title: 'Usuarios',
+      subtitle: 'USUARIOS TOTALES',
+      value: stats.totalUsers.toLocaleString('es-PY'),
+      description: 'en todas las organizaciones',
       icon: Users,
       trend: trends?.users,
-      color: 'text-blue-600 dark:text-blue-400',
-      bgColor: 'bg-blue-50 dark:bg-blue-900/20',
-      borderColor: 'border-l-blue-500',
+      accentColor: 'text-sky-400',
+      accentBg: 'bg-sky-500/10',
+      accentBorder: 'border-sky-500/20',
+      glowColor: 'shadow-sky-500/10',
+      dotColor: 'bg-sky-400',
     },
     {
-      title: 'Organizaciones Activas',
+      title: 'Activas',
+      subtitle: 'ORGS ACTIVAS',
       value: stats.activeOrganizations || 0,
-      description: 'Empresas operando',
+      description: `${stats.totalOrganizations > 0 ? Math.round(((stats.activeOrganizations || 0) / stats.totalOrganizations) * 100) : 0}% de operación`,
       icon: Building2,
       trend: trends?.subscriptions,
-      color: 'text-emerald-600 dark:text-emerald-400',
-      bgColor: 'bg-emerald-50 dark:bg-emerald-900/20',
-      borderColor: 'border-l-emerald-500',
+      accentColor: 'text-emerald-400',
+      accentBg: 'bg-emerald-500/10',
+      accentBorder: 'border-emerald-500/20',
+      glowColor: 'shadow-emerald-500/10',
+      dotColor: 'bg-emerald-400',
     },
     {
-      title: 'MRR Estimado',
+      title: 'MRR',
+      subtitle: 'INGRESO MENSUAL',
       value: formatMoney(stats.monthlyRevenue),
-      description: 'Ingreso recurrente mensual',
+      description: 'ingreso recurrente mensual',
       icon: DollarSign,
       trend: trends?.revenue,
-      color: 'text-amber-600 dark:text-amber-400',
-      bgColor: 'bg-amber-50 dark:bg-amber-900/20',
-      borderColor: 'border-l-amber-500',
+      accentColor: 'text-violet-400',
+      accentBg: 'bg-violet-500/10',
+      accentBorder: 'border-violet-500/20',
+      glowColor: 'shadow-violet-500/10',
+      dotColor: 'bg-violet-400',
     },
     {
-      title: 'Suscripciones SaaS Activas',
+      title: 'Suscripciones',
+      subtitle: 'CONTRATOS ACTIVOS',
       value: stats.activeSubscriptions,
-      description: 'Contratos de plan activos',
+      description: 'planes SaaS vigentes',
       icon: CreditCard,
       trend: trends?.subscriptions,
-      color: 'text-violet-600 dark:text-violet-400',
-      bgColor: 'bg-violet-50 dark:bg-violet-900/20',
-      borderColor: 'border-l-violet-500',
+      accentColor: 'text-amber-400',
+      accentBg: 'bg-amber-500/10',
+      accentBorder: 'border-amber-500/20',
+      glowColor: 'shadow-amber-500/10',
+      dotColor: 'bg-amber-400',
     },
   ];
 
   return (
     <TooltipProvider>
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {statCards.map((stat, index) => {
           const Icon = stat.icon;
           const hasTrend = typeof stat.trend === 'number';
@@ -92,58 +107,65 @@ export const AdminStats = memo(function AdminStats({ stats, trends }: AdminStats
           const isNegative = hasTrend && stat.trend! < 0;
 
           return (
-            <Card
+            <div
               key={index}
-              className={`relative overflow-hidden glass-card hover-lift hover-glow cursor-pointer border-l-4 ${stat.borderColor} bg-background/60`}
+              className={`group relative overflow-hidden rounded-xl border bg-slate-900/60 p-5 backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg ${stat.accentBorder} ${stat.glowColor}`}
             >
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  {stat.title}
-                </CardTitle>
-                <div className={`p-2 rounded-lg ${stat.bgColor}`}>
-                  <Icon className={`h-4 w-4 ${stat.color}`} />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-end justify-between">
-                  <div className="space-y-1">
-                    <div className="text-2xl font-bold text-foreground">{stat.value}</div>
-                    <p className="text-xs text-muted-foreground/80">
-                      {stat.description}
-                    </p>
-                  </div>
+              {/* Ambient glow top-right */}
+              <div className={`pointer-events-none absolute -right-4 -top-4 h-20 w-20 rounded-full ${stat.accentBg} blur-2xl opacity-60 transition-opacity duration-300 group-hover:opacity-100`} />
 
-                  {hasTrend && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div
-                          className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full ${
-                            isPositive
-                              ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 dark:text-emerald-400'
-                              : isNegative
-                              ? 'text-red-600 bg-red-50 dark:bg-red-950/30 dark:text-red-400'
-                              : 'text-slate-500 bg-slate-100 dark:bg-slate-800 dark:text-slate-400'
-                          }`}
-                        >
-                          {isPositive ? (
-                            <TrendingUp className="h-3 w-3" />
-                          ) : isNegative ? (
-                            <TrendingDown className="h-3 w-3" />
-                          ) : null}
-                          {Math.abs(stat.trend!)}%
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>
-                          {isPositive ? 'Incremento' : isNegative ? 'Disminución' : 'Sin cambios'} del{' '}
-                          {Math.abs(stat.trend!)}% respecto al período anterior
-                        </p>
-                      </TooltipContent>
-                    </Tooltip>
-                  )}
+              {/* Header row */}
+              <div className="relative flex items-start justify-between gap-2">
+                <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${stat.accentBg} border ${stat.accentBorder}`}>
+                  <Icon className={`h-4 w-4 ${stat.accentColor}`} />
                 </div>
-              </CardContent>
-            </Card>
+
+                {hasTrend && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div
+                        className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums ${
+                          isPositive
+                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                            : isNegative
+                            ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                            : 'bg-slate-500/10 text-slate-500 border border-slate-700'
+                        }`}
+                      >
+                        {isPositive ? (
+                          <TrendingUp className="h-2.5 w-2.5" />
+                        ) : isNegative ? (
+                          <TrendingDown className="h-2.5 w-2.5" />
+                        ) : (
+                          <Minus className="h-2.5 w-2.5" />
+                        )}
+                        {Math.abs(stat.trend!)}%
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs">
+                      {isPositive ? 'Incremento' : isNegative ? 'Disminución' : 'Sin cambios'} del{' '}
+                      {Math.abs(stat.trend!)}% respecto al período anterior
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
+
+              {/* Value */}
+              <div className="relative mt-4">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+                  {stat.subtitle}
+                </p>
+                <div className={`mt-1 text-3xl font-black tabular-nums tracking-tight ${stat.accentColor}`}>
+                  {stat.value}
+                </div>
+                <p className="mt-1 text-xs text-slate-500">
+                  {stat.description}
+                </p>
+              </div>
+
+              {/* Bottom accent line */}
+              <div className={`absolute bottom-0 left-0 right-0 h-[2px] ${stat.accentBg} opacity-0 transition-opacity duration-300 group-hover:opacity-100`} />
+            </div>
           );
         })}
       </div>

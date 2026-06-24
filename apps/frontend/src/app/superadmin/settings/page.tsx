@@ -1,7 +1,6 @@
-﻿'use client';
+'use client';
 
 import { SuperAdminGuard } from '../components/SuperAdminGuard';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -36,10 +35,17 @@ import {
   EyeOff,
   Palette,
   Image as ImageIcon,
+  Zap,
+  Copy,
+  Link2,
+  Trash2,
+  LayoutDashboard,
+  Crown,
 } from 'lucide-react';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useDeferredValue } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/lib/toast';
+import { BrandTab } from './BrandTab';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -87,7 +93,6 @@ const DEFAULT_SETTINGS: SystemSettings = {
   data_retention_days: 90,
 };
 
-// Solo persistimos estas keys (excluye feature_flags, que tiene su propia key).
 const SETTINGS_KEYS = Object.keys(DEFAULT_SETTINGS) as (keyof SystemSettings)[];
 
 interface FeatureFlag {
@@ -134,7 +139,223 @@ interface AuditEntry {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Component
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+function filterSettings(raw: Record<string, unknown>): Partial<SystemSettings> {
+  const out: Record<string, unknown> = {};
+  for (const key of SETTINGS_KEYS) {
+    if (key in raw) out[key] = raw[key];
+  }
+  return out as Partial<SystemSettings>;
+}
+
+function formatDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString('es-PY', { dateStyle: 'medium', timeStyle: 'short' });
+  } catch {
+    return iso;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sub-components
+// ─────────────────────────────────────────────────────────────────────────────
+
+function SectionCard({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`rounded-xl border border-slate-800 bg-slate-900/70 backdrop-blur-sm ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+function SectionHeader({
+  icon: Icon,
+  accent = 'text-indigo-400',
+  accentBg = 'bg-indigo-500/10',
+  accentBorder = 'border-indigo-500/20',
+  title,
+  description,
+  action,
+}: {
+  icon: typeof Settings;
+  accent?: string;
+  accentBg?: string;
+  accentBorder?: string;
+  title: string;
+  description?: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 border-b border-slate-800 px-5 py-4">
+      <div className="flex items-start gap-3">
+        <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${accentBg} ${accentBorder}`}>
+          <Icon className={`h-4 w-4 ${accent}`} />
+        </div>
+        <div>
+          <p className="text-sm font-bold text-slate-100">{title}</p>
+          {description && <p className="mt-0.5 text-xs text-slate-500">{description}</p>}
+        </div>
+      </div>
+      {action && <div className="shrink-0">{action}</div>}
+    </div>
+  );
+}
+
+function SettingToggle({
+  icon: Icon,
+  iconColor,
+  label,
+  description,
+  checked,
+  onCheckedChange,
+  danger = false,
+}: {
+  icon: typeof Settings;
+  iconColor: string;
+  label: string;
+  description: string;
+  checked: boolean;
+  onCheckedChange: (v: boolean) => void;
+  danger?: boolean;
+}) {
+  return (
+    <div className={`flex items-start justify-between gap-4 rounded-lg border p-3.5 transition-colors ${
+      danger && checked
+        ? 'border-rose-500/30 bg-rose-500/5'
+        : 'border-slate-800 bg-slate-950/30 hover:border-slate-700'
+    }`}>
+      <div className="flex items-start gap-3">
+        <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${iconColor}`} />
+        <div>
+          <p className="text-sm font-medium text-slate-200">{label}</p>
+          <p className="text-xs text-slate-500">{description}</p>
+        </div>
+      </div>
+      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+    </div>
+  );
+}
+
+function ManagedExternally({
+  icon: Icon,
+  label,
+  description,
+}: {
+  icon: typeof Settings;
+  label: string;
+  description: string;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4 rounded-lg border border-dashed border-slate-700/60 p-3.5">
+      <div className="flex items-start gap-3">
+        <Icon className="mt-0.5 h-4 w-4 shrink-0 text-slate-600" />
+        <div>
+          <p className="text-sm font-medium text-slate-400">{label}</p>
+          <p className="text-xs text-slate-600">{description}</p>
+        </div>
+      </div>
+      <Badge variant="outline" className="shrink-0 border-slate-700 text-[10px] text-slate-500">
+        Supabase
+      </Badge>
+    </div>
+  );
+}
+
+function EnvRow({ env }: { env: EnvVar }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-800/80 bg-slate-950/40 px-3 py-2.5">
+      <div className="flex min-w-0 items-center gap-2.5">
+        {env.present ? (
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+        ) : env.required ? (
+          <XCircle className="h-4 w-4 shrink-0 text-rose-500" />
+        ) : (
+          <XCircle className="h-4 w-4 shrink-0 text-slate-700" />
+        )}
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            <code className="truncate text-xs font-medium text-slate-300">{env.key}</code>
+            {env.secret && <EyeOff className="h-3 w-3 shrink-0 text-slate-600" aria-label="Secreto" />}
+            {env.required && (
+              <span className="shrink-0 rounded bg-slate-800 px-1 text-[9px] font-semibold uppercase text-slate-500">
+                req
+              </span>
+            )}
+          </div>
+          {env.present && env.preview ? (
+            <code className="block truncate text-[11px] text-slate-600">{env.preview}</code>
+          ) : (
+            <span className="text-[11px] text-slate-600">
+              {env.secret ? (env.present ? 'definido (oculto)' : 'no definido') : env.present ? '' : 'no definido'}
+            </span>
+          )}
+        </div>
+      </div>
+      <Badge
+        variant="outline"
+        className={
+          env.present
+            ? 'shrink-0 border-emerald-800/50 bg-emerald-900/30 text-[10px] text-emerald-400'
+            : env.required
+            ? 'shrink-0 border-rose-800/50 bg-rose-900/30 text-[10px] text-rose-400'
+            : 'shrink-0 border-slate-700 text-[10px] text-slate-500'
+        }
+      >
+        {env.present ? 'OK' : env.required ? 'Falta' : 'Opcional'}
+      </Badge>
+    </div>
+  );
+}
+
+function InfoStat({
+  label,
+  value,
+  icon: Icon,
+  tone,
+}: {
+  label: string;
+  value: string;
+  icon: typeof Settings;
+  tone?: 'ok' | 'bad';
+}) {
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+        <Icon className="h-3 w-3" />
+        {label}
+      </div>
+      <p className={`mt-1.5 truncate text-sm font-bold tabular-nums ${
+        tone === 'ok' ? 'text-emerald-400'
+        : tone === 'bad' ? 'text-rose-400'
+        : 'text-slate-200'
+      }`}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function FieldGroup({ children }: { children: React.ReactNode }) {
+  return <div className="space-y-1.5">{children}</div>;
+}
+
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return <Label className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">{children}</Label>;
+}
+
+function StyledInput(props: React.ComponentProps<typeof Input>) {
+  return (
+    <Input
+      {...props}
+      className={`border-slate-700 bg-slate-950/60 text-slate-200 placeholder:text-slate-600 focus:border-indigo-500/50 focus:ring-indigo-500/20 ${props.className ?? ''}`}
+    />
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Page Component
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
@@ -269,15 +490,9 @@ export default function SettingsPage() {
 
   // ── Save domain ──
   const handleSaveDomain = useCallback(async () => {
-    if (!baseDomain.trim()) {
-      toast.error('El dominio base es requerido');
-      return;
-    }
+    if (!baseDomain.trim()) { toast.error('El dominio base es requerido'); return; }
     const domainRegex = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.[a-z]{2,}$/i;
-    if (!domainRegex.test(baseDomain)) {
-      toast.error('Formato de dominio inválido. Ejemplo: miapp.vercel.app');
-      return;
-    }
+    if (!domainRegex.test(baseDomain)) { toast.error('Formato de dominio inválido. Ejemplo: miapp.vercel.app'); return; }
     setSavingDomain(true);
     try {
       const res = await fetch('/api/superadmin/system-settings', {
@@ -297,21 +512,16 @@ export default function SettingsPage() {
 
   const handleSave = () => {
     if (settings.session_timeout < 5 || settings.session_timeout > 1440) {
-      toast.error('Tiempo de sesión debe ser entre 5 y 1440 minutos');
-      return;
+      toast.error('Tiempo de sesión debe ser entre 5 y 1440 minutos'); return;
     }
     if (settings.max_login_attempts < 1 || settings.max_login_attempts > 20) {
-      toast.error('Intentos de login debe ser entre 1 y 20');
-      return;
+      toast.error('Intentos de login debe ser entre 1 y 20'); return;
     }
     if (settings.data_retention_days < 7 || settings.data_retention_days > 3650) {
-      toast.error('Retención de datos debe ser entre 7 y 3650 días');
-      return;
+      toast.error('Retención de datos debe ser entre 7 y 3650 días'); return;
     }
     if (settings.maintenance_mode && !data?.settings?.maintenance_mode) {
-      if (!confirm('⚠️ Vas a ACTIVAR el modo mantenimiento. Esto bloqueará el acceso a TODOS los usuarios (excepto super admins). ¿Continuar?')) {
-        return;
-      }
+      if (!confirm('⚠️ Vas a ACTIVAR el modo mantenimiento. Esto bloqueará el acceso a TODOS los usuarios (excepto super admins). ¿Continuar?')) return;
     }
     saveMutation.mutate(settings);
   };
@@ -321,8 +531,7 @@ export default function SettingsPage() {
     const payload = {
       exportedAt: new Date().toISOString(),
       version: systemInfo?.app.version || '0.1.0',
-      settings,
-      baseDomain,
+      settings, baseDomain,
       featureFlags: Object.fromEntries(flags.map((f) => [f.key, f.enabled])),
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -356,26 +565,31 @@ export default function SettingsPage() {
     }
   };
 
-  // ── Loading / error ──
+  // ── Loading ──
   if (isLoading) {
     return (
       <SuperAdminGuard>
         <div className="flex min-h-[400px] flex-col items-center justify-center gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
-          <p className="text-sm text-slate-500">Cargando configuraciones...</p>
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-indigo-500/20 bg-indigo-500/10">
+            <Loader2 className="h-7 w-7 animate-spin text-indigo-400" />
+          </div>
+          <p className="text-sm text-slate-500">Cargando configuraciones…</p>
         </div>
       </SuperAdminGuard>
     );
   }
 
+  // ── Error ──
   if (error) {
     return (
       <SuperAdminGuard>
         <div className="flex min-h-[400px] flex-col items-center justify-center gap-4">
-          <AlertTriangle className="h-10 w-10 text-rose-500" />
-          <p className="text-slate-500">{error instanceof Error ? error.message : 'Error'}</p>
-          <Button onClick={() => refetch()} variant="outline" size="sm">
-            <RefreshCw className="mr-2 h-4 w-4" /> Reintentar
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-rose-500/20 bg-rose-500/10">
+            <AlertTriangle className="h-7 w-7 text-rose-400" />
+          </div>
+          <p className="text-sm text-slate-500">{error instanceof Error ? error.message : 'Error'}</p>
+          <Button onClick={() => refetch()} size="sm" className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white">
+            <RefreshCw className="h-4 w-4" /> Reintentar
           </Button>
         </div>
       </SuperAdminGuard>
@@ -383,300 +597,225 @@ export default function SettingsPage() {
   }
 
   const dbOk = systemInfo?.database.status === 'connected';
+  const enabledFlagsCount = flags.filter((f) => f.enabled).length;
 
   return (
     <SuperAdminGuard>
-      <div className="mx-auto max-w-4xl space-y-6">
-        {data?.loadWarning ? (
-          <Alert className="border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription className="text-sm">{data.loadWarning}</AlertDescription>
-          </Alert>
-        ) : null}
+      <div className="mx-auto max-w-4xl space-y-5">
 
-        {/* ── Header ── */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="flex items-center gap-2 text-2xl font-bold text-slate-900 dark:text-white">
-              <Settings className="h-6 w-6 text-slate-600" />
-              Configuración Global
-            </h1>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              Parámetros del sistema, accesos, features y herramientas del SaaS
+        {/* ── Warning banner ── */}
+        {data?.loadWarning && (
+          <div className="flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+            <p className="text-xs text-amber-300">{data.loadWarning}</p>
+          </div>
+        )}
+
+        {/* ── Maintenance banner ── */}
+        {settings.maintenance_mode && (
+          <div className="flex items-start gap-3 rounded-xl border border-rose-500/30 bg-rose-500/5 px-4 py-3">
+            <Power className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
+            <p className="text-xs font-medium text-rose-300">
+              Modo mantenimiento ACTIVO — los usuarios no-superadmin están viendo la página de mantenimiento.
+              {!data?.settings?.maintenance_mode && ' (sin guardar todavía)'}
             </p>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => refetch()}>
-              <RefreshCw className="mr-2 h-4 w-4" /> Recargar
-            </Button>
-            <Button size="sm" onClick={handleSave} disabled={saveMutation.isPending}>
-              {saveMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-              Guardar cambios
-            </Button>
+        )}
+
+        {/* ── Hero Header ── */}
+        <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 p-6 md:p-8">
+          <div className="pointer-events-none absolute -left-10 -top-10 h-40 w-40 rounded-full bg-indigo-600/10 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-10 -right-10 h-40 w-40 rounded-full bg-violet-600/10 blur-3xl" />
+
+          <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-indigo-500/30 bg-indigo-500/10 shadow-lg shadow-indigo-500/10">
+                <Settings className="h-6 w-6 text-indigo-400" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-2xl font-black tracking-tight text-slate-50 md:text-3xl">
+                    Configuración Global
+                  </h1>
+                  <span className="rounded-full border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-indigo-400">
+                    Sistema
+                  </span>
+                </div>
+                <p className="mt-0.5 text-sm text-slate-400">
+                  Parámetros del sistema, accesos, features y herramientas del SaaS
+                </p>
+              </div>
+            </div>
+
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => refetch()}
+                className="h-9 gap-2 border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-slate-100"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Recargar</span>
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleSave}
+                disabled={saveMutation.isPending}
+                className="h-9 gap-2 bg-indigo-600 text-white shadow-lg shadow-indigo-500/20 hover:bg-indigo-700"
+              >
+                {saveMutation.isPending
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <Save className="h-3.5 w-3.5" />}
+                Guardar cambios
+              </Button>
+            </div>
           </div>
         </div>
 
-        {/* ── Maintenance banner (cuando está activo) ── */}
-        {settings.maintenance_mode && (
-          <Alert className="border-rose-300 bg-rose-50 text-rose-900 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-200">
-            <Power className="h-4 w-4" />
-            <AlertDescription className="text-sm font-medium">
-              Modo mantenimiento ACTIVO — los usuarios no-superadmin están viendo la página de mantenimiento.
-              {!data?.settings?.maintenance_mode && ' (sin guardar todavía)'}
-            </AlertDescription>
-          </Alert>
-        )}
-
         {/* ── Tabs ── */}
         <Tabs defaultValue="general" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6">
-            <TabsTrigger value="general" className="gap-1.5"><Settings className="h-3.5 w-3.5" /> General</TabsTrigger>
-            <TabsTrigger value="brand" className="gap-1.5"><Palette className="h-3.5 w-3.5" /> Marca</TabsTrigger>
-            <TabsTrigger value="security" className="gap-1.5"><Lock className="h-3.5 w-3.5" /> Acceso</TabsTrigger>
-            <TabsTrigger value="notifications" className="gap-1.5"><Bell className="h-3.5 w-3.5" /> Avisos</TabsTrigger>
-            <TabsTrigger value="flags" className="gap-1.5"><Flag className="h-3.5 w-3.5" /> Features</TabsTrigger>
-            <TabsTrigger value="system" className="gap-1.5"><ServerCog className="h-3.5 w-3.5" /> Sistema</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-3 gap-1 rounded-xl border border-slate-800 bg-slate-900/70 p-1 sm:grid-cols-6">
+            {[
+              { value: 'general', icon: Settings, label: 'General' },
+              { value: 'brand', icon: Palette, label: 'Marca' },
+              { value: 'security', icon: Lock, label: 'Acceso' },
+              { value: 'notifications', icon: Bell, label: 'Avisos' },
+              { value: 'flags', icon: Flag, label: 'Features' },
+              { value: 'system', icon: ServerCog, label: 'Sistema' },
+            ].map(({ value, icon: Icon, label }) => (
+              <TabsTrigger
+                key={value}
+                value={value}
+                className="gap-1.5 rounded-lg text-xs font-semibold text-slate-500 data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow"
+              >
+                <Icon className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{label}</span>
+              </TabsTrigger>
+            ))}
           </TabsList>
-
-          {/* ════════ MARCA / PLATAFORMA ════════ */}
-          <TabsContent value="brand" className="mt-4 space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Palette className="h-5 w-5 text-emerald-600" /> Identidad de la Plataforma
-                </CardTitle>
-                <CardDescription>Nombre, logo y colores de la marca que ven todos los usuarios del sistema.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Nombre y tagline */}
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="platformName" className="text-xs">Nombre de la plataforma</Label>
-                    <Input
-                      id="platformName"
-                      value={settings.system_name}
-                      onChange={(e) => setSettings({ ...settings, system_name: e.target.value })}
-                      placeholder="MITIENDA"
-                    />
-                    <p className="text-[11px] text-muted-foreground">Aparece en el sidebar, emails y footer.</p>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="platformTagline" className="text-xs">Tagline / Eslogan</Label>
-                    <Input
-                      id="platformTagline"
-                      value={settings.platform_tagline}
-                      onChange={(e) => setSettings({ ...settings, platform_tagline: e.target.value })}
-                      placeholder="Sistema de gestión para tu negocio"
-                    />
-                    <p className="text-[11px] text-muted-foreground">Descripción corta usada en emails y meta tags.</p>
-                  </div>
-                </div>
-
-                {/* Logo */}
-                <div className="space-y-2">
-                  <Label className="text-xs">Logo de la plataforma</Label>
-                  <div className="flex items-center gap-4">
-                    {settings.platform_logo ? (
-                      <div className="flex h-14 w-14 items-center justify-center rounded-xl border bg-white p-2">
-                        <img src={settings.platform_logo} alt="Logo" className="max-h-10 max-w-full object-contain" />
-                      </div>
-                    ) : (
-                      <div className="flex h-14 w-14 items-center justify-center rounded-xl border border-dashed bg-slate-50 dark:bg-slate-900">
-                        <ImageIcon className="h-6 w-6 text-slate-400" />
-                      </div>
-                    )}
-                    <div className="flex-1 space-y-1.5">
-                      <Input
-                        value={settings.platform_logo}
-                        onChange={(e) => setSettings({ ...settings, platform_logo: e.target.value })}
-                        placeholder="https://tu-dominio.com/logo.png"
-                        className="font-mono text-sm"
-                      />
-                      <p className="text-[11px] text-muted-foreground">URL pública del logo. Subí la imagen desde /admin/business-config o pega un link directo.</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Color primario */}
-                <div className="space-y-2">
-                  <Label className="text-xs">Color primario de la plataforma</Label>
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="color"
-                      value={settings.platform_primary_color}
-                      onChange={(e) => setSettings({ ...settings, platform_primary_color: e.target.value })}
-                      className="h-10 w-10 cursor-pointer rounded-lg border p-0.5"
-                    />
-                    <Input
-                      value={settings.platform_primary_color}
-                      onChange={(e) => setSettings({ ...settings, platform_primary_color: e.target.value })}
-                      placeholder="#059669"
-                      className="max-w-[140px] font-mono text-sm"
-                    />
-                    <div
-                      className="flex h-10 flex-1 items-center justify-center rounded-lg text-xs font-medium text-white"
-                      style={{ backgroundColor: settings.platform_primary_color }}
-                    >
-                      Vista previa del color
-                    </div>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">Se usa en botones CTA, headers de emails y acentos de la UI pública.</p>
-                </div>
-
-                {/* Emails */}
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="platformEmail" className="text-xs">Email del sistema (sender)</Label>
-                    <Input
-                      id="platformEmail"
-                      type="email"
-                      value={settings.system_email}
-                      onChange={(e) => setSettings({ ...settings, system_email: e.target.value })}
-                      placeholder="admin@mitienda.com"
-                    />
-                    <p className="text-[11px] text-muted-foreground">Aparece como remitente en emails transaccionales.</p>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="supportEmail" className="text-xs">Email de soporte</Label>
-                    <Input
-                      id="supportEmail"
-                      type="email"
-                      value={settings.platform_support_email}
-                      onChange={(e) => setSettings({ ...settings, platform_support_email: e.target.value })}
-                      placeholder="soporte@mitienda.com"
-                    />
-                    <p className="text-[11px] text-muted-foreground">Donde los usuarios escriben si tienen problemas.</p>
-                  </div>
-                </div>
-
-                {/* Preview */}
-                <div className="rounded-xl border bg-slate-50 p-4 dark:bg-slate-900">
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-3">Vista previa — Header de email</p>
-                  <div className="overflow-hidden rounded-lg border">
-                    <div className="p-4 text-center" style={{ backgroundColor: settings.platform_primary_color }}>
-                      {settings.platform_logo ? (
-                        <img src={settings.platform_logo} alt="Logo" className="mx-auto max-h-8 object-contain" />
-                      ) : (
-                        <span className="text-lg font-bold text-white">{settings.system_name}</span>
-                      )}
-                    </div>
-                    <div className="bg-white p-4 text-center dark:bg-slate-950">
-                      <p className="text-sm font-medium">{settings.system_name}</p>
-                      <p className="text-xs text-muted-foreground">{settings.platform_tagline}</p>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
 
           {/* ════════ GENERAL ════════ */}
           <TabsContent value="general" className="mt-4 space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Settings className="h-5 w-5 text-blue-600" /> Identidad del sistema
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="systemName" className="text-xs">Nombre del Sistema</Label>
-                  <Input id="systemName" value={settings.system_name} onChange={(e) => setSettings({ ...settings, system_name: e.target.value })} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="systemEmail" className="text-xs">Email del Sistema</Label>
-                  <Input id="systemEmail" type="email" value={settings.system_email} onChange={(e) => setSettings({ ...settings, system_email: e.target.value })} />
-                </div>
-              </CardContent>
-            </Card>
+            <SectionCard>
+              <SectionHeader icon={Settings} title="Identidad del sistema" description="Nombre y email principal del SaaS" />
+              <div className="grid gap-4 p-5 sm:grid-cols-2">
+                <FieldGroup>
+                  <FieldLabel>Nombre del Sistema</FieldLabel>
+                  <StyledInput
+                    id="systemName"
+                    value={settings.system_name}
+                    onChange={(e) => setSettings({ ...settings, system_name: e.target.value })}
+                  />
+                </FieldGroup>
+                <FieldGroup>
+                  <FieldLabel>Email del Sistema</FieldLabel>
+                  <StyledInput
+                    id="systemEmail"
+                    type="email"
+                    value={settings.system_email}
+                    onChange={(e) => setSettings({ ...settings, system_email: e.target.value })}
+                  />
+                </FieldGroup>
+              </div>
+            </SectionCard>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Globe className="h-5 w-5 text-purple-600" /> Dominio Base (Multitenancy)
-                </CardTitle>
-                <CardDescription>Dominio principal para construir subdominios de cada organización</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
+            <SectionCard>
+              <SectionHeader icon={Globe} accent="text-violet-400" accentBg="bg-violet-500/10" accentBorder="border-violet-500/20"
+                title="Dominio Base (Multitenancy)"
+                description="Dominio principal para construir subdominios de cada organización"
+              />
+              <div className="space-y-3 p-5">
                 <div className="flex gap-2">
                   <div className="relative flex-1">
-                    <Globe className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                    <Input value={baseDomain} onChange={(e) => setBaseDomain(e.target.value.toLowerCase())} placeholder="miapp.vercel.app" className="pl-10 font-mono text-sm" />
+                    <Globe className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-600" />
+                    <StyledInput
+                      value={baseDomain}
+                      onChange={(e) => setBaseDomain(e.target.value.toLowerCase())}
+                      placeholder="miapp.vercel.app"
+                      className="pl-10 font-mono text-sm"
+                    />
                   </div>
-                  <Button onClick={handleSaveDomain} disabled={savingDomain} size="sm">
+                  <Button
+                    onClick={handleSaveDomain}
+                    disabled={savingDomain}
+                    size="sm"
+                    className="h-9 bg-indigo-600 hover:bg-indigo-700 text-white"
+                  >
                     {savingDomain ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                   </Button>
                 </div>
-                {baseDomain ? (
-                  <p className="text-xs text-slate-400">
-                    Subdominios: <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">tienda.{baseDomain}</code>
+                {baseDomain && (
+                  <p className="text-xs text-slate-500">
+                    Subdominios:{' '}
+                    <code className="rounded bg-slate-800 px-1.5 py-0.5 text-slate-300">tienda.{baseDomain}</code>
                   </p>
-                ) : null}
-              </CardContent>
-            </Card>
+                )}
+              </div>
+            </SectionCard>
 
-            <Card className={settings.maintenance_mode ? 'border-rose-300 dark:border-rose-800' : ''}>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Power className="h-5 w-5 text-rose-600" /> Disponibilidad del servicio
-                  <Badge variant="outline" className="ml-1 border-emerald-200 bg-emerald-50 text-[10px] text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400">Activo</Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
+            <SectionCard className={settings.maintenance_mode ? 'border-rose-500/30' : ''}>
+              <SectionHeader icon={Power} accent="text-rose-400" accentBg="bg-rose-500/10" accentBorder="border-rose-500/20"
+                title="Disponibilidad del servicio"
+              />
+              <div className="space-y-2 p-5">
                 <SettingToggle
-                  icon={Power}
-                  iconColor="text-rose-600"
+                  icon={Power} iconColor="text-rose-400"
                   label="Modo Mantenimiento"
                   description="Bloquea el acceso a todos los usuarios excepto super admins. Aplicado por middleware en todo el sistema."
                   checked={settings.maintenance_mode}
                   onCheckedChange={(v) => setSettings({ ...settings, maintenance_mode: v })}
+                  danger
                 />
                 <SettingToggle
-                  icon={Globe}
-                  iconColor="text-blue-600"
+                  icon={Globe} iconColor="text-indigo-400"
                   label="Permitir Registros"
                   description="Permite que nuevas organizaciones se registren. Enforced en el endpoint de signup."
                   checked={settings.allow_registrations}
                   onCheckedChange={(v) => setSettings({ ...settings, allow_registrations: v })}
                 />
-              </CardContent>
-            </Card>
+              </div>
+            </SectionCard>
+          </TabsContent>
+
+          {/* ════════ MARCA ════════ */}
+          <TabsContent value="brand" className="mt-4">
+            <BrandTab settings={settings} setSettings={setSettings} />
           </TabsContent>
 
           {/* ════════ ACCESO / SEGURIDAD ════════ */}
           <TabsContent value="security" className="mt-4 space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Lock className="h-5 w-5 text-red-600" /> Sesiones y acceso
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="sessionTimeout" className="text-xs">Sesión (minutos)</Label>
-                  <Input id="sessionTimeout" type="number" min={5} max={1440} value={settings.session_timeout}
-                    onChange={(e) => setSettings({ ...settings, session_timeout: Math.max(5, parseInt(e.target.value) || 5) })} />
-                  <p className="text-[10px] text-slate-400">5–1440 min</p>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="maxLogin" className="text-xs">Intentos de login</Label>
-                  <Input id="maxLogin" type="number" min={1} max={20} value={settings.max_login_attempts}
-                    onChange={(e) => setSettings({ ...settings, max_login_attempts: Math.max(1, parseInt(e.target.value) || 1) })} />
-                  <p className="text-[10px] text-slate-400">1–20 intentos</p>
-                </div>
-              </CardContent>
-            </Card>
+            <SectionCard>
+              <SectionHeader icon={Lock} accent="text-rose-400" accentBg="bg-rose-500/10" accentBorder="border-rose-500/20"
+                title="Sesiones y acceso"
+              />
+              <div className="grid gap-4 p-5 sm:grid-cols-2">
+                <FieldGroup>
+                  <FieldLabel>Tiempo de sesión (minutos)</FieldLabel>
+                  <StyledInput
+                    type="number" min={5} max={1440}
+                    value={settings.session_timeout}
+                    onChange={(e) => setSettings({ ...settings, session_timeout: Math.max(5, parseInt(e.target.value) || 5) })}
+                  />
+                  <p className="text-[10px] text-slate-600">5–1440 min</p>
+                </FieldGroup>
+                <FieldGroup>
+                  <FieldLabel>Intentos de login</FieldLabel>
+                  <StyledInput
+                    type="number" min={1} max={20}
+                    value={settings.max_login_attempts}
+                    onChange={(e) => setSettings({ ...settings, max_login_attempts: Math.max(1, parseInt(e.target.value) || 1) })}
+                  />
+                  <p className="text-[10px] text-slate-600">1–20 intentos</p>
+                </FieldGroup>
+              </div>
+            </SectionCard>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <ShieldCheck className="h-5 w-5 text-emerald-600" /> Gestionado en Supabase Auth
-                </CardTitle>
-                <CardDescription>
-                  Estas políticas se controlan directamente en el proveedor de autenticación, no desde acá.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
+            <SectionCard>
+              <SectionHeader icon={ShieldCheck} accent="text-emerald-400" accentBg="bg-emerald-500/10" accentBorder="border-emerald-500/20"
+                title="Gestionado en Supabase Auth"
+                description="Estas políticas se controlan directamente en el proveedor de autenticación."
+              />
+              <div className="space-y-2 p-5">
                 <ManagedExternally
                   icon={Mail}
                   label="Verificación de Email"
@@ -691,68 +830,85 @@ export default function SettingsPage() {
                   href="https://supabase.com/dashboard/project/_/auth/providers"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-400 hover:text-indigo-300 hover:underline"
                 >
                   Abrir configuración de Auth en Supabase <ExternalLink className="h-3 w-3" />
                 </a>
-              </CardContent>
-            </Card>
+              </div>
+            </SectionCard>
           </TabsContent>
 
           {/* ════════ NOTIFICACIONES ════════ */}
           <TabsContent value="notifications" className="mt-4 space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Bell className="h-5 w-5 text-amber-600" /> Notificaciones del sistema
-                </CardTitle>
-                <CardDescription>Preferencias globales de envío de avisos del SaaS.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <SettingToggle icon={Bell} iconColor="text-blue-600" label="Notificaciones del Sistema"
+            <SectionCard>
+              <SectionHeader icon={Bell} accent="text-amber-400" accentBg="bg-amber-500/10" accentBorder="border-amber-500/20"
+                title="Notificaciones del sistema"
+                description="Preferencias globales de envío de avisos del SaaS."
+              />
+              <div className="space-y-2 p-5">
+                <SettingToggle icon={Bell} iconColor="text-indigo-400" label="Notificaciones del Sistema"
                   description="Habilita notificaciones generales en la plataforma"
-                  checked={settings.enable_notifications} onCheckedChange={(v) => setSettings({ ...settings, enable_notifications: v })} />
-                <SettingToggle icon={Mail} iconColor="text-purple-600" label="Notificaciones por Email"
+                  checked={settings.enable_notifications}
+                  onCheckedChange={(v) => setSettings({ ...settings, enable_notifications: v })} />
+                <SettingToggle icon={Mail} iconColor="text-violet-400" label="Notificaciones por Email"
                   description="Envía avisos importantes por email"
-                  checked={settings.enable_email_notifications} onCheckedChange={(v) => setSettings({ ...settings, enable_email_notifications: v })} />
-                <SettingToggle icon={Bell} iconColor="text-emerald-600" label="Notificaciones SMS"
+                  checked={settings.enable_email_notifications}
+                  onCheckedChange={(v) => setSettings({ ...settings, enable_email_notifications: v })} />
+                <SettingToggle icon={Bell} iconColor="text-emerald-400" label="Notificaciones SMS"
                   description="Envía avisos críticos por SMS (requiere proveedor configurado)"
-                  checked={settings.enable_sms_notifications} onCheckedChange={(v) => setSettings({ ...settings, enable_sms_notifications: v })} />
-              </CardContent>
-            </Card>
+                  checked={settings.enable_sms_notifications}
+                  onCheckedChange={(v) => setSettings({ ...settings, enable_sms_notifications: v })} />
+              </div>
+            </SectionCard>
           </TabsContent>
 
           {/* ════════ FEATURE FLAGS ════════ */}
           <TabsContent value="flags" className="mt-4 space-y-4">
-            <Card>
-              <CardHeader className="flex flex-row items-start justify-between gap-4">
-                <div>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Flag className="h-5 w-5 text-indigo-600" /> Feature Flags
-                  </CardTitle>
-                  <CardDescription>
-                    Activá o desactivá features del SaaS de forma centralizada. El código consulta estos flags vía <code className="rounded bg-slate-100 px-1 text-[11px] dark:bg-slate-800">isFeatureEnabled()</code>.
-                  </CardDescription>
-                </div>
-                <Button size="sm" onClick={() => saveFlagsMutation.mutate(flags)} disabled={saveFlagsMutation.isPending}>
-                  {saveFlagsMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                  Guardar flags
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-3">
+            <SectionCard>
+              <SectionHeader
+                icon={Flag} accent="text-violet-400" accentBg="bg-violet-500/10" accentBorder="border-violet-500/20"
+                title="Feature Flags"
+                description={`Activá o desactivá features de forma centralizada. El código consulta estos flags vía isFeatureEnabled().`}
+                action={
+                  <div className="flex items-center gap-2">
+                    {enabledFlagsCount > 0 && (
+                      <Badge variant="outline" className="border-violet-500/20 bg-violet-500/10 text-[10px] text-violet-400">
+                        {enabledFlagsCount} activos
+                      </Badge>
+                    )}
+                    <Button
+                      size="sm"
+                      onClick={() => saveFlagsMutation.mutate(flags)}
+                      disabled={saveFlagsMutation.isPending}
+                      className="h-8 gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white"
+                    >
+                      {saveFlagsMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                      Guardar
+                    </Button>
+                  </div>
+                }
+              />
+              <div className="space-y-2 p-5">
                 {flags.length === 0 ? (
-                  <p className="py-6 text-center text-sm text-slate-400">No hay feature flags definidos.</p>
+                  <div className="flex flex-col items-center justify-center py-10 text-center">
+                    <Zap className="mb-2 h-8 w-8 text-slate-700" />
+                    <p className="text-sm text-slate-500">No hay feature flags definidos.</p>
+                  </div>
                 ) : (
                   flags.map((flag) => (
-                    <div key={flag.key} className="flex items-start justify-between gap-4 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+                    <div key={flag.key} className={`flex items-start justify-between gap-4 rounded-lg border p-3.5 transition-colors ${
+                      flag.enabled
+                        ? 'border-violet-500/20 bg-violet-500/5'
+                        : 'border-slate-800 bg-slate-950/30'
+                    }`}>
                       <div className="flex items-start gap-3">
-                        <Flag className={`mt-0.5 h-4 w-4 shrink-0 ${flag.enabled ? 'text-indigo-600' : 'text-slate-300 dark:text-slate-600'}`} />
+                        <Flag className={`mt-0.5 h-4 w-4 shrink-0 ${flag.enabled ? 'text-violet-400' : 'text-slate-700'}`} />
                         <div>
                           <div className="flex items-center gap-2">
-                            <p className="text-sm font-medium text-slate-900 dark:text-white">{flag.label}</p>
-                            <code className="rounded bg-slate-100 px-1 text-[10px] text-slate-500 dark:bg-slate-800 dark:text-slate-400">{flag.key}</code>
+                            <p className="text-sm font-medium text-slate-200">{flag.label}</p>
+                            <code className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-500">{flag.key}</code>
                           </div>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">{flag.description}</p>
+                          <p className="text-xs text-slate-500">{flag.description}</p>
                         </div>
                       </div>
                       <Switch
@@ -762,23 +918,25 @@ export default function SettingsPage() {
                     </div>
                   ))
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </SectionCard>
           </TabsContent>
 
           {/* ════════ SISTEMA ════════ */}
           <TabsContent value="system" className="mt-4 space-y-4">
+
             {/* System info */}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <ServerCog className="h-5 w-5 text-slate-600" /> Información del sistema
-                </CardTitle>
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => refetchInfo()}>
-                  <RefreshCw className={`h-4 w-4 ${infoLoading ? 'animate-spin' : ''}`} />
-                </Button>
-              </CardHeader>
-              <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <SectionCard>
+              <SectionHeader
+                icon={ServerCog}
+                title="Información del sistema"
+                action={
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-500 hover:text-slate-300 hover:bg-slate-800" onClick={() => refetchInfo()}>
+                    <RefreshCw className={`h-4 w-4 ${infoLoading ? 'animate-spin' : ''}`} />
+                  </Button>
+                }
+              />
+              <div className="grid gap-2 p-5 sm:grid-cols-2 lg:grid-cols-3">
                 <InfoStat label="Versión" value={systemInfo?.app.version ?? '—'} icon={Info} />
                 <InfoStat label="Entorno" value={systemInfo?.app.environment ?? '—'} icon={ServerCog} />
                 <InfoStat label="Runtime" value={systemInfo?.app.nodeVersion ?? '—'} icon={ServerCog} />
@@ -790,280 +948,138 @@ export default function SettingsPage() {
                 />
                 <InfoStat label="Organizaciones" value={String(systemInfo?.totals.organizations ?? '—')} icon={Globe} />
                 <InfoStat label="Usuarios" value={String(systemInfo?.totals.users ?? '—')} icon={Globe} />
-              </CardContent>
-            </Card>
+              </div>
+            </SectionCard>
 
             {/* Variables de entorno */}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <KeyRound className="h-5 w-5 text-amber-600" /> Variables de entorno
-                  </CardTitle>
-                  <CardDescription>
-                    Estado de configuración. Los secretos solo muestran si están definidos, nunca su valor.
-                  </CardDescription>
-                </div>
-                {systemInfo?.envSummary && (
-                  <Badge
-                    variant="outline"
-                    className={
-                      systemInfo.envSummary.missingRequired.length === 0
-                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400'
-                        : 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-400'
-                    }
-                  >
-                    {systemInfo.envSummary.present}/{systemInfo.envSummary.total} configuradas
-                  </Badge>
-                )}
-              </CardHeader>
-              <CardContent className="space-y-4">
+            <SectionCard>
+              <SectionHeader
+                icon={KeyRound} accent="text-amber-400" accentBg="bg-amber-500/10" accentBorder="border-amber-500/20"
+                title="Variables de entorno"
+                description="Estado de configuración. Los secretos solo muestran si están definidos, nunca su valor."
+                action={
+                  systemInfo?.envSummary && (
+                    <Badge
+                      variant="outline"
+                      className={
+                        systemInfo.envSummary.missingRequired.length === 0
+                          ? 'border-emerald-800/50 bg-emerald-900/30 text-[10px] text-emerald-400'
+                          : 'border-rose-800/50 bg-rose-900/30 text-[10px] text-rose-400'
+                      }
+                    >
+                      {systemInfo.envSummary.present}/{systemInfo.envSummary.total} configuradas
+                    </Badge>
+                  )
+                }
+              />
+              <div className="space-y-4 p-5">
                 {systemInfo?.envSummary && systemInfo.envSummary.missingRequired.length > 0 && (
-                  <Alert className="border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-200">
-                    <AlertTriangle className="h-4 w-4" />
-                    <AlertDescription className="text-xs">
-                      Faltan variables requeridas: <strong>{systemInfo.envSummary.missingRequired.join(', ')}</strong>
-                    </AlertDescription>
-                  </Alert>
+                  <div className="flex items-start gap-3 rounded-lg border border-rose-500/20 bg-rose-500/5 px-3 py-2.5">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
+                    <p className="text-xs text-rose-300">
+                      Faltan variables requeridas:{' '}
+                      <strong>{systemInfo.envSummary.missingRequired.join(', ')}</strong>
+                    </p>
+                  </div>
                 )}
                 {!systemInfo?.env ? (
-                  <p className="py-4 text-center text-sm text-slate-400">Cargando estado de variables...</p>
+                  <p className="py-4 text-center text-sm text-slate-500">Cargando estado de variables…</p>
                 ) : (
                   (['core', 'app', 'optional'] as const).map((group) => {
                     const vars = systemInfo.env!.filter((v) => v.group === group);
                     if (vars.length === 0) return null;
                     return (
                       <div key={group} className="space-y-1.5">
-                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
                           {ENV_GROUP_LABELS[group]}
                         </p>
-                        {vars.map((v) => (
-                          <EnvRow key={v.key} env={v} />
-                        ))}
+                        {vars.map((v) => <EnvRow key={v.key} env={v} />)}
                       </div>
                     );
                   })
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </SectionCard>
 
             {/* Export / Import */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <Download className="h-5 w-5 text-emerald-600" /> Respaldo de configuración
-                </CardTitle>
-                <CardDescription>Exportá o importá toda la configuración (settings, dominio y feature flags) como JSON.</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-wrap gap-2">
-                <Button variant="outline" size="sm" onClick={handleExport}>
-                  <Download className="mr-2 h-4 w-4" /> Exportar JSON
+            <SectionCard>
+              <SectionHeader
+                icon={Download} accent="text-emerald-400" accentBg="bg-emerald-500/10" accentBorder="border-emerald-500/20"
+                title="Respaldo de configuración"
+                description="Exportá o importá toda la configuración (settings, dominio y feature flags) como JSON."
+              />
+              <div className="flex flex-wrap items-center gap-2 p-5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExport}
+                  className="h-9 gap-2 border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-slate-100"
+                >
+                  <Download className="h-4 w-4" /> Exportar JSON
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
-                  <Upload className="mr-2 h-4 w-4" /> Importar JSON
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="h-9 gap-2 border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-slate-100"
+                >
+                  <Upload className="h-4 w-4" /> Importar JSON
                 </Button>
                 <input ref={fileInputRef} type="file" accept="application/json" className="hidden" onChange={handleImportFile} />
-                <p className="w-full text-[11px] text-slate-400">
-                  Al importar se cargan los valores en el formulario; presioná <strong>Guardar cambios</strong> para aplicarlos.
+                <p className="w-full text-[11px] text-slate-500">
+                  Al importar se cargan los valores en el formulario; presioná <strong className="text-slate-400">Guardar cambios</strong> para aplicarlos.
                 </p>
-              </CardContent>
-            </Card>
+              </div>
+            </SectionCard>
 
             {/* Change history */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <History className="h-5 w-5 text-slate-600" /> Historial de cambios
-                </CardTitle>
-                <CardDescription>Últimas modificaciones de configuración registradas en auditoría.</CardDescription>
-              </CardHeader>
-              <CardContent>
+            <SectionCard>
+              <SectionHeader
+                icon={History}
+                title="Historial de cambios"
+                description="Últimas modificaciones de configuración registradas en auditoría."
+              />
+              <div className="p-5">
                 {!history || history.length === 0 ? (
-                  <p className="py-6 text-center text-sm text-slate-400">Sin cambios registrados todavía.</p>
+                  <div className="flex flex-col items-center justify-center py-10 text-center">
+                    <Clock className="mb-2 h-8 w-8 text-slate-700" />
+                    <p className="text-sm text-slate-500">Sin cambios registrados todavía.</p>
+                  </div>
                 ) : (
                   <div className="space-y-2">
                     {history.map((entry) => (
-                      <div key={entry.id} className="flex items-start gap-3 rounded-lg border border-slate-100 p-2.5 text-sm dark:border-slate-800">
-                        <Clock className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                      <div key={entry.id} className="flex items-start gap-3 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2.5">
+                        <Clock className="mt-0.5 h-4 w-4 shrink-0 text-slate-600" />
                         <div className="min-w-0 flex-1">
-                          <p className="text-slate-700 dark:text-slate-300">
+                          <p className="text-sm text-slate-300">
                             {(entry.metadata?.updated_keys?.length ?? 0) > 0
                               ? `Actualizó ${entry.metadata!.updated_keys!.length} parámetro(s): `
                               : 'Cambio de configuración '}
-                            <span className="text-xs text-slate-400">
+                            <span className="text-xs text-slate-500">
                               {entry.metadata?.updated_keys?.slice(0, 6).join(', ')}
                               {(entry.metadata?.updated_keys?.length ?? 0) > 6 ? '…' : ''}
                             </span>
                           </p>
-                          <p className="text-[11px] text-slate-400">{formatDate(entry.created_at)}</p>
+                          <p className="text-[11px] text-slate-600">{formatDate(entry.created_at)}</p>
                         </div>
                       </div>
                     ))}
                   </div>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </SectionCard>
           </TabsContent>
         </Tabs>
 
         {/* ── Footer info ── */}
-        <Alert className="border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900">
-          <Info className="h-4 w-4 text-slate-500" />
-          <AlertDescription className="text-xs text-slate-600 dark:text-slate-400">
+        <div className="flex items-start gap-3 rounded-xl border border-slate-800 bg-slate-900/40 px-4 py-3">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-slate-600" />
+          <p className="text-xs text-slate-600">
             Modo mantenimiento y permitir-registros se aplican de verdad (middleware + signup). 2FA y verificación de email se gestionan en Supabase Auth.
-            Caché, sesiones y purga de logs viven en <strong>Mantenimiento</strong>.
-          </AlertDescription>
-        </Alert>
+            Caché, sesiones y purga de logs viven en <strong className="text-slate-500">Mantenimiento</strong>.
+          </p>
+        </div>
       </div>
     </SuperAdminGuard>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
-function filterSettings(raw: Record<string, unknown>): Partial<SystemSettings> {
-  const out: Record<string, unknown> = {};
-  for (const key of SETTINGS_KEYS) {
-    if (key in raw) out[key] = raw[key];
-  }
-  return out as Partial<SystemSettings>;
-}
-
-function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString('es-PY', { dateStyle: 'medium', timeStyle: 'short' });
-  } catch {
-    return iso;
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Sub-components
-// ─────────────────────────────────────────────────────────────────────────────
-
-function SettingToggle({
-  icon: Icon,
-  iconColor,
-  label,
-  description,
-  checked,
-  onCheckedChange,
-}: {
-  icon: typeof Settings;
-  iconColor: string;
-  label: string;
-  description: string;
-  checked: boolean;
-  onCheckedChange: (v: boolean) => void;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-4 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-      <div className="flex items-start gap-3">
-        <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${iconColor}`} />
-        <div>
-          <p className="text-sm font-medium text-slate-900 dark:text-white">{label}</p>
-          <p className="text-xs text-slate-500 dark:text-slate-400">{description}</p>
-        </div>
-      </div>
-      <Switch checked={checked} onCheckedChange={onCheckedChange} />
-    </div>
-  );
-}
-
-function ManagedExternally({
-  icon: Icon,
-  label,
-  description,
-}: {
-  icon: typeof Settings;
-  label: string;
-  description: string;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-4 rounded-lg border border-dashed border-slate-200 p-3 dark:border-slate-700">
-      <div className="flex items-start gap-3">
-        <Icon className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-        <div>
-          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">{label}</p>
-          <p className="text-xs text-slate-500 dark:text-slate-400">{description}</p>
-        </div>
-      </div>
-      <Badge variant="outline" className="shrink-0 border-slate-200 text-[10px] text-slate-500 dark:border-slate-700 dark:text-slate-400">
-        Supabase
-      </Badge>
-    </div>
-  );
-}
-
-function EnvRow({ env }: { env: EnvVar }) {
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-md border border-slate-100 px-3 py-2 dark:border-slate-800">
-      <div className="flex min-w-0 items-center gap-2.5">
-        {env.present ? (
-          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
-        ) : env.required ? (
-          <XCircle className="h-4 w-4 shrink-0 text-rose-500" />
-        ) : (
-          <XCircle className="h-4 w-4 shrink-0 text-slate-300 dark:text-slate-600" />
-        )}
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
-            <code className="truncate text-xs font-medium text-slate-700 dark:text-slate-300">{env.key}</code>
-            {env.secret && <EyeOff className="h-3 w-3 shrink-0 text-slate-400" aria-label="Secreto" />}
-            {env.required && (
-              <span className="shrink-0 rounded bg-slate-100 px-1 text-[9px] font-medium uppercase text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                req
-              </span>
-            )}
-          </div>
-          {env.present && env.preview ? (
-            <code className="block truncate text-[11px] text-slate-400">{env.preview}</code>
-          ) : (
-            <span className="text-[11px] text-slate-400">{env.secret ? (env.present ? 'definido (oculto)' : 'no definido') : env.present ? '' : 'no definido'}</span>
-          )}
-        </div>
-      </div>
-      <Badge
-        variant="outline"
-        className={
-          env.present
-            ? 'shrink-0 border-emerald-200 bg-emerald-50 text-[10px] text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400'
-            : env.required
-              ? 'shrink-0 border-rose-200 bg-rose-50 text-[10px] text-rose-700 dark:border-rose-800 dark:bg-rose-950/30 dark:text-rose-400'
-              : 'shrink-0 border-slate-200 text-[10px] text-slate-400 dark:border-slate-700'
-        }
-      >
-        {env.present ? 'OK' : env.required ? 'Falta' : 'Opcional'}
-      </Badge>
-    </div>
-  );
-}
-
-function InfoStat({
-  label,
-  value,
-  icon: Icon,
-  tone,
-}: {
-  label: string;
-  value: string;
-  icon: typeof Settings;
-  tone?: 'ok' | 'bad';
-}) {
-  return (
-    <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-      <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-slate-400">
-        <Icon className="h-3 w-3" /> {label}
-      </div>
-      <p className={`mt-1 truncate text-sm font-semibold ${
-        tone === 'ok' ? 'text-emerald-600 dark:text-emerald-400'
-        : tone === 'bad' ? 'text-rose-600 dark:text-rose-400'
-        : 'text-slate-900 dark:text-white'
-      }`}>
-        {value}
-      </p>
-    </div>
   );
 }

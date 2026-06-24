@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowLeft, ArrowRight, Building2, Globe, Layers3, PackageSearch } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Building2, Globe, Layers3, PackageSearch, Scissors } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { FeaturedOrganizationCard } from '@/lib/public-site/data';
@@ -200,8 +200,12 @@ export function OrganizationsCarousel({ organizations }: OrganizationsCarouselPr
               {/* Inline stats */}
               <div className="mt-5 flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
                 <span className="flex items-center gap-1.5">
-                  <PackageSearch className="h-3.5 w-3.5" />
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">{active.productCount || 0}</span> productos
+                  {active.vertical === 'BARBERSHOP' ? (
+                    <Scissors className="h-3.5 w-3.5" />
+                  ) : (
+                    <PackageSearch className="h-3.5 w-3.5" />
+                  )}
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">{active.productCount || 0}</span> {active.vertical === 'BARBERSHOP' ? 'servicios' : 'productos'}
                 </span>
                 <span className="flex items-center gap-1.5">
                   <Layers3 className="h-3.5 w-3.5" />
@@ -211,12 +215,12 @@ export function OrganizationsCarousel({ organizations }: OrganizationsCarouselPr
 
               {/* Actions */}
               <div className="mt-6 flex flex-wrap items-center gap-3">
-                <Link href={active.href}>
+                <a href={active.href}>
                   <Button className="rounded-lg bg-slate-950 px-5 text-white hover:bg-emerald-700 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white">
                     Ver empresa
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Button>
-                </Link>
+                </a>
 
                 {items.length > 1 && (
                   <div className="ml-auto flex items-center gap-2">

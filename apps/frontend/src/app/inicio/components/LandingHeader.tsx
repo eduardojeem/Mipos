@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { ArrowRight, Building2, LayoutDashboard, LogIn, LogOut, Menu, User, X } from 'lucide-react';
+import { ArrowRight, Building2, LayoutDashboard, LogIn, LogOut, Menu, ShoppingBag, User, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -43,12 +43,6 @@ type NavItem =
   | { kind: 'link'; label: string; href: string; active: (pathname: string) => boolean };
 
 const NAV_ITEMS: NavItem[] = [
-  {
-    kind: 'link',
-    label: 'Marketplace',
-    href: '/home',
-    active: (pathname) => pathname === '/home',
-  },
   {
     kind: 'scroll',
     label: 'Caracteristicas',
@@ -173,6 +167,20 @@ export function LandingHeader() {
             })}
           </nav>
 
+          {/* Marketplace CTA — separado con estilo propio */}
+          <Link
+            href="/home"
+            className={cn(
+              'hidden items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-semibold transition-all lg:flex',
+              pathname === '/home'
+                ? 'border-amber-400/50 bg-amber-400/15 text-amber-300'
+                : 'border-amber-400/30 bg-amber-400/10 text-amber-300 hover:border-amber-400/60 hover:bg-amber-400/20 hover:text-amber-200'
+            )}
+          >
+            <ShoppingBag className="h-4 w-4" />
+            Marketplace
+          </Link>
+
           <div className="hidden items-center gap-2 lg:flex">
             {authLoading ? (
               <div className="h-10 w-32 animate-pulse rounded-full bg-white/5" />
@@ -289,6 +297,16 @@ export function LandingHeader() {
                   );
                 })}
               </div>
+
+              {/* Marketplace — destacado en mobile */}
+              <Link
+                href="/home"
+                onClick={() => setMobileMenuOpen(false)}
+                className="mt-2 flex items-center gap-2 rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm font-semibold text-amber-300 transition-colors hover:bg-amber-400/20"
+              >
+                <ShoppingBag className="h-4 w-4" />
+                Marketplace
+              </Link>
 
               <div className="landing-divider mt-3 border-t pt-3">
                 {authLoading ? (

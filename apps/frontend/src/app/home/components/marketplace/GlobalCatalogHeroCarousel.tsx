@@ -269,19 +269,19 @@ export function GlobalCatalogHeroCarousel({
 
           {/* CTAs + nav */}
           <div className="ml-auto flex flex-wrap items-center gap-2">
-            <Link href={detailHref}>
+            <a href={detailHref}>
               <Button className="h-11 rounded-xl bg-white px-6 font-semibold text-slate-950 shadow-lg hover:bg-slate-100">
                 Ver producto
               </Button>
-            </Link>
-            <Link href={organizationHref}>
+            </a>
+            <a href={organizationHref}>
               <Button
                 variant="outline"
                 className="h-11 rounded-xl border-white/20 bg-white/5 px-5 font-semibold text-white backdrop-blur-sm hover:bg-white/10"
               >
                 Ver tienda
               </Button>
-            </Link>
+            </a>
 
             {slides.length > 1 && (
               <div className="flex items-center gap-1">
