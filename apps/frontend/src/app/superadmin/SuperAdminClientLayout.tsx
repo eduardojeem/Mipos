@@ -201,6 +201,12 @@ const NAV_ITEMS: NavItem[] = [
         icon: Store,
         description: "Contenido de /home",
       },
+      {
+        title: "Legal",
+        href: "/superadmin/web-content/legal",
+        icon: FileText,
+        description: "Términos, privacidad y aceptaciones",
+      },
     ],
   },
 
