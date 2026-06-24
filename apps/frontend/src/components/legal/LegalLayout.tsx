@@ -4,6 +4,10 @@ import { TERMS_LAST_UPDATED, TERMS_VERSION } from '@/lib/legal/terms';
 
 interface LegalLayoutProps {
   title: string;
+  /** Versión mostrada; por defecto la constante TERMS_VERSION. */
+  version?: string;
+  /** Fecha de última actualización; por defecto TERMS_LAST_UPDATED. */
+  lastUpdated?: string;
   /** Mostrar el aviso de "borrador pendiente de revisión legal". */
   draft?: boolean;
   children: React.ReactNode;
@@ -13,7 +17,13 @@ interface LegalLayoutProps {
  * Contenedor compartido para páginas legales (/terms, /privacy).
  * Tipografía legible, navegación de retorno, versión y fecha.
  */
-export function LegalLayout({ title, draft = true, children }: LegalLayoutProps) {
+export function LegalLayout({
+  title,
+  version = TERMS_VERSION,
+  lastUpdated = TERMS_LAST_UPDATED,
+  draft = true,
+  children,
+}: LegalLayoutProps) {
   return (
     <main className="mx-auto w-full max-w-3xl px-5 py-10 sm:px-6 sm:py-14">
       <Link
@@ -29,7 +39,7 @@ export function LegalLayout({ title, draft = true, children }: LegalLayoutProps)
           {title}
         </h1>
         <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-          Última actualización: {TERMS_LAST_UPDATED} · Versión {TERMS_VERSION}
+          Última actualización: {lastUpdated} · Versión {version}
         </p>
       </header>
 

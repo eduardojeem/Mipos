@@ -5,19 +5,22 @@ import { createAdminClient } from '@/lib/supabase-admin';
 import {
   LANDING_CONTENT_DEFAULTS,
   MARKETPLACE_CONTENT_DEFAULTS,
+  LEGAL_CONTENT_DEFAULTS,
 } from '@/lib/web-content/types';
 
-const ALLOWED_KEYS = ['landing_content', 'marketplace_content'] as const;
+const ALLOWED_KEYS = ['landing_content', 'marketplace_content', 'legal_content'] as const;
 type ContentKey = (typeof ALLOWED_KEYS)[number];
 
 const DEFAULTS: Record<ContentKey, unknown> = {
   landing_content: LANDING_CONTENT_DEFAULTS,
   marketplace_content: MARKETPLACE_CONTENT_DEFAULTS,
+  legal_content: LEGAL_CONTENT_DEFAULTS,
 };
 
 const TAG_MAP: Record<ContentKey, string[]> = {
   landing_content: ['web-content', 'landing-content'],
   marketplace_content: ['web-content', 'marketplace-content'],
+  legal_content: ['web-content', 'legal-content'],
 };
 
 export async function GET(request: NextRequest) {
@@ -84,9 +87,12 @@ export async function PUT(request: NextRequest) {
         key: key as ContentKey,
         value: content,
         category: 'web_content',
-        description: key === 'landing_content'
-          ? 'Contenido de la pagina de inicio publica (/inicio)'
-          : 'Contenido del marketplace publico (/home)',
+        description:
+          key === 'landing_content'
+            ? 'Contenido de la pagina de inicio publica (/inicio)'
+            : key === 'legal_content'
+              ? 'Contenido legal publico (/terms y /privacy)'
+              : 'Contenido del marketplace publico (/home)',
         is_active: true,
         updated_at: new Date().toISOString(),
         updated_by: auth.userId,

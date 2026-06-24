@@ -5,8 +5,10 @@ import { createAdminClient } from '@/lib/supabase/server';
 import {
   LANDING_CONTENT_DEFAULTS,
   MARKETPLACE_CONTENT_DEFAULTS,
+  LEGAL_CONTENT_DEFAULTS,
   type LandingContent,
   type MarketplaceContent,
+  type LegalContent,
 } from './types';
 
 function deepMerge<T extends Record<string, unknown>>(defaults: T, overrides: Partial<T>): T {
@@ -81,4 +83,29 @@ export const getMarketplaceContent = unstable_cache(
   },
   ['marketplace-content'],
   { revalidate: 300, tags: ['web-content', 'marketplace-content'] },
+);
+
+export const getLegalContent = unstable_cache(
+  async (): Promise<LegalContent> => {
+    try {
+      const client = await createAdminClient();
+      const { data } = await client
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'legal_content')
+        .single();
+
+      if (data?.value && typeof data.value === 'object') {
+        return deepMerge(
+          LEGAL_CONTENT_DEFAULTS as unknown as Record<string, unknown>,
+          data.value as Record<string, unknown>,
+        ) as unknown as LegalContent;
+      }
+    } catch {
+      // Fall back to defaults if table doesn't have the key yet
+    }
+    return LEGAL_CONTENT_DEFAULTS;
+  },
+  ['legal-content'],
+  { revalidate: 300, tags: ['web-content', 'legal-content'] },
 );
