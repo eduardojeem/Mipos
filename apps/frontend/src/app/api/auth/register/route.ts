@@ -13,6 +13,7 @@ import {
   checkEmailExists,
 } from './signup-service';
 import { redisRateLimiter } from './rate-limiter-redis';
+import { TERMS_VERSION } from '@/lib/legal/terms';
 
 // Plans whose subscription is provisioned immediately on signup. Anything
 // else (paid plans) must go through the billing flow  registration only
@@ -275,6 +276,24 @@ export async function POST(request: NextRequest) {
       console.error('[register] Email send error:', err);
       // Non-critical
     });
+
+    // Record terms acceptance (implied by completing signup). Best-effort:
+    // must not block signup if the terms_acceptances table is not migrated yet.
+    try {
+      const { error: termsErr } = await clientForWrites.from('terms_acceptances').insert({
+        user_id: authUser.id,
+        organization_id: orgData.id,
+        terms_version: TERMS_VERSION,
+        source: 'signup',
+        ip,
+        user_agent: request.headers.get('user-agent') || null,
+      });
+      if (termsErr) {
+        console.warn('[register] Could not record terms acceptance (non-critical):', termsErr.message);
+      }
+    } catch (termsErr) {
+      console.warn('[register] Terms acceptance insert threw (non-critical):', termsErr);
+    }
 
     // Reset rate limit after successful signup (async, non-blocking)
     redisRateLimiter.reset(ip).catch((err) => {
