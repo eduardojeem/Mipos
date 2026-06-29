@@ -9,10 +9,10 @@ interface MarketplaceLayoutProps {
 
 export function MarketplaceLayout({ children, searchQuery }: MarketplaceLayoutProps) {
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(249,115,22,0.08),_transparent_25%),radial-gradient(circle_at_top_right,_rgba(16,185,129,0.08),_transparent_28%),linear-gradient(180deg,_#fffdf8_0%,_#f8fafc_42%,_#eef4f3_100%)] text-slate-900 dark:bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.18),_transparent_24%),radial-gradient(circle_at_top_right,_rgba(16,185,129,0.12),_transparent_26%),linear-gradient(180deg,_#020617_0%,_#0f172a_42%,_#111827_100%)] dark:text-slate-100">
+    <div className="min-h-screen bg-[linear-gradient(180deg,_#f8fafc_0%,_#f4f6f8_42%,_#eef2f6_100%)] text-slate-900 dark:bg-[linear-gradient(180deg,_#020617_0%,_#0f172a_48%,_#111827_100%)] dark:text-slate-100">
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute left-[-10rem] top-[-6rem] h-[24rem] w-[24rem] rounded-full bg-amber-300/15 blur-3xl opacity-50 dark:bg-blue-500/15" />
-        <div className="absolute right-[-8rem] top-[10rem] h-[22rem] w-[22rem] rounded-full bg-emerald-300/10 blur-3xl opacity-50 dark:bg-emerald-500/15" />
+        <div className="absolute left-[-10rem] top-[-6rem] h-[24rem] w-[24rem] rounded-full bg-slate-300/20 blur-3xl opacity-40 dark:bg-slate-600/15" />
+        <div className="absolute right-[-8rem] top-[10rem] h-[22rem] w-[22rem] rounded-full bg-blue-200/10 blur-3xl opacity-40 dark:bg-blue-500/10" />
       </div>
       
       <MarketplaceHeader searchQuery={searchQuery} />

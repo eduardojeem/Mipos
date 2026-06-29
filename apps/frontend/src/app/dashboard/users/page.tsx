@@ -62,6 +62,7 @@ import { userService } from '@/lib/services/user-service';
 import type { User as ServiceUser } from '@/lib/services/user-service';
 import { PermissionGuard, PermissionProvider, usePermissions } from '@/components/ui/permission-guard';
 import { cn } from '@/lib/utils';
+import { createUserSchema, editUserSchema } from '@/lib/validation-schemas';
 
 const logger = createLogger('UsersPage');
 
@@ -119,31 +120,15 @@ function UsersPageContent() {
   const { toast } = useToast();
   const { hasPermission } = usePermissions();
 
-  const validatePassword = (password: string): string[] => {
-    const errors: string[] = [];
-    if (password.length < 6) errors.push('Al menos 6 caracteres');
-    if (!/[A-Z]/.test(password)) errors.push('Al menos una mayúscula');
-    if (!/[a-z]/.test(password)) errors.push('Al menos una minúscula');
-    if (!/[0-9]/.test(password)) errors.push('Al menos un número');
-    return errors;
-  };
-
   const validateForm = (data: UserFormData, isEdit = false): Partial<UserFormData> => {
-    const errors: Partial<UserFormData> = {};
-    if (!data.full_name.trim() || data.full_name.trim().length < 2)
-      errors.full_name = 'El nombre debe tener al menos 2 caracteres';
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email))
-      errors.email = 'Ingresa un email válido';
-    if (!isEdit || data.password) {
-      if (!data.password) errors.password = 'La contraseña es requerida';
-      else {
-        const pe = validatePassword(data.password);
-        if (pe.length > 0) errors.password = pe[0];
-      }
-      if (data.password !== data.confirmPassword)
-        errors.confirmPassword = 'Las contraseñas no coinciden';
-    }
-    return errors;
+    const schema = isEdit ? editUserSchema : createUserSchema;
+    const result = schema.safeParse(data);
+    if (result.success) return {};
+    return result.error.issues.reduce<Partial<UserFormData>>((acc, issue) => {
+      const field = issue.path[0] as keyof UserFormData;
+      if (field && !acc[field]) acc[field] = issue.message;
+      return acc;
+    }, {});
   };
 
   const fetchUsers = async () => {

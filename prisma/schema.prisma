@@ -738,6 +738,9 @@ model CashSession {
   counts            CashCount[]
   discrepancies     CashDiscrepancy[]
 
+  // Partial unique index enforced at DB level (not expressible in Prisma):
+  // CREATE UNIQUE INDEX cash_sessions_one_open_per_org ON cash_sessions (organization_id) WHERE (status = 'OPEN')
+  // See migration: 20260626_cash_sessions_unique_open_per_org.sql
   @@index([organizationId, status])
   @@index([organizationId, openedAt])
   @@index([status])

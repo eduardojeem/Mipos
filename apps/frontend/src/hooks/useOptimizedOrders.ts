@@ -374,6 +374,25 @@ export function useUpdateOrderStatus() {
         'No se pudo actualizar el estado del pedido'
       );
     },
+    onMutate: async ({ orderId, status }) => {
+      await queryClient.cancelQueries({ queryKey: orderKeys.detail(organizationId, orderId) });
+      const previousOrder = queryClient.getQueryData<Order>(orderKeys.detail(organizationId, orderId));
+      if (previousOrder) {
+        queryClient.setQueryData(
+          orderKeys.detail(organizationId, orderId),
+          normalizeOrder({ ...previousOrder, status })
+        );
+      }
+      return { previousOrder, orderId };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previousOrder) {
+        queryClient.setQueryData(
+          orderKeys.detail(organizationId, ctx.orderId),
+          ctx.previousOrder
+        );
+      }
+    },
     onSuccess: ({ order }, { orderId }) => {
       queryClient.setQueryData(
         orderKeys.detail(organizationId, orderId),

@@ -44,8 +44,8 @@ function getUserInitials(name?: string | null, email?: string | null): string {
 
 const navItems = [
   { name: 'Inicio', href: '/home' },
-  { name: 'Catalogo', href: '/home/catalogo' },
-  { name: 'Rubros', href: '/home/categorias' },
+  { name: 'Productos', href: '/home/catalogo' },
+  { name: 'Categorias', href: '/home/categorias' },
   { name: 'Tiendas', href: '/home/empresas' },
   { name: 'Servicios', href: '/home/servicios' },
 ];
@@ -77,15 +77,15 @@ export function MarketplaceHeader({ searchQuery = '' }: MarketplaceHeaderProps) 
     <header className="sticky top-0 z-50 w-full border-b border-slate-200/80 bg-white/80 backdrop-blur-2xl transition-all duration-300 dark:border-slate-800/80 dark:bg-slate-950/80">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
         <Link href="/home" className="flex items-center gap-3 transition-transform hover:scale-[1.01]">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-slate-950 to-emerald-700 shadow-lg shadow-emerald-500/15 dark:from-slate-100 dark:to-emerald-400">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-slate-950 to-blue-700 shadow-lg shadow-slate-900/10 dark:from-slate-100 dark:to-blue-300">
             <Store className="h-5 w-5 text-white dark:text-slate-950" />
           </div>
           <div className="hidden sm:block">
             <p className="text-sm font-bold tracking-tight text-slate-950 dark:text-slate-50">
-              MITIENDA <span className="text-emerald-600 dark:text-emerald-400">Marketplace</span>
+              MITIENDA <span className="text-slate-600 dark:text-slate-300">Productos</span>
             </p>
             <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
-              Directorio comercial
+              Catalogo de tiendas
             </p>
           </div>
         </Link>
@@ -95,10 +95,10 @@ export function MarketplaceHeader({ searchQuery = '' }: MarketplaceHeaderProps) 
             <Link
               key={item.href}
               href={item.href}
-              className="group relative transition-colors hover:text-emerald-600 dark:hover:text-emerald-400"
+              className="group relative transition-colors hover:text-slate-950 dark:hover:text-white"
             >
               {item.name}
-              <span className="absolute -bottom-1 left-0 h-0.5 w-0 bg-emerald-600 transition-all group-hover:w-full dark:bg-emerald-400" />
+              <span className="absolute -bottom-1 left-0 h-0.5 w-0 bg-blue-600 transition-all group-hover:w-full dark:bg-blue-300" />
             </Link>
           ))}
         </nav>
@@ -110,8 +110,8 @@ export function MarketplaceHeader({ searchQuery = '' }: MarketplaceHeaderProps) 
               type="search"
               name="search"
               defaultValue={searchQuery}
-              placeholder="Buscar productos o marcas"
-              className="h-10 w-full rounded-full border border-slate-200 bg-white/60 pl-10 pr-4 text-sm outline-none shadow-sm transition-all focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-500/5 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:bg-slate-900"
+              placeholder="Buscar productos u ofertas"
+              className="h-10 w-full rounded-full border border-slate-300 bg-white/70 pl-10 pr-4 text-sm outline-none shadow-sm transition-all focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:bg-slate-900"
             />
           </form>
 
@@ -125,7 +125,7 @@ export function MarketplaceHeader({ searchQuery = '' }: MarketplaceHeaderProps) 
                     variant="ghost"
                     className="h-10 gap-2 rounded-full border border-slate-200 bg-white px-2 pr-4 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
                   >
-                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-slate-950 to-emerald-700 text-[11px] font-semibold text-white dark:from-slate-100 dark:to-emerald-400 dark:text-slate-950">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-slate-950 to-blue-700 text-[11px] font-semibold text-white dark:from-slate-100 dark:to-blue-300 dark:text-slate-950">
                       {userInitials}
                     </span>
                     <span className="max-w-[140px] truncate text-sm font-medium">
@@ -166,9 +166,9 @@ export function MarketplaceHeader({ searchQuery = '' }: MarketplaceHeaderProps) 
                   </Button>
                 </Link>
                 <Link href="/inicio#como-funciona">
-                  <Button className="h-10 rounded-full bg-slate-950 px-6 text-white transition-all hover:bg-emerald-700 hover:shadow-lg hover:shadow-emerald-500/20 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white">
+                  <Button className="h-10 rounded-full bg-slate-950 px-6 text-white transition-all hover:bg-slate-800 hover:shadow-lg hover:shadow-slate-900/10 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white">
                     <Store className="mr-2 h-4 w-4" />
-                    ¿Tenés un negocio?
+                    Publicar productos
                   </Button>
                 </Link>
               </>
@@ -234,7 +234,7 @@ export function MarketplaceHeader({ searchQuery = '' }: MarketplaceHeaderProps) 
                     ) : user ? (
                       <>
                         <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900">
-                          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-slate-950 to-emerald-700 text-sm font-semibold text-white dark:from-slate-100 dark:to-emerald-400 dark:text-slate-950">
+                          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-slate-950 to-blue-700 text-sm font-semibold text-white dark:from-slate-100 dark:to-blue-300 dark:text-slate-950">
                             {userInitials}
                           </span>
                           <div className="min-w-0 flex-1">
@@ -275,7 +275,7 @@ export function MarketplaceHeader({ searchQuery = '' }: MarketplaceHeaderProps) 
                         <Link href="/inicio#como-funciona" onClick={() => setIsMobileMenuOpen(false)}>
                           <Button className="h-14 w-full gap-2 rounded-2xl bg-slate-950 text-lg font-bold dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white">
                             <Store className="h-5 w-5" />
-                            ¿Tenés un negocio?
+                            Publicar productos
                           </Button>
                         </Link>
                       </>
@@ -305,8 +305,8 @@ export function MarketplaceHeader({ searchQuery = '' }: MarketplaceHeaderProps) 
                   name="search"
                   autoFocus
                   defaultValue={searchQuery}
-                  placeholder="Que estas buscando"
-                  className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-base outline-none focus:border-emerald-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500"
+                  placeholder="Buscar productos u ofertas"
+                  className="h-12 w-full rounded-2xl border border-slate-300 bg-slate-50 pl-11 pr-4 text-base outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500"
                 />
               </form>
             </div>

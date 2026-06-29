@@ -2,7 +2,6 @@
 
 import { useCallback, useState } from 'react';
 import Image from 'next/image';
-import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowRight, Building2, MapPin, Package, Tag, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -107,7 +106,7 @@ function ProductDetailModal({
             <ProductImagePlaceholder productName={product.name} className="absolute inset-0 rounded-none border-0" />
           )}
           {hasOffer ? (
-            <Badge className="absolute left-4 top-4 bg-emerald-500 text-white">
+            <Badge className="absolute left-4 top-4 bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-950">
               <Tag className="mr-1 h-3 w-3" />
               {Number(product.discountPercentage || 0) > 0
                 ? `-${Math.round(Number(product.discountPercentage))}%`
@@ -124,7 +123,7 @@ function ProductDetailModal({
               {product.categoryName}
             </Badge>
             {product.brand ? (
-              <Badge variant="outline" className="rounded-full border-amber-200 bg-amber-50 text-[10px] text-amber-700 dark:border-amber-900 dark:bg-amber-950/60 dark:text-amber-200">
+              <Badge variant="outline" className="rounded-full border-slate-300 bg-slate-50 text-[10px] text-slate-700 dark:border-slate-700 dark:bg-slate-800/70 dark:text-slate-200">
                 {product.brand}
               </Badge>
             ) : null}
@@ -148,7 +147,7 @@ function ProductDetailModal({
               {Array.from({ length: 5 }).map((_, i) => (
                 <span
                   key={i}
-                  className={`text-sm ${i < Math.round(Number(product.rating || 0)) ? 'text-amber-400' : 'text-slate-200 dark:text-slate-700'}`}
+                  className={`text-sm ${i < Math.round(Number(product.rating || 0)) ? 'text-blue-500' : 'text-slate-200 dark:text-slate-700'}`}
                 >
                   ★
                 </span>
@@ -161,7 +160,7 @@ function ProductDetailModal({
           <div className="flex items-end gap-3">
             {hasOffer ? (
               <>
-                <span className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">
+                <span className="text-2xl font-bold text-slate-950 dark:text-slate-100">
                   {formatMarketplaceCurrency(product.offerPrice || product.basePrice)}
                 </span>
                 <span className="text-sm text-slate-400 line-through">
@@ -178,7 +177,7 @@ function ProductDetailModal({
           {/* Stock */}
           <div className="flex items-center gap-2 text-sm">
             <Package className="h-4 w-4 text-slate-400" />
-            <span className={Number(product.stockQuantity || 0) > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500'}>
+            <span className={Number(product.stockQuantity || 0) > 0 ? 'text-blue-700 dark:text-blue-300' : 'text-red-500'}>
               {Number(product.stockQuantity || 0) > 0 ? `${product.stockQuantity} en stock` : 'Sin stock'}
             </span>
           </div>
@@ -204,7 +203,7 @@ function ProductDetailModal({
           {/* CTAs */}
           <div className="flex gap-3 pt-2">
             <a href={detailHref} className="flex-1">
-              <Button className="w-full rounded-xl bg-emerald-600 font-semibold text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600">
+              <Button className="w-full rounded-xl bg-slate-900 font-semibold text-white hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white">
                 Ir a tienda
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
@@ -259,7 +258,7 @@ export function ProductCard({
 
         <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
           {hasOffer ? (
-            <Badge className="bg-emerald-500/90 text-white hover:bg-emerald-500">
+            <Badge className="bg-slate-900/90 text-white hover:bg-slate-900 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white">
               <Tag className="mr-1 h-3 w-3" />
               Oferta
             </Badge>
@@ -281,7 +280,7 @@ export function ProductCard({
           {product.brand ? (
             <Badge
               variant="outline"
-              className="rounded-full border-amber-200 bg-amber-50 text-[10px] font-semibold text-amber-700 dark:border-amber-900/70 dark:bg-amber-950/60 dark:text-amber-200"
+              className="rounded-full border-slate-300 bg-slate-50 text-[10px] font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800/70 dark:text-slate-200"
             >
               {product.brand}
             </Badge>
@@ -293,7 +292,7 @@ export function ProductCard({
           onClick={() => onOpenModal(product)}
           className="block text-left"
         >
-          <h3 className="mt-3 text-base font-semibold tracking-tight text-slate-900 transition-colors group-hover:text-emerald-700 dark:text-slate-100 dark:group-hover:text-emerald-300">
+          <h3 className="mt-3 text-base font-semibold tracking-tight text-slate-900 transition-colors group-hover:text-blue-700 dark:text-slate-100 dark:group-hover:text-blue-300">
             {product.name}
           </h3>
         </button>
@@ -308,7 +307,7 @@ export function ProductCard({
             {Array.from({ length: 5 }).map((_, i) => (
               <span
                 key={i}
-                className={`text-xs ${i < Math.round(Number(product.rating || 0)) ? 'text-amber-400' : 'text-slate-200 dark:text-slate-700'}`}
+                className={`text-xs ${i < Math.round(Number(product.rating || 0)) ? 'text-blue-500' : 'text-slate-200 dark:text-slate-700'}`}
               >
                 ★
               </span>
@@ -324,10 +323,10 @@ export function ProductCard({
                 <p className="text-xs text-slate-400 line-through dark:text-slate-500">
                   {formatMarketplaceCurrency(product.basePrice)}
                 </p>
-                <p className="text-xl font-bold text-emerald-700 dark:text-emerald-300">
+                <p className="text-xl font-bold text-slate-950 dark:text-slate-100">
                   {formatMarketplaceCurrency(product.offerPrice || product.basePrice)}
                 </p>
-                <p className="mt-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                <p className="mt-0.5 text-xs font-medium text-blue-700 dark:text-blue-300">
                   {discountLabel}
                 </p>
               </>
@@ -340,7 +339,7 @@ export function ProductCard({
           <a href={detailHref}>
             <Button
               size="sm"
-              className="rounded-lg bg-emerald-600 font-semibold text-white shadow-sm hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600"
+              className="rounded-lg bg-slate-900 font-semibold text-white shadow-sm hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-white"
             >
               Ir a tienda
               <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
@@ -351,7 +350,7 @@ export function ProductCard({
         <div className="mt-4 flex items-center gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
           <a
             href={organizationHref}
-            className="flex min-w-0 flex-1 items-center gap-2 transition-colors hover:text-emerald-700 dark:hover:text-emerald-300"
+            className="flex min-w-0 flex-1 items-center gap-2 transition-colors hover:text-blue-700 dark:hover:text-blue-300"
           >
             <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-slate-100 dark:bg-slate-800">
               <Building2 className="h-3.5 w-3.5 text-slate-600 dark:text-slate-300" />
@@ -436,4 +435,3 @@ export function ProductCarousel({ products }: { products: GlobalProductCard[] })
     </>
   );
 }
-

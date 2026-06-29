@@ -219,32 +219,32 @@ export interface MarketplaceContent {
 
 export const MARKETPLACE_CONTENT_DEFAULTS: MarketplaceContent = {
   hero: {
-    badge: 'Ecosistema publico multiempresa',
-    headline: 'Directorio comercial',
-    headlineHighlight: 'conectado a MITIENDA',
+    badge: 'Catalogo de productos de tiendas activas',
+    headline: 'Encuentra productos',
+    headlineHighlight: 'de comercios reales',
     description:
-      'El dominio principal concentra empresas, categorias y productos publicados, mientras cada negocio conserva su catalogo, marca y operacion propia.',
-    ctaPrimary: 'Explorar catalogo global',
+      'Explora ofertas, novedades y productos disponibles publicados por tiendas registradas. Compara precios, revisa disponibilidad y entra directo al catalogo de cada negocio.',
+    ctaPrimary: 'Ver productos publicados',
     ctaSecondary: 'Registrar mi empresa',
   },
   sections: {
     organizations: {
-      badge: 'Directorio Global',
-      headline: 'Marcas y negocios',
+      badge: 'Tiendas con catalogo',
+      headline: 'Negocios que publican',
       headlineHighlight: 'publicados',
       ctaLabel: 'Ver todos los negocios',
     },
     categories: {
-      badge: 'Navegacion Global',
-      headline: 'Explora por',
+      badge: 'Categorias de productos',
+      headline: 'Compra por',
       headlineHighlight: 'categoria',
       ctaLabel: 'Ver todas las categorias',
     },
     catalog: {
-      badge: 'Catalogo Global',
-      headline: 'Productos',
-      headlineHighlight: 'destacados',
-      ctaLabel: 'Ir al catalogo completo',
+      badge: 'Catalogo de tiendas',
+      headline: 'Productos publicados',
+      headlineHighlight: 'por comercios',
+      ctaLabel: 'Ver mas productos',
     },
   },
 };

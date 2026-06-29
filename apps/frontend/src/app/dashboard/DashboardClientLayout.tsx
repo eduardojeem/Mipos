@@ -160,7 +160,9 @@ export default function DashboardClientLayout({
         mobileSidebar={<MobileNavigation items={navigationItems} />}
         header={<Header compact />}
       >
-        {children}
+        <DashboardErrorBoundary>
+          {children}
+        </DashboardErrorBoundary>
 
         <KeyboardShortcuts />
 

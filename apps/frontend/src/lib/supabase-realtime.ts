@@ -219,8 +219,8 @@ export class SupabaseRealtimeService {
   /**
    * Suscribirse a cambios en tiempo real de productos
    */
-  subscribeToProducts(callback: (payload: ProductChangePayload) => void) {
-    const subscription = this.supabase
+  subscribeToProducts(callback: (payload: ProductChangePayload) => void): () => void {
+    const channel = this.supabase
       .channel('products-changes')
       .on(
         'postgres_changes',
@@ -238,8 +238,11 @@ export class SupabaseRealtimeService {
       )
       .subscribe();
 
-    this.subscriptions.set('products', subscription);
-    return subscription;
+    this.subscriptions.set('products', channel);
+    return () => {
+      this.supabase.removeChannel(channel);
+      this.subscriptions.delete('products');
+    };
   }
 
   /**
@@ -250,7 +253,7 @@ export class SupabaseRealtimeService {
   subscribeToTable<T extends RowData = RowData>(
     tableName: string,
     callback: (payload: { eventType: 'INSERT' | 'UPDATE' | 'DELETE'; new?: T; old?: T }) => void
-  ) {
+  ): () => void {
     const key = `table:${tableName}`;
     const channelName = `table-${tableName}-changes`;
 
@@ -273,7 +276,10 @@ export class SupabaseRealtimeService {
       .subscribe();
 
     this.subscriptions.set(key, subscription);
-    return subscription;
+    return () => {
+      this.supabase.removeChannel(subscription);
+      this.subscriptions.delete(key);
+    };
   }
 
   getMetrics(): Record<string, { count: number; lastEventAt: number }> {
@@ -283,8 +289,8 @@ export class SupabaseRealtimeService {
   /**
    * Suscribirse a cambios en tiempo real de categorías
    */
-  subscribeToCategories(callback: (payload: CategoryChangePayload) => void) {
-    const subscription = this.supabase
+  subscribeToCategories(callback: (payload: CategoryChangePayload) => void): () => void {
+    const channel = this.supabase
       .channel('categories-changes')
       .on(
         'postgres_changes',
@@ -300,8 +306,11 @@ export class SupabaseRealtimeService {
       )
       .subscribe();
 
-    this.subscriptions.set('categories', subscription);
-    return subscription;
+    this.subscriptions.set('categories', channel);
+    return () => {
+      this.supabase.removeChannel(channel);
+      this.subscriptions.delete('categories');
+    };
   }
 
   /**

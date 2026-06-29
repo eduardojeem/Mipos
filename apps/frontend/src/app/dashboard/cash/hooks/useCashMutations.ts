@@ -158,8 +158,6 @@ export function useCashMutations(options: UseCashMutationsOptions): UseCashMutat
                                 await api.post('/cash/session/force-close', {
                                     notes: 'Cierre forzado para reabrir caja',
                                 });
-                                // Wait for DB to settle
-                                await new Promise((r) => setTimeout(r, 300));
                                 // Now open the new session
                                 await openSessionMutation.mutateAsync({ amount, notes });
                                 // Refetch en paralelo — antes era serial (2 round-trips).

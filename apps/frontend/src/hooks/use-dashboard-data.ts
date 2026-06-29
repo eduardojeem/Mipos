@@ -283,6 +283,9 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
   const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  // Track whether the initial load has completed — background refreshes
+  // should not show the full loading state to avoid the "page reloads" UX.
+  const initialLoadDoneRef = useRef(false)
 
   // Generar clave de cache basada en el usuario
   const cacheKey = useMemo(() => {
@@ -566,7 +569,9 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
         return
       }
 
-      setLoading(true)
+      if (!initialLoadDoneRef.current) {
+        setLoading(true)
+      }
 
       const controller = new AbortController()
       abortRef.current?.abort()
@@ -613,6 +618,7 @@ export function useDashboardData(options: UseDashboardDataOptions = {}) {
       saveToCache(newData)
       setData(newData)
       setLastUpdated(new Date())
+      initialLoadDoneRef.current = true
     } catch (err) {
       inflightRequests.delete(cacheKey)
       if (isCanceledError(err)) {

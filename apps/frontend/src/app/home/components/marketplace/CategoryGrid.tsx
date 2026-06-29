@@ -2,8 +2,7 @@
 
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { ArrowRight, Building2, PackageSearch, Store, Laptop, Shirt, ShoppingCart, Pill, Sparkles, Home, Dumbbell, BookOpen, Briefcase, Car, Gamepad2, PawPrint, Hammer, UtensilsCrossed, Layers3 } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { Store, Laptop, Shirt, ShoppingCart, Pill, Sparkles, Home, Dumbbell, BookOpen, Briefcase, Car, Gamepad2, PawPrint, Hammer, UtensilsCrossed, Layers3 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { GlobalCategoryCard } from '@/lib/public-site/data';
 import { trackCategoryEvent } from '@/hooks/use-track-category';
@@ -58,13 +57,6 @@ function resolveHref(category: CategoryGridItem) {
   return `/home/catalogo?category=${encodeURIComponent(key)}`;
 }
 
-function resolveCoverage(category: CategoryGridItem) {
-  if (typeof category.shareOfProducts === 'number' && Number.isFinite(category.shareOfProducts)) {
-    return `${Math.max(0, Math.round(category.shareOfProducts * 100))}% del catálogo`;
-  }
-  return `${category.productCount} productos`;
-}
-
 function resolveIcon(iconName?: string | null): LucideIcon {
   if (iconName && ICON_MAP[iconName]) return ICON_MAP[iconName];
   return Layers3;
@@ -91,7 +83,7 @@ export function CategoryGrid({ categories }: CategoryGridProps) {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: Math.min(index, 15) * 0.03 }}
-              className="flex items-center gap-2.5 rounded-full border border-slate-200 bg-white px-4 py-2 shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md dark:border-slate-800 dark:bg-slate-950 dark:hover:border-emerald-900"
+              className="flex items-center gap-2.5 rounded-full border border-slate-200 bg-white px-4 py-2 shadow-sm transition-all hover:-translate-y-0.5 hover:border-slate-400 hover:shadow-md dark:border-slate-800 dark:bg-slate-950 dark:hover:border-slate-600"
             >
               <div
                 className="flex h-7 w-7 items-center justify-center rounded-full text-white shadow-sm"

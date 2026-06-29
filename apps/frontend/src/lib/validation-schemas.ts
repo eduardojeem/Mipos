@@ -118,6 +118,42 @@ export const validationMessages = {
 };
 
 // =============================
+// Usuarios: esquemas Zod
+// =============================
+
+const passwordSchema = z.string()
+  .min(6, 'Al menos 6 caracteres')
+  .regex(/[A-Z]/, 'Al menos una mayúscula')
+  .regex(/[a-z]/, 'Al menos una minúscula')
+  .regex(/[0-9]/, 'Al menos un número');
+
+export const createUserSchema = z.object({
+  full_name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres').trim(),
+  email: z.string().regex(emailRegex, 'Ingresa un email válido'),
+  phone: z.string().optional().or(z.literal('')),
+  role: z.enum(['ADMIN', 'MANAGER', 'CASHIER', 'EMPLOYEE', 'VIEWER']),
+  password: passwordSchema,
+  confirmPassword: z.string(),
+}).refine((d) => d.password === d.confirmPassword, {
+  message: 'Las contraseñas no coinciden',
+  path: ['confirmPassword'],
+});
+
+export const editUserSchema = createUserSchema
+  .omit({ password: true, confirmPassword: true })
+  .extend({
+    password: passwordSchema.optional().or(z.literal('')),
+    confirmPassword: z.string().optional().or(z.literal('')),
+  })
+  .refine((d) => !d.password || d.password === d.confirmPassword, {
+    message: 'Las contraseñas no coinciden',
+    path: ['confirmPassword'],
+  });
+
+export type CreateUserData = z.infer<typeof createUserSchema>;
+export type EditUserData = z.infer<typeof editUserSchema>;
+
+// =============================
 // Proveedores: esquemas Zod
 // =============================
 
